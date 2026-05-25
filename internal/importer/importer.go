@@ -190,36 +190,67 @@ func ImportJSON(srcPath, dstDir string) (string, string, error) {
 	return charPath, wp, nil
 }
 
-// writeWorldDir creates the three-layer world directory structure.
+// writeWorldDir creates the three-layer world directory per architecture spec.
 func writeWorldDir(dir string, w WorldYAML) (string, error) {
 	canonDir := filepath.Join(dir, "canon")
+	scenesDir := filepath.Join(dir, "scenes")
 	os.MkdirAll(canonDir, 0755)
+	os.MkdirAll(scenesDir, 0755)
 
-	// 1. world.yml — core_rules only
+	// 1. world.yml — meta + core_rules (compact, <50 lines)
 	worldFile := filepath.Join(dir, "world.yml")
 	worldData, _ := yaml.Marshal(map[string]interface{}{
-		"name":       w.Name,
+		"meta": map[string]string{
+			"name":    w.Name,
+			"version": "1.0",
+			"source":  "sillytavern_import",
+		},
 		"core_rules": w.CoreRules,
 	})
 	os.WriteFile(worldFile, worldData, 0644)
 
-	// 2. scene.yml — initial scene
-	sceneFile := filepath.Join(dir, "scene.yml")
-	sceneData, _ := yaml.Marshal(w.Scene)
-	os.WriteFile(sceneFile, sceneData, 0644)
-
-	// 3. canon/ontology.yml — entity definitions
+	// 2. canon/ontology.yml — entities with id fields
 	ontoFile := filepath.Join(canonDir, "ontology.yml")
-	ontoData, _ := yaml.Marshal(w.Ontology)
+	ontoData, _ := yaml.Marshal(map[string]interface{}{"ontology": w.Ontology})
 	os.WriteFile(ontoFile, ontoData, 0644)
 
-	// 4. canon/facts.yml — immutable facts extracted from settings + lore
+	// 3. canon/facts.yml — immutable facts (subject-predicate-object)
 	factsFile := filepath.Join(canonDir, "facts.yml")
 	facts := extractFacts(w.Ontology)
+	// Add scene-derived facts if too few
+	if len(facts) < 5 {
+		facts = append(facts, extractSceneFacts(w)...)
+	}
 	factsData, _ := yaml.Marshal(map[string]interface{}{"facts": facts})
 	os.WriteFile(factsFile, factsData, 0644)
 
+	// 4. scenes/default.yml — runtime scene state
+	sceneFile := filepath.Join(scenesDir, "default.yml")
+	sceneData, _ := yaml.Marshal(map[string]interface{}{"scene": w.Scene})
+	os.WriteFile(sceneFile, sceneData, 0644)
+
 	return worldFile, nil
+}
+
+// extractSceneFacts generates basic facts from the scene.
+func extractSceneFacts(w WorldYAML) []FactEntry {
+	var facts []FactEntry
+	if w.Scene.Location != "" && w.Scene.Location != "未知地点" {
+		facts = append(facts, FactEntry{
+			Subject: "场景", Predicate: "地点", Object: w.Scene.Location, Confidence: 1.0,
+		})
+	}
+	if w.Scene.Weather != "" && w.Scene.Weather != "未知天气" {
+		facts = append(facts, FactEntry{
+			Subject: "场景", Predicate: "天气", Object: w.Scene.Weather, Confidence: 1.0,
+		})
+	}
+	for _, c := range w.Scene.Characters {
+		facts = append(facts, FactEntry{
+			Subject: "场景", Predicate: "在场角色", Object: c, Confidence: 1.0,
+		})
+	}
+	return facts
 }
 
 // extractFacts converts settings and lore entries into FactEntries.

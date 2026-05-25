@@ -448,28 +448,75 @@ type ontologyEvent struct {
 func loadWorldDir(dir string) loadedWorld {
 	var w loadedWorld
 
-	// world.yml
+	// world.yml — meta + core_rules
 	if data, err := os.ReadFile(filepath.Join(dir, "world.yml")); err == nil {
 		var worldData struct {
-			Name      string `yaml:"name"`
+			Meta struct {
+				Name string `yaml:"name"`
+			} `yaml:"meta"`
 			CoreRules string `yaml:"core_rules"`
 		}
 		yaml.Unmarshal(data, &worldData)
-		w.Name = worldData.Name
-		w.CoreRules = worldData.CoreRules
+		w.Name = worldData.Meta.Name
+		if w.Name == "" {
+			// Fallback: old format without meta section
+			var oldFormat struct {
+				Name      string `yaml:"name"`
+				CoreRules string `yaml:"core_rules"`
+			}
+			yaml.Unmarshal(data, &oldFormat)
+			w.Name = oldFormat.Name
+			w.CoreRules = oldFormat.CoreRules
+		} else {
+			w.CoreRules = worldData.CoreRules
+		}
 	}
 
-	// scene.yml
-	if data, err := os.ReadFile(filepath.Join(dir, "scene.yml")); err == nil {
-		yaml.Unmarshal(data, &w.Scene)
+	// scenes/default.yml
+	if data, err := os.ReadFile(filepath.Join(dir, "scenes", "default.yml")); err == nil {
+		var sceneDoc struct {
+			Scene SceneYAMLDir `yaml:"scene"`
+		}
+		yaml.Unmarshal(data, &sceneDoc)
+		w.Scene.Location = sceneDoc.Scene.Location
+		w.Scene.TimeOfDay = sceneDoc.Scene.TimeOfDay
+		w.Scene.Weather = sceneDoc.Scene.Weather
+		w.Scene.Characters = sceneDoc.Scene.PresentChars
+		w.Scene.Description = sceneDoc.Scene.Atmosphere
+	}
+	// Fallback: old scene.yml at top level
+	if w.Scene.Location == "" {
+		if data, err := os.ReadFile(filepath.Join(dir, "scene.yml")); err == nil {
+			yaml.Unmarshal(data, &w.Scene)
+		}
 	}
 
 	// canon/ontology.yml
 	if data, err := os.ReadFile(filepath.Join(dir, "canon", "ontology.yml")); err == nil {
-		yaml.Unmarshal(data, &w.Ontology)
+		var ontoDoc struct {
+			Ontology struct {
+				Characters []ontologyEntry  `yaml:"characters"`
+				Locations  []ontologyEntry  `yaml:"locations"`
+				Factions   []ontologyEntry  `yaml:"factions"`
+				Items      []ontologyEntry  `yaml:"items"`
+				Lore       []ontologyEntry  `yaml:"lore"`
+				Events     []ontologyEvent  `yaml:"events"`
+				Timelines  []ontologyEntry  `yaml:"timelines"`
+				Settings   []ontologyEntry  `yaml:"settings"`
+			} `yaml:"ontology"`
+		}
+		yaml.Unmarshal(data, &ontoDoc)
+		w.Ontology.Characters = ontoDoc.Ontology.Characters
+		w.Ontology.Locations = ontoDoc.Ontology.Locations
+		w.Ontology.Factions = ontoDoc.Ontology.Factions
+		w.Ontology.Items = ontoDoc.Ontology.Items
+		w.Ontology.Lore = ontoDoc.Ontology.Lore
+		w.Ontology.Events = ontoDoc.Ontology.Events
+		w.Ontology.Timelines = ontoDoc.Ontology.Timelines
+		w.Ontology.Settings = ontoDoc.Ontology.Settings
 	}
 
-	// canon/facts.yml → loaded as structured facts
+	// canon/facts.yml → DirectFacts
 	if data, err := os.ReadFile(filepath.Join(dir, "canon", "facts.yml")); err == nil {
 		var factsDoc struct {
 			Facts []FactEntry `yaml:"facts"`
@@ -479,6 +526,16 @@ func loadWorldDir(dir string) loadedWorld {
 	}
 
 	return w
+}
+
+// SceneYAMLDir mirrors the scenes/default.yml structure.
+type SceneYAMLDir struct {
+	Location     string   `yaml:"location"`
+	TimeOfDay    string   `yaml:"time_of_day"`
+	Weather      string   `yaml:"weather"`
+	Atmosphere   string   `yaml:"atmosphere"`
+	PresentChars []string `yaml:"present_chars"`
+	Tension      float64  `yaml:"tension"`
 }
 
 // FactEntry mirrors importer.FactEntry for direct fact loading.
