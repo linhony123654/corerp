@@ -529,8 +529,14 @@ func (e *Engine) LLMRoutes() map[string]interface{} {
 	}
 }
 
-// GetDialogue returns recent dialogue messages.
+// GetDialogue returns recent dialogue messages (default limit).
 func (e *Engine) GetDialogue() []core.Message {
+	return e.memEngine.GetRecentDialogue(e.activeCharacter)
+}
+
+// GetDialogueLimit returns up to N recent dialogue messages.
+func (e *Engine) GetDialogueLimit(limit int) []core.Message {
+	e.memEngine.LoadRecentDialogueFromDB(e.activeCharacter, limit)
 	return e.memEngine.GetRecentDialogue(e.activeCharacter)
 }
 

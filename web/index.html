@@ -394,7 +394,14 @@ body {
     </div>
 
     <div class="panel-section">
-      <button id="reset-btn" style="width:100%;padding:8px;background:transparent;color:var(--fg-tertiary);border:1px solid var(--border);cursor:pointer;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">重新开始</button>
+      <div class="stat-row">
+        <span class="stat-key">显示消息</span>
+        <span style="display:flex;align-items:center;gap:4px">
+          <input type="range" id="msg-limit-slider" min="5" max="100" value="30" style="width:60px;accent-color:var(--accent);cursor:pointer">
+          <span class="stat-val" id="msg-limit-val">30</span>
+        </span>
+      </div>
+      <button id="reset-btn" style="width:100%;padding:6px;margin-top:6px;background:transparent;color:var(--fg-tertiary);border:1px solid var(--border);cursor:pointer;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase">重新开始</button>
     </div>
 
     <div class="panel-section" id="char-panel-section">

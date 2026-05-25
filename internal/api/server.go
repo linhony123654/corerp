@@ -542,7 +542,11 @@ func (s *Server) handleDialogue(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	dialogue := s.engine.GetDialogue()
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	dialogue := s.engine.GetDialogueLimit(limit)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"messages": dialogue,

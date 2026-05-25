@@ -379,11 +379,24 @@ document.getElementById('price-save').addEventListener('click', async () => {
   refreshPanel();
 });
 
+// ── Message limit control ──
+const msgLimitSlider = document.getElementById('msg-limit-slider');
+const msgLimitVal = document.getElementById('msg-limit-val');
+msgLimitSlider.addEventListener('input', () => {
+  msgLimitVal.textContent = msgLimitSlider.value;
+  localStorage.setItem('corerp-msg-limit', msgLimitSlider.value);
+});
+const savedMsgLimit = parseInt(localStorage.getItem('corerp-msg-limit')) || 30;
+msgLimitSlider.value = savedMsgLimit;
+msgLimitVal.textContent = savedMsgLimit;
+
 // ── Dialogue restore on load ──
 async function restoreDialogue() {
-  const d = await fetch('/api/dialogue').then(r => r.json()).catch(() => ({}));
+  const limit = msgLimitSlider.value || 30;
+  const d = await fetch('/api/dialogue?limit=' + limit).then(r => r.json()).catch(() => ({}));
   const msgs = d.messages || [];
   if (msgs.length === 0) return;
+  chatScroll.innerHTML = '';
   for (const m of msgs) {
     addMsg(m.role, null, m.content);
   }
