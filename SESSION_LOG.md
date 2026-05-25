@@ -169,6 +169,35 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 - CLAUDE.md: 6 项验证全部标记 ✅，Status 更新
 - TODO.md: 重构为 P1→P2→P3 三段式，移除冗余
 
+## 2026-05-25 (LLM Router — llm/router.go)
+
+### 实现
+- `internal/llm/router.go`:
+  - `Router` — 按任务类型分发 LLM 调用，支持 fallback
+  - 三种任务：`narrative`（叙事生成）、`summary`（记忆压缩）、`extraction`（事实提取）
+  - 每个任务可独立路由到不同 adapter（不同 model/endpoint）
+  - `Generate(task, prompt, callback)` / `GenerateNonStream(task, messages)` 自动路由
+  - Fallback 机制：主 adapter 失败时自动切换到 fallback
+  - `AddAdapter()` / `SetRoute()` / `SetFallback()` 动态配置
+  - `NewRouter(defaultAdapter)` — 所有任务默认使用同一个模型
+- `internal/runtime/runtime.go`:
+  - `llmAdapter *llm.Adapter` → `llmRouter *llm.Router`
+  - `ProcessTurn` 调用 `router.Generate(llm.TaskNarrative, ...)`
+  - `updateWorkingMemory` 调用 `router.GenerateNonStream(llm.TaskSummary, ...)`
+  - 新增 `LLMRoutes()` 方法
+- `cmd/corerp/main.go`:
+  - 新增 `-llm-summary-url` / `-llm-summary-model` CLI 参数（可选，独立摘要模型）
+  - 创建 `Router` 替代直接 `Adapter`
+- `internal/api/server.go`:
+  - 新增 `GET /api/llm-routes` — 查看当前路由表
+
+### 测试结果
+- ✅ 路由表正确显示 3 个任务 → default
+- ✅ Chat 通过 router 正常工作
+- ✅ 独立摘要模型配置支持（可选）
+
+## Phase 3 Complete — 全部 6 项完成 (2026-05-25)
+
 ## 2026-05-25 (Narrative Compression — narrative/compression.go)
 
 ### 实现

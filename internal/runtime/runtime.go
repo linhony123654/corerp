@@ -35,7 +35,7 @@ type Engine struct {
 	memEngine   *memory.Engine
 	agents      *agents.EnvelopeManager
 	compiler     *context.Compiler
-	llmAdapter   *llm.Adapter
+	llmRouter    *llm.Router
 	executor     *actions.Executor
 	tickLoop     *simulation.Loop
 	decayEngine  *memory.DecayEngine
@@ -65,7 +65,7 @@ func New(
 	memEngine *memory.Engine,
 	decayEngine *memory.DecayEngine,
 	agentsMgr *agents.EnvelopeManager,
-	llmAdapter *llm.Adapter,
+	llmRouter *llm.Router,
 	activeChar string, loadedChars []string,
 	charWorlds map[string]CharWorld,
 ) (*Engine, error) {
@@ -83,7 +83,7 @@ func New(
 		scheduler:       agents.NewScheduler(),
 		agents:          agentsMgr,
 		compiler:        context.NewCompiler(4000),
-		llmAdapter:      llmAdapter,
+		llmRouter:       llmRouter,
 		executor:        actions.NewExecutor(),
 		activeCharacter: activeChar,
 		loadedCharacters: loadedChars,
@@ -213,7 +213,7 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 
 		// 10. LLM generation (collect full output server-side)
 		var llmOutput strings.Builder
-		err = e.llmAdapter.Generate(prompt, func(chunk core.LLMStreamChunk) {
+		err = e.llmRouter.Generate(llm.TaskNarrative, prompt, func(chunk core.LLMStreamChunk) {
 			if chunk.Done {
 				return
 			}
@@ -308,7 +308,7 @@ func (e *Engine) updateWorkingMemory() {
 	}
 
 	prompt := fmt.Sprintf("请用300字以内总结以下对话的关键信息（场景、人物关系变化、重要决定）：\n\n%s", dialogueText.String())
-	summary, err := e.llmAdapter.GenerateNonStream([]core.LLMMessage{
+	summary, err := e.llmRouter.GenerateNonStream(llm.TaskSummary, []core.LLMMessage{
 		{Role: "system", Content: "你是一个对话摘要助手。请用简洁的中文总结。"},
 		{Role: "user", Content: prompt},
 	})
@@ -446,6 +446,14 @@ func (e *Engine) CompressEvents(from, to int) (*narrative.CompressionResult, err
 // CompressionStats returns compression engine statistics.
 func (e *Engine) CompressionStats() map[string]interface{} {
 	return e.compressEng.SummaryStats()
+}
+
+// LLMRoutes returns the current LLM routing configuration.
+func (e *Engine) LLMRoutes() map[string]interface{} {
+	return map[string]interface{}{
+		"routes":   e.llmRouter.Routes(),
+		"adapters": e.llmRouter.Adapters(),
+	}
 }
 
 func (e *Engine) GetWorldName() string {

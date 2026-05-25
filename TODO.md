@@ -51,4 +51,7 @@
 - [x] events/causality.go — 因果链引擎（自动链接 + 递归查询 + summary）
 - [x] events/replay.go — 时间线回放/分叉（ReplayTo/ReplayAtTime/Fork/CompareStates）
 - [x] narrative/compression.go — 事件升维抽象（按类型分组→摘要，AutoCompress 每 20 tick）
-- [ ] llm/router.go — 能力路由
+- [x] llm/router.go — 能力路由（narrative/summary/extraction 分任务 + fallback）
+
+## Phase 3 — Complete (2026-05-25)
+全部 6 项完成。

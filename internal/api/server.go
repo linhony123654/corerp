@@ -34,6 +34,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/branches", s.handleBranches)
 	mux.HandleFunc("/api/compress", s.handleCompress)
 	mux.HandleFunc("/api/compression-stats", s.handleCompressionStats)
+	mux.HandleFunc("/api/llm-routes", s.handleLLMRoutes)
 	mux.HandleFunc("/api/debug/memory", s.handleDebugMemory)
 	mux.HandleFunc("/api/director", s.handleDirector)
 	mux.HandleFunc("/", s.handleStatic)
@@ -363,6 +364,17 @@ func (s *Server) handleCompressionStats(w http.ResponseWriter, r *http.Request) 
 	stats := s.engine.CompressionStats()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+func (s *Server) handleLLMRoutes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	routes := s.engine.LLMRoutes()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(routes)
 }
 
 func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {
