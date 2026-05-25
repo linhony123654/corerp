@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"corerp/internal/auth"
 	"corerp/internal/llm"
@@ -42,6 +43,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/llm-configs", a(s.handleLLMConfigs))
 	mux.HandleFunc("/api/llm-configs/", a(s.handleLLMConfigItem))
 	mux.HandleFunc("/api/llm-active", a(s.handleLLMActive))
+	mux.HandleFunc("/api/llm-models", a(s.handleLLMModels))
 	mux.HandleFunc("/api/llm-routes", a(s.handleLLMRoutes))
 	mux.HandleFunc("/api/dialogue", a(s.handleDialogue))
 	mux.HandleFunc("/api/dialogue/reset", a(s.handleDialogueReset))
@@ -424,6 +426,56 @@ func (s *Server) handleLLMConfigs(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleLLMModels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	configName := r.URL.Query().Get("config")
+	store := llm.GetConfigStore()
+	var cfg *llm.APIConfig
+	if configName != "" {
+		c, err := store.Get(configName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		cfg = c
+	} else {
+		c := llm.GetActiveConfig()
+		cfg = &c
+	}
+
+	// Proxy the models list request
+	req, _ := http.NewRequest("GET", strings.TrimRight(cfg.Endpoint, "/")+"/models", nil)
+	if cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to fetch models: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		http.Error(w, "Failed to parse models response", http.StatusBadGateway)
+		return
+	}
+	var models []string
+	for _, m := range result.Data {
+		models = append(models, m.ID)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"models": models})
 }
 
 func (s *Server) handleLLMActive(w http.ResponseWriter, r *http.Request) {

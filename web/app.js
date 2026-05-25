@@ -229,6 +229,25 @@ async function refreshPanel() {
     document.getElementById('pan-dialogue').textContent = debug.dialogue_in_memory || 0;
     document.getElementById('pan-events').textContent = debug.quarantined_events || 0;
 
+    // Message count
+    const dCount = debug.dialogue_in_memory || 0;
+    document.getElementById('msg-count').textContent = dCount + '条';
+
+    // World info
+    try {
+      const world = await fetch('/api/world').then(r => r.json());
+      document.getElementById('pan-world-name').textContent = world.name || '--';
+    } catch(_) {}
+    try {
+      const branches = await fetch('/api/branches').then(r => r.json());
+      document.getElementById('pan-branches').textContent = (branches.branches || []).length;
+    } catch(_) {}
+    try {
+      const comp = await fetch('/api/compression-stats').then(r => r.json());
+      document.getElementById('pan-compressed').textContent = comp.compressed_events || 0;
+      document.getElementById('pan-summaries').textContent = comp.summary_events || 0;
+    } catch(_) {}
+
     // NPC feed
     const npcActions = debug.npc_actions;
     if (npcActions && npcActions.length > 0) {
@@ -255,6 +274,22 @@ const cfgForm = document.getElementById('cfg-form');
 const cfgAddBtn = document.getElementById('cfg-add-btn');
 document.getElementById('cfg-cancel').addEventListener('click', () => { cfgForm.style.display = 'none'; });
 cfgAddBtn.addEventListener('click', () => { cfgForm.style.display = 'block'; });
+
+document.getElementById('cfg-fetch-models').addEventListener('click', async () => {
+  const ep = document.getElementById('cfg-endpoint').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if (!ep) return alert('请先填写 API 地址');
+  const tn = '_fetch_tmp';
+  await fetch('/api/llm-configs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name:tn,endpoint:ep,api_key:key,model:''}) });
+  try {
+    const r = await fetch('/api/llm-models?config='+tn).then(r=>r.json());
+    const sel = document.getElementById('cfg-model-select');
+    sel.innerHTML = ''; sel.style.display = 'block';
+    (r.models||[]).forEach(m => { const o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o); });
+    sel.onchange = () => { document.getElementById('cfg-model').value = sel.value; };
+  } catch(_) { alert('拉取失败'); }
+  fetch('/api/llm-configs/'+tn, {method:'DELETE'});
+});
 
 document.getElementById('cfg-save').addEventListener('click', async () => {
   const cfg = {
@@ -290,9 +325,10 @@ async function loadLLMConfigs() {
     html += `<div style="font-size:9px;color:var(--accent);margin-bottom:4px;font-weight:600">● 当前使用</div>`;
     html += `<div class="stat-row">
       <span class="stat-key" style="font-size:10px">${activeName}</span>
-      <span class="stat-val" style="font-size:9px">${active.model || ''}</span>
+      <span class="stat-val" style="font-size:9px;cursor:pointer;color:var(--fg-tertiary)" data-del="${activeName}" title="删除">✕</span>
     </div>`;
-    html += `<div style="font-size:9px;color:var(--fg-tertiary);margin-bottom:6px">${active.endpoint || ''}</div>`;
+    html += `<div style="font-size:9px;color:var(--fg-tertiary);margin-bottom:2px">${active.model || ''}</div>`;
+    html += `<div style="font-size:8px;color:var(--fg-tertiary);margin-bottom:6px">${active.endpoint || ''}</div>`;
   }
 
   // Saved configs

@@ -336,7 +336,8 @@ body {
 <header id="header">
   <span class="logo">Core<em>RP</em></span>
   <select id="char-select"></select>
-  <button id="theme-toggle" title="切换明暗主题" aria-label="切换主题">◐</button>
+  <button id="theme-toggle" title="切换主题" aria-label="切换主题">◐</button>
+  <span class="header-stat" id="msg-count">0条</span>
   <span id="clock-display"></span>
   <span class="header-stat" id="token-stat">⛁<span class="val">0</span></span>
   <span id="tension-meter">
@@ -426,10 +427,20 @@ body {
         <input id="cfg-name" placeholder="名称" style="width:100%;padding:6px;margin-bottom:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font-size:11px;font-family:var(--font-mono)">
         <input id="cfg-endpoint" placeholder="API 地址" style="width:100%;padding:6px;margin-bottom:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font-size:11px;font-family:var(--font-mono)">
         <input id="cfg-key" placeholder="API Key" type="password" style="width:100%;padding:6px;margin-bottom:4px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font-size:11px;font-family:var(--font-mono)">
-        <input id="cfg-model" placeholder="模型名" style="width:100%;padding:6px;margin-bottom:6px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font-size:11px;font-family:var(--font-mono)">
+        <input id="cfg-model" placeholder="模型名" style="width:100%;padding:6px;margin-bottom:2px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font-size:11px;font-family:var(--font-mono)">
+        <button id="cfg-fetch-models" style="font-size:9px;padding:1px 8px;background:transparent;color:var(--fg-tertiary);border:1px solid var(--border);cursor:pointer;margin-bottom:6px">拉取模型列表</button>
+        <select id="cfg-model-select" style="display:none;width:100%;padding:4px;margin-bottom:6px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font-size:10px"></select>
         <button id="cfg-save" style="padding:4px 12px;background:transparent;color:var(--accent);border:1px solid var(--accent);cursor:pointer;font-size:10px;font-weight:600;letter-spacing:1px;">保存</button>
         <button id="cfg-cancel" style="padding:4px 12px;background:transparent;color:var(--fg-tertiary);border:1px solid var(--border);cursor:pointer;font-size:10px;margin-left:4px;">取消</button>
       </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">世界</div>
+      <div class="stat-row"><span class="stat-key">名称</span><span class="stat-val" id="pan-world-name">--</span></div>
+      <div class="stat-row"><span class="stat-key">分叉数</span><span class="stat-val" id="pan-branches">--</span></div>
+      <div class="stat-row"><span class="stat-key">已压缩</span><span class="stat-val" id="pan-compressed">--</span></div>
+      <div class="stat-row"><span class="stat-key">摘要事件</span><span class="stat-val" id="pan-summaries">--</span></div>
     </div>
 
     <div class="panel-section">
