@@ -11,8 +11,12 @@ import (
 const (
 	// Auto-switch threshold: use keyword search below this, vector search above.
 	VectorThreshold = 100
-	// VectorDims is the fixed dimensionality of the embedding space.
+	// VectorDims is the fixed dimensionality of the local embedding space.
 	VectorDims = 256
+	// RecallMinScore drops results below this threshold (irrelevant noise).
+	RecallMinScore = 0.30
+	// RecallTopK limits how many candidates enter the Snapshot.
+	RecallTopK = 5
 )
 
 // VectorEmbedder converts text to fixed-size vectors.
@@ -226,15 +230,18 @@ func (vs *VectorStore) SearchFacts(query string, candidates []core.FactFrame, li
 	})
 
 	var out []VectorSearchResult
-	for i, r := range results {
-		if i >= limit {
-			break
+	for _, r := range results {
+		if r.score < RecallMinScore {
+			continue
 		}
 		out = append(out, VectorSearchResult{
 			ID:      r.fact.Subject + "_" + r.fact.Predicate,
 			Score:   r.score,
 			Content: r.fact.Subject + " " + r.fact.Predicate + " " + r.fact.Object,
 		})
+		if len(out) >= RecallTopK || len(out) >= limit {
+			break
+		}
 	}
 	return out
 }
@@ -286,15 +293,18 @@ func (vs *VectorStore) SearchEpisodic(query string, candidates []core.EventFrame
 	})
 
 	var out []VectorSearchResult
-	for i, r := range results {
-		if i >= limit {
-			break
+	for _, r := range results {
+		if r.score < RecallMinScore {
+			continue
 		}
 		out = append(out, VectorSearchResult{
 			ID:      r.event.EventID,
 			Score:   r.score,
 			Content: r.event.Description,
 		})
+		if len(out) >= RecallTopK || len(out) >= limit {
+			break
+		}
 	}
 	return out
 }
