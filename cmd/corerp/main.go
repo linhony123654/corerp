@@ -66,6 +66,13 @@ func runImport(args []string) {
 		for _, r := range results {
 			fmt.Println(r)
 		}
+	} else if strings.HasSuffix(strings.ToLower(*src), ".json") {
+		charPath, worldPath, err := importer.ImportJSON(*src, *dst)
+		if err != nil {
+			log.Fatalf("Import failed: %v", err)
+		}
+		fmt.Printf("Imported character: %s\n", charPath)
+		fmt.Printf("Imported world:     %s\n", worldPath)
 	} else {
 		charPath, worldPath, err := importer.ImportPNG(*src, *dst)
 		if err != nil {

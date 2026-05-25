@@ -55,6 +55,7 @@ type OntologyYAML struct {
 	Factions   []EntityEntry `yaml:"factions,omitempty"`
 	Items      []EntityEntry `yaml:"items,omitempty"`
 	Lore       []EntityEntry `yaml:"lore,omitempty"`
+	Settings   []EntityEntry `yaml:"settings,omitempty"`
 	Events     []EventEntry  `yaml:"events,omitempty"`
 	Timelines  []EntityEntry `yaml:"timelines,omitempty"`
 }
@@ -125,6 +126,45 @@ func ImportPNG(srcPath, dstDir string) (string, string, error) {
 	jsonBytes, err := base64.StdEncoding.DecodeString(charaB64)
 	if err != nil {
 		return "", "", fmt.Errorf("decode base64: %w", err)
+	}
+
+	var st SillyTavernChar
+	if err := json.Unmarshal(jsonBytes, &st); err != nil {
+		return "", "", fmt.Errorf("parse json: %w", err)
+	}
+
+	charYAML, worldYAML := Convert(st)
+
+	base := filepath.Base(srcPath)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+
+	charPath := filepath.Join(dstDir, name+".yml")
+	worldPath := filepath.Join(dstDir, name+"_world.yml")
+
+	charOut, err := yaml.Marshal(charYAML)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal char yaml: %w", err)
+	}
+	if err := os.WriteFile(charPath, charOut, 0644); err != nil {
+		return "", "", fmt.Errorf("write char yaml: %w", err)
+	}
+
+	worldOut, err := yaml.Marshal(worldYAML)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal world yaml: %w", err)
+	}
+	if err := os.WriteFile(worldPath, worldOut, 0644); err != nil {
+		return "", "", fmt.Errorf("write world yaml: %w", err)
+	}
+
+	return charPath, worldPath, nil
+}
+
+// ImportJSON reads a SillyTavern JSON card and converts to CoreRP YAMLs.
+func ImportJSON(srcPath, dstDir string) (string, string, error) {
+	jsonBytes, err := os.ReadFile(srcPath)
+	if err != nil {
+		return "", "", fmt.Errorf("read json: %w", err)
 	}
 
 	var st SillyTavernChar
@@ -256,21 +296,24 @@ func BuildWorldYAML(st SillyTavernChar, book []WorldBookEntry) WorldYAML {
 				Name: e.Name, Keys: e.Keys, Content: e.Content,
 			})
 		case "setting":
-			if strings.Contains(e.Name, "势力") {
-				world.Ontology.Factions = append(world.Ontology.Factions, EntityEntry{
-					Name: e.Name, Keys: e.Keys, Content: e.Content,
-				})
-			} else if strings.Contains(e.Name, "世界观") || strings.Contains(e.Name, "常识") {
-				world.Ontology.Lore = append(world.Ontology.Lore, EntityEntry{
-					Name: e.Name, Keys: e.Keys, Content: e.Content,
-				})
-			} else {
-				world.Ontology.Locations = append(world.Ontology.Locations, EntityEntry{
-					Name: e.Name, Keys: e.Keys, Content: e.Content,
-				})
-			}
+			// System/ability/class entries → Settings
+			world.Ontology.Settings = append(world.Ontology.Settings, EntityEntry{
+				Name: e.Name, Keys: e.Keys, Content: e.Content,
+			})
+		case "faction":
+			world.Ontology.Factions = append(world.Ontology.Factions, EntityEntry{
+				Name: e.Name, Keys: e.Keys, Content: e.Content,
+			})
+		case "location":
+			world.Ontology.Locations = append(world.Ontology.Locations, EntityEntry{
+				Name: e.Name, Keys: e.Keys, Content: e.Content,
+			})
 		case "item":
 			world.Ontology.Items = append(world.Ontology.Items, EntityEntry{
+				Name: e.Name, Keys: e.Keys, Content: e.Content,
+			})
+		case "lore":
+			world.Ontology.Lore = append(world.Ontology.Lore, EntityEntry{
 				Name: e.Name, Keys: e.Keys, Content: e.Content,
 			})
 		case "event":
@@ -649,21 +692,33 @@ func extractSystemPrompt(data map[string]interface{}) string {
 }
 
 func classifyEntry(comment string) string {
-	if strings.Contains(comment, "角色") {
+	c := strings.ToLower(comment)
+
+	// Check bracketed category tags first: [角色], [物品], etc.
+	switch {
+	case strings.Contains(c, "[角色]"), strings.Contains(c, "[人物]"), strings.Contains(c, "[npc]"):
+		return "character"
+	case strings.Contains(c, "[事件]"), strings.Contains(c, "事件线"), strings.Contains(c, "[剧情]"):
+		return "event"
+	case strings.Contains(c, "[时间]"), strings.Contains(c, "时间线"), strings.Contains(c, "[年代]"):
+		return "timeline"
+	case strings.Contains(c, "[地点]"), strings.Contains(c, "[地理]"), strings.Contains(c, "[位置]"), strings.Contains(c, "[地图]"):
+		return "location"
+	case strings.Contains(c, "[物品]"), strings.Contains(c, "[装备]"), strings.Contains(c, "[道具]"), strings.Contains(c, "[武器]"):
+		return "item"
+	case strings.Contains(c, "[组织]"), strings.Contains(c, "[势力]"), strings.Contains(c, "[门派]"), strings.Contains(c, "[帮派]"), strings.Contains(c, "[公会]"):
+		return "faction"
+	case strings.Contains(c, "[体系]"), strings.Contains(c, "[能力]"), strings.Contains(c, "[职业]"), strings.Contains(c, "[技能]"), strings.Contains(c, "[等级]"), strings.Contains(c, "[系统]"):
+		return "setting"
+	case strings.Contains(c, "[概念]"), strings.Contains(c, "[设定]"), strings.Contains(c, "[规则]"), strings.Contains(c, "[社会]"), strings.Contains(c, "[其他]"):
+		return "lore"
+	}
+
+	// No bracket prefix: plain name → character entry
+	if !strings.Contains(comment, "[") && !strings.Contains(comment, "]") {
 		return "character"
 	}
-	if strings.Contains(comment, "事件线") {
-		return "event"
-	}
-	if strings.Contains(comment, "时间线") {
-		return "timeline"
-	}
-	if strings.Contains(comment, "设定") {
-		return "setting"
-	}
-	if strings.Contains(comment, "物品") {
-		return "item"
-	}
+
 	return "lore"
 }
 
