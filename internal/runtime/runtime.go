@@ -405,6 +405,36 @@ func (e *Engine) GetCausalitySummary(eventID string, depth int) (string, error) 
 	return e.gatekeeper.Causality().GetChainSummary(eventID, depth)
 }
 
+// ReplayTo reconstructs world state at a given event.
+func (e *Engine) ReplayTo(eventID string) (core.WorldState, error) {
+	return e.gatekeeper.Replay().ReplayTo(eventID, "main")
+}
+
+// ReplayAtTime reconstructs world state at a given world time.
+func (e *Engine) ReplayAtTime(hour, minute, day int) (core.WorldState, error) {
+	return e.gatekeeper.Replay().ReplayAtTime(hour, minute, day)
+}
+
+// ForkTimeline creates a new timeline branch from an event.
+func (e *Engine) ForkTimeline(eventID, branchName string) error {
+	return e.gatekeeper.Replay().Fork(eventID, branchName)
+}
+
+// GetTimeline returns the timeline for a branch.
+func (e *Engine) GetTimeline(branch string, limit int) ([]events.EventTimeline, error) {
+	return e.gatekeeper.Replay().GetTimeline(branch, limit)
+}
+
+// ListBranches returns all branch names.
+func (e *Engine) ListBranches() ([]string, error) {
+	return e.gatekeeper.Replay().ListBranches()
+}
+
+// CompareBranches compares world state across two branches.
+func (e *Engine) CompareBranches(branchA, branchB string, index int) (map[string]interface{}, error) {
+	return e.gatekeeper.Replay().CompareStates(branchA, branchB, index)
+}
+
 func (e *Engine) GetWorldName() string {
 	return e.worldName
 }

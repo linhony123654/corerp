@@ -28,6 +28,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/world", s.handleWorld)
 	mux.HandleFunc("/api/npc-actions", s.handleNPCActions)
 	mux.HandleFunc("/api/causality", s.handleCausality)
+	mux.HandleFunc("/api/replay", s.handleReplay)
+	mux.HandleFunc("/api/fork", s.handleFork)
+	mux.HandleFunc("/api/timeline", s.handleTimeline)
+	mux.HandleFunc("/api/branches", s.handleBranches)
 	mux.HandleFunc("/api/debug/memory", s.handleDebugMemory)
 	mux.HandleFunc("/api/director", s.handleDirector)
 	mux.HandleFunc("/", s.handleStatic)
@@ -209,6 +213,117 @@ func (s *Server) handleCausality(w http.ResponseWriter, r *http.Request) {
 		"depth":    depth,
 		"chain":    chain,
 		"summary":  summary,
+	})
+}
+
+func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	eventID := r.URL.Query().Get("id")
+	timeParam := r.URL.Query().Get("time")
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if eventID != "" {
+		state, err := s.engine.ReplayTo(eventID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(state)
+		return
+	}
+
+	if timeParam != "" {
+		var h, m, d int
+		fmt.Sscanf(timeParam, "%d:%d:%d", &d, &h, &m)
+		state, err := s.engine.ReplayAtTime(h, m, d)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(state)
+		return
+	}
+
+	http.Error(w, "Missing 'id' or 'time' query parameter", http.StatusBadRequest)
+}
+
+func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		EventID string `json:"event_id"`
+		Branch  string `json:"branch"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.engine.ForkTimeline(req.EventID, req.Branch); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":      true,
+		"event_id": req.EventID,
+		"branch":  req.Branch,
+	})
+}
+
+func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	branch := r.URL.Query().Get("branch")
+	if branch == "" {
+		branch = "main"
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+
+	timeline, err := s.engine.GetTimeline(branch, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"branch":   branch,
+		"timeline": timeline,
+	})
+}
+
+func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	branches, err := s.engine.ListBranches()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"branches": branches,
 	})
 }
 

@@ -169,6 +169,39 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 - CLAUDE.md: 6 项验证全部标记 ✅，Status 更新
 - TODO.md: 重构为 P1→P2→P3 三段式，移除冗余
 
+## 2026-05-25 (Timeline Replay & Fork — events/replay.go)
+
+### 实现
+- `internal/events/replay.go`:
+  - `ReplayEngine` — 回放事件流重建任意时刻的 WorldState
+  - `ReplayTo(eventID)` — 从事件流开始播放到指定事件，返回当时的世界状态
+  - `ReplayAtTime(hour, minute, day)` — 按世界时钟回放
+  - `Fork(eventID, branchName)` — 从任意事件创建平行时间线分叉
+  - `GetTimeline(branch, limit)` — 获取时间线的所有事件
+  - `ListBranches()` — 列出所有分叉名
+  - `CompareStates(branchA, branchB, index)` — 对比两个分叉的同一点状态差异
+  - `ReplaySummary()` / `BuildTimeline()` — 人类可读格式
+- `internal/events/store.go`:
+  - events 表新增 `branch TEXT DEFAULT 'main'` 列
+  - `scanEvents` 修复 NULL 扫描问题：actor/target/scene_id/session_id 改用 `sql.NullString`
+  - `GetByID` 同样修复 NULL 扫描
+  - 所有 SELECT 查询加 `branch` 列
+- `internal/events/quarantine.go`:
+  - Gatekeeper 新增 `replay *ReplayEngine` 字段 + `Replay()` 访问器
+- `internal/runtime/runtime.go`:
+  - 新增 `ReplayTo()` / `ReplayAtTime()` / `ForkTimeline()` / `GetTimeline()` / `ListBranches()` / `CompareBranches()` 方法
+- `internal/api/server.go`:
+  - 新增 `GET /api/replay?id=<event_id>` / `GET /api/replay?time=<d:h:m>`
+  - 新增 `POST /api/fork` → `{"event_id":"...", "branch":"name"}`
+  - 新增 `GET /api/timeline?branch=main&limit=50`
+  - 新增 `GET /api/branches`
+
+### 测试结果
+- ✅ ReplayTo 重建 WorldState（clock/tension/scene/relationships 完整）
+- ✅ Timeline 正确排序显示事件
+- ✅ Fork 创建新分叉成功，branches 列表更新
+- ✅ NULL 扫描修复同时解决了 LoadState 警告
+
 ## 2026-05-25 (Causality Engine — events/causality.go)
 
 ### 实现

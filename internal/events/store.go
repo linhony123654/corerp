@@ -50,7 +50,15 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
 `
 	_, err := s.db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Migration: add branch column for timeline forking (P3)
+	s.db.Exec(`ALTER TABLE events ADD COLUMN branch TEXT DEFAULT 'main'`)
+	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_branch ON events(branch)`)
+
+	return nil
 }
 
 func (s *Store) Append(e core.Event) error {
@@ -58,17 +66,18 @@ func (s *Store) Append(e core.Event) error {
 	causes, _ := json.Marshal(e.Causes)
 	effects, _ := json.Marshal(e.Effects)
 
+	branch := "main"
 	_, err := s.db.Exec(
-		`INSERT INTO events (id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO events (id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.Type, e.Actor, e.Target, payload, causes, effects,
-		e.Canonical, e.Confidence, e.Confirmations, e.SceneID, e.SessionID, e.CreatedAt,
+		e.Canonical, e.Confidence, e.Confirmations, e.SceneID, e.SessionID, branch, e.CreatedAt,
 	)
 	return err
 }
 
 func (s *Store) GetCanonicalEvents() ([]core.Event, error) {
-	rows, err := s.db.Query(`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at FROM events WHERE canonical = 1 ORDER BY created_at ASC`)
+	rows, err := s.db.Query(`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at FROM events WHERE canonical = 1 ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +87,7 @@ func (s *Store) GetCanonicalEvents() ([]core.Event, error) {
 }
 
 func (s *Store) GetAllEvents(limit int) ([]core.Event, error) {
-	rows, err := s.db.Query(`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at FROM events ORDER BY created_at DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at FROM events ORDER BY created_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +114,19 @@ func scanEvents(rows *sql.Rows) ([]core.Event, error) {
 	for rows.Next() {
 		var e core.Event
 		var payloadJSON, causesJSON, effectsJSON []byte
-		var createdAtStr string
+		var createdAtStr, branch string
+		var actor, target, sceneID, sessionID sql.NullString
 
-		err := rows.Scan(&e.ID, &e.Type, &e.Actor, &e.Target, &payloadJSON, &causesJSON, &effectsJSON,
-			&e.Canonical, &e.Confidence, &e.Confirmations, &e.SceneID, &e.SessionID, &createdAtStr)
+		err := rows.Scan(&e.ID, &e.Type, &actor, &target, &payloadJSON, &causesJSON, &effectsJSON,
+			&e.Canonical, &e.Confidence, &e.Confirmations, &sceneID, &sessionID, &branch, &createdAtStr)
 		if err != nil {
 			return nil, err
 		}
+
+		e.Actor = actor.String
+		e.Target = target.String
+		e.SceneID = sceneID.String
+		e.SessionID = sessionID.String
 
 		json.Unmarshal(payloadJSON, &e.Payload)
 		json.Unmarshal(causesJSON, &e.Causes)
@@ -126,16 +141,22 @@ func scanEvents(rows *sql.Rows) ([]core.Event, error) {
 func (s *Store) GetByID(eventID string) (core.Event, error) {
 	var e core.Event
 	var payloadJSON, causesJSON, effectsJSON []byte
-	var createdAtStr string
+	var createdAtStr, branch string
+	var actor, target, sceneID, sessionID sql.NullString
 
 	err := s.db.QueryRow(
-		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at FROM events WHERE id = ?`,
+		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&e.ID, &e.Type, &e.Actor, &e.Target, &payloadJSON, &causesJSON, &effectsJSON,
-		&e.Canonical, &e.Confidence, &e.Confirmations, &e.SceneID, &e.SessionID, &createdAtStr)
+	).Scan(&e.ID, &e.Type, &actor, &target, &payloadJSON, &causesJSON, &effectsJSON,
+		&e.Canonical, &e.Confidence, &e.Confirmations, &sceneID, &sessionID, &branch, &createdAtStr)
 	if err != nil {
 		return core.Event{}, err
 	}
+
+	e.Actor = actor.String
+	e.Target = target.String
+	e.SceneID = sceneID.String
+	e.SessionID = sessionID.String
 
 	json.Unmarshal(payloadJSON, &e.Payload)
 	json.Unmarshal(causesJSON, &e.Causes)
@@ -148,7 +169,7 @@ func (s *Store) GetByID(eventID string) (core.Event, error) {
 // GetRecentEvents returns the last N events (canonical and quarantined).
 func (s *Store) GetRecentEvents(limit int) ([]core.Event, error) {
 	rows, err := s.db.Query(
-		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at FROM events ORDER BY created_at DESC LIMIT ?`,
+		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at FROM events ORDER BY created_at DESC LIMIT ?`,
 		limit,
 	)
 	if err != nil {

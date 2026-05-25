@@ -11,12 +11,14 @@ import (
 type Gatekeeper struct {
 	store     *Store
 	causality *CausalityEngine
+	replay    *ReplayEngine
 }
 
 func NewGatekeeper(store *Store) *Gatekeeper {
 	return &Gatekeeper{
 		store:     store,
 		causality: NewCausalityEngine(store),
+		replay:    NewReplayEngine(store),
 	}
 }
 
@@ -48,6 +50,11 @@ func (g *Gatekeeper) Causality() *CausalityEngine {
 	return g.causality
 }
 
+// Replay returns the replay engine for timeline reconstruction.
+func (g *Gatekeeper) Replay() *ReplayEngine {
+	return g.replay
+}
+
 // Review manually confirms or rejects a quarantined event.
 func (g *Gatekeeper) Review(eventID string, confirm bool) error {
 	if confirm {
@@ -76,7 +83,7 @@ func (g *Gatekeeper) AutoPromote() (int, error) {
 // ListPending returns quarantined events pending review.
 func (g *Gatekeeper) ListPending(limit int) ([]core.Event, error) {
 	rows, err := g.store.db.Query(
-		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at
+		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at
 		 FROM events WHERE canonical = 0 ORDER BY created_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
