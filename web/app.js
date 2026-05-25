@@ -32,6 +32,9 @@ themeToggle.addEventListener('click', () => {
   localStorage.setItem('corerp-theme', next);
 });
 
+// ── Reset button ──
+document.getElementById('reset-btn').addEventListener('click', resetConversation);
+
 // ── Panel toggle (mobile) ──
 panelToggle.addEventListener('click', () => panel.classList.toggle('open'));
 panel.addEventListener('click', e => {
@@ -331,7 +334,28 @@ document.getElementById('price-save').addEventListener('click', async () => {
   refreshPanel();
 });
 
+// ── Dialogue restore on load ──
+async function restoreDialogue() {
+  const d = await fetch('/api/dialogue').then(r => r.json()).catch(() => ({}));
+  const msgs = d.messages || [];
+  if (msgs.length === 0) return;
+  for (const m of msgs) {
+    addMsg(m.role, null, m.content);
+  }
+}
+
+// ── Reset conversation ──
+async function resetConversation() {
+  if (!confirm('确定要重新开始对话吗？当前对话将被清除。')) return;
+  await fetch('/api/dialogue/reset', { method: 'POST' });
+  chatScroll.innerHTML = '';
+  msgCount = 0;
+  lastSpeaker = null;
+  addMsg('system', '对话已重置');
+}
+
 // ── Init ──
+restoreDialogue();
 refreshPanel();
 loadLLMConfigs();
 setInterval(refreshPanel, 15000);

@@ -116,6 +116,14 @@ func (e *Engine) GetRecentDialogue(character string) []core.Message {
 	return result
 }
 
+// ResetDialogue clears short-term memory and DB dialogue for a character.
+func (e *Engine) ResetDialogue(character string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	delete(e.shortTerm, character)
+	e.db.Exec(`DELETE FROM dialogue_history WHERE character = ?`, character)
+}
+
 // LoadRecentDialogueFromDB restores the last N messages for a character from SQLite into short-term memory.
 func (e *Engine) LoadRecentDialogueFromDB(character string, limit int) {
 	e.mu.Lock()

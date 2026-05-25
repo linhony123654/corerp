@@ -43,6 +43,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/llm-configs/", a(s.handleLLMConfigItem))
 	mux.HandleFunc("/api/llm-active", a(s.handleLLMActive))
 	mux.HandleFunc("/api/llm-routes", a(s.handleLLMRoutes))
+	mux.HandleFunc("/api/dialogue", a(s.handleDialogue))
+	mux.HandleFunc("/api/dialogue/reset", a(s.handleDialogueReset))
 	mux.HandleFunc("/api/debug/memory", a(s.handleDebugMemory))
 	mux.HandleFunc("/api/director", a(s.handleDirector))
 	mux.HandleFunc("/", s.handleStatic)
@@ -481,6 +483,28 @@ func (s *Server) handleLLMRoutes(w http.ResponseWriter, r *http.Request) {
 	routes := s.engine.LLMRoutes()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(routes)
+}
+
+func (s *Server) handleDialogue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	dialogue := s.engine.GetDialogue()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"messages": dialogue,
+	})
+}
+
+func (s *Server) handleDialogueReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.engine.ResetDialogue()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 }
 
 func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {

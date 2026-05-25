@@ -529,6 +529,18 @@ func (e *Engine) LLMRoutes() map[string]interface{} {
 	}
 }
 
+// GetDialogue returns recent dialogue messages.
+func (e *Engine) GetDialogue() []core.Message {
+	return e.memEngine.GetRecentDialogue(e.activeCharacter)
+}
+
+// ResetDialogue clears the current character's dialogue.
+func (e *Engine) ResetDialogue() {
+	e.memEngine.ResetDialogue(e.activeCharacter)
+	e.dialogueHistory = nil
+	e.turnCount = 0
+}
+
 func (e *Engine) GetWorldName() string {
 	return e.worldName
 }
