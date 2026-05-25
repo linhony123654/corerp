@@ -198,6 +198,37 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 
 ## Phase 3 Complete — 全部 6 项完成 (2026-05-25)
 
+## 2026-05-25 (Token Budget 升级 — 4K → 48K/96K)
+
+### 问题
+P1 时代 Snapshot Compiler 硬编码 4000 token 上限，256K 上下文模型下严重浪费。
+
+### 改动
+- 新增 `budgets.yml` — Token 预算配置文件
+  - `normal`: 48K total（日常对话），分配比例:
+    - core_rules 20% (9.6K) — ontology 全量常驻
+    - persona_state 12% (5.8K) — 更细腻的 Identity Envelope
+    - semantic_facts 20% (9.6K) — 结构化事实不截断
+    - episodic_events 20% (9.6K) — 完整事件链
+    - recent_dialogue 15% (7.2K) — 保留 40-60 轮原始对话
+  - `full_load`: 96K total（角色切换/首次加载）
+- `internal/context/compiler.go`:
+  - `NewCompiler(configPath)` — 从 YAML 加载预算配置，缺失时回退默认值
+  - `SetMode("normal"|"full_load")` — 双模式切换
+  - `Budget()` — 返回当前活跃预算
+- `internal/runtime/runtime.go`:
+  - `NewCompiler("budgets.yml")` 替代硬编码 `NewCompiler(4000)`
+  - `SwitchCharacter` 时自动切 `full_load`，首轮后恢复 `normal`
+
+### 对比
+
+| 指标 | 旧 (4K) | 新 normal (48K) | 新 full_load (96K) |
+|------|---------|-----------------|-------------------|
+| 对话历史 | ~6 轮 | ~40-60 轮 | ~100 轮 |
+| 语义事实 | ~600 tokens | 9.6K | 19.2K |
+| 事件链 | ~400 tokens | 9.6K | 16.3K |
+| 世界规则 | ~200 tokens | 9.6K | 19.2K |
+
 ## 2026-05-25 (Cleanup — 关闭架构)
 
 - 删除 `internal/models/types.go`（空占位文件，无引用）

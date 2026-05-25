@@ -1,0 +1,25 @@
+# budgets.yml — Token budget configuration for Snapshot Compiler
+# Models in 2026 typically support 256K-1M context. 4K is obsolete.
+
+budgets:
+  normal:        # Regular turn-by-turn conversation
+    total: 48000
+    allocation:
+      core_rules:      0.20    # 9600 — ontology full-time resident
+      persona_state:   0.12    # 5760 — richer identity envelope
+      scene_state:     0.05    # 2400 — scene description
+      working_memory:  0.08    # 3840 — compressed summary
+      semantic_facts:  0.20    # 9600 — structured facts, no truncation
+      episodic_events: 0.20    # 9600 — complete event chains
+      recent_dialogue: 0.15    # 7200 — ~40-60 rounds of raw dialogue
+
+  full_load:     # Character switch / first load / scene transition
+    total: 96000
+    allocation:
+      core_rules:      0.20    # 19200
+      persona_state:   0.15    # 14400
+      scene_state:     0.05    # 4800
+      working_memory:  0.08    # 7680
+      semantic_facts:  0.20    # 19200
+      episodic_events: 0.17    # 16320
+      recent_dialogue: 0.15    # 14400

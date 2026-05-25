@@ -82,7 +82,7 @@ func New(
 		planner:         agents.NewPlanner(),
 		scheduler:       agents.NewScheduler(),
 		agents:          agentsMgr,
-		compiler:        context.NewCompiler(4000),
+		compiler:        context.NewCompiler("budgets.yml"),
 		llmRouter:       llmRouter,
 		executor:        actions.NewExecutor(),
 		activeCharacter: activeChar,
@@ -207,6 +207,9 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 			ch <- fmt.Sprintf("[ERROR] Snapshot compile failed: %v\n", err)
 			return
 		}
+
+		// Reset to normal budget after first post-switch turn
+		e.compiler.SetMode("normal")
 
 		// 9. Render prompt
 		prompt := e.compiler.RenderSnapshot(snapshot)
@@ -373,6 +376,9 @@ func (e *Engine) SwitchCharacter(name string) error {
 	e.turnCount = 0
 	e.activeCharacter = name
 	e.memEngine.LoadRecentDialogueFromDB(e.activeCharacter, 15)
+
+	// Use full_load budget for the first turn after switch
+	e.compiler.SetMode("full_load")
 
 	// Switch world context
 	if cw, ok := e.charWorlds[name]; ok {

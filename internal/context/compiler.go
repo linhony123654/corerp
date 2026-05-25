@@ -2,41 +2,108 @@ package context
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"corerp/internal/core"
+
+	"gopkg.in/yaml.v3"
 )
 
-// Compiler assembles WorldSnapshot with hard token budget.
+// Compiler assembles WorldSnapshot with configurable token budget.
 type Compiler struct {
-	budget Budget
+	budgets map[string]Budget
+	mode    string // "normal" or "full_load"
 }
 
 type Budget struct {
-	Total         int
-	CoreRules     int
-	PersonaState  int
-	SceneState    int
-	WorkingMemory int
-	SemanticFacts int
+	Total          int
+	CoreRules      int
+	PersonaState   int
+	SceneState     int
+	WorkingMemory  int
+	SemanticFacts  int
 	EpisodicEvents int
 	RecentDialogue int
 }
 
-func NewCompiler(modelTokenLimit int) *Compiler {
-	// P1: hardcoded percentages
-	return &Compiler{
-		budget: Budget{
-			Total:          modelTokenLimit,
-			CoreRules:      int(float64(modelTokenLimit) * 0.05),
-			PersonaState:   int(float64(modelTokenLimit) * 0.15),
-			SceneState:     int(float64(modelTokenLimit) * 0.10),
-			WorkingMemory:  int(float64(modelTokenLimit) * 0.15),
-			SemanticFacts:  int(float64(modelTokenLimit) * 0.15),
-			EpisodicEvents: int(float64(modelTokenLimit) * 0.10),
-			RecentDialogue: int(float64(modelTokenLimit) * 0.30),
-		},
+type budgetConfig struct {
+	Budgets map[string]struct {
+		Total      int                `yaml:"total"`
+		Allocation map[string]float64 `yaml:"allocation"`
+	} `yaml:"budgets"`
+}
+
+// NewCompiler loads budget config from YAML. Falls back to defaults if file missing.
+func NewCompiler(configPath string) *Compiler {
+	c := &Compiler{
+		budgets: make(map[string]Budget),
+		mode:    "normal",
 	}
+
+	// Default budgets (used if config is missing or invalid)
+	defaults := map[string]Budget{
+		"normal":    {Total: 48000, CoreRules: 9600, PersonaState: 5760, SceneState: 2400, WorkingMemory: 3840, SemanticFacts: 9600, EpisodicEvents: 9600, RecentDialogue: 7200},
+		"full_load": {Total: 96000, CoreRules: 19200, PersonaState: 14400, SceneState: 4800, WorkingMemory: 7680, SemanticFacts: 19200, EpisodicEvents: 16320, RecentDialogue: 14400},
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		c.budgets = defaults
+		return c
+	}
+
+	var cfg budgetConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		c.budgets = defaults
+		return c
+	}
+
+	for name, bc := range cfg.Budgets {
+		b := Budget{Total: bc.Total}
+		for section, pct := range bc.Allocation {
+			tokens := int(float64(bc.Total) * pct)
+			switch section {
+			case "core_rules":
+				b.CoreRules = tokens
+			case "persona_state":
+				b.PersonaState = tokens
+			case "scene_state":
+				b.SceneState = tokens
+			case "working_memory":
+				b.WorkingMemory = tokens
+			case "semantic_facts":
+				b.SemanticFacts = tokens
+			case "episodic_events":
+				b.EpisodicEvents = tokens
+			case "recent_dialogue":
+				b.RecentDialogue = tokens
+			}
+		}
+		c.budgets[name] = b
+	}
+
+	if len(c.budgets) == 0 {
+		c.budgets = defaults
+	}
+
+	return c
+}
+
+// SetMode switches between "normal" and "full_load" budgets.
+func (c *Compiler) SetMode(mode string) {
+	if _, ok := c.budgets[mode]; ok {
+		c.mode = mode
+	}
+}
+
+// Budget returns the active budget.
+func (c *Compiler) Budget() Budget {
+	if b, ok := c.budgets[c.mode]; ok {
+		return b
+	}
+	// Fallback
+	return Budget{Total: 48000, CoreRules: 9600, PersonaState: 5760, SceneState: 2400, WorkingMemory: 3840, SemanticFacts: 9600, EpisodicEvents: 9600, RecentDialogue: 7200}
 }
 
 func (c *Compiler) Compile(
@@ -50,24 +117,25 @@ func (c *Compiler) Compile(
 	allowedActions []string,
 	coreRules string,
 ) (core.WorldSnapshot, error) {
+	b := c.Budget()
 	snapshot := core.WorldSnapshot{
-		TokenBudget:    c.budget.Total,
+		TokenBudget:    b.Total,
 		UsedTokens:     0,
-		CoreRules:      c.truncate(coreRules, c.budget.CoreRules),
+		CoreRules:      c.truncate(coreRules, b.CoreRules),
 		PersonaState:   persona,
 		SceneState:     state.Scene,
 		ActiveGoals:    goals,
-		WorkingMemory:  c.truncate(workingMem, c.budget.WorkingMemory),
-		SemanticFacts:  c.truncateFacts(semanticFacts, c.budget.SemanticFacts),
-		EpisodicEvents: c.truncateEvents(episodicEvents, c.budget.EpisodicEvents),
-		RecentDialogue: c.truncateDialogue(dialogue, c.budget.RecentDialogue),
+		WorkingMemory:  c.truncate(workingMem, b.WorkingMemory),
+		SemanticFacts:  c.truncateFacts(semanticFacts, b.SemanticFacts),
+		EpisodicEvents: c.truncateEvents(episodicEvents, b.EpisodicEvents),
+		RecentDialogue: c.truncateDialogue(dialogue, b.RecentDialogue),
 		AllowedActions: allowedActions,
 	}
 
 	snapshot.UsedTokens = c.estimateSnapshotTokens(snapshot)
 
-	if snapshot.UsedTokens > c.budget.Total {
-		return snapshot, fmt.Errorf("SNAPSHOT OVER BUDGET: used %d / %d tokens", snapshot.UsedTokens, c.budget.Total)
+	if snapshot.UsedTokens > b.Total {
+		return snapshot, fmt.Errorf("SNAPSHOT OVER BUDGET: used %d / %d tokens", snapshot.UsedTokens, b.Total)
 	}
 
 	return snapshot, nil
@@ -77,10 +145,10 @@ func (c *Compiler) GoalsToFrames(goals []core.Goal) []core.GoalFrame {
 	var frames []core.GoalFrame
 	for _, g := range goals {
 		frames = append(frames, core.GoalFrame{
-			ID:       g.ID,
-			Priority: g.Priority,
-			Type:     g.Type,
-			Target:   g.Target,
+			ID:        g.ID,
+			Priority:  g.Priority,
+			Type:      g.Type,
+			Target:    g.Target,
 			Condition: g.Condition,
 		})
 	}
@@ -88,8 +156,7 @@ func (c *Compiler) GoalsToFrames(goals []core.Goal) []core.GoalFrame {
 }
 
 func (c *Compiler) truncate(text string, maxTokens int) string {
-	// Rough: 1 token ≈ 1.5 CJK chars or 4 ASCII chars
-	maxChars := maxTokens * 3 // conservative for mixed
+	maxChars := maxTokens * 3
 	if len(text) <= maxChars {
 		return text
 	}
@@ -127,7 +194,6 @@ func (c *Compiler) truncateEvents(events []core.EventFrame, maxTokens int) []cor
 func (c *Compiler) truncateDialogue(dialogue []core.Message, maxTokens int) []core.Message {
 	var result []core.Message
 	used := 0
-	// Add from most recent backwards
 	for i := len(dialogue) - 1; i >= 0; i-- {
 		est := len(dialogue[i].Content)/2 + 5
 		if used+est > maxTokens {

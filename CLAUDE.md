@@ -169,7 +169,7 @@ SSE 返回叙事文本
 1. ✅ 连续对话 50 轮，角色人设不漂移（Identity Envelope 生效）。— 多轮验证 + OOC 拦截测试通过
 2. ✅ 重启服务后，角色能准确回忆第 3 轮的关键事实（Semantic Memory + Event Store 生效）。— 跨会话记忆：dialogue_history 持久化 + 重启恢复 15 轮
 3. ✅ LLM 输出一次明显 OOC（如角色做 forbidden 动作），被 Validator 拦截或降级。— Anya 拒绝卖萌/撒娇/鬼脸
-4. ✅ 上下文 Token 始终 < 3K（Snapshot Compiler 预算硬墙生效）。— 实测 1348-2438/4000，稳定在 2.4K 以下
+4. ✅ 上下文 Token 预算可配置（budgets.yml: normal=48K, full_load=96K）。— 不再使用 P1 的 4K 硬墙
 5. ✅ 手机浏览器打开域名，能发消息、收 SSE 流式回复（PWA 生效）。— PWA manifest + sw.js + app.js + 响应式布局
 6. ✅ VPS 上 `pm2 start ./corerp` 能常驻，SQLite 单文件可备份。— deploy/corerp.service systemd 配置
 
@@ -202,4 +202,4 @@ SSE 返回叙事文本
 ---
 
 *Version: 2026-05-25*
-*Status: Phase 1 Verified — All 6 criteria met. Phase 2 implemented.*
+*Status: Phase 1-3 Complete. All modules implemented, budget upgraded to 48K/96K.*
