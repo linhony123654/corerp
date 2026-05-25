@@ -169,6 +169,31 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 - CLAUDE.md: 6 项验证全部标记 ✅，Status 更新
 - TODO.md: 重构为 P1→P2→P3 三段式，移除冗余
 
+## 2026-05-25 (Narrative Compression — narrative/compression.go)
+
+### 实现
+- `internal/narrative/compression.go`:
+  - `CompressionEngine` — 规则式事件升维压缩，零 LLM 调用
+  - 按 event type 分组，同类型连续事件合并为一条摘要
+  - `AutoCompress()` — 事件超阈值（500）时自动压缩 10min+ 的旧事件
+  - `CompressRange(from, to)` — 手动指定范围压缩
+  - `SummaryStats()` — 压缩统计（total/active/compressed/summary）
+  - 摘要生成：observe→"观察了N次"，dialogue→"进行了N轮对话"，clock_advance→"时间推进了N步" 等
+  - 不可压缩类型：user_message, attack, threaten（关键事件保留）
+  - 摘要存储为 `narrative_compression` 类型 canonical 事件
+- `internal/runtime/runtime.go`:
+  - Engine 新增 `compressEng` 字段
+  - `onTick` 每 20 tick 自动检查并压缩
+  - 新增 `CompressEvents()` / `CompressionStats()` 方法
+- `internal/api/server.go`:
+  - 新增 `POST /api/compress` → `{"from":0,"to":50}`
+  - 新增 `GET /api/compression-stats`
+
+### 测试结果
+- ✅ 50 事件范围压缩：6 组（dialogue x9/2/2/3, clock_advance x4/3）→ 23 事件压缩为 6 条摘要
+- ✅ stats 正确追踪 active/compressed/summary 数量
+- ✅ 压缩事件不删除，只标记跳过
+
 ## 2026-05-25 (Timeline Replay & Fork — events/replay.go)
 
 ### 实现

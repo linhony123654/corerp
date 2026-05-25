@@ -32,6 +32,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/fork", s.handleFork)
 	mux.HandleFunc("/api/timeline", s.handleTimeline)
 	mux.HandleFunc("/api/branches", s.handleBranches)
+	mux.HandleFunc("/api/compress", s.handleCompress)
+	mux.HandleFunc("/api/compression-stats", s.handleCompressionStats)
 	mux.HandleFunc("/api/debug/memory", s.handleDebugMemory)
 	mux.HandleFunc("/api/director", s.handleDirector)
 	mux.HandleFunc("/", s.handleStatic)
@@ -325,6 +327,42 @@ func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"branches": branches,
 	})
+}
+
+func (s *Server) handleCompress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		From int `json:"from"`
+		To   int `json:"to"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result, err := s.engine.CompressEvents(req.From, req.To)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleCompressionStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stats := s.engine.CompressionStats()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }
 
 func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {

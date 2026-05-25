@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,7 @@ type Engine struct {
 	decayEngine  *memory.DecayEngine
 	tensionEng   *narrative.TensionEngine
 	stateMachine *state.StateMachine
+	compressEng  *narrative.CompressionEngine
 	planner      *agents.Planner
 	scheduler    *agents.Scheduler
 
@@ -76,6 +78,7 @@ func New(
 		decayEngine:     decayEngine,
 		tensionEng:      narrative.NewTensionEngine(),
 		stateMachine:    state.NewStateMachine(),
+		compressEng:     narrative.NewCompressionEngine(eventStore),
 		planner:         agents.NewPlanner(),
 		scheduler:       agents.NewScheduler(),
 		agents:          agentsMgr,
@@ -435,6 +438,16 @@ func (e *Engine) CompareBranches(branchA, branchB string, index int) (map[string
 	return e.gatekeeper.Replay().CompareStates(branchA, branchB, index)
 }
 
+// CompressEvents manually triggers narrative compression.
+func (e *Engine) CompressEvents(from, to int) (*narrative.CompressionResult, error) {
+	return e.compressEng.CompressRange(from, to)
+}
+
+// CompressionStats returns compression engine statistics.
+func (e *Engine) CompressionStats() map[string]interface{} {
+	return e.compressEng.SummaryStats()
+}
+
 func (e *Engine) GetWorldName() string {
 	return e.worldName
 }
@@ -565,6 +578,15 @@ func (e *Engine) onTick() {
 		e.gatekeeper,
 		e.tickCount,
 	)
+
+	// 9. Narrative compression: every 20 ticks, check if compaction needed
+	if e.tickCount%20 == 0 {
+		result, err := e.compressEng.AutoCompress()
+		if err == nil && result.EventsCompressed > 0 {
+			log.Printf("Compression: %d events across %d groups compressed",
+				result.EventsCompressed, result.GroupsFound)
+		}
+	}
 }
 
 // SetTension directly sets tension for testing/directing.
