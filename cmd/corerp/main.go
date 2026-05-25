@@ -194,6 +194,9 @@ func runServe(args []string) {
 		log.Printf("Auth: enabled (set via -auth-key or CORERP_AUTH_KEY)")
 	}
 
+	// Init LLM config store
+	llm.InitConfigStore(*dataDir + "/llm_configs.json")
+
 	// Init LLM router + usage logger + compact previous month
 	usagePath := *dataDir + "/llm_usage.jsonl"
 	llm.InitUsageLogger(usagePath)

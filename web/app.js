@@ -16,6 +16,19 @@ let isStreaming = false;
 let lastSpeaker = null;
 let msgCount = 0;
 
+// ── Theme toggle ──
+const themeToggle = document.getElementById('theme-toggle');
+const savedTheme = localStorage.getItem('corerp-theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+themeToggle.textContent = savedTheme === 'light' ? '◑' : '◐';
+themeToggle.addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  themeToggle.textContent = next === 'light' ? '◑' : '◐';
+  localStorage.setItem('corerp-theme', next);
+});
+
 // ── Panel toggle (mobile) ──
 panelToggle.addEventListener('click', () => panel.classList.toggle('open'));
 panel.addEventListener('click', e => {
@@ -231,8 +244,53 @@ async function refreshPanel() {
   } catch (_) {}
 }
 
+// ── LLM Config management ──
+const cfgForm = document.getElementById('cfg-form');
+const cfgAddBtn = document.getElementById('cfg-add-btn');
+document.getElementById('cfg-cancel').addEventListener('click', () => { cfgForm.style.display = 'none'; });
+cfgAddBtn.addEventListener('click', () => { cfgForm.style.display = 'block'; });
+
+document.getElementById('cfg-save').addEventListener('click', async () => {
+  const cfg = {
+    name: document.getElementById('cfg-name').value.trim(),
+    endpoint: document.getElementById('cfg-endpoint').value.trim(),
+    api_key: document.getElementById('cfg-key').value.trim(),
+    model: document.getElementById('cfg-model').value.trim()
+  };
+  if (!cfg.name || !cfg.endpoint) return;
+  await fetch('/api/llm-configs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg)
+  });
+  cfgForm.style.display = 'none';
+  document.getElementById('cfg-name').value = '';
+  document.getElementById('cfg-endpoint').value = '';
+  document.getElementById('cfg-key').value = '';
+  document.getElementById('cfg-model').value = '';
+  loadLLMConfigs();
+});
+
+async function loadLLMConfigs() {
+  const configs = await fetch('/api/llm-configs').then(r => r.json());
+  const el = document.getElementById('pan-llm-configs');
+  el.innerHTML = configs.map(c => `
+    <div class="stat-row">
+      <span class="stat-key" style="font-size:10px">${c.name}</span>
+      <span class="stat-val" style="font-size:9px;cursor:pointer;color:var(--fg-tertiary)" data-del="${c.name}" title="删除">✕</span>
+    </div>
+    <div style="font-size:9px;color:var(--fg-tertiary);margin-bottom:4px">${c.model} @ ${c.endpoint}</div>
+  `).join('');
+  el.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await fetch('/api/llm-configs/' + btn.dataset.del, { method: 'DELETE' });
+      loadLLMConfigs();
+    });
+  });
+}
+
 // ── Init ──
 refreshPanel();
+loadLLMConfigs();
 setInterval(refreshPanel, 15000);
 
 document.addEventListener('keydown', e => {

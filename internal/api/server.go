@@ -39,6 +39,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/compress", a(s.handleCompress))
 	mux.HandleFunc("/api/compression-stats", a(s.handleCompressionStats))
 	mux.HandleFunc("/api/usage", a(s.handleUsage))
+	mux.HandleFunc("/api/llm-configs", a(s.handleLLMConfigs))
+	mux.HandleFunc("/api/llm-configs/", a(s.handleLLMConfigItem))
 	mux.HandleFunc("/api/llm-routes", a(s.handleLLMRoutes))
 	mux.HandleFunc("/api/debug/memory", a(s.handleDebugMemory))
 	mux.HandleFunc("/api/director", a(s.handleDirector))
@@ -396,6 +398,51 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		"by_week":             stats.ByWeek,
 		"by_month":            stats.ByMonth,
 	})
+}
+
+func (s *Server) handleLLMConfigs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	store := llm.GetConfigStore()
+
+	switch r.Method {
+	case "GET":
+		json.NewEncoder(w).Encode(store.List())
+	case "POST":
+		var cfg llm.APIConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := store.Add(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleLLMConfigItem(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	// Extract name from /api/llm-configs/<name>
+	name := strings.TrimPrefix(r.URL.Path, "/api/llm-configs/")
+	if name == "" {
+		http.Error(w, "Missing config name", http.StatusBadRequest)
+		return
+	}
+	store := llm.GetConfigStore()
+
+	switch r.Method {
+	case "DELETE":
+		if err := store.Remove(name); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func (s *Server) handleLLMRoutes(w http.ResponseWriter, r *http.Request) {
