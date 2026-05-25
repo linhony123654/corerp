@@ -23,15 +23,48 @@ panel.addEventListener('click', e => {
 });
 
 // ── Character list ──
-fetch('/api/characters').then(r => r.json()).then(d => {
+async function loadChars() {
+  const d = await fetch('/api/characters').then(r => r.json());
+  const count = d.characters.length;
   charSelect.innerHTML = '';
+
+  // Panel character list
+  const charPanel = document.getElementById('pan-chars');
+  const charSection = document.getElementById('char-panel-section');
+  if (charPanel) {
+    charPanel.innerHTML = '';
+    for (const name of d.characters) {
+      const row = document.createElement('div');
+      row.className = 'stat-row';
+      row.style.cursor = 'pointer';
+      const key = document.createElement('span');
+      key.className = 'stat-key';
+      key.textContent = (name === d.active ? '● ' : '○ ') + name;
+      if (name === d.active) key.style.color = 'var(--accent)';
+      row.appendChild(key);
+      row.addEventListener('click', () => {
+        charSelect.value = name;
+        charSelect.dispatchEvent(new Event('change'));
+      });
+      charPanel.appendChild(row);
+    }
+    charSection.style.display = count > 1 ? '' : 'none';
+  }
+
+  // Header dropdown
+  if (count <= 1) {
+    charSelect.style.display = 'none';
+    return;
+  }
+  charSelect.style.display = '';
   for (const name of d.characters) {
     const opt = document.createElement('option');
-    opt.value = name; opt.textContent = name;
+    opt.value = name; opt.textContent = (name === d.active ? '● ' : '○ ') + name;
     if (name === d.active) opt.selected = true;
     charSelect.appendChild(opt);
   }
-});
+}
+loadChars();
 
 charSelect.addEventListener('change', async () => {
   const name = charSelect.value;
@@ -49,6 +82,8 @@ charSelect.addEventListener('change', async () => {
     const lines = data.npc_actions.map(a => a.summary);
     addMsg('system', '你不在时的动态', lines.join(' / '));
   }
+  loadChars(); // refresh active indicator
+  refreshPanel();
 });
 
 // ── Chat rendering ──
