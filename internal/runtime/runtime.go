@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -28,12 +29,12 @@ type CharWorld struct {
 
 // Engine orchestrates the narrative loop.
 type Engine struct {
-	mu          sync.RWMutex
-	stateMgr    *state.Manager
-	eventStore  *events.Store
-	gatekeeper  *events.Gatekeeper
-	memEngine   *memory.Engine
-	agents      *agents.EnvelopeManager
+	mu           sync.RWMutex
+	stateMgr     *state.Manager
+	eventStore   *events.Store
+	gatekeeper   *events.Gatekeeper
+	memEngine    *memory.Engine
+	agents       *agents.EnvelopeManager
 	compiler     *context.Compiler
 	llmRouter    *llm.Router
 	executor     *actions.Executor
@@ -49,14 +50,18 @@ type Engine struct {
 	activeCharacter  string
 	loadedCharacters []string
 	charWorlds       map[string]CharWorld // per-character world context
-	worldName       string
-	coreRules       string
-	sessionID       string
+	worldName        string
+	coreRules        string
+	sessionID        string
 
 	// Working state
 	dialogueHistory []core.Message
 	turnCount       int
 	tickCount       int
+	lastTrace       map[string]interface{}
+	lastSnapshotDbg map[string]interface{}
+	stateDiffs      []map[string]interface{}
+	compressionLog  []map[string]interface{}
 }
 
 func New(
@@ -71,26 +76,28 @@ func New(
 ) (*Engine, error) {
 	cw := charWorlds[activeChar]
 	return &Engine{
-		stateMgr:        state.New(),
-		eventStore:      eventStore,
-		gatekeeper:      gatekeeper,
-		memEngine:       memEngine,
-		decayEngine:     decayEngine,
-		tensionEng:      narrative.NewTensionEngine(),
-		stateMachine:    state.NewStateMachine(),
-		compressEng:     narrative.NewCompressionEngine(eventStore),
-		planner:         agents.NewPlanner(),
-		scheduler:       agents.NewScheduler(),
-		agents:          agentsMgr,
-		compiler:        context.NewCompiler("budgets.yml"),
-		llmRouter:       llmRouter,
-		executor:        actions.NewExecutor(),
-		activeCharacter: activeChar,
+		stateMgr:         state.New(),
+		eventStore:       eventStore,
+		gatekeeper:       gatekeeper,
+		memEngine:        memEngine,
+		decayEngine:      decayEngine,
+		tensionEng:       narrative.NewTensionEngine(),
+		stateMachine:     state.NewStateMachine(),
+		compressEng:      narrative.NewCompressionEngine(eventStore),
+		planner:          agents.NewPlanner(),
+		scheduler:        agents.NewScheduler(),
+		agents:           agentsMgr,
+		compiler:         context.NewCompiler("budgets.yml"),
+		llmRouter:        llmRouter,
+		executor:         actions.NewExecutor(),
+		activeCharacter:  activeChar,
 		loadedCharacters: loadedChars,
-		charWorlds:      charWorlds,
-		worldName:       cw.WorldName,
-		coreRules:       cw.CoreRules,
-		sessionID:       fmt.Sprintf("sess_%d", time.Now().Unix()),
+		charWorlds:       charWorlds,
+		worldName:        cw.WorldName,
+		coreRules:        cw.CoreRules,
+		sessionID:        fmt.Sprintf("sess_%d", time.Now().Unix()),
+		stateDiffs:       make([]map[string]interface{}, 0, 128),
+		compressionLog:   make([]map[string]interface{}, 0, 64),
 	}, nil
 }
 
@@ -163,9 +170,9 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 				parts := strings.Split(m.Content, " ")
 				if len(parts) >= 3 {
 					semanticFacts = append(semanticFacts, core.FactFrame{
-						Subject:   parts[0],
-						Predicate: parts[1],
-						Object:    strings.Join(parts[2:], " "),
+						Subject:    parts[0],
+						Predicate:  parts[1],
+						Object:     strings.Join(parts[2:], " "),
 						Confidence: m.Score,
 					})
 				}
@@ -213,6 +220,7 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 			ch <- fmt.Sprintf("[ERROR] Snapshot compile failed: %v\n", err)
 			return
 		}
+		e.lastSnapshotDbg = buildSnapshotDebug(snapshot, memories, storedFacts, recentEpi)
 
 		// Reset to normal budget after first post-switch turn
 		e.compiler.SetMode("normal")
@@ -242,12 +250,30 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 		}
 
 		// 12. Validator (on full output)
+		validatorResult := "pass"
 		if actionFrame.Action != "" {
 			if err := e.agents.Validate(actionFrame, narrative, e.activeCharacter); err != nil {
 				ch <- fmt.Sprintf("[系统拦截: %v]\n", err)
 				actionFrame.Action = "speak"
 				actionFrame.Intensity = 1
+				validatorResult = "blocked"
 			}
+		}
+		e.lastTrace = map[string]interface{}{
+			"trace_id":   fmt.Sprintf("trace_%d", time.Now().UnixNano()),
+			"turn":       e.turnCount,
+			"character":  e.activeCharacter,
+			"source":     "user_input",
+			"user_input": userInput,
+			"decision": map[string]interface{}{
+				"planner_steps":   len(planSteps),
+				"goals":           len(allGoals),
+				"allowed_actions": allowedActions,
+			},
+			"action_frame":     actionFrame,
+			"validator_result": validatorResult,
+			"snapshot_tokens":  snapshot.UsedTokens,
+			"snapshot_budget":  snapshot.TokenBudget,
 		}
 
 		// 13. Stream only the narrative text to user (typing effect)
@@ -268,10 +294,10 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 						// Log but don't fail
 					}
 				}
-					// Reset tension heat-death timer on conflict actions
-					if actionFrame.Action == "attack" || actionFrame.Action == "threaten" {
-						e.tensionEng.ResetConflictTimer(e.turnCount)
-					}
+				// Reset tension heat-death timer on conflict actions
+				if actionFrame.Action == "attack" || actionFrame.Action == "threaten" {
+					e.tensionEng.ResetConflictTimer(e.turnCount)
+				}
 			}
 		}
 
@@ -575,17 +601,17 @@ func (e *Engine) DebugInfo() map[string]interface{} {
 	canon, quarantined, _ := e.gatekeeper.Stats()
 
 	return map[string]interface{}{
-		"turn_count":          e.turnCount,
-		"dialogue_in_memory":  len(recent),
-		"dialogue_history":    dialoguePreview,
-		"world_clock":         state.Clock,
-		"scene":               state.Scene,
-		"tension":             state.Tension,
-		"narrative_state":     e.stateMachine.Current(),
-		"canonical_events":    canon,
-		"quarantined_events":  quarantined,
-			"npc_actions":         e.scheduler.RecentActions(0),
-			"vector_search":        e.memEngine.CountFacts(e.activeCharacter) >= 100,
+		"turn_count":         e.turnCount,
+		"dialogue_in_memory": len(recent),
+		"dialogue_history":   dialoguePreview,
+		"world_clock":        state.Clock,
+		"scene":              state.Scene,
+		"tension":            state.Tension,
+		"narrative_state":    e.stateMachine.Current(),
+		"canonical_events":   canon,
+		"quarantined_events": quarantined,
+		"npc_actions":        e.scheduler.RecentActions(0),
+		"vector_search":      e.memEngine.CountFacts(e.activeCharacter) >= 100,
 	}
 }
 
@@ -608,6 +634,7 @@ func (e *Engine) onTick() {
 	defer e.mu.Unlock()
 
 	state := e.stateMgr.Get()
+	before := state
 
 	// 1. Advance world clock: 1min real = 5min world
 	state.Clock.Minute += 5
@@ -664,6 +691,7 @@ func (e *Engine) onTick() {
 
 	// 7. Update state manager with all tick changes
 	e.stateMgr.Set(state)
+	e.recordStateDiff("tick", before, state)
 
 	// 8. NPC Scheduler: run autonomous actions for non-active characters
 	e.tickCount++
@@ -689,9 +717,70 @@ func (e *Engine) onTick() {
 	if e.tickCount%20 == 0 {
 		result, err := e.compressEng.AutoCompress()
 		if err == nil && result.EventsCompressed > 0 {
+			e.compressionLog = append(e.compressionLog, map[string]interface{}{
+				"tick":              e.tickCount,
+				"events_compressed": result.EventsCompressed,
+				"groups_found":      result.GroupsFound,
+				"summaries":         result.Summaries,
+				"at":                time.Now().Format(time.RFC3339),
+			})
 			log.Printf("Compression: %d events across %d groups compressed",
 				result.EventsCompressed, result.GroupsFound)
 		}
+	}
+}
+
+func (e *Engine) recordStateDiff(source string, before, after core.WorldState) {
+	diff := map[string]interface{}{
+		"source": source,
+		"at":     time.Now().Format(time.RFC3339),
+	}
+	if before.Tension != after.Tension {
+		diff["tension"] = map[string]float64{"before": before.Tension, "after": after.Tension}
+	}
+	if before.Scene.Location != after.Scene.Location {
+		diff["location"] = map[string]string{"before": before.Scene.Location, "after": after.Scene.Location}
+	}
+	if before.Clock != after.Clock {
+		diff["clock"] = map[string]core.WorldTime{"before": before.Clock, "after": after.Clock}
+	}
+	if len(diff) > 2 {
+		e.stateDiffs = append(e.stateDiffs, diff)
+		if len(e.stateDiffs) > 200 {
+			e.stateDiffs = e.stateDiffs[len(e.stateDiffs)-200:]
+		}
+	}
+}
+
+func buildSnapshotDebug(snapshot core.WorldSnapshot, memories []core.Memory, storedFacts []core.FactFrame, recentEpi []core.EventFrame) map[string]interface{} {
+	return map[string]interface{}{
+		"token_budget": snapshot.TokenBudget,
+		"used_tokens":  snapshot.UsedTokens,
+		"injected": map[string]interface{}{
+			"working_memory_chars": len(snapshot.WorkingMemory),
+			"semantic_facts":       len(snapshot.SemanticFacts),
+			"episodic_events":      len(snapshot.EpisodicEvents),
+			"recent_dialogue":      len(snapshot.RecentDialogue),
+			"retrieved_memories":   len(memories),
+			"stored_facts_total":   len(storedFacts),
+			"recent_epi_total":     len(recentEpi),
+		},
+	}
+}
+
+func (e *Engine) InspectorTrace() map[string]interface{}         { return e.lastTrace }
+func (e *Engine) InspectorSnapshot() map[string]interface{}      { return e.lastSnapshotDbg }
+func (e *Engine) InspectorStateDiffs() []map[string]interface{}  { return e.stateDiffs }
+func (e *Engine) InspectorCompression() []map[string]interface{} { return e.compressionLog }
+func (e *Engine) ReplayConsistency(eventID string) map[string]interface{} {
+	s1, err1 := e.gatekeeper.Replay().ReplayTo(eventID, "main")
+	s2, err2 := e.gatekeeper.Replay().ReplayTo(eventID, "main")
+	if err1 != nil || err2 != nil {
+		return map[string]interface{}{"consistent": false, "error": "replay failed"}
+	}
+	return map[string]interface{}{
+		"event_id":   eventID,
+		"consistent": reflect.DeepEqual(s1, s2),
 	}
 }
 
