@@ -220,14 +220,18 @@ func (e *Engine) GetAllFacts(character string) ([]core.FactFrame, error) {
 
 // SeedFacts inserts ontology facts with high confidence (canonical truth).
 func (e *Engine) SeedFacts(facts []core.FactFrame, character string) error {
+	// Skip if already seeded (prevent accumulation on restart)
+	var count int
+	e.db.QueryRow(`SELECT COUNT(*) FROM semantic_facts WHERE character = ? AND confidence >= 1.0`, character).Scan(&count)
+	if count > 0 {
+		return nil
+	}
+
 	tx, err := e.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-
-	// Clear existing ontology facts for this character
-	tx.Exec(`DELETE FROM semantic_facts WHERE character = ? AND confidence >= 1.0`, character)
 
 	stmt, err := tx.Prepare(`INSERT INTO semantic_facts (id, character, subject, predicate, object, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -247,13 +251,17 @@ func (e *Engine) SeedFacts(facts []core.FactFrame, character string) error {
 
 // SeedEpisodics inserts ontology events as episodic memory.
 func (e *Engine) SeedEpisodics(events []core.EventFrame, character string) error {
+	var count int
+	e.db.QueryRow(`SELECT COUNT(*) FROM episodic_events WHERE character = ? AND emotional_weight >= 1.0`, character).Scan(&count)
+	if count > 0 {
+		return nil
+	}
+
 	tx, err := e.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-
-	tx.Exec(`DELETE FROM episodic_events WHERE character = ? AND emotional_weight = 1.0`, character)
 
 	stmt, err := tx.Prepare(`INSERT INTO episodic_events (id, character, event_id, event_type, description, emotional_weight, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -332,33 +340,68 @@ func (e *Engine) GetRecentEpisodic(character string, limit int) ([]core.EventFra
 	return events, rows.Err()
 }
 
-// --- Unified Recall (P1 simplified) ---
+// --- Unified Recall (keyword or vector, auto-switching) ---
 
 func (e *Engine) Recall(query string, character string, goals []core.Goal) []core.Memory {
-	// 1. Semantic recall (keyword based in P1)
-	facts, _ := e.RecallFacts(query, character, 10)
 	var candidates []core.Memory
-	for _, f := range facts {
-		content := fmt.Sprintf("%s %s %s", f.Subject, f.Predicate, f.Object)
-		candidates = append(candidates, core.Memory{
-			ID:        fmt.Sprintf("fact_%s", content),
-			Type:      "semantic",
-			Content:   content,
-			Character: character,
-			Score:     f.Confidence,
-		})
+
+	// 1. Semantic recall
+	totalFacts := e.CountFacts(character)
+	if ShouldUseVector(totalFacts) {
+		// Vector search: load all facts, run similarity
+		allFacts, _ := e.GetAllFacts(character)
+		vs := NewVectorStore()
+		results := vs.SearchFacts(query, allFacts, 10)
+		for _, r := range results {
+			candidates = append(candidates, core.Memory{
+				ID:        fmt.Sprintf("vec_%s", r.ID),
+				Type:      "semantic",
+				Content:   r.Content,
+				Character: character,
+				Score:     r.Score,
+			})
+		}
+	} else {
+		// Keyword fallback for small datasets
+		facts, _ := e.RecallFacts(query, character, 10)
+		for _, f := range facts {
+			content := fmt.Sprintf("%s %s %s", f.Subject, f.Predicate, f.Object)
+			candidates = append(candidates, core.Memory{
+				ID:        fmt.Sprintf("fact_%s", content),
+				Type:      "semantic",
+				Content:   content,
+				Character: character,
+				Score:     f.Confidence,
+			})
+		}
 	}
 
 	// 2. Episodic recall
-	events, _ := e.RecallEpisodic(query, character, 5)
-	for _, ev := range events {
-		candidates = append(candidates, core.Memory{
-			ID:        ev.EventID,
-			Type:      "episodic",
-			Content:   ev.Description,
-			Character: character,
-			Score:     ev.EmotionalWeight,
-		})
+	totalEpisodic := e.CountEpisodic(character)
+	if ShouldUseVector(totalEpisodic) {
+		allEvents, _ := e.GetAllEpisodic(character)
+		vs := NewVectorStore()
+		results := vs.SearchEpisodic(query, allEvents, 5)
+		for _, r := range results {
+			candidates = append(candidates, core.Memory{
+				ID:        r.ID,
+				Type:      "episodic",
+				Content:   r.Content,
+				Character: character,
+				Score:     r.Score,
+			})
+		}
+	} else {
+		events, _ := e.RecallEpisodic(query, character, 5)
+		for _, ev := range events {
+			candidates = append(candidates, core.Memory{
+				ID:        ev.EventID,
+				Type:      "episodic",
+				Content:   ev.Description,
+				Character: character,
+				Score:     ev.EmotionalWeight,
+			})
+		}
 	}
 
 	// 3. Goal weight adjustment
@@ -396,6 +439,42 @@ func TakeUntilBudget(memories []core.Memory, maxTokens int) []core.Memory {
 		used += est
 	}
 	return result
+}
+
+// CountFacts returns the total number of semantic facts for a character.
+func (e *Engine) CountFacts(character string) int {
+	var count int
+	e.db.QueryRow(`SELECT COUNT(*) FROM semantic_facts WHERE character = ?`, character).Scan(&count)
+	return count
+}
+
+// CountEpisodic returns the total number of episodic events for a character.
+func (e *Engine) CountEpisodic(character string) int {
+	var count int
+	e.db.QueryRow(`SELECT COUNT(*) FROM episodic_events WHERE character = ?`, character).Scan(&count)
+	return count
+}
+
+// GetAllEpisodic returns all episodic events for a character (used by vector search).
+func (e *Engine) GetAllEpisodic(character string) ([]core.EventFrame, error) {
+	rows, err := e.db.Query(
+		`SELECT event_id, event_type, description, emotional_weight FROM episodic_events
+		WHERE character = ? ORDER BY created_at DESC`, character,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []core.EventFrame
+	for rows.Next() {
+		var ef core.EventFrame
+		if err := rows.Scan(&ef.EventID, &ef.Type, &ef.Description, &ef.EmotionalWeight); err != nil {
+			return nil, err
+		}
+		events = append(events, ef)
+	}
+	return events, rows.Err()
 }
 
 func (e *Engine) Close() error {

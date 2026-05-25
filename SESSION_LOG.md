@@ -198,6 +198,33 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 
 ## Phase 3 Complete — 全部 6 项完成 (2026-05-25)
 
+## 2026-05-25 (Vector Search — memory/vector.go)
+
+### 实现
+- `internal/memory/vector.go`:
+  - `VectorEmbedder` — 纯 Go 字符 bigram 向量化，零外部依赖
+    - 中文 2-gram 哈希到 256 维向量，归一化到单位长度
+  - `VectorStore` — 向量存储 + 相似度搜索
+    - `SearchFacts()` / `SearchEpisodic()` — 余弦相似度 + 置信度加权
+  - `ShouldUseVector(totalFacts)` — 阈值判断（>= 100 切向量）
+  - 升级路径：接口化设计，ONNX all-MiniLM-L6-v2 可直接替换
+- `internal/memory/engine.go`:
+  - `Recall()` 自动切换：facts < 100 → 关键词 LIKE，>= 100 → 向量余弦相似度
+  - 新增 `CountFacts()` / `CountEpisodic()` / `GetAllEpisodic()` 辅助方法
+  - **Bug fix**: `SeedFacts`/`SeedEpisodics` 加重复检查，避免每次重启累加数据
+  - DB 已有 158 facts（历史累积），修复后不会再增长
+- `internal/runtime/runtime.go`:
+  - DebugInfo 新增 `vector_search` 布尔字段
+
+### 测试结果
+- ✅ 安雅 (0 facts): 关键词模式
+- ✅ 同学搞我妈妈 (158 facts): 向量模式 (vector_search: true)
+- ✅ 阈值 100 自动切换正常工作
+
+### 升级路径
+当 sqlite-vec + all-MiniLM-L6-v2 ONNX 就绪时，替换 `VectorEmbedder.Embed()` 即可，
+SearchFacts/SearchEpisodic 接口不变。
+
 ## 2026-05-25 (Writing Guide — 风格约束层)
 
 ### 改动

@@ -494,6 +494,7 @@ func (e *Engine) DebugInfo() map[string]interface{} {
 		"canonical_events":    canon,
 		"quarantined_events":  quarantined,
 			"npc_actions":         e.scheduler.RecentActions(0),
+			"vector_search":        e.memEngine.CountFacts(e.activeCharacter) >= 100,
 	}
 }
 
