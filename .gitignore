@@ -3,6 +3,7 @@
 
 # Data
 data/
+llm_usage.jsonl
 
 # Logs
 server.log

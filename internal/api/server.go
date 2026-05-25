@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"corerp/internal/llm"
 	"corerp/internal/runtime"
 )
 
@@ -34,6 +35,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/branches", s.handleBranches)
 	mux.HandleFunc("/api/compress", s.handleCompress)
 	mux.HandleFunc("/api/compression-stats", s.handleCompressionStats)
+	mux.HandleFunc("/api/usage", s.handleUsage)
 	mux.HandleFunc("/api/llm-routes", s.handleLLMRoutes)
 	mux.HandleFunc("/api/debug/memory", s.handleDebugMemory)
 	mux.HandleFunc("/api/director", s.handleDirector)
@@ -364,6 +366,30 @@ func (s *Server) handleCompressionStats(w http.ResponseWriter, r *http.Request) 
 	stats := s.engine.CompressionStats()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stats, err := llm.ReadUsageStats("data/llm_usage.jsonl")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"total_calls":         stats.TotalCalls,
+		"total_tokens":        stats.TotalTokens,
+		"prompt_tokens":       stats.TotalPromptTokens,
+		"completion_tokens":   stats.TotalCompTokens,
+		"estimated_cost":      stats.EstimatedCost(),
+		"by_task":             stats.ByTask,
+		"by_model":            stats.ByModel,
+	})
 }
 
 func (s *Server) handleLLMRoutes(w http.ResponseWriter, r *http.Request) {

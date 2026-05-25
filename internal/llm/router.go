@@ -71,10 +71,17 @@ func (r *Router) Generate(task, prompt string, onChunk func(core.LLMStreamChunk)
 		fallback := r.adapters[r.fallbackAdapter]
 		if fallback != nil && fallback != adapter {
 			log.Printf("[router] task '%s' failed on primary, trying fallback: %v", task, err)
-			return fallback.Generate(prompt, onChunk)
+			err2 := fallback.Generate(prompt, onChunk)
+			if err2 == nil {
+				p, c := fallback.Usage()
+				LogUsage(task, fallback.Model(), p, c)
+			}
+			return err2
 		}
 		return err
 	}
+	p, c := adapter.Usage()
+	LogUsage(task, adapter.Model(), p, c)
 	return nil
 }
 
@@ -87,10 +94,17 @@ func (r *Router) GenerateNonStream(task string, messages []core.LLMMessage) (str
 		fallback := r.adapters[r.fallbackAdapter]
 		if fallback != nil && fallback != adapter {
 			log.Printf("[router] task '%s' nonstream failed on primary, trying fallback: %v", task, err)
-			return fallback.GenerateNonStream(messages)
+			result2, err2 := fallback.GenerateNonStream(messages)
+			if err2 == nil {
+				p, c := fallback.Usage()
+				LogUsage(task, fallback.Model(), p, c)
+			}
+			return result2, err2
 		}
 		return "", err
 	}
+	p, c := adapter.Usage()
+	LogUsage(task, adapter.Model(), p, c)
 	return result, nil
 }
 

@@ -13,10 +13,22 @@ import (
 )
 
 type Adapter struct {
-	endpoint  string
-	apiKey    string
-	model     string
+	endpoint   string
+	apiKey     string
+	model      string
 	httpClient *http.Client
+	promptTokens     int
+	completionTokens int
+}
+
+// Usage returns the token counts from the last call.
+func (a *Adapter) Usage() (prompt, completion int) {
+	return a.promptTokens, a.completionTokens
+}
+
+// Model returns the model name.
+func (a *Adapter) Model() string {
+	return a.model
 }
 
 func NewAdapter(endpoint, apiKey, model string) *Adapter {
@@ -87,9 +99,17 @@ func (a *Adapter) Generate(prompt string, onChunk func(core.LLMStreamChunk)) err
 					Content string `json:"content"`
 				} `json:"delta"`
 			} `json:"choices"`
+			Usage *struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+			} `json:"usage"`
 		}
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 			continue
+		}
+		if streamResp.Usage != nil {
+			a.promptTokens = streamResp.Usage.PromptTokens
+			a.completionTokens = streamResp.Usage.CompletionTokens
 		}
 		if len(streamResp.Choices) > 0 {
 			content := streamResp.Choices[0].Delta.Content
@@ -134,9 +154,17 @@ func (a *Adapter) GenerateNonStream(messages []core.LLMMessage) (string, error) 
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage *struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return "", err
+	}
+	if result.Usage != nil {
+		a.promptTokens = result.Usage.PromptTokens
+		a.completionTokens = result.Usage.CompletionTokens
 	}
 	if len(result.Choices) == 0 {
 		return "", fmt.Errorf("no choices in LLM response")

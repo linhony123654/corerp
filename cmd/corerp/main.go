@@ -186,7 +186,8 @@ func runServe(args []string) {
 		log.Printf("Loaded character: %s", charNames[i])
 	}
 
-	// Init LLM router
+	// Init LLM router + usage logger
+	llm.InitUsageLogger(*dataDir + "/llm_usage.jsonl")
 	defaultAdapter := llm.NewAdapter(*llmURL, *llmKey, *llmModel)
 	llmRouter := llm.NewRouter(defaultAdapter)
 
