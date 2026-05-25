@@ -257,8 +257,9 @@ func CompactMonth(path string) error {
 
 // EstimatedCost returns a rough cost estimate (DeepSeek pricing).
 func (s *UsageStats) EstimatedCost() string {
-	promptCost := float64(s.TotalPromptTokens) / 1_000_000 * 1.0
-	compCost := float64(s.TotalCompTokens) / 1_000_000 * 4.0
+	promptPrice, compPrice := GetPricing()
+	promptCost := float64(s.TotalPromptTokens) / 1_000_000 * promptPrice
+	compCost := float64(s.TotalCompTokens) / 1_000_000 * compPrice
 	return fmt.Sprintf("¥%.4f (prompt ¥%.4f + completion ¥%.4f)", promptCost+compCost, promptCost, compCost)
 }
 

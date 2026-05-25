@@ -9,10 +9,12 @@ import (
 
 // APIConfig holds one LLM API configuration.
 type APIConfig struct {
-	Name     string `json:"name"`
-	Endpoint string `json:"endpoint"`
-	APIKey   string `json:"api_key"`
-	Model    string `json:"model"`
+	Name           string  `json:"name"`
+	Endpoint       string  `json:"endpoint"`
+	APIKey         string  `json:"api_key"`
+	Model          string  `json:"model"`
+	PromptPrice    float64 `json:"prompt_price"`    // ¥ per 1M tokens
+	CompletionPrice float64 `json:"completion_price"` // ¥ per 1M tokens
 }
 
 // ConfigStore manages persisted LLM API configurations.
@@ -23,6 +25,30 @@ type ConfigStore struct {
 }
 
 var globalConfigStore *ConfigStore
+var activeConfig APIConfig
+
+// SetActiveConfig records the CLI/env-provided LLM config.
+func SetActiveConfig(name, endpoint, apiKey, model string) {
+	activeConfig = APIConfig{
+		Name: name, Endpoint: endpoint, APIKey: apiKey, Model: model,
+		PromptPrice: 1.0, CompletionPrice: 4.0, // DeepSeek defaults
+	}
+	// Also save to store for persistence
+	if globalConfigStore != nil {
+		globalConfigStore.Add(activeConfig)
+	}
+}
+
+// GetActiveConfig returns the currently active LLM config.
+func GetActiveConfig() APIConfig { return activeConfig }
+
+// GetPricing returns prompt/completion prices for the active model.
+func GetPricing() (prompt, completion float64) {
+	if activeConfig.PromptPrice > 0 {
+		return activeConfig.PromptPrice, activeConfig.CompletionPrice
+	}
+	return 1.0, 4.0
+}
 
 // InitConfigStore loads or creates the config file.
 func InitConfigStore(path string) error {

@@ -16,16 +16,19 @@ let isStreaming = false;
 let lastSpeaker = null;
 let msgCount = 0;
 
-// ── Theme toggle ──
+// ── Theme toggle (3-way: dark → light → kraft) ──
+const themes = ['dark', 'light', 'kraft'];
+const themeIcons = { dark: '◐', light: '◑', kraft: '◒' };
 const themeToggle = document.getElementById('theme-toggle');
-const savedTheme = localStorage.getItem('corerp-theme') || 'dark';
+const savedTheme = themes.includes(localStorage.getItem('corerp-theme')) ? localStorage.getItem('corerp-theme') : 'dark';
 document.documentElement.setAttribute('data-theme', savedTheme);
-themeToggle.textContent = savedTheme === 'light' ? '◑' : '◐';
+themeToggle.textContent = themeIcons[savedTheme];
 themeToggle.addEventListener('click', () => {
   const cur = document.documentElement.getAttribute('data-theme');
-  const next = cur === 'light' ? 'dark' : 'light';
+  const idx = themes.indexOf(cur);
+  const next = themes[(idx + 1) % themes.length];
   document.documentElement.setAttribute('data-theme', next);
-  themeToggle.textContent = next === 'light' ? '◑' : '◐';
+  themeToggle.textContent = themeIcons[next];
   localStorage.setItem('corerp-theme', next);
 });
 
@@ -271,15 +274,34 @@ document.getElementById('cfg-save').addEventListener('click', async () => {
 });
 
 async function loadLLMConfigs() {
-  const configs = await fetch('/api/llm-configs').then(r => r.json());
+  const [configs, active] = await Promise.all([
+    fetch('/api/llm-configs').then(r => r.json()),
+    fetch('/api/llm-active').then(r => r.json()).catch(() => ({}))
+  ]);
   const el = document.getElementById('pan-llm-configs');
-  el.innerHTML = configs.map(c => `
+
+  // Active config first
+  const activeName = active.name || '';
+  let html = '';
+  if (activeName) {
+    html += `<div style="font-size:9px;color:var(--accent);margin-bottom:4px;font-weight:600">● 当前使用</div>`;
+    html += `<div class="stat-row">
+      <span class="stat-key" style="font-size:10px">${activeName}</span>
+      <span class="stat-val" style="font-size:9px">${active.model || ''}</span>
+    </div>`;
+    html += `<div style="font-size:9px;color:var(--fg-tertiary);margin-bottom:6px">${active.endpoint || ''}</div>`;
+  }
+
+  // Saved configs
+  if (configs.length > 0) html += `<div style="font-size:9px;color:var(--fg-tertiary);margin-bottom:4px;margin-top:8px">已保存</div>`;
+  html += configs.filter(c => c.name !== activeName).map(c => `
     <div class="stat-row">
       <span class="stat-key" style="font-size:10px">${c.name}</span>
       <span class="stat-val" style="font-size:9px;cursor:pointer;color:var(--fg-tertiary)" data-del="${c.name}" title="删除">✕</span>
     </div>
     <div style="font-size:9px;color:var(--fg-tertiary);margin-bottom:4px">${c.model} @ ${c.endpoint}</div>
   `).join('');
+  el.innerHTML = html;
   el.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', async () => {
       await fetch('/api/llm-configs/' + btn.dataset.del, { method: 'DELETE' });
@@ -287,6 +309,27 @@ async function loadLLMConfigs() {
     });
   });
 }
+
+// Pricing popup
+const pricingPopup = document.getElementById('pricing-popup');
+document.getElementById('pricing-btn').addEventListener('click', async () => {
+  if (pricingPopup.style.display === 'block') { pricingPopup.style.display = 'none'; return; }
+  const active = await fetch('/api/llm-active').then(r => r.json()).catch(() => ({}));
+  document.getElementById('price-prompt').value = active.prompt_price || 1.0;
+  document.getElementById('price-comp').value = active.completion_price || 4.0;
+  pricingPopup.style.display = 'block';
+});
+document.getElementById('price-save').addEventListener('click', async () => {
+  const active = await fetch('/api/llm-active').then(r => r.json()).catch(() => ({}));
+  active.prompt_price = parseFloat(document.getElementById('price-prompt').value) || 1.0;
+  active.completion_price = parseFloat(document.getElementById('price-comp').value) || 4.0;
+  await fetch('/api/llm-active', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(active)
+  });
+  pricingPopup.style.display = 'none';
+  refreshPanel();
+});
 
 // ── Init ──
 refreshPanel();

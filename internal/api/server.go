@@ -41,6 +41,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/usage", a(s.handleUsage))
 	mux.HandleFunc("/api/llm-configs", a(s.handleLLMConfigs))
 	mux.HandleFunc("/api/llm-configs/", a(s.handleLLMConfigItem))
+	mux.HandleFunc("/api/llm-active", a(s.handleLLMActive))
 	mux.HandleFunc("/api/llm-routes", a(s.handleLLMRoutes))
 	mux.HandleFunc("/api/debug/memory", a(s.handleDebugMemory))
 	mux.HandleFunc("/api/director", a(s.handleDirector))
@@ -421,6 +422,32 @@ func (s *Server) handleLLMConfigs(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleLLMActive(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "POST" {
+		var cfg llm.APIConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		store := llm.GetConfigStore()
+		store.Add(cfg)
+		llm.SetActiveConfig(cfg.Name, cfg.Endpoint, cfg.APIKey, cfg.Model)
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cfg := llm.GetActiveConfig()
+	// Mask key
+	if len(cfg.APIKey) > 8 {
+		cfg.APIKey = cfg.APIKey[:4] + "****" + cfg.APIKey[len(cfg.APIKey)-4:]
+	}
+	json.NewEncoder(w).Encode(cfg)
 }
 
 func (s *Server) handleLLMConfigItem(w http.ResponseWriter, r *http.Request) {

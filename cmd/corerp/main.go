@@ -201,6 +201,7 @@ func runServe(args []string) {
 	usagePath := *dataDir + "/llm_usage.jsonl"
 	llm.InitUsageLogger(usagePath)
 	llm.CompactMonth(usagePath) // nop if current month has no prior records
+	llm.SetActiveConfig("default", *llmURL, *llmKey, *llmModel)
 	defaultAdapter := llm.NewAdapter(*llmURL, *llmKey, *llmModel)
 	llmRouter := llm.NewRouter(defaultAdapter)
 
