@@ -211,6 +211,29 @@ func Project(eventStream []core.Event) core.WorldState {
 
 func applyEvent(state core.WorldState, e core.Event) core.WorldState {
 	switch e.Type {
+	case "scene_init":
+		// Full scene override — higher priority than partial changes
+		if loc, ok := e.Payload["location"].(string); ok {
+			state.Scene.Location = loc
+		}
+		if tod, ok := e.Payload["time_of_day"].(string); ok {
+			state.Scene.TimeOfDay = tod
+		}
+		if weather, ok := e.Payload["weather"].(string); ok {
+			state.Scene.Weather = weather
+		}
+		if chars, ok := e.Payload["characters"].([]interface{}); ok {
+			state.Scene.Characters = nil
+			for _, c := range chars {
+				if s, ok := c.(string); ok {
+					state.Scene.Characters = append(state.Scene.Characters, s)
+				}
+			}
+		}
+		if desc, ok := e.Payload["description"].(string); ok {
+			state.Scene.Description = desc
+		}
+
 	case "scene_change":
 		if loc, ok := e.Payload["location"].(string); ok {
 			state.Scene.Location = loc

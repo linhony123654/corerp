@@ -49,6 +49,12 @@ func (m *Manager) ApplyEffects(effects []core.StateEffect) {
 	}
 }
 
+func (m *Manager) SetScene(scene core.SceneState) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.state.Scene = scene
+}
+
 func (m *Manager) UpdateFromProjection(state core.WorldState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

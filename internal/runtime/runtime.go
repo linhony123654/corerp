@@ -343,11 +343,17 @@ func (e *Engine) GetState() core.WorldState {
 }
 
 func (e *Engine) SeedScene(scene core.SceneState) {
-	state := e.stateMgr.Get()
-	if state.Scene.Location == "" {
-		state.Scene = scene
-		e.stateMgr.Set(state)
-	}
+	// Write scene_init event to Event Store — always overrides stale state
+	evt := events.BuildEvent("scene_init", "system", "",
+		map[string]interface{}{
+			"location":    scene.Location,
+			"time_of_day": scene.TimeOfDay,
+			"weather":     scene.Weather,
+			"characters":  scene.Characters,
+			"description": scene.Description,
+		})
+	e.gatekeeper.Submit(evt, events.SourceSystem())
+	e.stateMgr.SetScene(scene)
 }
 
 func (e *Engine) GetCharacter() (core.Character, bool) {
