@@ -1,0 +1,26 @@
+# Example world file format.
+# Copy this to your own .yml file and customize.
+
+name: "示例世界"
+core_rules: |
+  这个世界的基本规则...
+  角色行为约束...
+  叙事风格要求...
+
+scene:
+  location: "起始地点"
+  time_of_day: "白天"
+  weather: "晴朗"
+  characters:
+    - "示例角色"
+    - "用户"
+  description: "场景的详细描述..."
+
+ontology:
+  characters: []
+  locations: []
+  factions: []
+  items: []
+  lore: []
+  events: []
+  timelines: []

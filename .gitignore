@@ -27,3 +27,11 @@ PYEOF
 .env
 .env.*
 *.key
+
+# Character and world data (user content)
+characters/*.yml
+worlds/*.yml
+characters/imported/
+worlds/cyberpunk2077/
+!characters/example.yml
+!worlds/example.yml

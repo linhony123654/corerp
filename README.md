@@ -15,10 +15,10 @@
 go build -o corerp ./cmd/corerp/
 
 # 单角色模式
-./corerp serve -character characters/anya.yml -world worlds/cyberpunk2077/world.yml
+./corerp serve -character characters/example.yml -world worlds/example.yml
 
 # 多角色模式（支持切换）
-./corerp serve -characters ./characters -world worlds/cyberpunk2077/world.yml
+./corerp serve -characters ./characters
 
 # 配置 LLM
 export LLM_URL="https://your-llm-api/v1"

@@ -1,0 +1,34 @@
+# Example character card format.
+# Copy this to your own .yml file and customize.
+#
+# Usage:
+#   Single: ./corerp serve -character characters/your_char.yml -world worlds/your_world.yml
+#   Multi:  ./corerp serve -characters ./characters
+
+identity:
+  name: "示例角色"
+  immutable:
+    - "性格特征1"
+    - "性格特征2"
+  adaptive:
+    trust: 5
+    intimacy: 3
+    fear: 2
+  forbidden:
+    - cartoon_behavior
+    - fourth_wall_break
+  voice:
+    style: "你的文风描述"
+    rhythm: "你的节奏描述"
+  writing_guide: |
+    每轮回复 300-500 字。
+    用环境细节和动作描写填充叙事。
+    内心活动占 30%。
+
+goals:
+  primary:
+    - id: survive
+      priority: 10
+      condition: always
+  secondary: []
+  hidden: []
