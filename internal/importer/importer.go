@@ -66,6 +66,13 @@ type EntityEntry struct {
 	Content string `yaml:"content"`
 }
 
+type FactEntry struct {
+	Subject    string  `yaml:"subject"`
+	Predicate  string  `yaml:"predicate"`
+	Object     string  `yaml:"object"`
+	Confidence float64 `yaml:"confidence"`
+}
+
 type EventEntry struct {
 	Name    string `yaml:"name"`
 	Arc     string `yaml:"arc,omitempty"`
@@ -133,31 +140,23 @@ func ImportPNG(srcPath, dstDir string) (string, string, error) {
 		return "", "", fmt.Errorf("parse json: %w", err)
 	}
 
-	charYAML, worldYAML := Convert(st)
+	charYAML, world := Convert(st)
 
 	base := filepath.Base(srcPath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 
 	charPath := filepath.Join(dstDir, name+".yml")
-	worldPath := filepath.Join(dstDir, name+"_world.yml")
+	worldDir := filepath.Join(dstDir, "..", "worlds", name)
 
-	charOut, err := yaml.Marshal(charYAML)
+	charOut, _ := yaml.Marshal(charYAML)
+	os.WriteFile(charPath, charOut, 0644)
+
+	wp, err := writeWorldDir(worldDir, world)
 	if err != nil {
-		return "", "", fmt.Errorf("marshal char yaml: %w", err)
-	}
-	if err := os.WriteFile(charPath, charOut, 0644); err != nil {
-		return "", "", fmt.Errorf("write char yaml: %w", err)
+		return "", "", fmt.Errorf("write world dir: %w", err)
 	}
 
-	worldOut, err := yaml.Marshal(worldYAML)
-	if err != nil {
-		return "", "", fmt.Errorf("marshal world yaml: %w", err)
-	}
-	if err := os.WriteFile(worldPath, worldOut, 0644); err != nil {
-		return "", "", fmt.Errorf("write world yaml: %w", err)
-	}
-
-	return charPath, worldPath, nil
+	return charPath, wp, nil
 }
 
 // ImportJSON reads a SillyTavern JSON card and converts to CoreRP YAMLs.
@@ -172,31 +171,88 @@ func ImportJSON(srcPath, dstDir string) (string, string, error) {
 		return "", "", fmt.Errorf("parse json: %w", err)
 	}
 
-	charYAML, worldYAML := Convert(st)
+	charYAML, world := Convert(st)
 
 	base := filepath.Base(srcPath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 
 	charPath := filepath.Join(dstDir, name+".yml")
-	worldPath := filepath.Join(dstDir, name+"_world.yml")
+	worldDir := filepath.Join(dstDir, "..", "worlds", name)
 
-	charOut, err := yaml.Marshal(charYAML)
+	charOut, _ := yaml.Marshal(charYAML)
+	os.WriteFile(charPath, charOut, 0644)
+
+	wp, err := writeWorldDir(worldDir, world)
 	if err != nil {
-		return "", "", fmt.Errorf("marshal char yaml: %w", err)
-	}
-	if err := os.WriteFile(charPath, charOut, 0644); err != nil {
-		return "", "", fmt.Errorf("write char yaml: %w", err)
+		return "", "", fmt.Errorf("write world dir: %w", err)
 	}
 
-	worldOut, err := yaml.Marshal(worldYAML)
-	if err != nil {
-		return "", "", fmt.Errorf("marshal world yaml: %w", err)
-	}
-	if err := os.WriteFile(worldPath, worldOut, 0644); err != nil {
-		return "", "", fmt.Errorf("write world yaml: %w", err)
-	}
+	return charPath, wp, nil
+}
 
-	return charPath, worldPath, nil
+// writeWorldDir creates the three-layer world directory structure.
+func writeWorldDir(dir string, w WorldYAML) (string, error) {
+	canonDir := filepath.Join(dir, "canon")
+	os.MkdirAll(canonDir, 0755)
+
+	// 1. world.yml — core_rules only
+	worldFile := filepath.Join(dir, "world.yml")
+	worldData, _ := yaml.Marshal(map[string]interface{}{
+		"name":       w.Name,
+		"core_rules": w.CoreRules,
+	})
+	os.WriteFile(worldFile, worldData, 0644)
+
+	// 2. scene.yml — initial scene
+	sceneFile := filepath.Join(dir, "scene.yml")
+	sceneData, _ := yaml.Marshal(w.Scene)
+	os.WriteFile(sceneFile, sceneData, 0644)
+
+	// 3. canon/ontology.yml — entity definitions
+	ontoFile := filepath.Join(canonDir, "ontology.yml")
+	ontoData, _ := yaml.Marshal(w.Ontology)
+	os.WriteFile(ontoFile, ontoData, 0644)
+
+	// 4. canon/facts.yml — immutable facts extracted from settings + lore
+	factsFile := filepath.Join(canonDir, "facts.yml")
+	facts := extractFacts(w.Ontology)
+	factsData, _ := yaml.Marshal(map[string]interface{}{"facts": facts})
+	os.WriteFile(factsFile, factsData, 0644)
+
+	return worldFile, nil
+}
+
+// extractFacts converts settings and lore entries into FactEntries.
+func extractFacts(ont OntologyYAML) []FactEntry {
+	var facts []FactEntry
+	for _, e := range ont.Settings {
+		facts = append(facts, FactEntry{
+			Subject:    cleanFactSubject(e.Name),
+			Predicate:  "体系规则",
+			Object:     e.Content,
+			Confidence: 1.0,
+		})
+	}
+	for _, e := range ont.Lore {
+		facts = append(facts, FactEntry{
+			Subject:    cleanFactSubject(e.Name),
+			Predicate:  "世界法则",
+			Object:     e.Content,
+			Confidence: 1.0,
+		})
+	}
+	return facts
+}
+
+func cleanFactSubject(name string) string {
+	s := name
+	s = strings.TrimPrefix(s, "[概念] ")
+	s = strings.TrimPrefix(s, "[设定] ")
+	s = strings.TrimPrefix(s, "[体系] ")
+	s = strings.TrimPrefix(s, "[规则] ")
+	s = strings.TrimPrefix(s, "[其他] ")
+	s = strings.TrimPrefix(s, "[社会规则] ")
+	return s
 }
 
 // Convert transforms SillyTavern JSON into CoreRP CharacterYAML + WorldYAML.

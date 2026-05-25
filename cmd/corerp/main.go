@@ -136,7 +136,12 @@ func runServe(args []string) {
 		if wf == "" {
 			wf = *worldFile
 		}
-		w := loadWorld(wf)
+		var w loadedWorld
+		if strings.HasSuffix(wf, "/") || strings.HasSuffix(wf, string(filepath.Separator)) {
+			w = loadWorldDir(wf)
+		} else {
+			w = loadWorld(wf)
+		}
 		charWorlds[name] = runtime.CharWorld{
 			WorldName: w.Name,
 			CoreRules: w.CoreRules,
@@ -182,7 +187,12 @@ func runServe(args []string) {
 		if wf == "" {
 			wf = *worldFile
 		}
-		fullWorld := loadWorld(wf)
+		var fullWorld loadedWorld
+		if strings.HasSuffix(wf, "/") || strings.HasSuffix(wf, string(filepath.Separator)) {
+			fullWorld = loadWorldDir(wf)
+		} else {
+			fullWorld = loadWorld(wf)
+		}
 		seedOntology(memEngine, &fullWorld, name)
 		log.Printf("Ontology seeded: %d facts, %d events into '%s'",
 			countOntologyFacts(&fullWorld), countOntologyEvents(&fullWorld), name)
@@ -283,14 +293,25 @@ func runServe(args []string) {
 
 func findWorldFile(charPath string) string {
 	base := strings.TrimSuffix(charPath, ".yml")
-	// Also try stripping directory prefix for worlds/ lookup
 	fileName := filepath.Base(charPath)
 	fileBase := strings.TrimSuffix(fileName, ".yml")
-	candidates := []string{
-		base + "_world.yml",                          // same dir: characters/xxx_world.yml
-		"worlds/" + fileBase + "_world.yml",           // worlds/xxx_world.yml
+
+	// New: directory structure worlds/{name}/
+	dirCandidates := []string{
+		"worlds/" + fileBase + "/",
 	}
-	for _, c := range candidates {
+	for _, c := range dirCandidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c
+		}
+	}
+
+	// Old: single _world.yml files
+	fileCandidates := []string{
+		base + "_world.yml",
+		"worlds/" + fileBase + "_world.yml",
+	}
+	for _, c := range fileCandidates {
 		if _, err := os.Stat(c); err == nil {
 			return c
 		}
@@ -420,6 +441,34 @@ type ontologyEvent struct {
 	Arc     string `yaml:"arc"`
 	Keys    string `yaml:"keys"`
 	Content string `yaml:"content"`
+}
+
+// loadWorldDir reads the three-layer world directory structure.
+func loadWorldDir(dir string) loadedWorld {
+	var w loadedWorld
+
+	// world.yml
+	if data, err := os.ReadFile(filepath.Join(dir, "world.yml")); err == nil {
+		var worldData struct {
+			Name      string `yaml:"name"`
+			CoreRules string `yaml:"core_rules"`
+		}
+		yaml.Unmarshal(data, &worldData)
+		w.Name = worldData.Name
+		w.CoreRules = worldData.CoreRules
+	}
+
+	// scene.yml
+	if data, err := os.ReadFile(filepath.Join(dir, "scene.yml")); err == nil {
+		yaml.Unmarshal(data, &w.Scene)
+	}
+
+	// canon/ontology.yml
+	if data, err := os.ReadFile(filepath.Join(dir, "canon", "ontology.yml")); err == nil {
+		yaml.Unmarshal(data, &w.Ontology)
+	}
+
+	return w
 }
 
 func loadWorld(path string) loadedWorld {
