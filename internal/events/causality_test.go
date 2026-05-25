@@ -4,9 +4,9 @@ import "testing"
 
 func TestIsMeaninglessContent(t *testing.T) {
 	tests := []struct {
-		name  string
-		in    interface{}
-		want  bool
+		name string
+		in   interface{}
+		want bool
 	}{
 		{name: "empty string", in: "", want: true},
 		{name: "quoted empty double", in: "\"\"", want: true},

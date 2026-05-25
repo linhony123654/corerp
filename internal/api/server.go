@@ -48,8 +48,63 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/dialogue", a(s.handleDialogue))
 	mux.HandleFunc("/api/dialogue/reset", a(s.handleDialogueReset))
 	mux.HandleFunc("/api/debug/memory", a(s.handleDebugMemory))
+	mux.HandleFunc("/api/inspector/trace", a(s.handleInspectorTrace))
+	mux.HandleFunc("/api/inspector/snapshot", a(s.handleInspectorSnapshot))
+	mux.HandleFunc("/api/inspector/state-diff", a(s.handleInspectorStateDiff))
+	mux.HandleFunc("/api/inspector/compression", a(s.handleInspectorCompression))
+	mux.HandleFunc("/api/inspector/replay-consistency", a(s.handleReplayConsistency))
 	mux.HandleFunc("/api/director", a(s.handleDirector))
 	mux.HandleFunc("/", s.handleStatic)
+}
+
+func (s *Server) handleInspectorTrace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(s.engine.InspectorTrace())
+}
+
+func (s *Server) handleInspectorSnapshot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(s.engine.InspectorSnapshot())
+}
+
+func (s *Server) handleInspectorStateDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"diffs": s.engine.InspectorStateDiffs()})
+}
+
+func (s *Server) handleInspectorCompression(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"traces": s.engine.InspectorCompression()})
+}
+
+func (s *Server) handleReplayConsistency(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	eventID := r.URL.Query().Get("id")
+	if eventID == "" {
+		http.Error(w, "Missing 'id' query parameter", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(s.engine.ReplayConsistency(eventID))
 }
 
 type chatRequest struct {
@@ -289,9 +344,9 @@ func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":      true,
+		"ok":       true,
 		"event_id": req.EventID,
-		"branch":  req.Branch,
+		"branch":   req.Branch,
 	})
 }
 
@@ -392,16 +447,16 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"total_calls":         stats.TotalCalls,
-		"total_tokens":        stats.TotalTokens,
-		"prompt_tokens":       stats.TotalPromptTokens,
-		"completion_tokens":   stats.TotalCompTokens,
-		"estimated_cost":      stats.EstimatedCost(),
-		"by_task":             stats.ByTask,
-		"by_model":            stats.ByModel,
-		"by_day":              stats.ByDay,
-		"by_week":             stats.ByWeek,
-		"by_month":            stats.ByMonth,
+		"total_calls":       stats.TotalCalls,
+		"total_tokens":      stats.TotalTokens,
+		"prompt_tokens":     stats.TotalPromptTokens,
+		"completion_tokens": stats.TotalCompTokens,
+		"estimated_cost":    stats.EstimatedCost(),
+		"by_task":           stats.ByTask,
+		"by_model":          stats.ByModel,
+		"by_day":            stats.ByDay,
+		"by_week":           stats.ByWeek,
+		"by_month":          stats.ByMonth,
 	})
 }
 
@@ -593,10 +648,10 @@ func (s *Server) handleDirector(w http.ResponseWriter, r *http.Request) {
 	case "set_tension":
 		s.engine.SetTension(req.Value)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok":      true,
-			"action":  req.Action,
-			"value":   req.Value,
-			"state":   s.engine.GetState().Tension,
+			"ok":     true,
+			"action": req.Action,
+			"value":  req.Value,
+			"state":  s.engine.GetState().Tension,
 		})
 	default:
 		http.Error(w, "Unknown action", http.StatusBadRequest)

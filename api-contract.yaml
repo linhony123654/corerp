@@ -124,6 +124,67 @@ paths:
                   name:
                     type: string
 
+  /api/inspector/trace:
+    get:
+      summary: 获取最近一次回合的运行轨迹（决策摘要）
+      responses:
+        "200":
+          description: Trace JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/inspector/snapshot:
+    get:
+      summary: 获取最近一次 Snapshot 注入与 token 使用调试信息
+      responses:
+        "200":
+          description: Snapshot debug JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/inspector/state-diff:
+    get:
+      summary: 获取近期状态差分记录（tick/回合）
+      responses:
+        "200":
+          description: State diffs JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/inspector/compression:
+    get:
+      summary: 获取压缩追踪记录
+      responses:
+        "200":
+          description: Compression trace JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/inspector/replay-consistency:
+    get:
+      summary: 校验指定事件 replay 的确定性一致性
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consistency check result
+          content:
+            application/json:
+              schema:
+                type: object
+
 components:
   schemas:
     WorldState:

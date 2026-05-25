@@ -553,3 +553,26 @@ survival(hide) > relationship_repair(trust) > info_gathering(observe) > explorat
 ### 结果
 - 因果链遇到环时不再把已访问节点回写进树。
 - 噪音判定具备自动化回归测试。
+
+## 2026-05-25 (Narrative DevTools Phase A/B/C/D MVP)
+
+### 改动
+- `internal/runtime/runtime.go`:
+  - 新增 Runtime Inspector MVP 数据面：`lastTrace` / `lastSnapshotDbg` / `stateDiffs` / `compressionLog`。
+  - 回合内记录 trace（source/decision/action/validator/token 使用）。
+  - 新增 snapshot 注入调试摘要（注入项计数 + token 预算/使用）。
+  - Tick 记录 state diff（tension/location/clock）。
+  - AutoCompress 成功时记录 compression trace（groups/events/summaries）。
+  - 新增 replay consistency 检查接口实现（同 event 两次 replay 结果一致性）。
+- `internal/api/server.go`:
+  - 新增 Inspector 端点：
+    - `GET /api/inspector/trace`
+    - `GET /api/inspector/snapshot`
+    - `GET /api/inspector/state-diff`
+    - `GET /api/inspector/compression`
+    - `GET /api/inspector/replay-consistency?id=<event_id>`
+- `api-contract.yaml`:
+  - 同步新增上述 API 契约。
+
+### 结果
+- Phase A/B/C/D 均有可调用 MVP 能力：trace、snapshot、state diff、compression、replay consistency。
