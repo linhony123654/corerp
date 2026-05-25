@@ -68,12 +68,13 @@ type WorldState struct {
 // --- Snapshot ---
 
 type PersonaFrame struct {
-	Name        string            `json:"name"`
-	Immutable   []string          `json:"immutable"`
-	Adaptive    map[string]float64 `json:"adaptive"`
-	Forbidden   []string          `json:"forbidden"`
-	VoiceStyle  string            `json:"voice_style"`
-	VoiceRhythm string            `json:"voice_rhythm"`
+	Name         string             `json:"name"`
+	Immutable    []string           `json:"immutable"`
+	Adaptive     map[string]float64 `json:"adaptive"`
+	Forbidden    []string           `json:"forbidden"`
+	VoiceStyle   string             `json:"voice_style"`
+	VoiceRhythm  string             `json:"voice_rhythm"`
+	WritingGuide string             `json:"writing_guide"`
 }
 
 type GoalFrame struct {
@@ -151,11 +152,12 @@ type Memory struct {
 // --- Agent / Identity ---
 
 type IdentityEnvelope struct {
-	Name      string            `json:"name"`
-	Immutable []string          `json:"immutable"`
-	Adaptive  map[string]float64 `json:"adaptive"`
-	Forbidden []string          `json:"forbidden"`
-	Voice     VoiceConfig       `json:"voice"`
+	Name         string             `json:"name"`
+	Immutable    []string           `json:"immutable"`
+	Adaptive     map[string]float64 `json:"adaptive"`
+	Forbidden    []string           `json:"forbidden"`
+	Voice        VoiceConfig        `json:"voice"`
+	WritingGuide string             `json:"writing_guide"`
 }
 
 type VoiceConfig struct {

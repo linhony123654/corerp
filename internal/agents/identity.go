@@ -114,11 +114,12 @@ func (em *EnvelopeManager) GetPersonaFrame(charName string) core.PersonaFrame {
 	}
 
 	return core.PersonaFrame{
-		Name:        charName,
-		Immutable:   c.Identity.Immutable,
-		Adaptive:    c.Identity.Adaptive,
-		Forbidden:   c.Identity.Forbidden,
-		VoiceStyle:  c.Identity.Voice.Style,
-		VoiceRhythm: c.Identity.Voice.Rhythm,
+		Name:         charName,
+		Immutable:    c.Identity.Immutable,
+		Adaptive:     c.Identity.Adaptive,
+		Forbidden:    c.Identity.Forbidden,
+		VoiceStyle:   c.Identity.Voice.Style,
+		VoiceRhythm:  c.Identity.Voice.Rhythm,
+		WritingGuide: c.Identity.WritingGuide,
 	}
 }

@@ -295,14 +295,15 @@ func loadCharacter(path string) core.Character {
 	}
 	var charRaw struct {
 		Identity struct {
-			Name      string             `yaml:"name"`
-			Immutable []string           `yaml:"immutable"`
-			Adaptive  map[string]float64 `yaml:"adaptive"`
-			Forbidden []string           `yaml:"forbidden"`
-			Voice     struct {
+			Name         string             `yaml:"name"`
+			Immutable    []string           `yaml:"immutable"`
+			Adaptive     map[string]float64 `yaml:"adaptive"`
+			Forbidden    []string           `yaml:"forbidden"`
+			Voice        struct {
 				Style  string `yaml:"style"`
 				Rhythm string `yaml:"rhythm"`
 			} `yaml:"voice"`
+			WritingGuide string `yaml:"writing_guide"`
 		} `yaml:"identity"`
 		Goals struct {
 			Primary []struct {
@@ -331,14 +332,15 @@ func loadCharacter(path string) core.Character {
 
 	var char core.Character
 	char.Identity = core.IdentityEnvelope{
-		Name:      charRaw.Identity.Name,
-		Immutable: charRaw.Identity.Immutable,
-		Adaptive:  charRaw.Identity.Adaptive,
-		Forbidden: charRaw.Identity.Forbidden,
+		Name:         charRaw.Identity.Name,
+		Immutable:    charRaw.Identity.Immutable,
+		Adaptive:     charRaw.Identity.Adaptive,
+		Forbidden:    charRaw.Identity.Forbidden,
 		Voice: core.VoiceConfig{
 			Style:  charRaw.Identity.Voice.Style,
 			Rhythm: charRaw.Identity.Voice.Rhythm,
 		},
+		WritingGuide: charRaw.Identity.WritingGuide,
 	}
 	for _, g := range charRaw.Goals.Primary {
 		char.Goals = append(char.Goals, core.Goal{ID: g.ID, Priority: g.Priority, Type: "primary", Target: g.Target, Condition: g.Condition})

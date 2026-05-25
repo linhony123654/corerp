@@ -189,7 +189,7 @@ SSE 返回叙事文本
 | `TODO.md` | 完成功能、发现新阻塞、新增待办 |
 | `SESSION_LOG.md` | 每次会话结束时追加修改记录、bug 修复、已知坑 |
 | `api-contract.yaml` | 修改 API 路由、请求/响应结构、新增端点 |
-| `internal/models/types.go` | 新增/修改核心数据结构（若与 `internal/core/types.go` 分离时） |
+| `budgets.yml` | 修改 Token 预算分配比例或阈值 |
 
 ### 执行方式
 代码写完后，在回复用户之前，问自己：

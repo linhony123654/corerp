@@ -242,6 +242,19 @@ func (c *Compiler) RenderSnapshot(s core.WorldSnapshot) string {
 	b.WriteString(fmt.Sprintf("文风: %s\n", s.PersonaState.VoiceStyle))
 	b.WriteString(fmt.Sprintf("节奏: %s\n", s.PersonaState.VoiceRhythm))
 	b.WriteString(fmt.Sprintf("禁止: %s\n", strings.Join(s.PersonaState.Forbidden, ", ")))
+	if s.PersonaState.WritingGuide != "" {
+		b.WriteString(fmt.Sprintf("写作指导: %s\n", s.PersonaState.WritingGuide))
+	}
+	b.WriteString("\n")
+
+	b.WriteString("=== 风格约束 ===\n")
+	b.WriteString("以下规则约束你的写作方式，不影响角色所知事实：\n")
+	b.WriteString("- 每轮回复至少 200 字。用动作、环境、感官细节填充叙事，不要只写对话。\n")
+	b.WriteString("- 用具体名词和动词，避免抽象形容词。\n")
+	b.WriteString("- 对话与描写交替：一段描写→一句对话→一段内心反应→环境细节。\n")
+	if s.PersonaState.WritingGuide != "" {
+		b.WriteString(fmt.Sprintf("- %s\n", s.PersonaState.WritingGuide))
+	}
 	b.WriteString("\n")
 
 	b.WriteString("=== 场景状态 ===\n")

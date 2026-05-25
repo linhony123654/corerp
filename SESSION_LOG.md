@@ -198,6 +198,29 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 
 ## Phase 3 Complete — 全部 6 项完成 (2026-05-25)
 
+## 2026-05-25 (Writing Guide — 风格约束层)
+
+### 改动
+- `internal/core/types.go`:
+  - `PersonaFrame` / `IdentityEnvelope` 新增 `WritingGuide string` 字段
+- `cmd/corerp/main.go`:
+  - `loadCharacter()` 解析 `identity.writing_guide` YAML 字段
+- `internal/agents/identity.go`:
+  - `GetPersonaFrame()` 传递 WritingGuide
+- `internal/context/compiler.go`:
+  - `RenderSnapshot` 新增 "=== 风格约束 ===" 层（在角色状态后、场景前）
+  - 通用写作规则：200+ 字、场景描写、具体名词、描写-对话交替
+  - 角色自定义 writing_guide 追加至此层
+- `characters/anya.yml`:
+  - 新增 writing_guide：赛博朋克感官细节、内心独白 30%、动作先于对话
+- `characters/48111430a81be7d4.yml`:
+  - 新增 writing_guide：偷窥视角感官细节、心理描写、环境→反应→对话节奏
+  - 修复 YAML 缩进（tab → 4-space），删除未使用的 opening_line
+
+### 测试结果
+- ✅ 安雅：1774 字符（之前 ~200），感官细节丰富、内心独白、动作优先
+- ⚠️ 同学搞我妈妈：Gemini 内容过滤（48K 预算下完整世界规则触发），非代码问题
+
 ## 2026-05-25 (Token Budget 升级 — 4K → 48K/96K)
 
 ### 问题
