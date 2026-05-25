@@ -198,6 +198,13 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 
 ## Phase 3 Complete — 全部 6 项完成 (2026-05-25)
 
+## 2026-05-25 (Cleanup — 关闭架构)
+
+- 删除 `internal/models/types.go`（空占位文件，无引用）
+- 清理 `internal/core/types.go` 4 条过时 TODO(P2)/TODO(P3) 注释
+- 更新 `ARCHITECTURE.md`：去掉已实现模块的 (P3) 标记，更新原则 5
+- 项目状态：功能完整、文档齐全、架构闭环
+
 ## 2026-05-25 (Narrative Compression — narrative/compression.go)
 
 ### 实现

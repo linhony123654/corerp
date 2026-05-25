@@ -10,13 +10,13 @@ API Gateway (无状态路由、统一认证)
 Runtime Core (叙事运行时内核)
     ├── Context OS     (Snapshot Compiler + Token Budget 硬墙)
     ├── State Machine  (Variables + Constraints + Transitions)
-    ├── Event Bus      (Event Store + Projector + Causality Engine(P3))
+    ├── Event Bus      (Event Store + Projector + Causality Engine)
     ├── Goal System    (Primary + Secondary + Hidden + Planner)
     ├── Action Layer   (Frame Definition + Executor + Permissions)
     ├── Memory Engine  (Short-term / Working / Semantic / Episodic)
     └── Canon Layer    (Ontology + Facts + Consistency)
     ↓
-Narrative Layer (Renderer + Tension Engine + Compression(P3))
+Narrative Layer (Renderer + Tension Engine + Compression)
     ↓
 LLM Adapter (OpenAI / Claude / DeepSeek / Ollama / Local MiniLM)
     ↓
@@ -54,6 +54,6 @@ Storage (SQLite + sqlite-vec | YAML worlds/characters)
 2. Event Store 是唯一真相源，状态是投影
 3. Action Layer 是世界变更的唯一入口
 4. Token 预算硬墙不可突破，超预算 panic（开发期）
-5. Phase 1 不做多 Agent、不做 Tick、不做自动提取
+5. Phase 1-3 已完成：多 Agent 调度、Tick Loop、自动事件提取、因果链、回放分叉、压缩、路由
 6. 所有配置 YAML 化，拒绝 JSON 黑盒
 7. SQLite 单文件，备份 = `cp memory.db backup/`

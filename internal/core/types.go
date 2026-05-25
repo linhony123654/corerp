@@ -10,11 +10,11 @@ type Event struct {
 	Actor         string                 `json:"actor"`
 	Target        string                 `json:"target"`
 	Payload       map[string]interface{} `json:"payload"`
-	Causes        []Cause                `json:"causes"`      // TODO(P3)
-	Effects       []StateEffect          `json:"effects"`     // TODO(P3)
+	Causes        []Cause                `json:"causes"`
+	Effects       []StateEffect          `json:"effects"`
 	Canonical     bool                   `json:"canonical"`
-	Confidence    float64                `json:"confidence"`  // TODO(P2)
-	Confirmations int                    `json:"confirmations"` // TODO(P2)
+	Confidence    float64                `json:"confidence"`
+	Confirmations int                    `json:"confirmations"`
 	SceneID       string                 `json:"scene_id"`
 	SessionID     string                 `json:"session_id"`
 	CreatedAt     time.Time              `json:"created_at"`
