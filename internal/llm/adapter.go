@@ -299,7 +299,11 @@ func extractFirstJSON(raw string) (core.ActionFrame, string) {
 		if raw[i] == '{' {
 			for j := i + 1; j <= len(raw); j++ {
 				if j == len(raw) || raw[j] == '}' {
-					candidate := raw[i : j+1]
+					end := j + 1
+					if end > len(raw) {
+						end = len(raw)
+					}
+					candidate := raw[i:end]
 					var frame core.ActionFrame
 					if err := json.Unmarshal([]byte(candidate), &frame); err == nil {
 						narrative := strings.TrimSpace(raw[j+1:])

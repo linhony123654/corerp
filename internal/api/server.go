@@ -389,6 +389,9 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		"estimated_cost":      stats.EstimatedCost(),
 		"by_task":             stats.ByTask,
 		"by_model":            stats.ByModel,
+		"by_day":              stats.ByDay,
+		"by_week":             stats.ByWeek,
+		"by_month":            stats.ByMonth,
 	})
 }
 

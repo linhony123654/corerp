@@ -66,6 +66,9 @@ type UsageStats struct {
 	TotalTokens       int            `json:"total_tokens"`
 	ByTask            map[string]TaskStats `json:"by_task"`
 	ByModel           map[string]TaskStats `json:"by_model"`
+	ByDay             map[string]TaskStats `json:"by_day"`
+	ByWeek            map[string]TaskStats `json:"by_week"`
+	ByMonth           map[string]TaskStats `json:"by_month"`
 	Records           []UsageRecord  `json:"-"`
 }
 
@@ -90,6 +93,9 @@ func ReadUsageStats(path string) (*UsageStats, error) {
 	stats := &UsageStats{
 		ByTask:  make(map[string]TaskStats),
 		ByModel: make(map[string]TaskStats),
+		ByDay:   make(map[string]TaskStats),
+		ByWeek:  make(map[string]TaskStats),
+		ByMonth: make(map[string]TaskStats),
 	}
 
 	lines := splitLines(string(data))
@@ -120,6 +126,17 @@ func ReadUsageStats(path string) (*UsageStats, error) {
 		m.CompletionTokens += rec.CompletionTokens
 		m.TotalTokens += rec.TotalTokens
 		stats.ByModel[rec.Model] = m
+
+		// Time aggregations
+		ts, _ := time.Parse(time.RFC3339, rec.Timestamp)
+		dayKey := ts.Format("2006-01-02")
+		weekYear, weekNum := ts.ISOWeek()
+		weekKey := fmt.Sprintf("%d-W%02d", weekYear, weekNum)
+		monthKey := ts.Format("2006-01")
+
+		stats.ByDay[dayKey] = addStats(stats.ByDay[dayKey], rec)
+		stats.ByWeek[weekKey] = addStats(stats.ByWeek[weekKey], rec)
+		stats.ByMonth[monthKey] = addStats(stats.ByMonth[monthKey], rec)
 	}
 
 	return stats, nil
@@ -134,6 +151,14 @@ func (s *UsageStats) EstimatedCost() string {
 	compCost := float64(s.TotalCompTokens) / 1_000_000 * 4.0
 	total := promptCost + compCost
 	return fmt.Sprintf("¥%.4f (prompt ¥%.4f + completion ¥%.4f)", total, promptCost, compCost)
+}
+
+func addStats(t TaskStats, rec UsageRecord) TaskStats {
+	t.Calls++
+	t.PromptTokens += rec.PromptTokens
+	t.CompletionTokens += rec.CompletionTokens
+	t.TotalTokens += rec.TotalTokens
+	return t
 }
 
 func splitLines(s string) []string {
