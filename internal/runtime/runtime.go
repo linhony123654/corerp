@@ -41,6 +41,7 @@ type Engine struct {
 	tensionEng   *narrative.TensionEngine
 	stateMachine *state.StateMachine
 	planner      *agents.Planner
+	scheduler    *agents.Scheduler
 
 	// Config
 	activeCharacter  string
@@ -53,6 +54,7 @@ type Engine struct {
 	// Working state
 	dialogueHistory []core.Message
 	turnCount       int
+	tickCount       int
 }
 
 func New(
@@ -75,6 +77,7 @@ func New(
 		tensionEng:      narrative.NewTensionEngine(),
 		stateMachine:    state.NewStateMachine(),
 		planner:         agents.NewPlanner(),
+		scheduler:       agents.NewScheduler(),
 		agents:          agentsMgr,
 		compiler:        context.NewCompiler(4000),
 		llmAdapter:      llmAdapter,
@@ -381,6 +384,13 @@ func (e *Engine) SwitchCharacter(name string) error {
 	return nil
 }
 
+// GetNPCActions returns recent autonomous actions for a character.
+func (e *Engine) GetNPCActions(name string, sinceTick int) []agents.NPCActionLog {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.scheduler.RecentActionsForCharacter(name, sinceTick)
+}
+
 func (e *Engine) GetWorldName() string {
 	return e.worldName
 }
@@ -412,6 +422,7 @@ func (e *Engine) DebugInfo() map[string]interface{} {
 		"narrative_state":     e.stateMachine.Current(),
 		"canonical_events":    canon,
 		"quarantined_events":  quarantined,
+			"npc_actions":         e.scheduler.RecentActions(0),
 	}
 }
 
@@ -491,7 +502,25 @@ func (e *Engine) onTick() {
 	// 7. Update state manager with all tick changes
 	e.stateMgr.Set(state)
 
-	// TODO(P2): 8. Agent Planner
+	// 8. NPC Scheduler: run autonomous actions for non-active characters
+	e.tickCount++
+	// Build scene map for NPC world contexts
+	npcScenes := make(map[string]core.SceneState)
+	for _, name := range e.loadedCharacters {
+		if cw, ok := e.charWorlds[name]; ok {
+			npcScenes[name] = cw.Scene
+		}
+	}
+	e.scheduler.Tick(
+		e.loadedCharacters,
+		e.activeCharacter,
+		npcScenes,
+		state,
+		e.agents,
+		e.executor,
+		e.gatekeeper,
+		e.tickCount,
+	)
 }
 
 // SetTension directly sets tension for testing/directing.

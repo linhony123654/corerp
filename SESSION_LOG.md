@@ -169,6 +169,34 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 - CLAUDE.md: 6 项验证全部标记 ✅，Status 更新
 - TODO.md: 重构为 P1→P2→P3 三段式，移除冗余
 
+## 2026-05-25 (NPC Scheduler — agents/scheduler.go)
+
+### 实现
+- `internal/agents/scheduler.go`:
+  - `Scheduler` 结构体：规则式 NPC 自主行动引擎，零 LLM 调用
+  - `Tick()` — 每个 tick（60s）遍历非活跃角色，Planner 生成计划 → 选最高优先级 → 构建 ActionFrame → Executor 执行 → Gatekeeper 提交 canonical 事件
+  - 20% 随机噪声避免 NPC 行为完全重复
+  - `NPCActionLog` 人类可读摘要："安雅 观察着周围的环境。"
+  - `RecentActions()` / `RecentActionsForCharacter()` 查询接口
+- `internal/runtime/runtime.go`:
+  - Engine 新增 `scheduler` + `tickCount` 字段
+  - `onTick()` 末尾调用 `scheduler.Tick()`，为非活跃角色生成自主动作
+  - 新增 `GetNPCActions()` 方法
+  - DebugInfo 返回 `npc_actions` 字段
+- `internal/api/server.go`:
+  - 新增 `GET /api/npc-actions?character=name` 端点
+  - `POST /api/switch` 响应体新增 `npc_actions` 字段（"你不在时发生的事"）
+- `web/app.js`:
+  - 角色切换时显示 NPC 行动摘要
+
+### 测试结果
+- ✅ NPC (安雅) 在后台每 3 tick (~3min) 执行一次自主动作
+- ✅ 安雅在世界场景（废弃地铁站）中独立行动，不干扰活跃角色的别墅场景
+- ✅ 切换到安雅时返回 "你不在时发生的事" 摘要
+
+### 行为优先级（Planner 规则）
+survival(hide) > relationship_repair(trust) > info_gathering(observe) > exploration(move) > social(speak)
+
 ## 2026-05-25 (Perspective Isolation Fix)
 
 ### 问题

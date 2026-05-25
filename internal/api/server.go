@@ -26,6 +26,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/characters", s.handleCharacters)
 	mux.HandleFunc("/api/switch", s.handleSwitch)
 	mux.HandleFunc("/api/world", s.handleWorld)
+	mux.HandleFunc("/api/npc-actions", s.handleNPCActions)
 	mux.HandleFunc("/api/debug/memory", s.handleDebugMemory)
 	mux.HandleFunc("/api/director", s.handleDirector)
 	mux.HandleFunc("/", s.handleStatic)
@@ -131,10 +132,14 @@ func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Include recent NPC actions for "while you were away" summary
+	npcActions := s.engine.GetNPCActions(req.Character, 0)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":        true,
-		"character": req.Character,
+		"ok":          true,
+		"character":   req.Character,
+		"npc_actions": npcActions,
 	})
 }
 
@@ -147,6 +152,25 @@ func (s *Server) handleWorld(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"name": s.engine.GetWorldName(),
+	})
+}
+
+func (s *Server) handleNPCActions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := r.URL.Query().Get("character")
+	if name == "" {
+		name = s.engine.GetCharacterName()
+	}
+
+	actions := s.engine.GetNPCActions(name, 0)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"character": name,
+		"actions":   actions,
 	})
 }
 

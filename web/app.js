@@ -41,9 +41,16 @@ charSelect.addEventListener('change', async () => {
       alert('切换失败: ' + (await resp.text()));
       return;
     }
+    const data = await resp.json();
     // Clear chat on switch
     chat.innerHTML = '';
     addMsg('system', '已切换到: ' + name);
+
+    // Show "while you were away" NPC actions
+    if (data.npc_actions && data.npc_actions.length > 0) {
+      const lines = data.npc_actions.map(a => '  - ' + a.summary);
+      addMsg('system', '你不在时发生的事:\n' + lines.join('\n'));
+    }
   } catch (err) {
     alert('切换错误: ' + err.message);
   }
