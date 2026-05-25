@@ -54,6 +54,9 @@ Storage (SQLite + sqlite-vec | YAML worlds/characters)
 2. Event Store 是唯一真相源，状态是投影
 3. Action Layer 是世界变更的唯一入口
 4. Token 预算硬墙不可突破，超预算 panic（开发期）
-5. Phase 1-3 已完成：多 Agent 调度、Tick Loop、自动事件提取、因果链、回放分叉、压缩、路由
-6. 所有配置 YAML 化，拒绝 JSON 黑盒
-7. SQLite 单文件，备份 = `cp memory.db backup/`
+5. Phase 1-3 全部完成：17 内部模块、24 API 端点、前端 100% 覆盖
+6. 世界文件三层分离：world.yml / canon/ontology.yml / canon/facts.yml / scenes/
+7. 所有配置 YAML 化，拒绝 JSON 黑盒
+8. SQLite 单文件，备份 = `cp memory.db backup/`
+9. 认证：HMAC session token，httpOnly cookie
+10. 嵌入模型：BGE-small-zh-v1.5（512-dim，中文语义优化，零 API 成本）
