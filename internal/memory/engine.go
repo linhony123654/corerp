@@ -144,6 +144,22 @@ func (e *Engine) LoadRecentDialogueFromDB(character string, limit int) {
 		}
 	}
 
+	// Fallback: load legacy messages with empty character field, then migrate them
+	if len(msgs) == 0 {
+		legacyRows, err := e.db.Query(
+			`SELECT role, content FROM dialogue_history WHERE character = '' ORDER BY created_at DESC LIMIT ?`, limit)
+		if err == nil {
+			defer legacyRows.Close()
+			for legacyRows.Next() {
+				var msg core.Message
+				if err := legacyRows.Scan(&msg.Role, &msg.Content); err == nil {
+					msgs = append([]core.Message{msg}, msgs...)
+				}
+			}
+			e.db.Exec(`UPDATE dialogue_history SET character = ? WHERE character = ''`, character)
+		}
+	}
+
 	if len(msgs) > e.shortTermCap {
 		msgs = msgs[len(msgs)-e.shortTermCap:]
 	}
