@@ -64,6 +64,19 @@ Interface (PWA/SSE) → API Gateway → Runtime Core
 - 非活跃角色在后台规则式自主行动（Scheduler，零 LLM 消耗）
 - 切换时显示"你不在时发生的事"摘要
 
+## TRPG 骰子判定
+
+聊天框内直接投骰，零 LLM 消耗：
+
+```bash
+/roll trust           # 2d6 + trust修正
+/roll 3d6+fear 10     # 3d6+fear，难度10
+/roll d20-1           # 2d20-1，无难度
+/r d6                 # /r 快捷方式
+```
+
+角色数值（trust/fear/intimacy/debt/respect, 0-10）自动映射为骰子修正（-3 到 +5）。成功/失败判定结果注入下一轮对话上下文——NPC 会据此调整态度。
+
 ## Token 预算
 
 `budgets.yml` 可配置：
