@@ -198,6 +198,35 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 
 ## Phase 3 Complete — 全部 6 项完成 (2026-05-25)
 
+## 2026-05-25 (BGE-small-zh Embedding — bge-small-zh-v1.5)
+
+### 实现
+- `embed_server.py` — Python 嵌入微服务（BAAI/bge-small-zh-v1.5，512-dim）
+  - `POST /embed` — 批量嵌入， `GET /health` — 健康检查
+  - 首次启动自动从 HuggingFace 下载模型（~100MB）
+- `internal/memory/embed_remote.go`:
+  - `RemoteEmbedder` — HTTP 客户端，30s 缓存可用性检查
+  - `EmbedBatch(texts)` — 批量嵌入（减少 HTTP 往返）
+  - `StartEmbedServer()` — Go 启动时自动拉起 Python 子进程
+- `internal/memory/vector.go`:
+  - `VectorEmbedder.Embed()` — 优先 bge-remote，不可用时回退 2-gram
+  - `SearchFacts/SearchEpisodic` — 批量嵌入，单次搜索内锁定方法（避免 512/256 混用）
+
+### 语义质量对比
+
+| 查询 | 目标 | 2-gram | bge-zh | 提升 |
+|------|------|--------|--------|------|
+| 欠我的东西 | 债务人情 | ~0 | **0.55** | ∞ |
+| 别墅里的事 | 别墅镜子偷窥 | 0.11 | **0.51** | 4.6x |
+| 她和我关系 | 沈佳是母亲 | ~0 | **0.35** | ∞ |
+
+### 架构
+```
+Go Runtime → HTTP POST /embed → Python (bge-small-zh-v1.5, 512-dim)
+              ↓ 不可用
+            回退 2-gram (256-dim)
+```
+
 ## 2026-05-25 (Vector Search — memory/vector.go)
 
 ### 实现

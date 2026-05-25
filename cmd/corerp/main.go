@@ -233,6 +233,16 @@ func runServe(args []string) {
 	engine.StartTickLoop()
 	defer engine.Stop()
 
+	// Start embedding server (best-effort, fallback to 2-gram if unavailable)
+	go func() {
+		cmd, err := memory.StartEmbedServer()
+		if err != nil {
+			log.Printf("Embed server: %v (falling back to 2-gram)", err)
+			return
+		}
+		log.Printf("Embed server started (PID %d)", cmd.Process.Pid)
+	}()
+
 	log.Printf("CoreRP started")
 	log.Printf("Active character: %s", activeName)
 	log.Printf("World: %s", charWorlds[activeName].WorldName)

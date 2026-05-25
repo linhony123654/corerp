@@ -16,12 +16,15 @@ const (
 )
 
 // VectorEmbedder converts text to fixed-size vectors.
-// P3: character bigram based — zero external dependencies.
-// Upgrade path: swap for ONNX all-MiniLM-L6-v2 via the same interface.
-type VectorEmbedder struct{}
+// Tries remote bge-small-zh server first; falls back to 2-gram if unavailable.
+type VectorEmbedder struct {
+	remote *RemoteEmbedder
+}
 
 func NewVectorEmbedder() *VectorEmbedder {
-	return &VectorEmbedder{}
+	return &VectorEmbedder{
+		remote: NewRemoteEmbedder(),
+	}
 }
 
 // Chinese stopwords and punctuation to strip before vectorization.
@@ -66,8 +69,23 @@ func (v *VectorEmbedder) preprocess(runes []rune) []rune {
 }
 
 // Embed converts text into a normalized float vector.
-// Chinese stopwords/punctuation stripped; falls back to raw if over-filtered.
+// Tries remote bge-small-zh first; falls back to local 2-gram if unavailable.
 func (v *VectorEmbedder) Embed(text string) []float64 {
+	// Try remote semantic embedding
+	if v.remote.Available() {
+		vec, err := v.remote.Embed(text)
+		if err == nil && len(vec) > 0 {
+			return vec
+		}
+	}
+
+	// Fallback: local 2-gram vectorization
+	return v.embedLocal(text)
+}
+
+// embedLocal is the 2-gram fallback vectorizer.
+// Chinese stopwords/punctuation stripped; falls back to raw if over-filtered.
+func (v *VectorEmbedder) embedLocal(text string) []float64 {
 	vec := make([]float64, VectorDims)
 	raw := []rune(text)
 	filtered := v.preprocess(raw)
@@ -159,9 +177,33 @@ type VectorSearchResult struct {
 }
 
 // SearchFacts performs vector similarity search over semantic facts.
-// candidates: pre-filtered facts (by character), query: user input.
 func (vs *VectorStore) SearchFacts(query string, candidates []core.FactFrame, limit int) []VectorSearchResult {
-	queryVec := vs.embedder.Embed(query)
+	// Determine embedding method once (remote vs local) for consistency
+	useRemote := vs.embedder.remote.Available()
+	var queryVec []float64
+	var factVecs [][]float64
+
+	if useRemote {
+		// Batch embed: query + all candidates at once
+		texts := []string{query}
+		for _, f := range candidates {
+			texts = append(texts, f.Subject+" "+f.Predicate+" "+f.Object)
+		}
+		batched, err := vs.embedder.remote.EmbedBatch(texts)
+		if err == nil && len(batched) == len(texts) {
+			queryVec = batched[0]
+			factVecs = batched[1:]
+		}
+	}
+
+	if queryVec == nil {
+		// Fallback: local 2-gram individually
+		useRemote = false
+		queryVec = vs.embedder.embedLocal(query)
+		for _, f := range candidates {
+			factVecs = append(factVecs, vs.embedder.embedLocal(f.Subject+" "+f.Predicate+" "+f.Object))
+		}
+	}
 
 	type scored struct {
 		fact  core.FactFrame
@@ -169,14 +211,15 @@ func (vs *VectorStore) SearchFacts(query string, candidates []core.FactFrame, li
 	}
 	var results []scored
 
-	for _, f := range candidates {
-		content := f.Subject + " " + f.Predicate + " " + f.Object
-		factVec := vs.embedder.Embed(content)
-		sim := cosineSimilarity(queryVec, factVec)
-		// Boost by confidence
+	for i, f := range candidates {
+		if i >= len(factVecs) {
+			break
+		}
+		sim := cosineSimilarity(queryVec, factVecs[i])
 		sim *= f.Confidence
 		results = append(results, scored{fact: f, score: sim})
 	}
+	_ = useRemote
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].score > results[j].score
@@ -198,7 +241,29 @@ func (vs *VectorStore) SearchFacts(query string, candidates []core.FactFrame, li
 
 // SearchEpisodic performs vector similarity search over episodic events.
 func (vs *VectorStore) SearchEpisodic(query string, candidates []core.EventFrame, limit int) []VectorSearchResult {
-	queryVec := vs.embedder.Embed(query)
+	useRemote := vs.embedder.remote.Available()
+	var queryVec []float64
+	var eventVecs [][]float64
+
+	if useRemote {
+		texts := []string{query}
+		for _, e := range candidates {
+			texts = append(texts, e.Description)
+		}
+		batched, err := vs.embedder.remote.EmbedBatch(texts)
+		if err == nil && len(batched) == len(texts) {
+			queryVec = batched[0]
+			eventVecs = batched[1:]
+		}
+	}
+
+	if queryVec == nil {
+		useRemote = false
+		queryVec = vs.embedder.embedLocal(query)
+		for _, e := range candidates {
+			eventVecs = append(eventVecs, vs.embedder.embedLocal(e.Description))
+		}
+	}
 
 	type scored struct {
 		event core.EventFrame
@@ -206,12 +271,15 @@ func (vs *VectorStore) SearchEpisodic(query string, candidates []core.EventFrame
 	}
 	var results []scored
 
-	for _, e := range candidates {
-		eventVec := vs.embedder.Embed(e.Description)
-		sim := cosineSimilarity(queryVec, eventVec)
+	for i, e := range candidates {
+		if i >= len(eventVecs) {
+			break
+		}
+		sim := cosineSimilarity(queryVec, eventVecs[i])
 		sim *= (1.0 + e.EmotionalWeight)
 		results = append(results, scored{event: e, score: sim})
 	}
+	_ = useRemote
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].score > results[j].score
