@@ -370,6 +370,7 @@ body {
         <span class="level" style="left:75%"></span>
         <span class="fill-bar" id="pan-tension-bar" style="width:0%;background:var(--accent)"></span>
       </div>
+      <input type="range" id="tension-slider" min="0" max="100" value="0" style="width:100%;margin-top:8px;accent-color:var(--accent);cursor:pointer" title="调整张力">
     </div>
 
     <div class="panel-section">
@@ -441,6 +442,7 @@ body {
       <div class="stat-row"><span class="stat-key">分叉数</span><span class="stat-val" id="pan-branches">--</span></div>
       <div class="stat-row"><span class="stat-key">已压缩</span><span class="stat-val" id="pan-compressed">--</span></div>
       <div class="stat-row"><span class="stat-key">摘要事件</span><span class="stat-val" id="pan-summaries">--</span></div>
+      <button id="compress-btn" style="width:100%;margin-top:4px;padding:3px;background:transparent;color:var(--fg-tertiary);border:1px solid var(--border);cursor:pointer;font-size:9px;letter-spacing:1px">压缩事件</button>
     </div>
 
     <div class="panel-section">
@@ -451,6 +453,17 @@ body {
       <div class="stat-row"><span class="stat-key">事件数</span><span class="stat-val" id="pan-events">--</span></div>
     </div>
   </aside>
+</div>
+
+<div id="chain-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);padding:24px;max-width:600px;max-height:80vh;overflow-y:auto;width:90%">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-family:var(--font-display);font-size:12px;letter-spacing:2px;color:var(--fg-tertiary)">因果链</span>
+      <button id="chain-close" style="background:none;border:none;color:var(--fg-tertiary);cursor:pointer;font-size:18px">✕</button>
+    </div>
+    <pre id="chain-content" style="font-family:var(--font-mono);font-size:10px;color:var(--fg-secondary);white-space:pre-wrap;line-height:1.6"></pre>
+    <div id="chain-replay" style="margin-top:12px"></div>
+  </div>
 </div>
 
 <script src="/app.js"></script>

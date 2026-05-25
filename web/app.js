@@ -347,6 +347,15 @@ async function loadLLMConfigs() {
       loadLLMConfigs();
     });
   });
+
+  // Routes table
+  try {
+    const routes = await fetch('/api/llm-routes').then(r => r.json());
+    html += `<div style="font-size:9px;color:var(--fg-tertiary);margin-top:8px;margin-bottom:2px">路由表</div>`;
+    for (const [task, adapter] of Object.entries(routes.routes || {})) {
+      html += `<div style="font-size:9px;padding:1px 0;color:var(--fg-tertiary)">${task} → <span style="color:var(--fg-secondary)">${adapter}</span></div>`;
+    }
+  } catch(_) {}
 }
 
 // Pricing popup
@@ -390,6 +399,49 @@ async function resetConversation() {
   addMsg('system', '对话已重置');
 }
 
+// ── Tension slider ──
+const tensionSlider = document.getElementById('tension-slider');
+let tensionTimeout;
+tensionSlider.addEventListener('input', () => {
+  clearTimeout(tensionTimeout);
+  tensionTimeout = setTimeout(async () => {
+    await fetch('/api/director', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_tension', value: tensionSlider.value / 100 })
+    });
+    refreshPanel();
+  }, 300);
+});
+
+// ── Compress button ──
+document.getElementById('compress-btn').addEventListener('click', async () => {
+  const total = parseInt(document.getElementById('pan-events')?.textContent) || 0;
+  if (total < 100) return alert('事件数不足，无需压缩');
+  await fetch('/api/compress', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: 0, to: Math.min(total, 200) })
+  });
+  refreshPanel();
+});
+
+// ── Causal chain modal ──
+const chainModal = document.getElementById('chain-modal');
+document.getElementById('chain-close').addEventListener('click', () => { chainModal.style.display = 'none'; });
+chainModal.addEventListener('click', e => { if (e.target === chainModal) chainModal.style.display = 'none'; });
+
+async function showCausalChain(eventId) {
+  try {
+    const r = await fetch('/api/causality?id=' + eventId + '&depth=3').then(r => r.json());
+    document.getElementById('chain-content').textContent = r.summary || '无因果数据';
+    // Replay state
+    const replay = await fetch('/api/replay?id=' + eventId).then(r => r.json());
+    document.getElementById('chain-replay').innerHTML = `
+      <div style="font-size:10px;color:var(--fg-tertiary);margin-bottom:4px">回放状态: 第${replay.clock?.day||0}天 ${replay.clock?.hour||0}:${String(replay.clock?.minute||0).padStart(2,'0')} | ${replay.scene?.location||'?'} | 张力${(replay.tension||0).toFixed(2)}</div>
+    `;
+    chainModal.style.display = 'flex';
+  } catch (_) { alert('查询失败'); }
+}
+
 // ── Timeline ──
 async function loadTimeline() {
   try {
@@ -421,7 +473,7 @@ function renderTimeline(timeline) {
   el.innerHTML = timeline.slice(-15).reverse().map(t => {
     const e = t.event;
     const icon = e.type === 'user_message' ? '⬤' : e.type === 'dialogue' ? '◆' : e.type === 'dice_roll' ? '◈' : '·';
-    return `<div style="font-size:10px;padding:2px 0;color:var(--fg-tertiary);border-bottom:1px solid var(--border-subtle)">
+    return `<div style="font-size:10px;padding:2px 0;color:var(--fg-tertiary);border-bottom:1px solid var(--border-subtle);cursor:pointer" onclick="showCausalChain('${e.id}')" title="点击查看因果链">
       <span style="color:var(--fg-secondary)">${icon}</span> ${e.type}: ${(e.actor||'?').substring(0,8)} → ${(e.target||'?').substring(0,8)}
       <span style="font-size:8px;color:var(--fg-tertiary)">#${t.index}</span>
     </div>`;
