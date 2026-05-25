@@ -127,6 +127,12 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 			map[string]interface{}{"content": userInput})
 		e.gatekeeper.Submit(userEvent, events.SourceUserInput())
 
+		// 1.5 Intercept /roll command (dice check, no LLM)
+		if strings.HasPrefix(strings.ToLower(userInput), "/roll") || strings.HasPrefix(strings.ToLower(userInput), "/r ") {
+			e.handleRollCommand(userInput, ch)
+			return
+		}
+
 		// 2. Load current state
 		worldState := e.stateMgr.Get()
 
@@ -391,6 +397,67 @@ func (e *Engine) SwitchCharacter(name string) error {
 	}
 
 	return nil
+}
+
+func (e *Engine) handleRollCommand(input string, ch chan<- string) {
+	// Parse: /roll <expr> [difficulty]
+	// Examples: /roll trust, /roll 2d6+trust, /r d20-2 15
+	input = strings.TrimSpace(input)
+	if strings.HasPrefix(input, "/r ") {
+		input = "/roll" + input[2:]
+	}
+	parts := strings.Fields(input) // ["/roll", "2d6+trust", "15"]
+	if len(parts) < 2 {
+		ch <- "[用法] /roll <表达式> [难度]\n  例: /roll trust  /roll 2d6+trust  /roll d20-1 15\n"
+		return
+	}
+
+	expr := parts[1]
+	difficulty := 0
+	if len(parts) >= 3 {
+		fmt.Sscanf(parts[2], "%d", &difficulty)
+	}
+
+	// Build stat function from character's adaptive values
+	char, _ := e.agents.GetCharacter(e.activeCharacter)
+	statFn := func(key string) int {
+		if v, ok := char.Identity.Adaptive[key]; ok {
+			return actions.StatToModifier(v)
+		}
+		return 0
+	}
+
+	result, err := actions.RollDice(expr, statFn, difficulty)
+	if err != nil {
+		ch <- fmt.Sprintf("[骰子错误] %v\n", err)
+		return
+	}
+
+	// Format output
+	ch <- "╔══ 判定 ══╗\n"
+	ch <- fmt.Sprintf("║ %s\n", result.Summary)
+	if result.Difficulty > 0 && result.Success != nil {
+		if *result.Success {
+			ch <- "║ ✓ 成功 — 行动达成预期效果\n"
+		} else {
+			ch <- "║ ✗ 失败 — 行动受阻或产生代价\n"
+		}
+	}
+	ch <- "╚══════════╝\n"
+
+	// Record roll as event for narrative context
+	rollEvent := events.BuildEvent("dice_roll", e.activeCharacter, "",
+		map[string]interface{}{
+			"expression": result.Expression,
+			"total":      result.Total,
+			"difficulty": result.Difficulty,
+			"summary":    result.Summary,
+		})
+	e.gatekeeper.Submit(rollEvent, events.SourceUserInput())
+
+	// Store in dialogue so LLM sees it next turn
+	rollMsg := core.Message{Role: "system", Content: fmt.Sprintf("[判定] %s", result.Summary)}
+	e.memEngine.PushDialogue(rollMsg, e.activeCharacter)
 }
 
 // GetNPCActions returns recent autonomous actions for a character.
