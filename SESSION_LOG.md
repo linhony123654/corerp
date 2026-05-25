@@ -529,3 +529,15 @@ survival(hide) > relationship_repair(trust) > info_gathering(observe) > explorat
   - core_rules: 685 字符
   - scene: 别墅 / 白天 / 晴朗炎热
   - ontology: 8 角色 + 12 地点 + 1 势力 + 8 物品 + 4  lore + 29 事件 + 9 时间线
+
+## 2026-05-25 (Causality Engine 循环污染修复)
+
+### 改动
+- `internal/events/causality.go`:
+  - `LinkNewEvent()` 新增噪音过滤：对 `fact_extracted` / `variable_set` 的空内容（`""`/空白）事件直接忽略，不再进入因果链接。
+  - 新增 `shouldIgnoreEvent()` 与 `isMeaninglessContent()`，避免无语义 payload 污染因果图。
+  - `GetChain()` 改为带 `visited` 集的 DFS（`getChain`），检测并剪枝已访问节点，防止 A→B→A 的循环递归。
+
+### 结果
+- 因果链查询在存在互相引用时不再出现递归环污染。
+- 空内容提取事件不再被自动连入 causality graph。

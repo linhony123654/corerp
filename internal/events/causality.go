@@ -32,6 +32,10 @@ type CausalChain struct {
 // LinkNewEvent analyzes a new event and establishes bidirectional causal links
 // to recent events. Call this after the event has been inserted.
 func (c *CausalityEngine) LinkNewEvent(evt core.Event) error {
+	if c.shouldIgnoreEvent(evt) {
+		return nil
+	}
+
 	recent, err := c.store.GetRecentEvents(c.maxRecentEvents)
 	if err != nil {
 		return err
@@ -40,6 +44,9 @@ func (c *CausalityEngine) LinkNewEvent(evt core.Event) error {
 	var causes []core.Cause
 	for _, past := range recent {
 		if past.ID == evt.ID {
+			continue
+		}
+		if c.shouldIgnoreEvent(past) {
 			continue
 		}
 		if c.isCausedBy(evt, past) {
@@ -147,9 +154,19 @@ func (c *CausalityEngine) GetEffects(eventID string) ([]core.Event, error) {
 
 // GetChain recursively builds a causal chain tree.
 func (c *CausalityEngine) GetChain(eventID string, depth int) (*CausalChain, error) {
+	visited := map[string]bool{}
+	return c.getChain(eventID, depth, visited)
+}
+
+func (c *CausalityEngine) getChain(eventID string, depth int, visited map[string]bool) (*CausalChain, error) {
 	if depth <= 0 {
 		return nil, nil
 	}
+	if visited[eventID] {
+		return nil, nil
+	}
+	visited[eventID] = true
+	defer delete(visited, eventID)
 
 	evt, err := c.store.GetByID(eventID)
 	if err != nil {
@@ -161,7 +178,7 @@ func (c *CausalityEngine) GetChain(eventID string, depth int) (*CausalChain, err
 	// Get direct causes
 	causeEvents, _ := c.GetCauses(eventID)
 	for _, ce := range causeEvents {
-		sub, err := c.GetChain(ce.ID, depth-1)
+		sub, err := c.getChain(ce.ID, depth-1, visited)
 		if err != nil || sub == nil {
 			chain.Causes = append(chain.Causes, CausalChain{Event: ce})
 		} else {
@@ -172,7 +189,7 @@ func (c *CausalityEngine) GetChain(eventID string, depth int) (*CausalChain, err
 	// Get direct effects
 	effectEvents, _ := c.GetEffects(eventID)
 	for _, ee := range effectEvents {
-		sub, err := c.GetChain(ee.ID, depth-1)
+		sub, err := c.getChain(ee.ID, depth-1, visited)
 		if err != nil || sub == nil {
 			chain.Effects = append(chain.Effects, CausalChain{Event: ee})
 		} else {
@@ -241,6 +258,25 @@ func (c *CausalityEngine) addEffect(eventID string, effectID string) error {
 
 func causeEffectID(eff core.StateEffect) string {
 	return eff.Path
+}
+
+func (c *CausalityEngine) shouldIgnoreEvent(evt core.Event) bool {
+	switch evt.Type {
+	case "fact_extracted", "variable_set":
+		return isMeaninglessContent(evt.Payload["content"]) ||
+			isMeaninglessContent(evt.Payload["value"]) ||
+			isMeaninglessContent(evt.Payload["fact"])
+	}
+	return false
+}
+
+func isMeaninglessContent(v interface{}) bool {
+	s, ok := v.(string)
+	if !ok {
+		return false
+	}
+	trimmed := strings.TrimSpace(s)
+	return trimmed == "" || trimmed == "\"\"" || trimmed == "''"
 }
 
 // causalTypeRules maps event types to the types they typically cause.
