@@ -428,6 +428,7 @@ type loadedWorld struct {
 		Timelines  []ontologyEntry  `yaml:"timelines"`
 			Settings   []ontologyEntry  `yaml:"settings"`
 	} `yaml:"ontology"`
+	DirectFacts []FactEntry
 }
 
 type ontologyEntry struct {
@@ -468,7 +469,24 @@ func loadWorldDir(dir string) loadedWorld {
 		yaml.Unmarshal(data, &w.Ontology)
 	}
 
+	// canon/facts.yml → loaded as structured facts
+	if data, err := os.ReadFile(filepath.Join(dir, "canon", "facts.yml")); err == nil {
+		var factsDoc struct {
+			Facts []FactEntry `yaml:"facts"`
+		}
+		yaml.Unmarshal(data, &factsDoc)
+		w.DirectFacts = factsDoc.Facts
+	}
+
 	return w
+}
+
+// FactEntry mirrors importer.FactEntry for direct fact loading.
+type FactEntry struct {
+	Subject    string  `yaml:"subject"`
+	Predicate  string  `yaml:"predicate"`
+	Object     string  `yaml:"object"`
+	Confidence float64 `yaml:"confidence"`
 }
 
 func loadWorld(path string) loadedWorld {
@@ -594,6 +612,16 @@ func seedOntology(mem *memory.Engine, world *loadedWorld, charName string) {
 			Predicate:  extractName(e.Name),
 			Object:     truncateStr(e.Content, 300),
 			Confidence: 1.0,
+		})
+	}
+
+	// Direct facts from canon/facts.yml (no extraction needed)
+	for _, f := range world.DirectFacts {
+		facts = append(facts, core.FactFrame{
+			Subject:    f.Subject,
+			Predicate:  f.Predicate,
+			Object:     f.Object,
+			Confidence: f.Confidence,
 		})
 	}
 
