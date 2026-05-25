@@ -123,6 +123,50 @@ func scanEvents(rows *sql.Rows) ([]core.Event, error) {
 	return events, rows.Err()
 }
 
+func (s *Store) GetByID(eventID string) (core.Event, error) {
+	var e core.Event
+	var payloadJSON, causesJSON, effectsJSON []byte
+	var createdAtStr string
+
+	err := s.db.QueryRow(
+		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at FROM events WHERE id = ?`,
+		eventID,
+	).Scan(&e.ID, &e.Type, &e.Actor, &e.Target, &payloadJSON, &causesJSON, &effectsJSON,
+		&e.Canonical, &e.Confidence, &e.Confirmations, &e.SceneID, &e.SessionID, &createdAtStr)
+	if err != nil {
+		return core.Event{}, err
+	}
+
+	json.Unmarshal(payloadJSON, &e.Payload)
+	json.Unmarshal(causesJSON, &e.Causes)
+	json.Unmarshal(effectsJSON, &e.Effects)
+	e.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAtStr)
+
+	return e, nil
+}
+
+// GetRecentEvents returns the last N events (canonical and quarantined).
+func (s *Store) GetRecentEvents(limit int) ([]core.Event, error) {
+	rows, err := s.db.Query(
+		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, created_at FROM events ORDER BY created_at DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events, err := scanEvents(rows)
+	if err != nil {
+		return nil, err
+	}
+	// Reverse to chronological order
+	for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
+		events[i], events[j] = events[j], events[i]
+	}
+	return events, nil
+}
+
 func (s *Store) Close() error {
 	return s.db.Close()
 }

@@ -27,6 +27,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/switch", s.handleSwitch)
 	mux.HandleFunc("/api/world", s.handleWorld)
 	mux.HandleFunc("/api/npc-actions", s.handleNPCActions)
+	mux.HandleFunc("/api/causality", s.handleCausality)
 	mux.HandleFunc("/api/debug/memory", s.handleDebugMemory)
 	mux.HandleFunc("/api/director", s.handleDirector)
 	mux.HandleFunc("/", s.handleStatic)
@@ -171,6 +172,43 @@ func (s *Server) handleNPCActions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"character": name,
 		"actions":   actions,
+	})
+}
+
+func (s *Server) handleCausality(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	eventID := r.URL.Query().Get("id")
+	if eventID == "" {
+		http.Error(w, "Missing 'id' query parameter", http.StatusBadRequest)
+		return
+	}
+
+	depth := 3
+	if d := r.URL.Query().Get("depth"); d != "" {
+		fmt.Sscanf(d, "%d", &depth)
+	}
+	if depth > 10 {
+		depth = 10
+	}
+
+	chain, err := s.engine.GetCausalityChain(eventID, depth)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	summary, _ := s.engine.GetCausalitySummary(eventID, depth)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"event_id": eventID,
+		"depth":    depth,
+		"chain":    chain,
+		"summary":  summary,
 	})
 }
 

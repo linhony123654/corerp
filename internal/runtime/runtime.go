@@ -391,6 +391,20 @@ func (e *Engine) GetNPCActions(name string, sinceTick int) []agents.NPCActionLog
 	return e.scheduler.RecentActionsForCharacter(name, sinceTick)
 }
 
+// GetCausalityChain returns the causal chain for an event.
+func (e *Engine) GetCausalityChain(eventID string, depth int) (interface{}, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.gatekeeper.Causality().GetChain(eventID, depth)
+}
+
+// GetCausalitySummary returns a human-readable chain summary.
+func (e *Engine) GetCausalitySummary(eventID string, depth int) (string, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.gatekeeper.Causality().GetChainSummary(eventID, depth)
+}
+
 func (e *Engine) GetWorldName() string {
 	return e.worldName
 }

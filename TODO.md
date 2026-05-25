@@ -48,7 +48,7 @@
 ## Phase 3（多世界与因果）
 - [x] 多角色加载 + 手动切换（`POST /api/switch`，前端下拉框）
 - [x] agents/scheduler.go — 多 Agent 自主调度（规则式，零 LLM，每 3 tick/NPC 一次动作）
-- [ ] events/causality.go — 因果链引擎
+- [x] events/causality.go — 因果链引擎（自动链接 + 递归查询 + summary）
 - [ ] events/replay.go — 时间线回放/分叉
 - [ ] narrative/compression.go — 事件升维抽象
 - [ ] llm/router.go — 能力路由

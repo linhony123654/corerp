@@ -169,6 +169,36 @@ world.yml 的 ontology 数据（71 条角色/事件/设定）未被加载进 LLM
 - CLAUDE.md: 6 项验证全部标记 ✅，Status 更新
 - TODO.md: 重构为 P1→P2→P3 三段式，移除冗余
 
+## 2026-05-25 (Causality Engine — events/causality.go)
+
+### 实现
+- `internal/events/causality.go`:
+  - `CausalityEngine` — 事件因果链引擎，利用 events 表已有 `causes`/`effects` JSON 列
+  - `LinkNewEvent(evt)` — 分析新事件，自动与最近 20 个事件建立双向因果链接
+  - 链接规则（权重）：类型启发(0.9) > 对话-响应(0.85) > 同角色(0.7) > 同目标(0.6)
+  - `causalTypeRules` 定义类型因果：attack→fear_change/tension_change/hide, user_message→dialogue 等
+  - `GetChain(eventID, depth)` — 递归构建因果链树
+  - `GetChainSummary()` — 人类可读的缩进文本摘要
+- `internal/events/quarantine.go`:
+  - `Gatekeeper` 新增 `causality` 字段，`Submit()` 存储后自动 `go g.causality.LinkNewEvent(e)`
+  - 新增 `Causality()` 访问器
+- `internal/events/store.go`:
+  - 新增 `GetByID()` / `GetRecentEvents()` 方法
+- `internal/runtime/runtime.go`:
+  - 新增 `GetCausalityChain()` / `GetCausalitySummary()` 方法
+- `internal/api/server.go`:
+  - 新增 `GET /api/causality?id=<event_id>&depth=3` 端点
+
+### 测试结果
+- ✅ `user_message` → `dialogue` 正确链接（weight 0.9）
+- ✅ `dialogue` → `variable_set` → `fact_extracted` 效应链
+- ✅ 递归链查询工作中，depth 参数控制深度
+- ✅ Summary 人类可读格式正确
+
+### 注意事项
+- 同角色规则会链接历史事件，depth 过深时噪音较多
+- 因果链接在 goroutine 中异步执行，不阻塞事件提交
+
 ## 2026-05-25 (NPC Scheduler — agents/scheduler.go)
 
 ### 实现

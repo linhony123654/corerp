@@ -9,14 +9,19 @@ import (
 
 // Gatekeeper routes events into canonical or quarantine based on source.
 type Gatekeeper struct {
-	store *Store
+	store     *Store
+	causality *CausalityEngine
 }
 
 func NewGatekeeper(store *Store) *Gatekeeper {
-	return &Gatekeeper{store: store}
+	return &Gatekeeper{
+		store:     store,
+		causality: NewCausalityEngine(store),
+	}
 }
 
 // Submit decides canonical vs quarantine based on event source.
+// After storing, it automatically establishes causal links to recent events.
 func (g *Gatekeeper) Submit(e core.Event, source string) error {
 	switch source {
 	case "user_input", "system", "action_result", "tick":
@@ -30,7 +35,17 @@ func (g *Gatekeeper) Submit(e core.Event, source string) error {
 	default:
 		e.Canonical = false
 	}
-	return g.store.Append(e)
+	if err := g.store.Append(e); err != nil {
+		return err
+	}
+	// Auto-link causal relationships
+	go g.causality.LinkNewEvent(e)
+	return nil
+}
+
+// Causality returns the causality engine for querying.
+func (g *Gatekeeper) Causality() *CausalityEngine {
+	return g.causality
 }
 
 // Review manually confirms or rejects a quarantined event.
