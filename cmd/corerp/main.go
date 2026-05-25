@@ -405,6 +405,7 @@ type loadedWorld struct {
 		Lore       []ontologyEntry  `yaml:"lore"`
 		Events     []ontologyEvent  `yaml:"events"`
 		Timelines  []ontologyEntry  `yaml:"timelines"`
+			Settings   []ontologyEntry  `yaml:"settings"`
 	} `yaml:"ontology"`
 }
 
@@ -508,6 +509,16 @@ func seedOntology(mem *memory.Engine, world *loadedWorld, charName string) {
 		facts = append(facts, core.FactFrame{
 			Subject:    extractName(e.Name),
 			Predicate:  "世界观",
+			Object:     truncateStr(e.Content, 300),
+			Confidence: 1.0,
+		})
+	}
+
+	// Settings (体系/能力/职业)
+	for _, e := range o.Settings {
+		facts = append(facts, core.FactFrame{
+			Subject:    extractName(e.Name),
+			Predicate:  "体系设定",
 			Object:     truncateStr(e.Content, 300),
 			Confidence: 1.0,
 		})

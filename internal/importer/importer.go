@@ -277,14 +277,28 @@ func BuildWorldYAML(st SillyTavernChar, book []WorldBookEntry) WorldYAML {
 		Scene: inferScene(st, book),
 	}
 
-	// CoreRules = system_prompt + world lore summaries
+	// CoreRules: system_prompt + world-building settings/concepts
 	var rules []string
 	if sp := extractSystemPrompt(st.Data); sp != "" {
 		rules = append(rules, cleanText(sp))
 	}
+	// Collect setting/lore entries that define world rules
 	for _, e := range book {
-		if e.Type == "setting" && strings.Contains(e.Name, "世界观") {
-			rules = append(rules, e.Content)
+		if e.Type == "setting" || e.Type == "lore" {
+			name := strings.ToLower(e.Name)
+			// World-building content: game systems, rules, core concepts
+			if strings.Contains(name, "世界观") || strings.Contains(name, "体系") ||
+				strings.Contains(name, "规则") || strings.Contains(name, "设定") ||
+				strings.Contains(name, "系统") || strings.Contains(name, "货币") ||
+				strings.Contains(name, "等级") || strings.Contains(name, "社会") {
+				rules = append(rules, "【"+e.Name+"】 "+e.Content)
+			}
+		}
+	}
+	if len(rules) == 0 {
+		// Fallback: use first_mes if nothing else provides rules
+		if st.FirstMes != "" {
+			rules = append(rules, cleanText(st.FirstMes))
 		}
 	}
 	world.CoreRules = strings.Join(rules, "\n\n")
