@@ -24,20 +24,69 @@ func NewVectorEmbedder() *VectorEmbedder {
 	return &VectorEmbedder{}
 }
 
+// Chinese stopwords and punctuation to strip before vectorization.
+var stopRunes = map[rune]bool{
+	'的': true, '了': true, '在': true, '是': true, '我': true,
+	'你': true, '他': true, '她': true, '它': true, '们': true,
+	'这': true, '那': true, '吗': true, '呢': true, '吧': true,
+	'啊': true, '哦': true, '嗯': true, '哈': true, '呀': true,
+	'就': true, '也': true, '都': true, '还': true, '要': true,
+	'会': true, '能': true, '可': true, '把': true, '被': true,
+	'和': true, '与': true, '对': true, '从': true, '到': true,
+	'让': true, '给': true, '为': true, '向': true, '跟': true,
+	'有': true, '没': true, '不': true, '很': true, '太': true,
+	'个': true, '些': true, '次': true, '点': true, '里': true,
+	'上': true, '下': true, '中': true, '前': true, '后': true,
+	'去': true, '来': true, '做': true, '说': true, '看': true,
+	'想': true, '知': true, '道': true, '得': true, '着': true,
+	'过': true, '一': true, '两': true, '几': true, '什': true,
+	'么': true, '怎': true, '样': true, '哪': true, '谁': true,
+	'事': true, '人': true, '大': true, '小': true, '多': true,
+	'少': true, '已': true, '经': true, '以': true, '及': true,
+	'所': true, '但': true, '而': true, '或': true, '且': true,
+	'只': true, '又': true, '再': true, '才': true, '刚': true,
+	'最': true, '更': true, '比': true, '等': true, '其': true,
+	'之': true, '将': true, '著': true,
+	'！': true, '？': true, '。': true, '，': true,
+	'、': true, '：': true, '；': true, '（': true, '）': true,
+	'"': true, '\'': true, '「': true,
+	'」': true, '『': true, '』': true, '—': true,
+	'《': true, '》': true, '【': true, '】': true, '~': true,
+	' ': true, '\t': true, '\n': true, '\r': true,
+}
+
+func (v *VectorEmbedder) preprocess(runes []rune) []rune {
+	filtered := make([]rune, 0, len(runes))
+	for _, r := range runes {
+		if !stopRunes[r] {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
 // Embed converts text into a normalized float vector.
+// Chinese stopwords/punctuation stripped; falls back to raw if over-filtered.
 func (v *VectorEmbedder) Embed(text string) []float64 {
 	vec := make([]float64, VectorDims)
-	runes := []rune(text)
-	if len(runes) < 2 {
-		// Single character: use unicode codepoint
-		idx := int(runes[0]) % VectorDims
-		vec[idx] = 1.0
+	raw := []rune(text)
+	filtered := v.preprocess(raw)
+
+	// Fall back to raw if stopword removal emptied or nearly emptied the text
+	if len(filtered) < 2 {
+		filtered = raw
+	}
+	if len(filtered) < 2 {
+		if len(filtered) == 1 {
+			idx := int(filtered[0]) % VectorDims
+			vec[idx] = 1.0
+		}
 		return vec
 	}
 
 	// Character bigram hashing into fixed-size vector
-	for i := 0; i < len(runes)-1; i++ {
-		idx := (int(runes[i])*31 + int(runes[i+1])) % VectorDims
+	for i := 0; i < len(filtered)-1; i++ {
+		idx := (int(filtered[i])*31 + int(filtered[i+1])) % VectorDims
 		if idx < 0 {
 			idx = -idx
 		}
