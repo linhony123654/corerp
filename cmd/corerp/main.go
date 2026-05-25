@@ -11,6 +11,7 @@ import (
 
 	"corerp/internal/agents"
 	"corerp/internal/api"
+	"corerp/internal/auth"
 	"corerp/internal/core"
 	"corerp/internal/events"
 	"corerp/internal/importer"
@@ -89,6 +90,7 @@ func runServe(args []string) {
 	llmModel := fs.String("llm-model", os.Getenv("LLM_MODEL"), "LLM model name")
 		summaryURL := fs.String("llm-summary-url", "", "Optional separate LLM endpoint for summaries (defaults to main)")
 		summaryModel := fs.String("llm-summary-model", "", "Optional separate model for summaries (defaults to main)")
+		authKey := fs.String("auth-key", os.Getenv("CORERP_AUTH_KEY"), "Access password (empty = no auth)")
 	fs.Parse(args)
 
 	if *llmURL == "" {
@@ -184,6 +186,12 @@ func runServe(args []string) {
 	for i, c := range chars {
 		agentsMgr.LoadCharacter(charNames[i], c)
 		log.Printf("Loaded character: %s", charNames[i])
+	}
+
+	// Init auth
+	auth.Init(*authKey)
+	if auth.IsEnabled() {
+		log.Printf("Auth: enabled (set via -auth-key or CORERP_AUTH_KEY)")
 	}
 
 	// Init LLM router + usage logger + compact previous month

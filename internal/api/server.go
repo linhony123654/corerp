@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"corerp/internal/auth"
 	"corerp/internal/llm"
 	"corerp/internal/runtime"
 )
@@ -21,24 +22,26 @@ func NewServer(engine *runtime.Engine) *Server {
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/api/chat", s.handleChat)
-	mux.HandleFunc("/api/state", s.handleState)
-	mux.HandleFunc("/api/character", s.handleCharacter)
-	mux.HandleFunc("/api/characters", s.handleCharacters)
-	mux.HandleFunc("/api/switch", s.handleSwitch)
-	mux.HandleFunc("/api/world", s.handleWorld)
-	mux.HandleFunc("/api/npc-actions", s.handleNPCActions)
-	mux.HandleFunc("/api/causality", s.handleCausality)
-	mux.HandleFunc("/api/replay", s.handleReplay)
-	mux.HandleFunc("/api/fork", s.handleFork)
-	mux.HandleFunc("/api/timeline", s.handleTimeline)
-	mux.HandleFunc("/api/branches", s.handleBranches)
-	mux.HandleFunc("/api/compress", s.handleCompress)
-	mux.HandleFunc("/api/compression-stats", s.handleCompressionStats)
-	mux.HandleFunc("/api/usage", s.handleUsage)
-	mux.HandleFunc("/api/llm-routes", s.handleLLMRoutes)
-	mux.HandleFunc("/api/debug/memory", s.handleDebugMemory)
-	mux.HandleFunc("/api/director", s.handleDirector)
+	a := func(h http.HandlerFunc) http.HandlerFunc { return auth.Middleware(h) }
+	mux.HandleFunc("/login", auth.HandleLogin)
+	mux.HandleFunc("/api/chat", a(s.handleChat))
+	mux.HandleFunc("/api/state", a(s.handleState))
+	mux.HandleFunc("/api/character", a(s.handleCharacter))
+	mux.HandleFunc("/api/characters", a(s.handleCharacters))
+	mux.HandleFunc("/api/switch", a(s.handleSwitch))
+	mux.HandleFunc("/api/world", a(s.handleWorld))
+	mux.HandleFunc("/api/npc-actions", a(s.handleNPCActions))
+	mux.HandleFunc("/api/causality", a(s.handleCausality))
+	mux.HandleFunc("/api/replay", a(s.handleReplay))
+	mux.HandleFunc("/api/fork", a(s.handleFork))
+	mux.HandleFunc("/api/timeline", a(s.handleTimeline))
+	mux.HandleFunc("/api/branches", a(s.handleBranches))
+	mux.HandleFunc("/api/compress", a(s.handleCompress))
+	mux.HandleFunc("/api/compression-stats", a(s.handleCompressionStats))
+	mux.HandleFunc("/api/usage", a(s.handleUsage))
+	mux.HandleFunc("/api/llm-routes", a(s.handleLLMRoutes))
+	mux.HandleFunc("/api/debug/memory", a(s.handleDebugMemory))
+	mux.HandleFunc("/api/director", a(s.handleDirector))
 	mux.HandleFunc("/", s.handleStatic)
 }
 
