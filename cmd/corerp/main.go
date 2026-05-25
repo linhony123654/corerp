@@ -186,8 +186,10 @@ func runServe(args []string) {
 		log.Printf("Loaded character: %s", charNames[i])
 	}
 
-	// Init LLM router + usage logger
-	llm.InitUsageLogger(*dataDir + "/llm_usage.jsonl")
+	// Init LLM router + usage logger + compact previous month
+	usagePath := *dataDir + "/llm_usage.jsonl"
+	llm.InitUsageLogger(usagePath)
+	llm.CompactMonth(usagePath) // nop if current month has no prior records
 	defaultAdapter := llm.NewAdapter(*llmURL, *llmKey, *llmModel)
 	llmRouter := llm.NewRouter(defaultAdapter)
 
