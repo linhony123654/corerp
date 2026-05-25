@@ -354,11 +354,64 @@ async function resetConversation() {
   addMsg('system', '对话已重置');
 }
 
+// ── Timeline ──
+async function loadTimeline() {
+  try {
+    const [branches, tl] = await Promise.all([
+      fetch('/api/branches').then(r => r.json()),
+      fetch('/api/timeline?limit=30').then(r => r.json())
+    ]);
+    const sel = document.getElementById('tl-branch');
+    sel.innerHTML = '';
+    for (const b of branches.branches || ['main']) {
+      const opt = document.createElement('option');
+      opt.value = b; opt.textContent = b;
+      if (b === 'main') opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.onchange = () => loadTimelineBranch(sel.value);
+    renderTimeline(tl.timeline || []);
+  } catch (_) {}
+}
+
+async function loadTimelineBranch(branch) {
+  const tl = await fetch('/api/timeline?branch=' + branch + '&limit=30').then(r => r.json());
+  renderTimeline(tl.timeline || []);
+}
+
+function renderTimeline(timeline) {
+  const el = document.getElementById('pan-timeline');
+  if (!timeline.length) { el.innerHTML = '<span style="color:var(--fg-tertiary);font-size:10px">无事件</span>'; return; }
+  el.innerHTML = timeline.slice(-15).reverse().map(t => {
+    const e = t.event;
+    const icon = e.type === 'user_message' ? '⬤' : e.type === 'dialogue' ? '◆' : e.type === 'dice_roll' ? '◈' : '·';
+    return `<div style="font-size:10px;padding:2px 0;color:var(--fg-tertiary);border-bottom:1px solid var(--border-subtle)">
+      <span style="color:var(--fg-secondary)">${icon}</span> ${e.type}: ${(e.actor||'?').substring(0,8)} → ${(e.target||'?').substring(0,8)}
+      <span style="font-size:8px;color:var(--fg-tertiary)">#${t.index}</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('tl-fork-btn').addEventListener('click', async () => {
+  const branch = prompt('新分叉名称:');
+  if (!branch) return;
+  const tl = await fetch('/api/timeline?limit=1').then(r => r.json());
+  const lastEvent = (tl.timeline || [])[tl.timeline.length - 1];
+  if (!lastEvent) return alert('没有可分叉的事件');
+  await fetch('/api/fork', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_id: lastEvent.event.id, branch })
+  });
+  loadTimeline();
+});
+
 // ── Init ──
 restoreDialogue();
 refreshPanel();
 loadLLMConfigs();
+loadTimeline();
 setInterval(refreshPanel, 15000);
+setInterval(loadTimeline, 30000);
 
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 'b') { e.preventDefault(); panel.classList.toggle('open'); }

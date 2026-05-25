@@ -401,6 +401,17 @@ body {
     </div>
 
     <div class="panel-section">
+      <div class="panel-label" style="display:flex;justify-content:space-between;align-items:center">
+        时间线
+        <span style="display:flex;gap:4px">
+          <select id="tl-branch" style="background:var(--bg);color:var(--fg-tertiary);border:1px solid var(--border);font-size:9px;padding:1px 4px;max-width:80px"></select>
+          <button id="tl-fork-btn" style="background:none;border:1px solid var(--border);color:var(--fg-tertiary);cursor:pointer;font-size:9px;padding:1px 6px" title="从最新事件分叉">+↪</button>
+        </span>
+      </div>
+      <div id="pan-timeline" style="max-height:200px;overflow-y:auto"></div>
+    </div>
+
+    <div class="panel-section">
       <div class="panel-label">NPC 动态</div>
       <div id="pan-npc"><span style="color:var(--fg-tertiary);font-size:11px">空闲中</span></div>
     </div>
