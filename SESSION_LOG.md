@@ -541,3 +541,15 @@ survival(hide) > relationship_repair(trust) > info_gathering(observe) > explorat
 ### 结果
 - 因果链查询在存在互相引用时不再出现递归环污染。
 - 空内容提取事件不再被自动连入 causality graph。
+
+## 2026-05-25 (Causality 修复补丁 v2)
+
+### 改动
+- `internal/events/causality.go`:
+  - 在 `getChain()` 的 cause/effect 遍历中，若子节点已在 `visited` 中则直接 `continue`，不再把循环节点以“叶子”形式追加到结果，彻底消除循环回显污染。
+- `internal/events/causality_test.go`:
+  - 新增 `TestIsMeaninglessContent`，覆盖空字符串、引号空串、空白、正常文本、数字、nil 等输入，保证噪音过滤判定稳定。
+
+### 结果
+- 因果链遇到环时不再把已访问节点回写进树。
+- 噪音判定具备自动化回归测试。

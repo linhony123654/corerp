@@ -178,6 +178,9 @@ func (c *CausalityEngine) getChain(eventID string, depth int, visited map[string
 	// Get direct causes
 	causeEvents, _ := c.GetCauses(eventID)
 	for _, ce := range causeEvents {
+		if visited[ce.ID] {
+			continue
+		}
 		sub, err := c.getChain(ce.ID, depth-1, visited)
 		if err != nil || sub == nil {
 			chain.Causes = append(chain.Causes, CausalChain{Event: ce})
@@ -189,6 +192,9 @@ func (c *CausalityEngine) getChain(eventID string, depth int, visited map[string
 	// Get direct effects
 	effectEvents, _ := c.GetEffects(eventID)
 	for _, ee := range effectEvents {
+		if visited[ee.ID] {
+			continue
+		}
 		sub, err := c.getChain(ee.ID, depth-1, visited)
 		if err != nil || sub == nil {
 			chain.Effects = append(chain.Effects, CausalChain{Event: ee})
