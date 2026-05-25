@@ -1,0 +1,18 @@
+# Binary
+corerp
+
+# Data
+data/
+
+# Logs
+server.log
+dev.log
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

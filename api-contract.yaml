@@ -1,0 +1,218 @@
+openapi: 3.0.0
+info:
+  title: CoreRP API
+  version: 1.0.0
+  description: CoreRP 前后端接口契约（HTTP + SSE）
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /:
+    get:
+      summary: PWA 首页
+      responses:
+        "200":
+          description: HTML 页面
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/chat:
+    post:
+      summary: 发送消息，SSE 流式返回叙事文本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: 用户输入
+              required:
+                - message
+      responses:
+        "200":
+          description: SSE 流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  格式: data: <chunk>\n\n
+                  最后发送: data: \n\n 表示结束
+
+  /api/state:
+    get:
+      summary: 获取当前世界状态
+      responses:
+        "200":
+          description: WorldState JSON
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorldState"
+
+  /api/character:
+    get:
+      summary: 获取当前角色卡
+      responses:
+        "200":
+          description: Character JSON
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "404":
+          description: 角色未找到
+
+  /api/characters:
+    get:
+      summary: 获取所有已加载角色列表和当前活跃角色
+      responses:
+        "200":
+          description: 角色列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    type: string
+                    description: 当前活跃角色名
+                  characters:
+                    type: array
+                    items:
+                      type: string
+                    description: 所有已加载角色名
+
+  /api/switch:
+    post:
+      summary: 切换活跃角色
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                character:
+                  type: string
+                  description: 要切换到的角色名
+              required:
+                - character
+      responses:
+        "200":
+          description: 切换成功
+        "400":
+          description: 角色未找到
+
+  /api/world:
+    get:
+      summary: 获取当前世界名称
+      responses:
+        "200":
+          description:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+
+components:
+  schemas:
+    WorldState:
+      type: object
+      properties:
+        clock:
+          $ref: "#/components/schemas/WorldTime"
+        scene:
+          $ref: "#/components/schemas/SceneState"
+        relationships:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/Relationship"
+        variables:
+          type: object
+        flags:
+          type: object
+          additionalProperties:
+            type: boolean
+        tension:
+          type: number
+
+    WorldTime:
+      type: object
+      properties:
+        hour: { type: integer }
+        minute: { type: integer }
+        day: { type: integer }
+
+    SceneState:
+      type: object
+      properties:
+        location: { type: string }
+        time_of_day: { type: string }
+        weather: { type: string }
+        characters:
+          type: array
+          items: { type: string }
+        description: { type: string }
+
+    Relationship:
+      type: object
+      properties:
+        trust: { type: number }
+        intimacy: { type: number }
+        fear: { type: number }
+        respect: { type: number }
+        debt: { type: number }
+        last_scene: { type: string }
+
+    Character:
+      type: object
+      properties:
+        identity:
+          $ref: "#/components/schemas/IdentityEnvelope"
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Goal"
+
+    IdentityEnvelope:
+      type: object
+      properties:
+        name: { type: string }
+        immutable:
+          type: array
+          items: { type: string }
+        adaptive:
+          type: object
+          additionalProperties:
+            type: number
+        forbidden:
+          type: array
+          items: { type: string }
+        voice:
+          type: object
+          properties:
+            style: { type: string }
+            rhythm: { type: string }
+
+    Goal:
+      type: object
+      properties:
+        id: { type: string }
+        priority: { type: integer }
+        type: { type: string, enum: [primary, secondary, hidden] }
+        target: { type: string }
+        condition: { type: string }
+        known_by:
+          type: array
+          items: { type: string }
+        reveal_condition: { type: string }
