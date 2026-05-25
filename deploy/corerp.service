@@ -7,17 +7,20 @@ Type=simple
 User=kelebit
 WorkingDirectory=/home/kelebit/corerp
 ExecStart=/home/kelebit/corerp/corerp serve \
-  -character /home/kelebit/corerp/characters/anya.yml \
-  -world /home/kelebit/corerp/worlds/cyberpunk2077/world.yml \
-  -llm-url https://gcli.ggchan.dev/v1 \
-  -llm-key gg-gcli-7uUA_mGKF_bvlk0zkFUpaUXSLsS3KSso9VCqyl7hhx0 \
-  -llm-model gemini-3-flash-preview
+  -characters /home/kelebit/corerp/characters \
+  -llm-url $LLM_URL \
+  -llm-key $LLM_API_KEY \
+  -llm-model $LLM_MODEL
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment=LLM_URL=https://gcli.ggchan.dev/v1
 Environment=LLM_MODEL=gemini-3-flash-preview
+Environment=LLM_API_KEY=
+
+# Fill in LLM_API_KEY above or use a separate env file:
+# EnvironmentFile=/home/kelebit/corerp/.env
 
 # SQLite backup hint: cp data/memory.db backup/memory_$(date +%Y%m%d).db
 

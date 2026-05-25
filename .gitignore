@@ -16,3 +16,14 @@ dev.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Test scripts
+test_*.py
+EOF
+GOEOF
+PYEOF
+
+# Environment secrets
+.env
+.env.*
+*.key
