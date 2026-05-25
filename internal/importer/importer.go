@@ -237,16 +237,34 @@ func Convert(st SillyTavernChar) (CharacterYAML, WorldYAML) {
 	book := extractCharacterBook(st.Data)
 	// Enrich inference pool with character entries if direct fields are empty
 	allChars := filterWorldBookByType(book, "character")
-	if len(allChars) > 0 && len(textPool) < 50 {
+	if len(allChars) > 0 {
 		for _, c := range allChars {
 			textPool += ". " + c.Content
 		}
 	}
 
+	// Try harder: extract immutable from character book entries
+	immutableTraits := extractImmutable(textPool)
+	if len(immutableTraits) == 0 && len(allChars) > 0 {
+		// Use first character's trait-like lines as immutable
+		firstCharContent := strings.ReplaceAll(allChars[0].Content, "```yaml", "")
+		firstCharContent = strings.ReplaceAll(firstCharContent, "```", "")
+		for _, line := range strings.Split(firstCharContent, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.Contains(line, ":") && len(line) > 10 && len(line) < 150 {
+				immutableTraits = append(immutableTraits, line)
+			}
+		}
+	}
+	// Ensure minimum viable immutable
+	if len(immutableTraits) == 0 {
+		immutableTraits = []string{"角色设定详见世界书"}
+	}
+
 	charYAML := CharacterYAML{
 		Identity: IdentityYAML{
 			Name:      st.Name,
-			Immutable: extractImmutable(textPool),
+			Immutable: immutableTraits,
 			Adaptive: map[string]float64{
 				"trust":    float64(inferTrust(st.Scenario, textPool)),
 				"intimacy": 1.0,
@@ -295,10 +313,11 @@ func BuildWorldYAML(st SillyTavernChar, book []WorldBookEntry) WorldYAML {
 			}
 		}
 	}
-	if len(rules) == 0 {
-		// Fallback: use first_mes if nothing else provides rules
-		if st.FirstMes != "" {
-			rules = append(rules, cleanText(st.FirstMes))
+	if len(rules) == 0 && st.FirstMes != "" {
+		// Last resort: extract only the rule-like sentences from first_mes
+		ruleLines := extractRuleLines(st.FirstMes)
+		if len(ruleLines) > 0 {
+			rules = append(rules, cleanText(strings.Join(ruleLines, " ")))
 		}
 	}
 	world.CoreRules = strings.Join(rules, "\n\n")
@@ -411,15 +430,22 @@ func extractImmutable(personality string) []string {
 		if len(s) < 5 || len(s) > 200 {
 			continue
 		}
+		// Skip markdown/code artifacts
+		if strings.HasPrefix(s, "```") || strings.HasPrefix(s, "<") {
+			continue
+		}
 		if containsAny(strings.ToLower(s), []string{"性格", "特质", "总是", "从不", "讨厌", "喜欢", "擅长", "厌恶", "信仰", "原则"}) {
 			traits = append(traits, cleanText(s))
 		}
 	}
 
 	if len(traits) == 0 && personality != "" {
-		// Fallback: take first few meaningful sentences as immutable
 		for _, s := range sentences {
 			s = strings.TrimSpace(s)
+			// Skip markdown/code artifacts in fallback too
+			if strings.HasPrefix(s, "```") || strings.HasPrefix(s, "<") {
+				continue
+			}
 			if len(s) >= 10 && len(s) <= 200 {
 				traits = append(traits, cleanText(s))
 			}
@@ -534,8 +560,33 @@ func containsAny(text string, words []string) bool {
 func cleanText(s string) string {
 	s = strings.ReplaceAll(s, "{{user}}", "玩家")
 	s = strings.ReplaceAll(s, "{{char}}", "角色")
+	// Strip markdown code block markers that leak from v3 cards
+	s = strings.ReplaceAll(s, "```markdown", "")
+	s = strings.ReplaceAll(s, "```yaml", "")
+	s = strings.ReplaceAll(s, "```json", "")
+	s = strings.ReplaceAll(s, "```xml", "")
+	s = strings.ReplaceAll(s, "```", "")
 	s = strings.TrimSpace(s)
 	return s
+}
+
+// extractRuleLines pulls sentences describing world rules from narrative text.
+func extractRuleLines(text string) []string {
+	var lines []string
+	for _, s := range splitSentences(text) {
+		s = strings.TrimSpace(s)
+		if len(s) < 10 || len(s) > 300 {
+			continue
+		}
+		lower := strings.ToLower(s)
+		if strings.Contains(lower, "规则") || strings.Contains(lower, "系统") ||
+			strings.Contains(lower, "设定") || strings.Contains(lower, "世界") ||
+			strings.Contains(lower, "游戏") || strings.Contains(lower, "特色") ||
+			strings.Contains(lower, "背景") {
+			lines = append(lines, s)
+		}
+	}
+	return lines
 }
 
 // inferScene builds initial SceneState from first_mes + location settings.
