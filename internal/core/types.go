@@ -415,8 +415,9 @@ type Goal struct {
 }
 
 type Character struct {
-	Identity IdentityEnvelope `json:"identity"`
-	Goals    []Goal           `json:"goals"`
+	WorldPath string           `json:"world_path,omitempty"`
+	Identity  IdentityEnvelope `json:"identity"`
+	Goals     []Goal           `json:"goals"`
 }
 
 // --- LLM ---

@@ -35,6 +35,9 @@ PYEOF
 # Character and world data (user content)
 characters/*.yml
 worlds/*.yml
+worlds/*/
+worlds/*_world.yml
+characters/worlds/
 characters/imported/
 worlds/cyberpunk2077/
 !characters/example.yml

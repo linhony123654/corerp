@@ -1,6 +1,9 @@
 package importer
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -39,6 +42,9 @@ func TestClassifyEntryPlainName(t *testing.T) {
 	// Plain names without brackets default to character
 	if got := classifyEntry("张三"); got != "character" {
 		t.Errorf("plain name should be character, got %s", got)
+	}
+	if got := classifyEntry("地点:白日庭"); got != "lore" {
+		t.Errorf("plain setting-like name should be lore, got %s", got)
 	}
 }
 
@@ -360,5 +366,112 @@ func TestChooseCanonicalNamePrefersFormalFullName(t *testing.T) {
 	got := chooseCanonicalName("宝玉", []string{"宝玉", "贾宝玉", "怡红公子"})
 	if got != "贾宝玉" {
 		t.Fatalf("chooseCanonicalName = %q, want 贾宝玉", got)
+	}
+}
+
+func TestInferVoiceUsesCharacterText(t *testing.T) {
+	tests := []struct {
+		name      string
+		text      string
+		wantStyle string
+	}{
+		{"gentle", "性格温柔体贴，习惯照顾别人。", "温柔、细腻、带照顾感"},
+		{"lively", "性格活泼开朗，语气俏皮，喜欢撒娇。", "活泼、俏皮、情绪外露"},
+		{"poetic", "性格敏感孤高，语言细腻，有诗意。", "敏感、诗意、带疏离感"},
+	}
+	for _, tc := range tests {
+		if got := inferStyle("", tc.text); got != tc.wantStyle {
+			t.Fatalf("%s style = %q, want %q", tc.name, got, tc.wantStyle)
+		}
+	}
+	if got := inferRhythm("", "说话慌乱紧张，常常断断续续。"); got != "短促、停顿多、情绪起伏明显" {
+		t.Fatalf("rhythm = %q", got)
+	}
+}
+
+func TestCastCandidateRejectsNonCharacterWorldbookEntries(t *testing.T) {
+	cases := []castCandidate{
+		{Name: "故事背景 妖族", Content: "世界观: 妖族与人间长期冲突\n首次出现: 序章", Score: 20},
+		{Name: "男式贞操带", Content: "物品: 男式贞操带\n持有者: 苏伟\n流转记录: 第10章获得", Score: 20},
+		{Name: "视角和文风条目", Content: "视角: 第三人称\n文风: 克制", Score: 20},
+		{Name: "华山", Content: "# 势力详情：纯阳宫\n- **类型:** 江湖门派\n- **领袖:** 掌门", Score: 20},
+	}
+	for _, tc := range cases {
+		if isCastLikeCandidate(tc) {
+			t.Fatalf("%q should not be imported as runnable character", tc.Name)
+		}
+	}
+}
+
+func TestAutoImportWorldOnlyForNonRunnableSingleCard(t *testing.T) {
+	bundle := ConvertBundleWithMode(SillyTavernChar{
+		Name:        "东京喰种 - 沙盒",
+		Description: "世界规则与状态栏说明。",
+	}, "auto")
+	if len(bundle.Characters) != 0 {
+		t.Fatalf("characters = %d, want world-only bundle", len(bundle.Characters))
+	}
+}
+
+func TestBuildWorldYAMLKeepsCoreRulesCompact(t *testing.T) {
+	long := strings.Repeat("现代城市背景与社会规则。", 60)
+	world := BuildWorldYAML(SillyTavernChar{Name: "紧凑世界"}, []WorldBookEntry{
+		{Type: "lore", Name: "世界观常识", Content: long},
+		{Type: "location", Name: "地点 - 学校", Content: "地点: 学校\n描述: 场景条目应留在 ontology。"},
+	})
+	if !strings.Contains(world.CoreRules, "...") {
+		t.Fatalf("core_rules should be summarized, got:\n%s", world.CoreRules)
+	}
+	if lines := strings.Count(world.CoreRules, "\n") + 1; lines > 6 {
+		t.Fatalf("core_rules lines = %d, want compact output:\n%s", lines, world.CoreRules)
+	}
+	if len(world.Ontology.Locations) != 1 {
+		t.Fatalf("locations = %d, want ontology entry preserved", len(world.Ontology.Locations))
+	}
+}
+
+func TestWriteImportBundleAddsWorldPath(t *testing.T) {
+	dst := filepath.Join(t.TempDir(), "characters")
+	worldDir := filepath.Join(t.TempDir(), "worlds", "demo")
+	bundle := ConvertBundleWithMode(SillyTavernChar{
+		Name:        "测试角色",
+		Description: "性格冷静，身份清晰。",
+		FirstMes:    "测试角色看向玩家。",
+	}, "single")
+
+	charPath, worldPath, err := writeImportBundle(dst, worldDir, "demo", bundle)
+	if err != nil {
+		t.Fatalf("writeImportBundle: %v", err)
+	}
+	data, err := os.ReadFile(charPath)
+	if err != nil {
+		t.Fatalf("read character yaml: %v", err)
+	}
+	want := "world_path: " + filepath.ToSlash(filepath.Clean(worldDir))
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("character yaml missing %q:\n%s", want, string(data))
+	}
+	if worldPath != filepath.Join(worldDir, "world.yml") {
+		t.Fatalf("worldPath = %q, want %q", worldPath, filepath.Join(worldDir, "world.yml"))
+	}
+}
+
+func TestImportDirectoryWithModeIncludesJSON(t *testing.T) {
+	src := t.TempDir()
+	dst := filepath.Join(t.TempDir(), "characters")
+	jsonCard := `{"name":"目录JSON","description":"性格稳定，身份清晰。","first_mes":"目录JSON看向玩家。"}`
+	if err := os.WriteFile(filepath.Join(src, "card.json"), []byte(jsonCard), 0644); err != nil {
+		t.Fatalf("write json card: %v", err)
+	}
+
+	results, err := ImportDirectoryWithMode(src, dst, "single")
+	if err != nil {
+		t.Fatalf("ImportDirectoryWithMode: %v", err)
+	}
+	if len(results) != 1 || !strings.Contains(results[0], "OK   card.json") {
+		t.Fatalf("results = %#v, want one OK json import", results)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "card.yml")); err != nil {
+		t.Fatalf("expected imported json character: %v", err)
 	}
 }

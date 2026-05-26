@@ -97,6 +97,9 @@ func (e *Engine) UpdateCharacterConfig(characterName string, card core.Character
 	if path == "" {
 		return core.CharacterConfig{}, fmt.Errorf("character path for '%s' is not configured", name)
 	}
+	if card.WorldPath == "" {
+		card.WorldPath = e.worldPaths[name]
+	}
 	card.Identity.Name = name
 	if err := goalexpr.ValidateCharacter(card); err != nil {
 		return core.CharacterConfig{}, err

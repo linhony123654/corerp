@@ -171,6 +171,7 @@ func runImport(args []string) {
 		for _, r := range results {
 			fmt.Println(r)
 		}
+		return
 	}
 
 	finalMode := *mode
@@ -509,6 +510,15 @@ func runServe(args []string) {
 }
 
 func findWorldFile(charPath string) string {
+	if wf := readCharacterWorldPath(charPath); wf != "" {
+		if info, err := os.Stat(wf); err == nil {
+			if info.IsDir() {
+				return wf
+			}
+			return wf
+		}
+	}
+
 	base := strings.TrimSuffix(charPath, ".yml")
 	fileName := filepath.Base(charPath)
 	fileBase := strings.TrimSuffix(fileName, ".yml")
@@ -534,6 +544,20 @@ func findWorldFile(charPath string) string {
 		}
 	}
 	return ""
+}
+
+func readCharacterWorldPath(charPath string) string {
+	data, err := os.ReadFile(charPath)
+	if err != nil {
+		return ""
+	}
+	var raw struct {
+		WorldPath string `yaml:"world_path"`
+	}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(raw.WorldPath)
 }
 
 func loadCharactersFromDir(dir string) (chars []core.Character, names []string, paths []string) {

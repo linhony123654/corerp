@@ -9,7 +9,8 @@ import (
 )
 
 type cardYAML struct {
-	Identity struct {
+	WorldPath string `yaml:"world_path"`
+	Identity  struct {
 		Name         string             `yaml:"name"`
 		Immutable    []string           `yaml:"immutable"`
 		Adaptive     map[string]float64 `yaml:"adaptive"`
@@ -51,6 +52,7 @@ func Load(path string) (core.Character, error) {
 	}
 
 	char := core.Character{
+		WorldPath: raw.WorldPath,
 		Identity: core.IdentityEnvelope{
 			Name:      raw.Identity.Name,
 			Immutable: raw.Identity.Immutable,
@@ -100,6 +102,7 @@ func Load(path string) (core.Character, error) {
 
 func Save(path string, char core.Character) error {
 	raw := cardYAML{}
+	raw.WorldPath = char.WorldPath
 	raw.Identity.Name = char.Identity.Name
 	raw.Identity.Immutable = char.Identity.Immutable
 	raw.Identity.Adaptive = char.Identity.Adaptive

@@ -72,7 +72,10 @@ export CORERP_AUTH_KEY="your-password"  # 可选
 默认模式是 `auto`：
 
 - 单角色卡：`1 character + 1 world`
-- 群像/大世界卡：`multiple characters + 1 world + cast_index.yml`
+- 群像/大世界卡：`primary cast characters + 1 world + cast_index.yml`
+- 世界资料卡：`world-only`，只写入 `worlds/<source>/`，不生成顶层可运行角色
+
+导入目录会处理 `.png` 和 `.json`。每个生成的角色卡会写入 `world_path`，运行时优先按该字段绑定到导入生成的 `worlds/<source>/` 世界目录；世界书里的地点、设定、规则、物品和事件保留在 world ontology/canon 中，不应作为顶层可运行角色加载。
 
 `-interactive` 会先展示自动判断结果，再决定是否改成 `single` 或 `ensemble`。
 

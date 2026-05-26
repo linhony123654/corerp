@@ -4,6 +4,111 @@
 
 ## 2026-05-26
 
+### 2026-05-26 12:55:02 UTC — 角色卡导入架构修复
+Modified by: Codex (GPT-5)
+
+- 导入架构收口：
+  - 角色卡导入输出 `characters/<角色>.yml`
+  - 世界书/canon/scene 输出到 `worlds/<导入源>/`
+  - 角色 YAML 新增 `world_path`，运行时优先按该字段绑定世界
+  - 前端保存角色卡时保留已有 `world_path`
+- 导入器修复：
+  - 目录导入完成后不再继续把目录当单文件导入
+  - 目录批量导入现在同时处理 `.png` 和 `.json`
+  - ensemble worldbook 中地点/设定/规则类条目不再默认当作顶层运行角色
+  - `cast_index.yml` 继续保留 secondary cast，完整世界资料进入 ontology/canon
+- 资源文件夹重新导入：
+  - 使用修复后的导入器重新导入 `/home/kelebituo/资源文件夹`
+  - 当前生成 49 个顶层角色 YAML 与 9 个 world 入口
+  - 临时启动验证确认角色按 `world_path` 绑定到对应 world
+- 文档同步：
+  - `README.md`
+- 验证：
+  - `/usr/local/go/bin/go test ./...` ✅
+  - `node --check web/app.js` ✅
+  - `git diff --check` ✅
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+
+### 2026-05-26 12:45:53 UTC — 资源文件夹角色卡导入验证
+Modified by: Codex (GPT-5)
+
+- 用户路径修正：
+  - 正确角色卡目录为 `/home/kelebituo/资源文件夹`
+  - 目录内包含 7 个 SillyTavern PNG 和 1 个 JSON 角色卡
+- 导入处理：
+  - 使用 `./corerp import -src /home/kelebituo/资源文件夹 -dst ./characters -mode auto` 导入 PNG
+  - 单独导入 `《红楼梦》完整版、-角色卡-202604190812.json`
+  - 当前生成约 47 个顶层角色 YAML 与对应 `worlds/<source>/` 世界目录
+- 发现问题：
+  - CLI 目录导入完成后会继续把目录当单文件导入，导致最后报 `read ... is a directory`，但 PNG 已实际导入成功
+  - ensemble JSON 会把设定/地点/规则类 worldbook 条目也生成为顶层角色 YAML
+  - 当前 `findWorldFile` 依赖角色文件名匹配 `worlds/<角色名>/`，但导入目录按源文件名建 world，因此临时启动时新角色默认落到 `worlds/cyberpunk2077/world.yml`
+- 验证：
+  - 临时数据目录 `/tmp/corerp-import-check` 启动成功
+  - 未重启正式 PM2，避免未整理角色列表直接污染当前运行实例
+
+### 2026-05-26 12:43:32 UTC — 角色卡解析接口检查与当前角色卡清空
+Modified by: Codex (GPT-5)
+
+- 解析能力检查：
+  - 当前已有 CLI 导入：`./corerp import -src <png_or_json_or_dir> -dst ./characters`
+  - 支持 SillyTavern PNG / JSON 单卡导入
+  - 批量目录导入当前只扫描 `.png`
+  - 目前没有 HTTP 上传解析接口，前端只支持编辑已加载角色卡
+- 运行数据处理：
+  - `/home/kelebituo/资源` 当前只发现截图文件，未发现 PNG/JSON 角色卡
+  - 备份当前 `characters/` 到 `data/character-card-backup-20260526T124231Z/`
+  - 删除当前非 tracked 角色卡 YAML
+  - 恢复误删的 tracked `characters/worlds/...` 世界资料，避免仓库出现 world 文件删除
+
+### 2026-05-26 12:38:30 UTC — 移动端顶栏收敛与测试数据清理
+Modified by: Codex (GPT-5)
+
+- `web/index.html`
+  - 移动端顶栏改为两行布局，隐藏品牌副标题与选择器标签
+  - 控制台入口在移动端改回图标按钮，避免大按钮挤占首屏
+  - 静态资源版本更新到 `app.js?v=20260526g`
+- 运行数据清理：
+  - 结束遗留的 `/tmp/corerp-ui-test/ui-jsdom-e2e.js` 进程
+  - 备份污染前数据到 `data/cleanup-backup-20260526T123336Z/`
+  - 清除 world/data/SQLite 中的 jsdom/e2e 测试场景、checkpoint、preset 与事件
+  - 重启 PM2 `corerp`，让运行态重新从清理后的数据加载
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test ./...` ✅
+  - `git diff --check` ✅
+  - world/data/SQLite 测试痕迹扫描为 0 ✅
+
+### 2026-05-26 12:25:35 UTC — 主页面编辑风重构
+Modified by: Codex (GPT-5)
+
+- `web/index.html`
+  - 主页面从运行工具台风格改为叙事编辑器风格
+  - 顶栏改为薄工具条，仅保留品牌、实例、角色和控制台入口
+  - 场景与角色信息收成正文上方 metadata 区，去除大 hero/card 感
+  - 对话区改为阅读排版：助手文本正文化，用户输入保留轻量边框
+  - 右侧控制台改为 inspector 风格分段列表，弱化卡片背景和网格密度
+  - 静态资源版本更新到 `app.js?v=20260526f`
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test ./...` ✅
+  - `git diff --check` ✅
+  - 登录后首页 HTML 返回新版编辑风布局与 `app.js?v=20260526f` ✅
+
+### 2026-05-26 12:18:24 UTC — 主页面密度重构
+Modified by: Codex (GPT-5)
+
+- `web/index.html`
+  - 收紧顶栏、场景区、角色摘要和输入区尺寸，让聊天区获得更多首屏空间
+  - 去除主页面装饰性径向背景和大卡片阴影，统一卡片/控件圆角与信息密度
+  - 右侧控制台宽度与间距下调，默认折叠组不再漏出角色卡编辑区
+  - 删除重复 trace 控件 DOM，避免重复 ID 与绑定歧义
+- 验证：
+  - 推送前确认 `origin/master` 已是最新
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test ./...` ✅
+  - 登录后首页 HTML 返回新版资源参数 `app.js?v=20260526e` ✅
+
 ### 2026-05-26 11:50:47 UTC — 首页改为更简约的编辑风主版面
 Modified by: Codex (GPT-5)
 
@@ -431,3 +536,32 @@ Modified by: Codex (GPT-5)
 Modified by: Codex (GPT-5)
 
 - `/usr/local/go/bin/go test ./...` ✅
+
+### 2026-05-26 13:05:06 UTC — 角色卡导入架构收紧
+Modified by: Codex (GPT-5)
+
+- 修复 SillyTavern 目录导入：
+  - 目录导入继续支持 `.png` / `.json`
+  - 世界资料卡现在按 `world-only` 导入，只写入 `worlds/<source>/`
+  - 地点、势力、规则、物品、速览、生成器等条目不再生成顶层可运行角色
+- `world.yml` 收敛为 meta + compact core_rules，长世界书内容保留在 `canon/ontology.yml` 与 `canon/facts.yml`
+- 重新导入 `/home/kelebituo/资源文件夹`：
+  - 顶层角色 YAML 从 49 收敛到 31
+  - 8 个源文件均生成对应 `worlds/<source>/`
+- 验证：
+  - `/usr/local/go/bin/go test ./...` ✅
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+  - `pm2 restart corerp --update-env` ✅
+
+### 2026-05-26 13:10:47 UTC — 导入角色 voice 推断修复
+Modified by: Codex (GPT-5)
+
+- 修复导入器 voice 默认值过度复用：
+  - `inferStyle()` 改为从角色正文与示例对话推断语气
+  - `inferRhythm()` 改为同时参考正文，避免缺少 `mes_example` 时全部落到 `短句为主`
+- 重新导入 `/home/kelebituo/资源文件夹`
+- 验证：
+  - `/usr/local/go/bin/go test ./...` ✅
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+  - `pm2 restart corerp --update-env` ✅
+  - `/api/health` ✅
