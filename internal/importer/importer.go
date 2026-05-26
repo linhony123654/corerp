@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -31,6 +32,43 @@ type CharacterYAML struct {
 	Identity    IdentityYAML `yaml:"identity"`
 	Goals       GoalsYAML    `yaml:"goals"`
 	OpeningLine string       `yaml:"opening_line,omitempty"`
+}
+
+type CardKind string
+
+const (
+	CardKindSingle   CardKind = "single_character"
+	CardKindEnsemble CardKind = "ensemble_world"
+)
+
+type CastIndexYAML struct {
+	Kind              CardKind         `yaml:"kind"`
+	WorldName         string           `yaml:"world_name"`
+	PrimaryCharacter  string           `yaml:"primary_character"`
+	GeneratedAtImport []CastMemberYAML `yaml:"generated_at_import"`
+	SecondaryCast     []CastMemberYAML `yaml:"secondary_cast,omitempty"`
+}
+
+type CastMemberYAML struct {
+	Name       string `yaml:"name"`
+	Role       string `yaml:"role"`
+	SourceType string `yaml:"source_type"`
+	File       string `yaml:"file,omitempty"`
+}
+
+type ImportBundle struct {
+	Kind             CardKind
+	PrimaryCharacter string
+	Characters       map[string]CharacterYAML
+	World            WorldYAML
+	CastIndex        CastIndexYAML
+}
+
+type ImportPreview struct {
+	Kind             CardKind
+	PrimaryCharacter string
+	WorldName        string
+	CharacterNames   []string
 }
 
 // WorldYAML is the CoreRP world setting format (Canon Layer).
@@ -119,6 +157,10 @@ type GoalYAML struct {
 // ImportPNG extracts SillyTavern PNG and converts to CoreRP YAMLs.
 // Returns (characterPath, worldPath, error).
 func ImportPNG(srcPath, dstDir string) (string, string, error) {
+	return ImportPNGWithMode(srcPath, dstDir, "auto")
+}
+
+func ImportPNGWithMode(srcPath, dstDir, mode string) (string, string, error) {
 	f, err := os.Open(srcPath)
 	if err != nil {
 		return "", "", fmt.Errorf("open png: %w", err)
@@ -140,27 +182,26 @@ func ImportPNG(srcPath, dstDir string) (string, string, error) {
 		return "", "", fmt.Errorf("parse json: %w", err)
 	}
 
-	charYAML, world := Convert(st)
+	bundle := ConvertBundleWithMode(st, mode)
 
 	base := filepath.Base(srcPath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 
 	charPath := filepath.Join(dstDir, name+".yml")
 	worldDir := filepath.Join(dstDir, "..", "worlds", name)
-
-	charOut, _ := yaml.Marshal(charYAML)
-	os.WriteFile(charPath, charOut, 0644)
-
-	wp, err := writeWorldDir(worldDir, world)
+	charPath, wp, err := writeImportBundle(dstDir, worldDir, name, bundle)
 	if err != nil {
-		return "", "", fmt.Errorf("write world dir: %w", err)
+		return "", "", err
 	}
-
 	return charPath, wp, nil
 }
 
 // ImportJSON reads a SillyTavern JSON card and converts to CoreRP YAMLs.
 func ImportJSON(srcPath, dstDir string) (string, string, error) {
+	return ImportJSONWithMode(srcPath, dstDir, "auto")
+}
+
+func ImportJSONWithMode(srcPath, dstDir, mode string) (string, string, error) {
 	jsonBytes, err := os.ReadFile(srcPath)
 	if err != nil {
 		return "", "", fmt.Errorf("read json: %w", err)
@@ -171,23 +212,58 @@ func ImportJSON(srcPath, dstDir string) (string, string, error) {
 		return "", "", fmt.Errorf("parse json: %w", err)
 	}
 
-	charYAML, world := Convert(st)
+	bundle := ConvertBundleWithMode(st, mode)
 
 	base := filepath.Base(srcPath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 
-	charPath := filepath.Join(dstDir, name+".yml")
 	worldDir := filepath.Join(dstDir, "..", "worlds", name)
+	charPath, wp, err := writeImportBundle(dstDir, worldDir, name, bundle)
+	if err != nil {
+		return "", "", err
+	}
+	return charPath, wp, nil
+}
 
-	charOut, _ := yaml.Marshal(charYAML)
-	os.WriteFile(charPath, charOut, 0644)
+func writeImportBundle(dstDir, worldDir, baseName string, bundle ImportBundle) (string, string, error) {
+	primaryFile := baseName + ".yml"
+	if bundle.Kind == CardKindEnsemble {
+		primaryFile = sanitizeFileComponent(bundle.PrimaryCharacter) + ".yml"
+	}
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return "", "", fmt.Errorf("create character dir: %w", err)
+	}
 
-	wp, err := writeWorldDir(worldDir, world)
+	for name, charYAML := range bundle.Characters {
+		fileName := sanitizeFileComponent(name) + ".yml"
+		if bundle.Kind == CardKindSingle && name == bundle.PrimaryCharacter {
+			fileName = primaryFile
+		}
+		charPath := filepath.Join(dstDir, fileName)
+		charOut, _ := yaml.Marshal(charYAML)
+		if err := os.WriteFile(charPath, charOut, 0644); err != nil {
+			return "", "", fmt.Errorf("write character yaml: %w", err)
+		}
+		for i := range bundle.CastIndex.GeneratedAtImport {
+			if bundle.CastIndex.GeneratedAtImport[i].Name == name {
+				bundle.CastIndex.GeneratedAtImport[i].File = fileName
+			}
+		}
+	}
+
+	wp, err := writeWorldDir(worldDir, bundle.World)
 	if err != nil {
 		return "", "", fmt.Errorf("write world dir: %w", err)
 	}
 
-	return charPath, wp, nil
+	if bundle.Kind == CardKindEnsemble {
+		indexOut, _ := yaml.Marshal(bundle.CastIndex)
+		if err := os.WriteFile(filepath.Join(worldDir, "cast_index.yml"), indexOut, 0644); err != nil {
+			return "", "", fmt.Errorf("write cast index: %w", err)
+		}
+	}
+
+	return filepath.Join(dstDir, primaryFile), wp, nil
 }
 
 // writeWorldDir creates the three-layer world directory per architecture spec.
@@ -289,6 +365,30 @@ func cleanFactSubject(name string) string {
 // Convert transforms SillyTavern JSON into CoreRP CharacterYAML + WorldYAML.
 // Supports v1 (flat) and v2 (data.*) formats.
 func Convert(st SillyTavernChar) (CharacterYAML, WorldYAML) {
+	bundle := ConvertBundle(st)
+	return bundle.Characters[bundle.PrimaryCharacter], bundle.World
+}
+
+func PreviewBundle(st SillyTavernChar, forceMode string) ImportPreview {
+	bundle := ConvertBundleWithMode(st, forceMode)
+	var names []string
+	for name := range bundle.Characters {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return ImportPreview{
+		Kind:             bundle.Kind,
+		PrimaryCharacter: bundle.PrimaryCharacter,
+		WorldName:        bundle.World.Name,
+		CharacterNames:   names,
+	}
+}
+
+func ConvertBundle(st SillyTavernChar) ImportBundle {
+	return ConvertBundleWithMode(st, "auto")
+}
+
+func ConvertBundleWithMode(st SillyTavernChar, forceMode string) ImportBundle {
 	// Normalize v2 data.* into top-level fields
 	if st.Spec == "chara_card_v2" || st.Spec == "chara_card_v3" {
 		if v, ok := st.Data["name"].(string); ok && v != "" {
@@ -372,7 +472,611 @@ func Convert(st SillyTavernChar) (CharacterYAML, WorldYAML) {
 	}
 
 	worldYAML := BuildWorldYAML(st, book)
-	return charYAML, worldYAML
+	kind := detectCardKind(st, book)
+	switch forceMode {
+	case "single":
+		kind = CardKindSingle
+	case "ensemble":
+		kind = CardKindEnsemble
+	}
+	if kind == CardKindSingle {
+		return ImportBundle{
+			Kind:             kind,
+			PrimaryCharacter: st.Name,
+			Characters:       map[string]CharacterYAML{st.Name: charYAML},
+			World:            worldYAML,
+			CastIndex: CastIndexYAML{
+				Kind:             kind,
+				WorldName:        worldYAML.Name,
+				PrimaryCharacter: st.Name,
+				GeneratedAtImport: []CastMemberYAML{{
+					Name:       st.Name,
+					Role:       "primary",
+					SourceType: "card",
+				}},
+			},
+		}
+	}
+
+	return buildEnsembleBundle(st, worldYAML, book, charYAML)
+}
+
+func detectCardKind(st SillyTavernChar, book []WorldBookEntry) CardKind {
+	charEntries := filterWorldBookByType(book, "character")
+	if len(charEntries) < 3 {
+		return CardKindSingle
+	}
+	lowerName := strings.ToLower(st.Name)
+	worldish := containsAny(lowerName, []string{"红楼梦", "世界", "群像", "合集", "完整版"})
+	if worldish || len(charEntries) >= 5 {
+		return CardKindEnsemble
+	}
+	return CardKindSingle
+}
+
+func buildEnsembleBundle(st SillyTavernChar, world WorldYAML, book []WorldBookEntry, fallback CharacterYAML) ImportBundle {
+	candidates := rankCastCandidates(st, book)
+	if len(candidates) == 0 {
+		return ImportBundle{
+			Kind:             CardKindSingle,
+			PrimaryCharacter: st.Name,
+			Characters:       map[string]CharacterYAML{st.Name: fallback},
+			World:            world,
+		}
+	}
+
+	primary := candidates[0]
+	characters := make(map[string]CharacterYAML)
+	index := CastIndexYAML{
+		Kind:              CardKindEnsemble,
+		WorldName:         world.Name,
+		PrimaryCharacter:  primary.Name,
+		GeneratedAtImport: []CastMemberYAML{},
+	}
+
+	for i, cand := range candidates {
+		if i >= 6 {
+			index.SecondaryCast = append(index.SecondaryCast, CastMemberYAML{Name: cand.Name, Role: "secondary", SourceType: cand.SourceType})
+			continue
+		}
+		characters[cand.Name] = buildCharacterFromEntry(cand, st)
+		role := "primary_cast"
+		if cand.Name == primary.Name {
+			role = "primary"
+		}
+		index.GeneratedAtImport = append(index.GeneratedAtImport, CastMemberYAML{Name: cand.Name, Role: role, SourceType: cand.SourceType})
+	}
+
+	if len(world.Scene.Characters) == 0 {
+		world.Scene.Characters = []string{primary.Name, "玩家"}
+	} else {
+		world.Scene.Characters = normalizeImportedSceneCharacters(world.Scene.Characters, primary.Name)
+	}
+
+	return ImportBundle{
+		Kind:             CardKindEnsemble,
+		PrimaryCharacter: primary.Name,
+		Characters:       characters,
+		World:            world,
+		CastIndex:        index,
+	}
+}
+
+type castCandidate struct {
+	Name       string
+	Content    string
+	Aliases    []string
+	SourceType string
+	Score      int
+}
+
+func rankCastCandidates(st SillyTavernChar, book []WorldBookEntry) []castCandidate {
+	charEntries := filterWorldBookByType(book, "character")
+	corpus := st.Name + "\n" + st.Description + "\n" + st.Scenario + "\n" + st.FirstMes
+	for _, e := range charEntries {
+		corpus += "\n" + e.Content
+	}
+	type aggregate struct {
+		name       string
+		aliases    []string
+		content    []string
+		score      int
+		supporters int
+	}
+	var groups []*aggregate
+	for _, e := range charEntries {
+		name := normalizeEntryName(e.Name, e.Keys)
+		if name == "" {
+			continue
+		}
+		aliases := buildCandidateAliases(name, e.Keys)
+		meaningfulAliases := filterMeaningfulAliases(aliases)
+		canonicalName := chooseCanonicalName(name, aliases)
+		scoringAliases := buildScoringAliases(canonicalName, meaningfulAliases)
+		score := 0
+		if len([]rune(e.Content)) > 80 {
+			score += 2
+		}
+		if containsAny(e.Content, []string{"性格", "外貌", "关系", "身份", "喜欢", "讨厌", "秘密", "目标"}) {
+			score += 3
+		}
+		if idx, matched := earliestAliasIndex(st.FirstMes, scoringAliases); matched {
+			score += 6
+			score += openingPositionBonus(idx)
+		}
+		if containsAnyAlias(st.Description+"\n"+st.Scenario, scoringAliases) {
+			score += 3
+		}
+		if mentions := countAliasOccurrences(corpus, scoringAliases); mentions > 0 {
+			if mentions > 5 {
+				mentions = 5
+			}
+			score += mentions * 2
+		}
+		score -= roleLikeNamePenalty(canonicalName)
+
+		merged := false
+		for _, group := range groups {
+			if !shouldMergeCandidate(group.name, group.aliases, canonicalName, aliases) {
+				continue
+			}
+			group.name = chooseCanonicalName(group.name, append(group.aliases, aliases...))
+			group.aliases = mergeAliases(group.aliases, aliases)
+			group.content = appendUniqueText(group.content, e.Content)
+			group.score += score
+			group.supporters++
+			merged = true
+			break
+		}
+		if merged {
+			continue
+		}
+		groups = append(groups, &aggregate{
+			name:       canonicalName,
+			aliases:    aliases,
+			content:    []string{e.Content},
+			score:      score,
+			supporters: 1,
+		})
+	}
+
+	var out []castCandidate
+	for _, group := range groups {
+		score := group.score
+		if group.supporters > 1 {
+			score += (group.supporters - 1) * 2
+		}
+		score += countAliasEntryMentions(charEntries, buildScoringAliases(group.name, group.aliases))
+		out = append(out, castCandidate{
+			Name:       group.name,
+			Content:    strings.Join(group.content, "\n\n"),
+			Aliases:    mergeAliases(nil, group.aliases),
+			SourceType: "character_book",
+			Score:      score,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Score == out[j].Score {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Score > out[j].Score
+	})
+	return out
+}
+
+func buildCharacterFromEntry(c castCandidate, st SillyTavernChar) CharacterYAML {
+	text := cleanText(c.Content)
+	immutable := extractImmutable(text)
+	if len(immutable) == 0 {
+		immutable = []string{truncateForTrait(text)}
+	}
+	return CharacterYAML{
+		Identity: IdentityYAML{
+			Name:      c.Name,
+			Immutable: immutable,
+			Adaptive: map[string]float64{
+				"trust":    float64(inferTrust(st.Scenario, text)),
+				"intimacy": 1.0,
+				"fear":     float64(inferFear(st.Scenario, text)),
+			},
+			Forbidden: defaultForbidden(),
+			Voice: VoiceYAML{
+				Style:  inferStyle(st.MesExample, text),
+				Rhythm: inferRhythm(st.MesExample),
+			},
+		},
+		Goals: GoalsYAML{
+			Primary: inferPrimaryGoals(st.Scenario, text),
+			Hidden:  inferHiddenGoals(st.Scenario, text),
+		},
+	}
+}
+
+func normalizeImportedSceneCharacters(chars []string, primary string) []string {
+	var out []string
+	seen := make(map[string]bool)
+	if primary != "" {
+		out = append(out, primary)
+		seen[primary] = true
+	}
+	for _, name := range chars {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		out = append(out, name)
+		seen[name] = true
+	}
+	hasPlayer := false
+	for _, name := range out {
+		if name == "玩家" || name == "用户" {
+			hasPlayer = true
+			break
+		}
+	}
+	if !hasPlayer {
+		out = append(out, "玩家")
+	}
+	return out
+}
+
+func normalizeEntryName(name, keys string) string {
+	raw := strings.TrimSpace(name)
+	name = strings.TrimSpace(name)
+	name = strings.Trim(name, "[]")
+	name = strings.TrimLeft(name, "-*• \t")
+	for _, prefix := range []string{
+		"角色内心 -", "角色内心-", "内心 -", "内心-",
+		"角色 -", "角色-", "人物 -", "人物-", "NPC -", "NPC-",
+		"角色]", "人物]", "NPC]", "角色", "人物", "NPC", "[角色", "[人物", "[NPC",
+	} {
+		name = strings.TrimSpace(strings.TrimPrefix(name, prefix))
+	}
+	for _, suffix := range []string{"-内心世界", "内心世界"} {
+		name = strings.TrimSpace(strings.TrimSuffix(name, suffix))
+	}
+	if strings.Contains(raw, "内心") && strings.Contains(name, "-") {
+		name = strings.TrimSpace(strings.SplitN(name, "-", 2)[0])
+	}
+	name = strings.TrimLeft(name, "-*• \t")
+	if name != "" {
+		return name
+	}
+	for _, key := range strings.Split(keys, ",") {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+func countOccurrences(text, name string) int {
+	if name == "" {
+		return 0
+	}
+	return strings.Count(text, name)
+}
+
+func buildCandidateAliases(name, keys string) []string {
+	seen := make(map[string]bool)
+	var aliases []string
+	add := func(v string) {
+		v = normalizeEntryName(v, "")
+		if v == "" || seen[v] {
+			return
+		}
+		seen[v] = true
+		aliases = append(aliases, v)
+	}
+	add(name)
+	for _, key := range strings.Split(keys, ",") {
+		add(key)
+	}
+	return aliases
+}
+
+func mergeAliases(base []string, extra []string) []string {
+	seen := make(map[string]bool, len(base)+len(extra))
+	var out []string
+	for _, alias := range append(base, extra...) {
+		alias = normalizeEntryName(alias, "")
+		if alias == "" || seen[alias] {
+			continue
+		}
+		seen[alias] = true
+		out = append(out, alias)
+	}
+	return out
+}
+
+func appendUniqueText(base []string, extra string) []string {
+	extra = strings.TrimSpace(extra)
+	if extra == "" {
+		return base
+	}
+	for _, existing := range base {
+		if existing == extra {
+			return base
+		}
+	}
+	return append(base, extra)
+}
+
+func filterMeaningfulAliases(aliases []string) []string {
+	var out []string
+	for _, alias := range aliases {
+		if isMeaningfulAlias(alias) {
+			out = append(out, alias)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	if len(aliases) > 0 {
+		return []string{aliases[0]}
+	}
+	return nil
+}
+
+func buildScoringAliases(canonicalName string, aliases []string) []string {
+	canonicalName = normalizeEntryName(canonicalName, "")
+	if canonicalName == "" {
+		return nil
+	}
+	seen := map[string]bool{canonicalName: true}
+	out := []string{canonicalName}
+	for _, alias := range aliases {
+		alias = normalizeEntryName(alias, "")
+		if alias == "" || seen[alias] || isRoleLikeAlias(alias) {
+			continue
+		}
+		if alias == canonicalName ||
+			strings.Contains(canonicalName, alias) ||
+			strings.Contains(alias, canonicalName) ||
+			(sharesLikelySurname(canonicalName, alias) && len([]rune(alias)) >= 2) {
+			seen[alias] = true
+			out = append(out, alias)
+		}
+	}
+	return out
+}
+
+func isMeaningfulAlias(alias string) bool {
+	alias = normalizeEntryName(alias, "")
+	if alias == "" {
+		return false
+	}
+	if isGenericAlias(alias) {
+		return false
+	}
+	return len([]rune(alias)) >= 2
+}
+
+func isGenericAlias(alias string) bool {
+	if alias == "" {
+		return true
+	}
+	generic := map[string]struct{}{
+		"你": {}, "我": {}, "他": {}, "她": {}, "它": {},
+		"爷": {}, "哥": {}, "姐": {}, "嫂": {}, "叔": {}, "婶": {}, "娘": {}, "爹": {},
+		"老爷": {}, "太太": {}, "奶奶": {}, "姑娘": {}, "小姐": {}, "夫人": {}, "公子": {},
+		"少爷": {}, "老内相": {}, "王爷": {}, "道人": {}, "道士": {}, "先生": {},
+		"哥哥": {}, "妹妹": {}, "姐姐": {}, "弟弟": {}, "叔叔": {}, "婶子": {},
+		"大爷": {}, "二爷": {}, "三爷": {}, "大哥": {}, "二哥": {}, "大姐": {}, "二姐": {},
+		"内心": {}, "心理": {}, "情感": {}, "情绪": {}, "独白": {}, "回忆": {},
+		"众人": {}, "诸公": {}, "众客": {}, "那道": {}, "一道": {}, "那府": {}, "那边": {},
+	}
+	if _, ok := generic[alias]; ok {
+		return true
+	}
+	if strings.HasPrefix(alias, "第") && strings.HasSuffix(alias, "章") {
+		return true
+	}
+	return false
+}
+
+func isRoleLikeAlias(alias string) bool {
+	for _, marker := range []string{"之妻", "之女", "之子", "母亲", "父亲", "妈妈", "爸爸", "外祖母", "祖母", "祖父", "家的", "媳妇", "老婆", "太爷", "丫头"} {
+		if strings.Contains(alias, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldMergeCandidate(currentName string, currentAliases []string, nextName string, nextAliases []string) bool {
+	if currentName == nextName {
+		return true
+	}
+	current := buildScoringAliases(currentName, filterMeaningfulAliases(currentAliases))
+	next := buildScoringAliases(nextName, filterMeaningfulAliases(nextAliases))
+	overlap := 0
+	set := make(map[string]bool, len(current))
+	for _, alias := range current {
+		set[alias] = true
+	}
+	for _, alias := range next {
+		if set[alias] {
+			overlap++
+		}
+	}
+	if overlap > 0 {
+		return true
+	}
+	for _, alias := range current {
+		if alias == nextName {
+			return true
+		}
+	}
+	for _, alias := range next {
+		if alias == currentName {
+			return true
+		}
+	}
+	return false
+}
+
+func chooseCanonicalName(name string, aliases []string) string {
+	best := normalizeEntryName(name, "")
+	bestScore := canonicalNameScore(best)
+	for _, alias := range aliases {
+		alias = normalizeEntryName(alias, "")
+		if alias == "" || isGenericAlias(alias) {
+			continue
+		}
+		score := canonicalNameScore(alias)
+		if score > bestScore || (score == bestScore && alias < best) {
+			best = alias
+			bestScore = score
+		}
+	}
+	return best
+}
+
+func canonicalNameScore(name string) int {
+	name = normalizeEntryName(name, "")
+	if name == "" {
+		return -1
+	}
+	score := 0
+	if hasLikelyChineseSurname(name) {
+		score += 30
+	}
+	runes := []rune(name)
+	if l := len(runes); l <= 6 {
+		score += l * 3
+	} else {
+		score += 18 - (l-6)*2
+	}
+	for _, marker := range []string{"公子", "主人", "老爷", "太太", "奶奶", "姑娘", "姐姐", "妹妹", "哥哥"} {
+		if strings.Contains(name, marker) {
+			score -= 8
+		}
+	}
+	for _, marker := range []string{"姐儿", "哥儿", "丫头"} {
+		if strings.Contains(name, marker) {
+			score -= 10
+		}
+	}
+	if strings.HasPrefix(name, "小") || strings.HasPrefix(name, "老") {
+		score -= 4
+	}
+	score -= roleLikeNamePenalty(name)
+	return score
+}
+
+func roleLikeNamePenalty(name string) int {
+	if name == "" {
+		return 0
+	}
+	penalty := 0
+	for _, marker := range []string{"之妻", "之女", "之子", "母亲", "父亲", "外祖母", "祖母", "祖父", "家的", "媳妇", "老婆"} {
+		if strings.Contains(name, marker) {
+			penalty += 10
+		}
+	}
+	for _, marker := range []string{"太爷", "奶奶", "丫头", "姐儿", "哥儿"} {
+		if strings.Contains(name, marker) {
+			penalty += 6
+		}
+	}
+	return penalty
+}
+
+func hasLikelyChineseSurname(name string) bool {
+	runes := []rune(name)
+	if len(runes) < 2 {
+		return false
+	}
+	const commonSurnames = "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于时傅皮卞齐康伍余元卜顾孟平黄和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁杜阮蓝闵席季麻强贾路娄危江童颜郭梅盛林钟徐邱骆高夏蔡田胡凌霍虞万支柯昝管卢莫经房裘缪干解应宗丁宣贲邓郁单杭洪包诸左石崔吉钮龚程嵇邢滑裴陆荣翁荀羊於惠甄曲家封芮羿储靳汲邴糜松井段富巫乌焦巴弓牧隗山谷车侯宓蓬全郗班仰秋仲伊宫宁仇栾暴甘厉戎祖武符刘景詹束龙叶司温庄晏柴瞿阎充慕连习宦艾鱼容向古易慎戈廖庾终暨居衡步都耿满弘匡国文寇广禄阙东欧殳沃利蔚越夔隆师巩厍聂晁勾敖融冷辛阚那简饶空曾毋沙乜养鞠须丰巢关蒯相查后荆红游竺权逯盖益桓公"
+	return strings.ContainsRune(commonSurnames, runes[0])
+}
+
+func sharesLikelySurname(left, right string) bool {
+	lr := []rune(left)
+	rr := []rune(right)
+	if len(lr) < 2 || len(rr) < 2 {
+		return false
+	}
+	return lr[0] == rr[0] && hasLikelyChineseSurname(left)
+}
+
+func containsAnyAlias(text string, aliases []string) bool {
+	for _, alias := range aliases {
+		if alias != "" && strings.Contains(text, alias) {
+			return true
+		}
+	}
+	return false
+}
+
+func countAliasOccurrences(text string, aliases []string) int {
+	total := 0
+	for _, alias := range aliases {
+		total += countOccurrences(text, alias)
+	}
+	return total
+}
+
+func countAliasEntryMentions(entries []WorldBookEntry, aliases []string) int {
+	total := 0
+	for _, entry := range entries {
+		if containsAnyAlias(entry.Content, aliases) {
+			total++
+		}
+	}
+	if total > 20 {
+		return 20
+	}
+	return total
+}
+
+func earliestAliasIndex(text string, aliases []string) (int, bool) {
+	best := -1
+	for _, alias := range aliases {
+		if alias == "" {
+			continue
+		}
+		if idx := strings.Index(text, alias); idx >= 0 && (best == -1 || idx < best) {
+			best = idx
+		}
+	}
+	return best, best >= 0
+}
+
+func openingPositionBonus(idx int) int {
+	switch {
+	case idx <= 12:
+		return 4
+	case idx <= 32:
+		return 2
+	default:
+		return 1
+	}
+}
+
+func sanitizeFileComponent(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, " ", "_")
+	if name == "" {
+		return "character"
+	}
+	return name
+}
+
+func truncateForTrait(text string) string {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\n", " "))
+	rs := []rune(text)
+	if len(rs) > 48 {
+		return string(rs[:48]) + "..."
+	}
+	if text == "" {
+		return "角色设定详见世界书"
+	}
+	return text
 }
 
 // BuildWorldYAML assembles Canon Layer data from character_book entries.
@@ -506,6 +1210,10 @@ func extractCharaChunk(f *os.File) (string, error) {
 	}
 
 	return "", fmt.Errorf("no chara chunk found in PNG")
+}
+
+func ExtractPreviewCharaChunk(f *os.File) (string, error) {
+	return extractCharaChunk(f)
 }
 
 func extractImmutable(personality string) []string {
@@ -845,6 +1553,7 @@ func extractSystemPrompt(data map[string]interface{}) string {
 
 func classifyEntry(comment string) string {
 	c := strings.ToLower(comment)
+	trimmed := strings.TrimSpace(comment)
 
 	// Check bracketed category tags first: [角色], [物品], etc.
 	switch {
@@ -866,12 +1575,40 @@ func classifyEntry(comment string) string {
 		return "lore"
 	}
 
-	// No bracket prefix: plain name → character entry
+	switch {
+	case hasAnyPrefix(trimmed, "角色 -", "角色-", "人物 -", "人物-", "npc -", "npc-", "NPC -", "NPC-", "内心 -", "内心-", "角色内心 -", "角色内心-"):
+		return "character"
+	case hasAnyPrefix(trimmed, "事件 -", "事件-", "剧情 -", "剧情-", "章节剧情 -", "章节剧情-"):
+		return "event"
+	case hasAnyPrefix(trimmed, "时间 -", "时间-", "时间线 -", "时间线-", "年代 -", "年代-"):
+		return "timeline"
+	case hasAnyPrefix(trimmed, "地点 -", "地点-", "地理 -", "地理-", "位置 -", "位置-", "地图 -", "地图-"):
+		return "location"
+	case hasAnyPrefix(trimmed, "物品 -", "物品-", "装备 -", "装备-", "道具 -", "道具-", "武器 -", "武器-"):
+		return "item"
+	case hasAnyPrefix(trimmed, "组织 -", "组织-", "势力 -", "势力-", "门派 -", "门派-", "帮派 -", "帮派-", "公会 -", "公会-"):
+		return "faction"
+	case hasAnyPrefix(trimmed, "体系 -", "体系-", "能力 -", "能力-", "职业 -", "职业-", "技能 -", "技能-", "等级 -", "等级-", "系统 -", "系统-", "玩法 -", "玩法-"):
+		return "setting"
+	case hasAnyPrefix(trimmed, "概念 -", "概念-", "设定 -", "设定-", "规则 -", "规则-", "社会 -", "社会-", "其他 -", "其他-"):
+		return "lore"
+	}
+
+	// No explicit category prefix: plain name → character entry
 	if !strings.Contains(comment, "[") && !strings.Contains(comment, "]") {
 		return "character"
 	}
 
 	return "lore"
+}
+
+func hasAnyPrefix(text string, prefixes ...string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(text, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func filterWorldBookByType(entries []WorldBookEntry, t string) []WorldBookEntry {
@@ -907,6 +1644,10 @@ func getStringSlice(m map[string]interface{}, key string) []string {
 
 // ImportDirectory batch imports all PNG files in a directory.
 func ImportDirectory(srcDir, dstDir string) ([]string, error) {
+	return ImportDirectoryWithMode(srcDir, dstDir, "auto")
+}
+
+func ImportDirectoryWithMode(srcDir, dstDir, mode string) ([]string, error) {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return nil, err
@@ -922,7 +1663,7 @@ func ImportDirectory(srcDir, dstDir string) ([]string, error) {
 		}
 
 		srcPath := filepath.Join(srcDir, entry.Name())
-		charPath, worldPath, err := ImportPNG(srcPath, dstDir)
+		charPath, worldPath, err := ImportPNGWithMode(srcPath, dstDir, mode)
 		if err != nil {
 			results = append(results, fmt.Sprintf("FAIL %s: %v", entry.Name(), err))
 			continue

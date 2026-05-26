@@ -71,7 +71,7 @@ CoreRP 是：
 |------|------|------|
 | 后端语言 | Go 1.22+ | 单二进制、goroutine 适合 Tick、SSE 原生支持 |
 | 数据库 | SQLite + sqlite-vec | 单文件、Git-friendly、零运维 |
-| 嵌入模型 | all-MiniLM-L6-v2 (ONNX) | 20MB、CPU 可跑、零 API 成本 |
+| 嵌入模型 | BGE-small-zh-v1.5 (ONNX) | 512-dim、中文语义优化、零 API 成本 |
 | 协议 | HTTP + SSE | 流式输出、比 WebSocket 简单、Nginx 友好 |
 | 前端 | 纯 HTML/JS PWA | 无框架、几百行、只负责渲染 |
 | 部署 | 单二进制 + Nginx 反代 | PM2/systemd 守护、VPS 常驻 |
@@ -187,7 +187,7 @@ SSE 返回叙事文本
 |------|--------------|
 | `ARCHITECTURE.md` | 修改分层结构、新增/删除模块、变更技术选型 |
 | `TODO.md` | 完成功能、发现新阻塞、新增待办 |
-| `SESSION_LOG.md` | 每次会话结束时追加修改记录、bug 修复、已知坑 |
+| `SESSION_LOG.md` | 每次会话结束时追加修改记录、bug 修复、已知坑；**每条记录必须写绝对时间和修改者/模型身份** |
 | `api-contract.yaml` | 修改 API 路由、请求/响应结构、新增端点 |
 | `budgets.yml` | 修改 Token 预算分配比例或阈值 |
 
@@ -198,6 +198,24 @@ SSE 返回叙事文本
 3. 本次会话有 bug 修复或踩坑？→ 追加 SESSION_LOG.md
 4. 本次修改了 API？→ 更新 api-contract.yaml
 5. 本次新增/修改了类型定义？→ 检查 internal/models/types.go 是否需要同步
+
+### `SESSION_LOG.md` 记录格式（强制）
+
+每次追加日志时，必须使用以下格式：
+
+```md
+### YYYY-MM-DD HH:MM:SS UTC — 标题
+Modified by: <Agent/Tool> (<Model>)
+```
+
+示例：
+
+```md
+### 2026-05-26 02:35:21 UTC — 角色一致性 / 记忆隔离 / 分支稳定性修复
+Modified by: Codex (GPT-5)
+```
+
+禁止只写相对时间（如“今天下午”）或只写工具名不写模型身份。
 
 ---
 

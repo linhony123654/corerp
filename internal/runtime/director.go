@@ -1,0 +1,371 @@
+package runtime
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"corerp/internal/core"
+)
+
+type directorCandidateScore struct {
+	name         string
+	score        float64
+	reason       string
+	mentioned    bool
+	mentionIndex int
+	present      bool
+	silenceBoost float64
+}
+
+func (e *Engine) GetDirectorConfig() core.DirectorConfig {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return normalizeDirectorConfig(e.directorCfg)
+}
+
+func (e *Engine) UpdateDirectorConfig(cfg core.DirectorConfig) core.DirectorConfig {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.directorCfg = normalizeDirectorConfig(cfg)
+	return e.directorCfg
+}
+
+func (e *Engine) GetDirectorPlan() core.DirectorPlan {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.lastPlan
+}
+
+func normalizeDirectorConfig(cfg core.DirectorConfig) core.DirectorConfig {
+	switch strings.TrimSpace(cfg.Mode) {
+	case "auto_single", "auto_chain":
+	default:
+		cfg.Mode = "manual"
+	}
+	if cfg.MaxSpeakers <= 0 {
+		cfg.MaxSpeakers = 1
+	}
+	if cfg.Mode == "auto_single" {
+		cfg.MaxSpeakers = 1
+	}
+	if cfg.Mode == "manual" {
+		cfg.MaxSpeakers = 1
+	}
+	if cfg.MaxSpeakers > 3 {
+		cfg.MaxSpeakers = 3
+	}
+	return cfg
+}
+
+func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) core.DirectorPlan {
+	cfg := normalizeDirectorConfig(e.directorCfg)
+	plan := core.DirectorPlan{
+		Mode:            cfg.Mode,
+		Trigger:         "user_turn",
+		PreviousSpeaker: e.activeCharacter,
+		CreatedAt:       time.Now().UTC(),
+	}
+	if cfg.Mode == "manual" || len(e.loadedCharacters) <= 1 {
+		plan.Selected = []string{e.activeCharacter}
+		plan.Candidates = []string{e.activeCharacter}
+		plan.Reason = "director manual mode"
+		plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, false, worldState, userInput, nil)
+		e.lastPlan = plan
+		return plan
+	}
+
+	candidates := e.directorCandidatesLocked(worldState)
+	plan.Candidates = append([]string(nil), candidates...)
+	if len(candidates) == 0 {
+		plan.Selected = []string{e.activeCharacter}
+		plan.Reason = "no alternate candidates"
+		plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, false, worldState, userInput, nil)
+		e.lastPlan = plan
+		return plan
+	}
+
+	var scoredList []directorCandidateScore
+	needle := strings.ToLower(strings.TrimSpace(userInput))
+	for _, name := range candidates {
+		score := 0.0
+		var reasons []string
+		mentionIndex := strings.Index(needle, strings.ToLower(name))
+		mentioned := mentionIndex >= 0
+		present := containsString(worldState.Scene.Characters, name)
+		silenceBoost := 0.0
+		if mentioned {
+			score += 100
+			reasons = append(reasons, "mentioned by user")
+			score += maxFloat(0, 12-float64(mentionIndex))
+			reasons = append(reasons, fmt.Sprintf("mention order %d", mentionIndex))
+		}
+		if name == e.activeCharacter {
+			score += 4
+			reasons = append(reasons, "current speaker continuity")
+		}
+		if present {
+			score += 8
+			reasons = append(reasons, "present in scene")
+		}
+		if last, ok := e.memEngine.LastAssistantAt(name); ok {
+			silence := time.Since(last).Minutes()
+			if silence > 0 {
+				silenceBoost = minFloat(silence/5, 12)
+				score += silenceBoost
+				reasons = append(reasons, fmt.Sprintf("silent %.0fm", silence))
+			}
+		} else {
+			silenceBoost = 10
+			score += silenceBoost
+			reasons = append(reasons, "has not spoken recently")
+		}
+		if char, ok := e.agents.GetCharacter(name); ok {
+			score += char.Identity.Adaptive["trust"] * 0.15
+			score += char.Identity.Adaptive["intimacy"] * 0.1
+			score += char.Identity.Adaptive["fear"] * 0.05
+		}
+		if mentioned && mentionIndex == 0 {
+			score += 6
+			reasons = append(reasons, "opened by user cue")
+		}
+		if worldState.Tension >= 0.6 && name != e.activeCharacter {
+			score += 3
+			reasons = append(reasons, "high tension favors switch")
+		}
+		scoredList = append(scoredList, directorCandidateScore{
+			name:         name,
+			score:        score,
+			reason:       strings.Join(reasons, ", "),
+			mentioned:    mentioned,
+			mentionIndex: mentionIndex,
+			present:      present,
+			silenceBoost: silenceBoost,
+		})
+	}
+
+	sort.SliceStable(scoredList, func(i, j int) bool {
+		if scoredList[i].mentioned != scoredList[j].mentioned {
+			return scoredList[i].mentioned
+		}
+		if scoredList[i].mentioned && scoredList[j].mentioned && scoredList[i].mentionIndex != scoredList[j].mentionIndex {
+			return scoredList[i].mentionIndex < scoredList[j].mentionIndex
+		}
+		if scoredList[i].score == scoredList[j].score {
+			return scoredList[i].name < scoredList[j].name
+		}
+		return scoredList[i].score > scoredList[j].score
+	})
+
+	maxSpeakers := cfg.MaxSpeakers
+	if maxSpeakers > len(scoredList) {
+		maxSpeakers = len(scoredList)
+	}
+	plan.Selected = buildSelectedSpeakers(scoredList, worldState, cfg.Mode == "auto_chain", maxSpeakers)
+	if len(plan.Selected) == 0 {
+		plan.Selected = []string{e.activeCharacter}
+	}
+	plan.Reason = buildPlanReason(scoredList, plan.Selected, cfg.Mode == "auto_chain")
+	if lead := plan.Selected[0]; lead != "" && lead != e.activeCharacter {
+		plan.Switched = true
+	}
+	plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, cfg.Mode == "auto_chain", worldState, userInput, scoredList)
+	e.lastPlan = plan
+	return plan
+}
+
+func buildSelectedSpeakers(scoredList []directorCandidateScore, worldState core.WorldState, allowChain bool, maxSpeakers int) []string {
+	if len(scoredList) == 0 || maxSpeakers <= 0 {
+		return nil
+	}
+
+	selected := []string{scoredList[0].name}
+	if !allowChain || maxSpeakers == 1 {
+		return selected
+	}
+
+	lead := scoredList[0]
+	if candidate := pickFollowup(scoredList, selected, func(s directorCandidateScore) bool {
+		return s.mentioned && s.name != lead.name
+	}); candidate != nil {
+		selected = append(selected, candidate.name)
+	}
+	if len(selected) >= maxSpeakers {
+		return selected
+	}
+
+	if candidate := pickFollowup(scoredList, selected, func(s directorCandidateScore) bool {
+		if s.name == lead.name {
+			return false
+		}
+		rel := relationshipWeight(worldState, lead.name, s.name)
+		return rel >= 0.75 || (worldState.Tension >= 0.6 && rel > 0)
+	}); candidate != nil {
+		selected = append(selected, candidate.name)
+	}
+	if len(selected) >= maxSpeakers {
+		return selected
+	}
+
+	if candidate := pickFollowup(scoredList, selected, func(s directorCandidateScore) bool {
+		if s.name == lead.name {
+			return false
+		}
+		return worldState.Tension >= 0.65 && (s.present || s.silenceBoost >= 8)
+	}); candidate != nil {
+		selected = append(selected, candidate.name)
+	}
+	if len(selected) >= maxSpeakers {
+		return selected
+	}
+
+	for _, candidate := range scoredList {
+		if len(selected) >= maxSpeakers {
+			break
+		}
+		if containsString(selected, candidate.name) {
+			continue
+		}
+		selected = append(selected, candidate.name)
+	}
+	return selected
+}
+
+func pickFollowup(scoredList []directorCandidateScore, selected []string, match func(directorCandidateScore) bool) *directorCandidateScore {
+	for i := range scoredList {
+		candidate := scoredList[i]
+		if containsString(selected, candidate.name) || !match(candidate) {
+			continue
+		}
+		return &candidate
+	}
+	return nil
+}
+
+func buildPlanReason(scoredList []directorCandidateScore, selected []string, allowChain bool) string {
+	if len(scoredList) == 0 {
+		return "no scored candidates"
+	}
+	if !allowChain || len(selected) <= 1 {
+		return scoredList[0].reason
+	}
+	parts := []string{fmt.Sprintf("lead %s: %s", selected[0], scoredList[0].reason)}
+	for _, name := range selected[1:] {
+		for _, candidate := range scoredList {
+			if candidate.name == name {
+				parts = append(parts, fmt.Sprintf("followup %s: %s", name, candidate.reason))
+				break
+			}
+		}
+	}
+	return strings.Join(parts, " | ")
+}
+
+func buildTurnSteps(selected []string, previousSpeaker string, allowChain bool, worldState core.WorldState, userInput string, scoredList []directorCandidateScore) []core.TurnStep {
+	if len(selected) == 0 {
+		return nil
+	}
+	if !allowChain && len(selected) > 1 {
+		selected = selected[:1]
+	}
+
+	steps := make([]core.TurnStep, 0, len(selected))
+	prev := previousSpeaker
+	lead := selected[0]
+	needle := strings.ToLower(strings.TrimSpace(userInput))
+	for i, speaker := range selected {
+		kind := "lead"
+		reason := "lead speaker"
+		if i > 0 {
+			kind = "followup"
+			reason = "director chained follow-up"
+			if strings.Contains(needle, strings.ToLower(speaker)) {
+				kind = "addressed_reply"
+				reason = "user explicitly addressed this character"
+			} else if relationshipWeight(worldState, lead, speaker) >= 0.75 {
+				kind = "support_response"
+				reason = fmt.Sprintf("strong relationship with lead %s", lead)
+			} else if worldState.Tension >= 0.65 {
+				kind = "tension_response"
+				reason = "high tension reaction slot"
+			}
+			for _, candidate := range scoredList {
+				if candidate.name == speaker && candidate.reason != "" {
+					reason = fmt.Sprintf("%s; %s", reason, candidate.reason)
+					break
+				}
+			}
+		}
+		budgetMode := "normal"
+		if speaker != prev {
+			budgetMode = "full_load"
+		}
+		steps = append(steps, core.TurnStep{
+			ID:         fmt.Sprintf("turn_step_%d_%s", i, speaker),
+			Index:      i,
+			Speaker:    speaker,
+			Kind:       kind,
+			Reason:     reason,
+			BudgetMode: budgetMode,
+		})
+		prev = speaker
+	}
+	return steps
+}
+
+func relationshipWeight(worldState core.WorldState, a, b string) float64 {
+	if a == "" || b == "" || a == b {
+		return 0
+	}
+	keys := []string{fmt.Sprintf("%s_%s", a, b), fmt.Sprintf("%s_%s", b, a)}
+	for _, key := range keys {
+		if rel, ok := worldState.Relationships[key]; ok {
+			return rel.Trust + rel.Intimacy + rel.Fear + rel.Respect + rel.Debt
+		}
+	}
+	return 0
+}
+
+func (e *Engine) directorCandidatesLocked(worldState core.WorldState) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, name := range worldState.Scene.Characters {
+		if _, ok := e.agents.GetCharacter(name); ok && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	if len(out) == 0 {
+		for _, name := range e.loadedCharacters {
+			if !seen[name] {
+				seen[name] = true
+				out = append(out, name)
+			}
+		}
+	}
+	return out
+}
+
+func containsString(items []string, needle string) bool {
+	for _, item := range items {
+		if item == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}

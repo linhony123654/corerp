@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,39 +10,177 @@ import (
 	"strings"
 	"time"
 
+	"corerp/internal/agents"
 	"corerp/internal/auth"
+	"corerp/internal/core"
+	"corerp/internal/events"
+	"corerp/internal/goalexpr"
 	"corerp/internal/llm"
-	"corerp/internal/runtime"
+	"corerp/internal/narrative"
 )
 
-type Server struct {
-	engine *runtime.Engine
+var (
+	BuildVersion = "dev"
+	BuildCommit  = "unknown"
+	BuildTime    = "unknown"
+)
+
+var (
+	errInstanceNotFound = errors.New("instance not found")
+	errInstanceConflict = errors.New("instance conflict")
+)
+
+// RuntimeEngine is the interface the server needs from the runtime engine.
+type RuntimeEngine interface {
+	ProcessTurn(userInput string) (<-chan string, error)
+	GetInstanceID() string
+	InstanceSummary() core.RuntimeInstanceSummary
+	GetState() core.WorldState
+	GetCharacter() (core.Character, bool)
+	GetCharacterName() string
+	GetPlayerRole() core.PlayerRole
+	UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, error)
+	GetCharacterConfig(name string) (core.CharacterConfig, error)
+	UpdateCharacterConfig(name string, card core.Character) (core.CharacterConfig, error)
+	GetWorldConfig() (core.WorldConfig, error)
+	UpdateWorldConfig(cfg core.WorldConfig) (core.WorldConfig, error)
+	ListSceneConfigs() (core.SceneConfigList, error)
+	UpdateSceneConfig(scene core.SceneConfig) (core.SceneConfig, error)
+	GetCanonFactsConfig() (core.CanonFactsConfig, error)
+	UpdateCanonFactsConfig(cfg core.CanonFactsConfig) (core.CanonFactsConfig, error)
+	GetDirectorConfig() core.DirectorConfig
+	UpdateDirectorConfig(cfg core.DirectorConfig) core.DirectorConfig
+	GetDirectorPlan() core.DirectorPlan
+	GetLatestTrace() (core.TurnTrace, bool)
+	ListTurnTraces(limit int) []core.TurnTrace
+	GetTraceByTurn(turn int) (core.TurnTrace, bool)
+	ListQuarantineEvents(character string, limit int) ([]core.Event, error)
+	PromoteQuarantineEvent(eventID string) error
+	RejectQuarantineEvent(eventID string) error
+	ListPendingFacts(character string, limit int) ([]core.PendingFact, map[string]interface{}, error)
+	ConfirmPendingFact(eventID string) error
+	DeletePendingFact(eventID string) error
+	PromotePendingFact(eventID string) error
+	GetLoadedCharacters() []string
+	SwitchCharacter(name string) error
+	GetWorldName() string
+	GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error)
+	ListSaveSlots() ([]core.SaveSlot, error)
+	CreateSaveSlot(name, branch, note string) (core.SaveSlot, error)
+	LoadSaveSlot(name string) (core.SaveSlot, error)
+	CompareSaveSlots(saveA, saveB string) (core.WorldStateDiff, error)
+	ListCheckpoints() ([]core.SaveSlot, error)
+	CreateCheckpoint(name, branch, note string) (core.SaveSlot, error)
+	LoadCheckpoint(name string) (core.SaveSlot, error)
+	ListScenarioPresets() ([]core.ScenarioPreset, error)
+	CreateScenarioPreset(name, branch, note string) (core.ScenarioPreset, error)
+	ApplyScenarioPreset(name string) (core.ScenarioPreset, error)
+	GetNPCActions(name string, sinceTick int) []agents.NPCActionLog
+	GetCausalityChain(eventID string, depth int) (interface{}, error)
+	GetCausalityChainNarrative(eventID string, depth int) (interface{}, error)
+	GetCausalitySummary(eventID string, depth int) (string, error)
+	GetCausalitySummaryNarrative(eventID string, depth int) (string, error)
+	ReplayTo(eventID string) (core.WorldState, error)
+	ReplayAtTime(hour, minute, day int) (core.WorldState, error)
+	ForkTimeline(eventID, branchName string) error
+	GetTimeline(branch string, limit int) ([]events.EventTimeline, error)
+	ListBranches() ([]string, error)
+	CompareBranchesDetailed(branchA, branchB string, index int) (core.WorldStateDiff, error)
+	MergeBranchState(sourceBranch, targetBranch string, mergeFlags, mergeVariables bool) (core.BranchMergeResult, error)
+	CompressEvents(from, to int) (*narrative.CompressionResult, error)
+	CompressionStats() map[string]interface{}
+	LLMRoutes() map[string]interface{}
+	SwitchLLM(name, endpoint, apiKey, model string)
+	GetDialogueLimit(limit int) []core.Message
+	ResetDialogue()
+	DebugInfo() map[string]interface{}
+	SetTension(v float64)
+	QueryActionLog(character string, firedOnly, blockedOnly bool, limit int) []interface{}
+	ActionLogStats() map[string]interface{}
 }
 
-func NewServer(engine *runtime.Engine) *Server {
-	return &Server{engine: engine}
+type InstanceResolver interface {
+	DefaultInstanceID() string
+	ResolveInstance(id string) (RuntimeEngine, error)
+	ListInstances() []core.RuntimeInstanceSummary
+	InstanceStatus(id string) (core.RuntimeInstanceSummary, error)
+	SetDefaultInstance(id string) error
+	StopInstance(id string) (core.RuntimeInstanceSummary, error)
+	DeleteInstance(id string) error
+	CreateInstance(sourceID, id, label, activeCharacter string) (core.RuntimeInstanceSummary, error)
+}
+
+type Server struct {
+	engine   RuntimeEngine
+	resolver InstanceResolver
+}
+
+func NewServer(engine RuntimeEngine, resolver ...InstanceResolver) *Server {
+	s := &Server{engine: engine}
+	if len(resolver) > 0 {
+		s.resolver = resolver[0]
+	}
+	return s
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
 	a := func(h http.HandlerFunc) http.HandlerFunc { return auth.Middleware(h) }
 	mux.HandleFunc("/login", auth.HandleLogin)
+	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/ready", s.handleReady)
+	mux.HandleFunc("/api/version", s.handleVersion)
+	mux.HandleFunc("/api/change-password", s.handleChangePassword)
 	mux.HandleFunc("/api/chat", a(s.handleChat))
 	mux.HandleFunc("/api/state", a(s.handleState))
 	mux.HandleFunc("/api/character", a(s.handleCharacter))
+	mux.HandleFunc("/api/player-role", a(s.handlePlayerRole))
+	mux.HandleFunc("/api/instances", a(s.handleInstances))
+	mux.HandleFunc("/api/instances/status", a(s.handleInstanceStatus))
+	mux.HandleFunc("/api/instances/create", a(s.handleInstanceCreate))
+	mux.HandleFunc("/api/instances/default", a(s.handleInstanceDefault))
+	mux.HandleFunc("/api/instances/stop", a(s.handleInstanceStop))
+	mux.HandleFunc("/api/instances/delete", a(s.handleInstanceDelete))
+	mux.HandleFunc("/api/character-config", a(s.handleCharacterConfig))
 	mux.HandleFunc("/api/characters", a(s.handleCharacters))
 	mux.HandleFunc("/api/switch", a(s.handleSwitch))
 	mux.HandleFunc("/api/world", a(s.handleWorld))
+	mux.HandleFunc("/api/world-config", a(s.handleWorldConfig))
+	mux.HandleFunc("/api/scenes", a(s.handleScenes))
+	mux.HandleFunc("/api/canon-facts", a(s.handleCanonFacts))
+	mux.HandleFunc("/api/director-config", a(s.handleDirectorConfig))
+	mux.HandleFunc("/api/trace", a(s.handleTrace))
+	mux.HandleFunc("/api/traces", a(s.handleTraces))
+	mux.HandleFunc("/api/trace/latest", a(s.handleTrace))
+	mux.HandleFunc("/api/quarantine", a(s.handleQuarantine))
+	mux.HandleFunc("/api/quarantine/promote", a(s.handleQuarantinePromote))
+	mux.HandleFunc("/api/quarantine/reject", a(s.handleQuarantineReject))
+	mux.HandleFunc("/api/pending-facts", a(s.handlePendingFacts))
+	mux.HandleFunc("/api/pending-facts/confirm", a(s.handlePendingFactsConfirm))
+	mux.HandleFunc("/api/pending-facts/delete", a(s.handlePendingFactsDelete))
+	mux.HandleFunc("/api/pending-facts/promote", a(s.handlePendingFactsPromote))
+	mux.HandleFunc("/api/memory", a(s.handleMemory))
+	mux.HandleFunc("/api/export", a(s.handleExport))
+	mux.HandleFunc("/api/saves", a(s.handleSaves))
+	mux.HandleFunc("/api/saves/load", a(s.handleSaveLoad))
+	mux.HandleFunc("/api/saves/diff", a(s.handleSavesDiff))
+	mux.HandleFunc("/api/checkpoints", a(s.handleCheckpoints))
+	mux.HandleFunc("/api/checkpoints/load", a(s.handleCheckpointLoad))
+	mux.HandleFunc("/api/presets", a(s.handlePresets))
+	mux.HandleFunc("/api/presets/apply", a(s.handlePresetApply))
 	mux.HandleFunc("/api/npc-actions", a(s.handleNPCActions))
+	mux.HandleFunc("/api/npc-action-log", a(s.handleActionLog))
 	mux.HandleFunc("/api/causality", a(s.handleCausality))
 	mux.HandleFunc("/api/replay", a(s.handleReplay))
 	mux.HandleFunc("/api/fork", a(s.handleFork))
 	mux.HandleFunc("/api/timeline", a(s.handleTimeline))
 	mux.HandleFunc("/api/branches", a(s.handleBranches))
+	mux.HandleFunc("/api/branches/diff", a(s.handleBranchesDiff))
+	mux.HandleFunc("/api/branches/merge", a(s.handleBranchesMerge))
 	mux.HandleFunc("/api/compress", a(s.handleCompress))
 	mux.HandleFunc("/api/compression-stats", a(s.handleCompressionStats))
 	mux.HandleFunc("/api/usage", a(s.handleUsage))
 	mux.HandleFunc("/api/llm-configs", a(s.handleLLMConfigs))
-	mux.HandleFunc("/api/llm-configs/", a(s.handleLLMConfigItem))
+	mux.HandleFunc("/api/llm-configs/", a(s.handleLLMConfigs))
 	mux.HandleFunc("/api/llm-active", a(s.handleLLMActive))
 	mux.HandleFunc("/api/llm-models", a(s.handleLLMModels))
 	mux.HandleFunc("/api/llm-routes", a(s.handleLLMRoutes))
@@ -49,7 +188,114 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/dialogue/reset", a(s.handleDialogueReset))
 	mux.HandleFunc("/api/debug/memory", a(s.handleDebugMemory))
 	mux.HandleFunc("/api/director", a(s.handleDirector))
-	mux.HandleFunc("/", s.handleStatic)
+	mux.HandleFunc("/", a(s.handleStatic))
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeInstanceError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	switch {
+	case errors.Is(err, errInstanceNotFound), strings.HasPrefix(err.Error(), "instance not found:"):
+		status = http.StatusNotFound
+	case errors.Is(err, errInstanceConflict),
+		strings.Contains(err.Error(), "cannot delete default instance"),
+		strings.Contains(err.Error(), "cannot delete the only instance"):
+		status = http.StatusConflict
+	case strings.Contains(err.Error(), "instance id required"):
+		status = http.StatusBadRequest
+	}
+	http.Error(w, err.Error(), status)
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":      true,
+		"status":  "ok",
+		"service": "corerp",
+	})
+}
+
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.engine == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"ok":     false,
+			"status": "unavailable",
+			"reason": "runtime unavailable",
+		})
+		return
+	}
+	instanceID := s.engine.GetInstanceID()
+	if s.resolver != nil {
+		instanceID = s.resolver.DefaultInstanceID()
+		if _, err := s.resolver.ResolveInstance(instanceID); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+				"ok":           false,
+				"status":       "unavailable",
+				"reason":       err.Error(),
+				"default":      instanceID,
+				"instances":    len(s.resolver.ListInstances()),
+				"build":        BuildVersion,
+				"build_commit": BuildCommit,
+				"build_time":   BuildTime,
+			})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":      true,
+		"status":  "ready",
+		"default": instanceID,
+		"instances": func() int {
+			if s.resolver != nil {
+				return len(s.resolver.ListInstances())
+			}
+			return 1
+		}(),
+		"build":        BuildVersion,
+		"build_commit": BuildCommit,
+		"build_time":   BuildTime,
+	})
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"service": "corerp",
+		"version": BuildVersion,
+		"commit":  BuildCommit,
+		"time":    BuildTime,
+	})
+}
+
+func (s *Server) engineForRequest(r *http.Request) (RuntimeEngine, string, error) {
+	if s.resolver == nil {
+		return s.engine, s.engine.GetInstanceID(), nil
+	}
+	id := strings.TrimSpace(r.URL.Query().Get("instance_id"))
+	engine, err := s.resolver.ResolveInstance(id)
+	if err != nil {
+		return nil, "", err
+	}
+	if id == "" {
+		id = s.resolver.DefaultInstanceID()
+	}
+	return engine, id, nil
 }
 
 type chatRequest struct {
@@ -78,7 +324,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ch, err := s.engine.ProcessTurn(req.Message)
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	ch, err := engine.ProcessTurn(req.Message)
 	if err != nil {
 		fmt.Fprintf(w, "data: [ERROR] %v\n\n", err)
 		flusher.Flush()
@@ -97,9 +349,31 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state := s.engine.GetState()
+	engine, instanceID, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	state := engine.GetState()
+	payload := struct {
+		core.WorldState
+		InstanceID     string                      `json:"instance_id"`
+		Instance       core.RuntimeInstanceSummary `json:"instance"`
+		DirectorConfig core.DirectorConfig         `json:"director_config"`
+		DirectorPlan   core.DirectorPlan           `json:"director_plan"`
+		LatestTrace    *core.TurnTrace             `json:"latest_trace,omitempty"`
+	}{
+		WorldState:     state,
+		InstanceID:     instanceID,
+		Instance:       engine.InstanceSummary(),
+		DirectorConfig: engine.GetDirectorConfig(),
+		DirectorPlan:   engine.GetDirectorPlan(),
+	}
+	if trace, ok := engine.GetLatestTrace(); ok {
+		payload.LatestTrace = &trace
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(state)
+	json.NewEncoder(w).Encode(payload)
 }
 
 func (s *Server) handleCharacter(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +382,12 @@ func (s *Server) handleCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	char, ok := s.engine.GetCharacter()
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	char, ok := engine.GetCharacter()
 	if !ok {
 		http.Error(w, "Character not found", http.StatusNotFound)
 		return
@@ -118,14 +397,233 @@ func (s *Server) handleCharacter(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(char)
 }
 
+func (s *Server) handlePlayerRole(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(engine.GetPlayerRole())
+	case http.MethodPost:
+		var req core.PlayerRole
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		role, err := engine.UpdatePlayerRole(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(role)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleInstances(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	resp := struct {
+		Default   string                        `json:"default"`
+		Instances []core.RuntimeInstanceSummary `json:"instances"`
+	}{
+		Default:   s.engine.GetInstanceID(),
+		Instances: []core.RuntimeInstanceSummary{s.engine.InstanceSummary()},
+	}
+	if s.resolver != nil {
+		resp.Default = s.resolver.DefaultInstanceID()
+		resp.Instances = s.resolver.ListInstances()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleInstanceCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.resolver == nil {
+		http.Error(w, "instance manager unavailable", http.StatusNotImplemented)
+		return
+	}
+	var req struct {
+		ID              string `json:"id"`
+		Label           string `json:"label"`
+		SourceID        string `json:"source_id"`
+		ActiveCharacter string `json:"active_character"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	summary, err := s.resolver.CreateInstance(req.SourceID, req.ID, req.Label, req.ActiveCharacter)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+}
+
+func (s *Server) handleInstanceStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.resolver == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(s.engine.InstanceSummary())
+		return
+	}
+	summary, err := s.resolver.InstanceStatus(r.URL.Query().Get("id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+}
+
+func (s *Server) handleInstanceDefault(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.resolver == nil {
+		http.Error(w, "instance manager unavailable", http.StatusNotImplemented)
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.resolver.SetDefaultInstance(req.ID); err != nil {
+		writeInstanceError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "default": req.ID})
+}
+
+func (s *Server) handleInstanceStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.resolver == nil {
+		http.Error(w, "instance manager unavailable", http.StatusNotImplemented)
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	summary, err := s.resolver.StopInstance(req.ID)
+	if err != nil {
+		writeInstanceError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+}
+
+func (s *Server) handleInstanceDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.resolver == nil {
+		http.Error(w, "instance manager unavailable", http.StatusNotImplemented)
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.resolver.DeleteInstance(req.ID); err != nil {
+		writeInstanceError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "deleted": req.ID})
+}
+
+func (s *Server) handleCharacterConfig(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	name := r.URL.Query().Get("character")
+	switch r.Method {
+	case http.MethodGet:
+		cfg, err := engine.GetCharacterConfig(name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	case http.MethodPost:
+		var req struct {
+			Character string         `json:"character"`
+			Card      core.Character `json:"card"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.Character != "" {
+			name = req.Character
+		}
+		if err := goalexpr.ValidateCharacter(req.Card); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cfg, err := engine.UpdateCharacterConfig(name, req.Card)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *Server) handleCharacters(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	chars := s.engine.GetLoadedCharacters()
-	active := s.engine.GetCharacterName()
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	chars := engine.GetLoadedCharacters()
+	active := engine.GetCharacterName()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"active":     active,
@@ -139,6 +637,12 @@ func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
 	var req struct {
 		Character string `json:"character"`
 	}
@@ -147,13 +651,13 @@ func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.engine.SwitchCharacter(req.Character); err != nil {
+	if err := engine.SwitchCharacter(req.Character); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Include recent NPC actions for "while you were away" summary
-	npcActions := s.engine.GetNPCActions(req.Character, 0)
+	npcActions := engine.GetNPCActions(req.Character, 0)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -169,10 +673,662 @@ func (s *Server) handleWorld(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"name": s.engine.GetWorldName(),
+		"name": engine.GetWorldName(),
 	})
+}
+
+func (s *Server) handleWorldConfig(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		cfg, err := engine.GetWorldConfig()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	case http.MethodPost:
+		var req core.WorldConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cfg, err := engine.UpdateWorldConfig(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleScenes(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		scenes, err := engine.ListSceneConfigs()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(scenes)
+	case http.MethodPost:
+		var req core.SceneConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		scene, err := engine.UpdateSceneConfig(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(scene)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleCanonFacts(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		cfg, err := engine.GetCanonFactsConfig()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	case http.MethodPost:
+		var req core.CanonFactsConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cfg, err := engine.UpdateCanonFactsConfig(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleDirectorConfig(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"config": engine.GetDirectorConfig(),
+			"plan":   engine.GetDirectorPlan(),
+		})
+	case http.MethodPost:
+		var req core.DirectorConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cfg := engine.UpdateDirectorConfig(req)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":     true,
+			"config": cfg,
+			"plan":   engine.GetDirectorPlan(),
+		})
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleTrace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	var (
+		trace core.TurnTrace
+		ok    bool
+	)
+	if turnRaw := r.URL.Query().Get("turn"); turnRaw != "" {
+		var turn int
+		fmt.Sscanf(turnRaw, "%d", &turn)
+		trace, ok = engine.GetTraceByTurn(turn)
+	} else {
+		trace, ok = engine.GetLatestTrace()
+	}
+	if !ok {
+		http.Error(w, "trace not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(trace)
+}
+
+func (s *Server) handleTraces(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	limit := 20
+	if n := r.URL.Query().Get("limit"); n != "" {
+		fmt.Sscanf(n, "%d", &limit)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"traces": engine.ListTurnTraces(limit),
+	})
+}
+
+func (s *Server) handleQuarantine(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	character := r.URL.Query().Get("character")
+	limit := 50
+	if n := r.URL.Query().Get("n"); n != "" {
+		fmt.Sscanf(n, "%d", &limit)
+	}
+	events, err := engine.ListQuarantineEvents(character, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if r.URL.Query().Get("include_noise") != "1" {
+		filtered := events[:0]
+		for _, event := range events {
+			if event.Type == "observe" {
+				continue
+			}
+			filtered = append(filtered, event)
+		}
+		events = filtered
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"events":    events,
+		"count":     len(events),
+		"character": character,
+	})
+}
+
+func (s *Server) handleQuarantinePromote(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	s.handleQuarantineAction(w, r, engine.PromoteQuarantineEvent)
+}
+
+func (s *Server) handleQuarantineReject(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	s.handleQuarantineAction(w, r, engine.RejectQuarantineEvent)
+}
+
+func (s *Server) handlePendingFacts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	character := r.URL.Query().Get("character")
+	limit := 50
+	if n := r.URL.Query().Get("n"); n != "" {
+		fmt.Sscanf(n, "%d", &limit)
+	}
+	items, stats, err := engine.ListPendingFacts(character, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"facts":     items,
+		"count":     len(items),
+		"stats":     stats,
+		"character": character,
+	})
+}
+
+func (s *Server) handlePendingFactsConfirm(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	s.handleFactAction(w, r, engine.ConfirmPendingFact)
+}
+
+func (s *Server) handlePendingFactsDelete(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	s.handleFactAction(w, r, engine.DeletePendingFact)
+}
+
+func (s *Server) handlePendingFactsPromote(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	s.handleFactAction(w, r, engine.PromotePendingFact)
+}
+
+func (s *Server) handleQuarantineAction(w http.ResponseWriter, r *http.Request, fn func(string) error) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.ID == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+	if err := fn(req.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "id": req.ID})
+}
+
+func (s *Server) handleFactAction(w http.ResponseWriter, r *http.Request, fn func(string) error) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.ID == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+	if err := fn(req.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "id": req.ID})
+}
+
+func (s *Server) handleMemory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	character := r.URL.Query().Get("character")
+	facts := 50
+	episodic := 20
+	dialogue := 20
+	if n := r.URL.Query().Get("facts"); n != "" {
+		fmt.Sscanf(n, "%d", &facts)
+	}
+	if n := r.URL.Query().Get("episodic"); n != "" {
+		fmt.Sscanf(n, "%d", &episodic)
+	}
+	if n := r.URL.Query().Get("dialogue"); n != "" {
+		fmt.Sscanf(n, "%d", &dialogue)
+	}
+	snapshot, err := engine.GetMemorySnapshot(character, facts, episodic, dialogue)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(snapshot)
+}
+
+func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "json"
+	}
+	limit := 50
+	if n := r.URL.Query().Get("limit"); n != "" {
+		fmt.Sscanf(n, "%d", &limit)
+	}
+
+	char, _ := engine.GetCharacter()
+	dialogue := engine.GetDialogueLimit(limit)
+	timeline, _ := engine.GetTimeline("main", limit)
+	payload := map[string]interface{}{
+		"exported_at": time.Now().UTC(),
+		"character":   char,
+		"world":       engine.GetWorldName(),
+		"state":       engine.GetState(),
+		"dialogue":    dialogue,
+		"timeline":    timeline,
+	}
+
+	filename := fmt.Sprintf("corerp-%s-%s", engine.GetCharacterName(), time.Now().UTC().Format("20060102T150405Z"))
+	switch format {
+	case "md", "markdown":
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.md\"", filename))
+		fmt.Fprintf(w, "# CoreRP Session Export\n\n")
+		fmt.Fprintf(w, "- Character: %s\n", char.Identity.Name)
+		fmt.Fprintf(w, "- World: %s\n", engine.GetWorldName())
+		fmt.Fprintf(w, "- Exported: %s\n\n", time.Now().UTC().Format(time.RFC3339))
+		state := engine.GetState()
+		fmt.Fprintf(w, "## Scene\n\n")
+		fmt.Fprintf(w, "- Day %d %02d:%02d\n", state.Clock.Day, state.Clock.Hour, state.Clock.Minute)
+		fmt.Fprintf(w, "- Location: %s\n", state.Scene.Location)
+		fmt.Fprintf(w, "- Weather: %s\n", state.Scene.Weather)
+		fmt.Fprintf(w, "- Tension: %.2f\n\n", state.Tension)
+		fmt.Fprintf(w, "## Dialogue\n\n")
+		for _, msg := range dialogue {
+			fmt.Fprintf(w, "- **%s**: %s\n", msg.Role, strings.ReplaceAll(msg.Content, "\n", " "))
+		}
+		fmt.Fprintf(w, "\n## Timeline\n\n")
+		for _, item := range timeline {
+			fmt.Fprintf(w, "- #%d `%s` %s -> %s\n", item.EventIndex, item.Event.Type, item.Event.Actor, item.Event.Target)
+		}
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.json\"", filename))
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		enc.Encode(payload)
+	}
+}
+
+func (s *Server) handleSaves(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		slots, err := engine.ListSaveSlots()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"saves": slots})
+	case http.MethodPost:
+		var req struct {
+			Name   string `json:"name"`
+			Branch string `json:"branch"`
+			Note   string `json:"note"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		slot, err := engine.CreateSaveSlot(req.Name, req.Branch, req.Note)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(slot)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleSaveLoad(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	slot, err := engine.LoadSaveSlot(req.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(slot)
+}
+
+func (s *Server) handleSavesDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	saveA := r.URL.Query().Get("a")
+	saveB := r.URL.Query().Get("b")
+	diff, err := engine.CompareSaveSlots(saveA, saveB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(diff)
+}
+
+func (s *Server) handleCheckpoints(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		slots, err := engine.ListCheckpoints()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"checkpoints": slots})
+	case http.MethodPost:
+		var req struct {
+			Name   string `json:"name"`
+			Branch string `json:"branch"`
+			Note   string `json:"note"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		slot, err := engine.CreateCheckpoint(req.Name, req.Branch, req.Note)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(slot)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleCheckpointLoad(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	slot, err := engine.LoadCheckpoint(req.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(slot)
+}
+
+func (s *Server) handlePresets(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		presets, err := engine.ListScenarioPresets()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"presets": presets})
+	case http.MethodPost:
+		var req struct {
+			Name   string `json:"name"`
+			Branch string `json:"branch"`
+			Note   string `json:"note"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		preset, err := engine.CreateScenarioPreset(req.Name, req.Branch, req.Note)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(preset)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handlePresetApply(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	preset, err := engine.ApplyScenarioPreset(req.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(preset)
 }
 
 func (s *Server) handleNPCActions(w http.ResponseWriter, r *http.Request) {
@@ -180,13 +1336,18 @@ func (s *Server) handleNPCActions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
 	name := r.URL.Query().Get("character")
 	if name == "" {
-		name = s.engine.GetCharacterName()
+		name = engine.GetCharacterName()
 	}
 
-	actions := s.engine.GetNPCActions(name, 0)
+	actions := engine.GetNPCActions(name, 0)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"character": name,
@@ -194,9 +1355,45 @@ func (s *Server) handleNPCActions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleActionLog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	q := r.URL.Query()
+	character := q.Get("character")
+	firedOnly := q.Get("mode") == "fired"
+	blockedOnly := q.Get("mode") == "blocked"
+	limit := 50
+	if n := q.Get("n"); n != "" {
+		fmt.Sscanf(n, "%d", &limit)
+	}
+	if q.Get("stats") == "1" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(engine.ActionLogStats())
+		return
+	}
+	entries := engine.QueryActionLog(character, firedOnly, blockedOnly, limit)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"entries": entries,
+		"count":   len(entries),
+	})
+}
+
 func (s *Server) handleCausality(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -214,13 +1411,24 @@ func (s *Server) handleCausality(w http.ResponseWriter, r *http.Request) {
 		depth = 10
 	}
 
-	chain, err := s.engine.GetCausalityChain(eventID, depth)
+	narrativeOnly := r.URL.Query().Get("mode") == "narrative"
+	var chain interface{}
+	var summary string
+	if narrativeOnly {
+		chain, err = engine.GetCausalityChainNarrative(eventID, depth)
+		if err == nil {
+			summary, _ = engine.GetCausalitySummaryNarrative(eventID, depth)
+		}
+	} else {
+		chain, err = engine.GetCausalityChain(eventID, depth)
+		if err == nil {
+			summary, _ = engine.GetCausalitySummary(eventID, depth)
+		}
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-
-	summary, _ := s.engine.GetCausalitySummary(eventID, depth)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -236,6 +1444,11 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
 	eventID := r.URL.Query().Get("id")
 	timeParam := r.URL.Query().Get("time")
@@ -243,7 +1456,7 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if eventID != "" {
-		state, err := s.engine.ReplayTo(eventID)
+		state, err := engine.ReplayTo(eventID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -255,7 +1468,7 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
 	if timeParam != "" {
 		var h, m, d int
 		fmt.Sscanf(timeParam, "%d:%d:%d", &d, &h, &m)
-		state, err := s.engine.ReplayAtTime(h, m, d)
+		state, err := engine.ReplayAtTime(h, m, d)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -272,6 +1485,11 @@ func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
 	var req struct {
 		EventID string `json:"event_id"`
@@ -282,22 +1500,27 @@ func (s *Server) handleFork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.engine.ForkTimeline(req.EventID, req.Branch); err != nil {
+	if err := engine.ForkTimeline(req.EventID, req.Branch); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":      true,
+		"ok":       true,
 		"event_id": req.EventID,
-		"branch":  req.Branch,
+		"branch":   req.Branch,
 	})
 }
 
 func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -311,7 +1534,7 @@ func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
 		fmt.Sscanf(l, "%d", &limit)
 	}
 
-	timeline, err := s.engine.GetTimeline(branch, limit)
+	timeline, err := engine.GetTimeline(branch, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -329,8 +1552,13 @@ func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
-	branches, err := s.engine.ListBranches()
+	branches, err := engine.ListBranches()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -342,9 +1570,68 @@ func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleBranchesDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	branchA := r.URL.Query().Get("a")
+	branchB := r.URL.Query().Get("b")
+	index := -1
+	if n := r.URL.Query().Get("index"); n != "" {
+		fmt.Sscanf(n, "%d", &index)
+	}
+	diff, err := engine.CompareBranchesDetailed(branchA, branchB, index)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(diff)
+}
+
+func (s *Server) handleBranchesMerge(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Source         string `json:"source"`
+		Target         string `json:"target"`
+		MergeFlags     bool   `json:"merge_flags"`
+		MergeVariables bool   `json:"merge_variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result, err := engine.MergeBranchState(req.Source, req.Target, req.MergeFlags, req.MergeVariables)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 func (s *Server) handleCompress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -357,7 +1644,7 @@ func (s *Server) handleCompress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.engine.CompressEvents(req.From, req.To)
+	result, err := engine.CompressEvents(req.From, req.To)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -372,8 +1659,13 @@ func (s *Server) handleCompressionStats(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
-	stats := s.engine.CompressionStats()
+	stats := engine.CompressionStats()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
@@ -392,16 +1684,16 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"total_calls":         stats.TotalCalls,
-		"total_tokens":        stats.TotalTokens,
-		"prompt_tokens":       stats.TotalPromptTokens,
-		"completion_tokens":   stats.TotalCompTokens,
-		"estimated_cost":      stats.EstimatedCost(),
-		"by_task":             stats.ByTask,
-		"by_model":            stats.ByModel,
-		"by_day":              stats.ByDay,
-		"by_week":             stats.ByWeek,
-		"by_month":            stats.ByMonth,
+		"total_calls":       stats.TotalCalls,
+		"total_tokens":      stats.TotalTokens,
+		"prompt_tokens":     stats.TotalPromptTokens,
+		"completion_tokens": stats.TotalCompTokens,
+		"estimated_cost":    stats.EstimatedCost(),
+		"by_task":           stats.ByTask,
+		"by_model":          stats.ByModel,
+		"by_day":            stats.ByDay,
+		"by_week":           stats.ByWeek,
+		"by_month":          stats.ByMonth,
 	})
 }
 
@@ -409,17 +1701,83 @@ func (s *Server) handleLLMConfigs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	store := llm.GetConfigStore()
 
+	// Extract item name from path: /api/llm-configs/<name>
+	name := strings.TrimPrefix(r.URL.Path, "/api/llm-configs/")
+	if name == "" || name == r.URL.Path {
+		// List all or create
+		switch r.Method {
+		case "GET":
+			json.NewEncoder(w).Encode(store.List())
+		case "POST":
+			var cfg llm.APIConfig
+			if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := store.Add(cfg); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
+	// Single item operations
 	switch r.Method {
 	case "GET":
-		json.NewEncoder(w).Encode(store.List())
+		cfg, err := store.Get(name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if len(cfg.APIKey) > 8 {
+			cfg.APIKey = cfg.APIKey[:4] + "****" + cfg.APIKey[len(cfg.APIKey)-4:]
+		}
+		json.NewEncoder(w).Encode(cfg)
 	case "POST":
-		var cfg llm.APIConfig
-		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		current, err := store.Get(name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		updated := *current
+		var incoming llm.APIConfig
+		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := store.Add(cfg); err != nil {
+		if incoming.Name != "" {
+			updated.Name = incoming.Name
+		}
+		if incoming.Endpoint != "" {
+			updated.Endpoint = incoming.Endpoint
+		}
+		if incoming.Model != "" {
+			updated.Model = incoming.Model
+		}
+		if incoming.APIKey != "" && !strings.Contains(incoming.APIKey, "****") {
+			updated.APIKey = incoming.APIKey
+		}
+		if incoming.PromptPrice > 0 {
+			updated.PromptPrice = incoming.PromptPrice
+		}
+		if incoming.CompletionPrice > 0 {
+			updated.CompletionPrice = incoming.CompletionPrice
+		}
+		if err := store.Add(updated); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if active := llm.GetActiveConfig(); active.Name == name {
+			llm.SetActiveConfigFull(updated)
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	case "DELETE":
+		if err := store.Remove(name); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
@@ -481,15 +1839,36 @@ func (s *Server) handleLLMModels(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLLMActive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method == "POST" {
+		engine, _, err := s.engineForRequest(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
 		var cfg llm.APIConfig
 		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		store := llm.GetConfigStore()
-		store.Add(cfg)
-		llm.SetActiveConfig(cfg.Name, cfg.Endpoint, cfg.APIKey, cfg.Model)
-		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+		if cfg.Name != "" && (cfg.Endpoint == "" || strings.Contains(cfg.APIKey, "****")) {
+			stored, err := store.Get(cfg.Name)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			cfg = *stored
+		}
+		if cfg.Name == "" || cfg.Endpoint == "" {
+			http.Error(w, "invalid active config", http.StatusBadRequest)
+			return
+		}
+		if err := store.Add(cfg); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		llm.SetActiveConfigFull(cfg)
+		engine.SwitchLLM(cfg.Name, cfg.Endpoint, cfg.APIKey, cfg.Model)
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "switched": cfg.Model})
 		return
 	}
 	if r.Method != "GET" {
@@ -504,35 +1883,17 @@ func (s *Server) handleLLMActive(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(cfg)
 }
 
-func (s *Server) handleLLMConfigItem(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	// Extract name from /api/llm-configs/<name>
-	name := strings.TrimPrefix(r.URL.Path, "/api/llm-configs/")
-	if name == "" {
-		http.Error(w, "Missing config name", http.StatusBadRequest)
-		return
-	}
-	store := llm.GetConfigStore()
-
-	switch r.Method {
-	case "DELETE":
-		if err := store.Remove(name); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
 func (s *Server) handleLLMRoutes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	routes := s.engine.LLMRoutes()
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	routes := engine.LLMRoutes()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(routes)
 }
@@ -542,11 +1903,16 @@ func (s *Server) handleDialogue(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {
 		fmt.Sscanf(l, "%d", &limit)
 	}
-	dialogue := s.engine.GetDialogueLimit(limit)
+	dialogue := engine.GetDialogueLimit(limit)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"messages": dialogue,
@@ -558,7 +1924,12 @@ func (s *Server) handleDialogueReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.engine.ResetDialogue()
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	engine.ResetDialogue()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 }
@@ -568,8 +1939,12 @@ func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	info := s.engine.DebugInfo()
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	info := engine.DebugInfo()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(info)
 }
@@ -577,6 +1952,11 @@ func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDirector(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -591,12 +1971,12 @@ func (s *Server) handleDirector(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Action {
 	case "set_tension":
-		s.engine.SetTension(req.Value)
+		engine.SetTension(req.Value)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok":      true,
-			"action":  req.Action,
-			"value":   req.Value,
-			"state":   s.engine.GetState().Tension,
+			"ok":     true,
+			"action": req.Action,
+			"value":  req.Value,
+			"state":  engine.GetState().Tension,
 		})
 	default:
 		http.Error(w, "Unknown action", http.StatusBadRequest)
@@ -641,5 +2021,31 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		contentType = "text/css"
 	}
 	w.Header().Set("Content-Type", contentType)
+	if strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".js") {
+		w.Header().Set("Cache-Control", "no-store, max-age=0")
+	}
 	w.Write(data)
+}
+
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Old string `json:"old"`
+		New string `json:"new"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := auth.ChangePassword(req.Old, req.New); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 }

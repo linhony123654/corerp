@@ -1,57 +1,58 @@
 # CoreRP TODO
 
-## Phase 1 — Implementation Complete
-- [x] Go 模块初始化 + 目录结构
-- [x] core/types.go — 全项目共享类型定义
-- [x] events/store.go — Event Store + State Projection
-- [x] state/state.go — WorldState 内存管理
-- [x] memory/engine.go — 四层记忆骨架
-- [x] agents/identity.go — Identity Envelope + Validator
-- [x] context/compiler.go — Snapshot Compiler + Token Budget 硬墙
-- [x] actions/executor.go — Action Frame + Executor
-- [x] llm/adapter.go — OpenAI 兼容 SSE 适配
-- [x] runtime/runtime.go — 对话循环内核
-- [x] api/server.go — HTTP API + SSE 路由
-- [x] web/ — PWA (index.html + app.js + sw.js + manifest.json)
-- [x] characters/anya.yml — 示例角色卡
-- [x] worlds/cyberpunk2077/world.yml — 示例世界设定
-- [x] 跨会话记忆（dialogue_history 表 + 重启恢复）
-- [x] SillyTavern PNG 导入器（v1/v2 + character_book → world.yml ontology）
+## 当前状态
 
-## Phase 1 — Verification Complete (6/6)
-- [x] 50 轮人设不漂移 — Anya OOC 测试 + 多轮角色一致性
-- [x] 重启后回忆第 3 轮事实 — dialogue_history 持久化，重启恢复 15 轮
-- [x] Validator 拦截 OOC — Anya 拒绝卖萌/撒娇/鬼脸
-- [x] Token < 3K — 实测 1348-2438/4000，稳定在 2.4K 以下
-- [x] 手机 PWA — manifest.json + sw.js + app.js + 响应式
-- [x] VPS PM2/systemd — deploy/corerp.service
+- [x] Persistent Narrative Runtime 基础内核
+- [x] World / Scene / Canon 编辑台
+- [x] Quarantine / Pending Facts 审核台
+- [x] Director + TurnPlan / TurnStep 多 step 串行执行
+- [x] Branch replay / diff / merge
+- [x] Trace 面板与 step_traces 前端展示
+- [x] Runtime Instance 多实例隔离
+- [x] Runtime Instance 生命周期第一版：`list / status / create / set default / stop / delete`
 
-## Phase 2 — Implementation Complete
-- [x] events/quarantine.go — Gatekeeper 暂存区系统
-- [x] simulation/tick.go — Simulation Tick Loop（60s 现实 = 5min 世界）
-- [x] memory/confidence.go — Memory Confidence Pipeline
-- [x] memory/decay.go — 记忆/关系衰减引擎
-- [x] narrative/tension.go — Tension Engine（热寂检测 + 自然衰减）
-- [x] state/machine.go — 叙事状态机（calm/tense/crisis/resolution）
-- [x] agents/planner.go — 规则式自主规划器
-- [x] importer → 双文件输出 + ontology seed pipeline
+## 当前架构缺口
 
-## Phase 2 — Verified
-- [x] Tension Engine: 8 轮后 tension 0→0.2
-- [x] State Machine: calm(0) → tense(0.35) → crisis(0.75)
-- [x] Tick Loop: 65 秒世界推 5 分钟
-- [x] Quarantine: auto-promote 生效
-- [x] Planner: 动态目标注入 snapshot
-- [x] Cross-session: 15 轮记忆恢复
-- [x] Ontology Seed: 50 facts + 29 events → Semantic Memory
+### P0
 
-## Phase 3（多世界与因果）
-- [x] 多角色加载 + 手动切换（`POST /api/switch`，前端下拉框）
-- [x] agents/scheduler.go — 多 Agent 自主调度（规则式，零 LLM，每 3 tick/NPC 一次动作）
-- [x] events/causality.go — 因果链引擎（自动链接 + 递归查询 + summary）
-- [x] events/replay.go — 时间线回放/分叉（ReplayTo/ReplayAtTime/Fork/CompareStates）
-- [x] narrative/compression.go — 事件升维抽象（按类型分组→摘要，AutoCompress 每 20 tick）
-- [x] llm/router.go — 能力路由（narrative/summary/extraction 分任务 + fallback）
+- [x] `internal/runtime/`：为删除实例补更高层集成测试，覆盖 event/branch/memory/file 全量清理
+- [x] `internal/api/server.go`：为实例删除补更明确的错误语义（如默认实例删除冲突、唯一实例删除冲突）
 
-## Phase 3 — Complete (2026-05-25)
-全部 6 项完成。
+### P1
+
+- [ ] `internal/runtime/`：把单实例内部多角色协作继续推进到更完整的多角色 turn 链
+- [x] `web/app.js`：trace 历史列表与 turn 翻阅 UI
+- [x] `internal/runtime/`：checkpoint / rollback / scenario preset 作者工具
+
+### P2
+
+- [ ] `internal/simulation/`：无用户输入时的长期自主事件推进
+- [ ] `internal/events/causality.go`：strongest cause / strongest effect 视图
+- [ ] `deploy/`：PM2 / systemd / reverse proxy 健康检查与巡检示例
+
+## 近期完成
+
+- [x] `data/` 已重建为新的标准运行目录
+- [x] PM2 启动参数固化到标准 `data/`
+- [x] `deploy/smoke-check.sh`：启动后检查 `/api/health` 与 `/api/ready`
+- [x] `GET /api/health` / `GET /api/ready` / `GET /api/version`
+- [x] 共享 SQLite 下的 `instance_id` 事件、分支、记忆隔离
+- [x] `data/instances/<instance_id>/` 文件级持久化隔离
+- [x] `POST /api/instances/create`
+- [x] `POST /api/instances/default`
+- [x] `GET /api/instances/status`
+- [x] `POST /api/instances/stop`
+- [x] `POST /api/instances/delete`
+- [x] `web/` 实例管理面板，支持 create / default / stop / delete
+- [x] `web/` 页面内显式实例选择，runtime 请求自动附带 `instance_id`
+- [x] `GET /api/traces`：turn trace 历史列表
+- [x] `GET/POST /api/checkpoints` + `POST /api/checkpoints/load`
+- [x] `GET/POST /api/presets` + `POST /api/presets/apply`
+- [x] `web/` 作者工具面板：
+  - checkpoint / rollback
+  - scenario preset 保存与套用
+  - trace turn 历史浏览
+- [x] `web/` trace 作者控制台第二轮：
+  - 当前 turn 高亮
+  - 上一轮 / 下一轮切换
+  - checkpoint 与 trace 联动跳转

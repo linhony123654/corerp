@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"corerp/internal/agents"
 	"corerp/internal/context"
 	"corerp/internal/core"
+	"corerp/internal/emotion"
 	"corerp/internal/events"
 	"corerp/internal/llm"
 	"corerp/internal/memory"
@@ -28,12 +30,12 @@ type CharWorld struct {
 
 // Engine orchestrates the narrative loop.
 type Engine struct {
-	mu          sync.RWMutex
-	stateMgr    *state.Manager
-	eventStore  *events.Store
-	gatekeeper  *events.Gatekeeper
-	memEngine   *memory.Engine
-	agents      *agents.EnvelopeManager
+	mu           sync.RWMutex
+	stateMgr     *state.Manager
+	eventStore   *events.Store
+	gatekeeper   *events.Gatekeeper
+	memEngine    *memory.Engine
+	agents       *agents.EnvelopeManager
 	compiler     *context.Compiler
 	llmRouter    *llm.Router
 	executor     *actions.Executor
@@ -44,14 +46,27 @@ type Engine struct {
 	compressEng  *narrative.CompressionEngine
 	planner      *agents.Planner
 	scheduler    *agents.Scheduler
+	emotionEng   *emotion.Engine
+	desireStore  *emotion.DesireStore
+	actionLogger *emotion.ActionLogger
+	actionBudget *emotion.ActionBudget
+	directorCfg  core.DirectorConfig
+	lastPlan     core.DirectorPlan
+	turnTraces   []core.TurnTrace
 
 	// Config
+	instanceID       string
+	instanceCreated  time.Time
 	activeCharacter  string
 	loadedCharacters []string
 	charWorlds       map[string]CharWorld // per-character world context
-	worldName       string
-	coreRules       string
-	sessionID       string
+	charPaths        map[string]string
+	worldPaths       map[string]string
+	dataDir          string
+	worldName        string
+	coreRules        string
+	sessionID        string
+	playerRole       core.PlayerRole
 
 	// Working state
 	dialogueHistory []core.Message
@@ -70,27 +85,47 @@ func New(
 	charWorlds map[string]CharWorld,
 ) (*Engine, error) {
 	cw := charWorlds[activeChar]
+	emotionEng, err := emotion.NewWithDB(memEngine.DB())
+	if err != nil {
+		return nil, err
+	}
+	actionLogger := emotion.NewActionLogger(200)
+	if err := actionLogger.EnablePersistence(memEngine.DB()); err != nil {
+		return nil, err
+	}
+	if err := actionLogger.LoadFromDB(200); err != nil {
+		return nil, err
+	}
 	return &Engine{
-		stateMgr:        state.New(),
-		eventStore:      eventStore,
-		gatekeeper:      gatekeeper,
-		memEngine:       memEngine,
-		decayEngine:     decayEngine,
-		tensionEng:      narrative.NewTensionEngine(),
-		stateMachine:    state.NewStateMachine(),
-		compressEng:     narrative.NewCompressionEngine(eventStore),
-		planner:         agents.NewPlanner(),
-		scheduler:       agents.NewScheduler(),
-		agents:          agentsMgr,
-		compiler:        context.NewCompiler("budgets.yml"),
-		llmRouter:       llmRouter,
-		executor:        actions.NewExecutor(),
-		activeCharacter: activeChar,
+		stateMgr:         state.New(),
+		eventStore:       eventStore,
+		gatekeeper:       gatekeeper,
+		memEngine:        memEngine,
+		decayEngine:      decayEngine,
+		tensionEng:       narrative.NewTensionEngine(),
+		stateMachine:     state.NewStateMachine(),
+		compressEng:      narrative.NewCompressionEngine(eventStore),
+		planner:          agents.NewPlanner(),
+		scheduler:        agents.NewScheduler(),
+		agents:           agentsMgr,
+		emotionEng:       emotionEng,
+		desireStore:      emotion.NewDesireStore(memEngine.DB()),
+		actionLogger:     actionLogger,
+		actionBudget:     emotion.DefaultBudget(),
+		directorCfg:      core.DirectorConfig{Mode: "manual", MaxSpeakers: 1},
+		turnTraces:       make([]core.TurnTrace, 0, 32),
+		compiler:         context.NewCompiler("budgets.yml"),
+		llmRouter:        llmRouter,
+		executor:         actions.NewExecutor(),
+		instanceID:       fmt.Sprintf("inst_%d", time.Now().UnixNano()),
+		instanceCreated:  time.Now().UTC(),
+		activeCharacter:  activeChar,
 		loadedCharacters: loadedChars,
-		charWorlds:      charWorlds,
-		worldName:       cw.WorldName,
-		coreRules:       cw.CoreRules,
-		sessionID:       fmt.Sprintf("sess_%d", time.Now().Unix()),
+		charWorlds:       charWorlds,
+		worldName:        cw.WorldName,
+		coreRules:        cw.CoreRules,
+		sessionID:        fmt.Sprintf("sess_%d", time.Now().Unix()),
+		playerRole:       defaultPlayerRole(),
 	}, nil
 }
 
@@ -108,6 +143,129 @@ func (e *Engine) LoadState() error {
 	return nil
 }
 
+// SyncActiveWorldContext applies the active character's world metadata and
+// scene to the in-memory state without appending a new canonical event.
+func (e *Engine) SyncActiveWorldContext() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.syncActiveWorldContextLocked()
+}
+
+func (e *Engine) syncActiveWorldContextLocked() {
+	cw, ok := e.charWorlds[e.activeCharacter]
+	if !ok {
+		return
+	}
+
+	e.worldName = cw.WorldName
+	e.coreRules = cw.CoreRules
+
+	state := e.stateMgr.Get()
+	state.Scene = normalizeSceneForCharacter(cw.Scene, e.activeCharacter, e.playerRoleNameLocked())
+	e.stateMgr.Set(state)
+}
+
+func normalizeSceneForCharacter(scene core.SceneState, activeCharacter, playerName string) core.SceneState {
+	if activeCharacter == "" {
+		return scene
+	}
+	if strings.TrimSpace(playerName) == "" {
+		playerName = "玩家"
+	}
+
+	chars := append([]string(nil), scene.Characters...)
+	if len(chars) == 0 {
+		scene.Characters = []string{activeCharacter, playerName}
+		return scene
+	}
+
+	activeSeen := false
+	playerSeen := false
+	leadReplaced := false
+	for i, name := range chars {
+		if name == activeCharacter {
+			activeSeen = true
+			continue
+		}
+		if isPlayerPlaceholder(name) || name == playerName {
+			chars[i] = playerName
+			playerSeen = true
+			continue
+		}
+		if !leadReplaced {
+			chars[i] = activeCharacter
+			activeSeen = true
+			leadReplaced = true
+		}
+	}
+
+	if !activeSeen {
+		chars = append([]string{activeCharacter}, chars...)
+	}
+	if !playerSeen {
+		chars = append(chars, playerName)
+	}
+	scene.Characters = dedupeSceneCharacters(chars)
+	return scene
+}
+
+func defaultPlayerRole() core.PlayerRole {
+	return core.PlayerRole{Name: "玩家"}
+}
+
+func normalizePlayerRole(role core.PlayerRole) core.PlayerRole {
+	role.Name = strings.TrimSpace(role.Name)
+	role.Description = strings.TrimSpace(role.Description)
+	role.BoundCharacter = strings.TrimSpace(role.BoundCharacter)
+	if role.Name == "" {
+		if role.BoundCharacter != "" {
+			role.Name = role.BoundCharacter
+		} else {
+			role.Name = "玩家"
+		}
+	}
+	return role
+}
+
+func isPlayerPlaceholder(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "", "用户", "玩家", "player", "Player", "USER":
+		return true
+	default:
+		return false
+	}
+}
+
+func dedupeSceneCharacters(chars []string) []string {
+	var out []string
+	seen := make(map[string]bool, len(chars))
+	for _, name := range chars {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
+}
+
+func (e *Engine) getPlayerRole() core.PlayerRole {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.playerRole
+}
+
+func (e *Engine) playerRoleName() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.playerRoleNameLocked()
+}
+
+func (e *Engine) playerRoleNameLocked() string {
+	return normalizePlayerRole(e.playerRole).Name
+}
+
 // ProcessTurn handles one user input and returns a channel of SSE chunks.
 func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 	ch := make(chan string, 32)
@@ -115,17 +273,47 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 	go func() {
 		defer close(ch)
 
+		e.mu.Lock()
 		e.turnCount++
+		turnNumber := e.turnCount
+		worldState := e.stateMgr.Get()
+		previousSpeaker := e.activeCharacter
+		plan := e.directTurnLocked(userInput, worldState)
+		e.mu.Unlock()
 
-		// 1. Record user input as event
+		if len(plan.Steps) == 0 {
+			ch <- "[ERROR] director produced no turn steps\n"
+			return
+		}
+
+		trace := core.TurnTrace{
+			Turn:         turnNumber,
+			Character:    plan.Steps[0].Speaker,
+			UserInput:    userInput,
+			DirectorPlan: plan,
+			CreatedAt:    time.Now().UTC(),
+		}
+		defer func() {
+			e.mu.Lock()
+			e.recordTraceLocked(trace)
+			e.mu.Unlock()
+		}()
+
 		userMsg := core.Message{Role: "user", Content: userInput}
-		e.memEngine.PushDialogue(userMsg, e.activeCharacter)
+		e.mu.Lock()
+		for _, speaker := range uniqueTurnSpeakers(plan.Steps) {
+			e.memEngine.PushDialogue(userMsg, speaker)
+		}
 		e.dialogueHistory = append(e.dialogueHistory, userMsg)
-
-		// Record user input as canonical event
-		userEvent := events.BuildEvent("user_message", "user", e.activeCharacter,
+		leadSpeaker := plan.Steps[0].Speaker
+		_ = e.setActiveCharacterLocked(leadSpeaker, true, false)
+		worldState = e.stateMgr.Get()
+		userEvent := events.BuildEvent("user_message", "user", leadSpeaker,
 			map[string]interface{}{"content": userInput})
+		userEvent.SessionID = e.sessionID
+		userEvent.SceneID = worldState.Scene.Location
 		e.gatekeeper.Submit(userEvent, events.SourceUserInput())
+		e.mu.Unlock()
 
 		// 1.5 Intercept /roll command (dice check, no LLM)
 		if strings.HasPrefix(strings.ToLower(userInput), "/roll") || strings.HasPrefix(strings.ToLower(userInput), "/r ") {
@@ -133,171 +321,63 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 			return
 		}
 
-		// 2. Load current state
-		worldState := e.stateMgr.Get()
-
-		// 3. Get character info
-		_, ok := e.agents.GetCharacter(e.activeCharacter)
-		if !ok {
-			ch <- fmt.Sprintf("[ERROR] Character '%s' not loaded\n", e.activeCharacter)
-			return
+		if plan.Switched {
+			ch <- fmt.Sprintf("[导演切换] %s -> %s\n", previousSpeaker, leadSpeaker)
 		}
 
-		// 4. Active goals + planner
-		goals := e.agents.ActiveGoals(e.activeCharacter, worldState)
-		workingMem, _ := e.memEngine.GetWorkingMemory(e.activeCharacter)
-		planSteps := e.planner.Plan(e.activeCharacter, worldState, goals, workingMem)
-		planGoalFrames := agents.StepsToGoals(planSteps)
-		// Merge planner goals into snapshot goals
-		allGoals := e.compiler.GoalsToFrames(goals)
-		allGoals = append(allGoals, planGoalFrames...)
+		var handoff *core.StepHandoff
+		for i, step := range plan.Steps {
+			stepTrace := e.executeTurnStep(step, userInput, turnNumber, handoff)
 
-		// 5. Memory retrieval
-		memories := e.memEngine.Recall(userInput, e.activeCharacter, goals)
-		semanticFacts := make([]core.FactFrame, 0)
-		episodicEvents := make([]core.EventFrame, 0)
-		for _, m := range memories {
-			switch m.Type {
-			case "semantic":
-				// Convert memory content back to fact (P1 simplified)
-				parts := strings.Split(m.Content, " ")
-				if len(parts) >= 3 {
-					semanticFacts = append(semanticFacts, core.FactFrame{
-						Subject:   parts[0],
-						Predicate: parts[1],
-						Object:    strings.Join(parts[2:], " "),
-						Confidence: m.Score,
-					})
-				}
-			case "episodic":
-				episodicEvents = append(episodicEvents, core.EventFrame{
-					EventID:         m.ID,
-					Type:            "memory",
-					Description:     m.Content,
-					EmotionalWeight: m.Score,
-				})
+			trace.StepTraces = append(trace.StepTraces, stepTrace)
+			if i == 0 {
+				trace.ActiveGoals = append(trace.ActiveGoals, stepTrace.ActiveGoals...)
+				trace.AllowedActions = append(trace.AllowedActions, stepTrace.AllowedActions...)
+				trace.Memories = append(trace.Memories, stepTrace.Memories...)
+				trace.SemanticFacts = append(trace.SemanticFacts, stepTrace.SemanticFacts...)
+				trace.EpisodicEvents = append(trace.EpisodicEvents, stepTrace.EpisodicEvents...)
+				trace.WorkingMemory = stepTrace.WorkingMemory
+				trace.ActionFrame = stepTrace.ActionFrame
+				trace.Validator = stepTrace.Validator
+				trace.Character = stepTrace.Character
 			}
-		}
-
-		// Also get stored facts from DB
-		storedFacts, _ := e.memEngine.GetAllFacts(e.activeCharacter)
-		semanticFacts = append(semanticFacts, storedFacts...)
-
-		// Get recent episodic
-		recentEpi, _ := e.memEngine.GetRecentEpisodic(e.activeCharacter, 5)
-		episodicEvents = append(episodicEvents, recentEpi...)
-
-		// Get working memory
-		workingMem, _ = e.memEngine.GetWorkingMemory(e.activeCharacter)
-
-		// 6. Allowed actions (goal-based + state machine filtered)
-		baseActions := actions.AllowedActionsFor(worldState, goals)
-		allowedActions := e.stateMachine.AllowedActions(baseActions)
-
-		// 7. Persona frame
-		personaFrame := e.agents.GetPersonaFrame(e.activeCharacter)
-
-		// 8. Compile snapshot (with token budget enforcement)
-		snapshot, err := e.compiler.Compile(
-			worldState,
-			personaFrame,
-			workingMem,
-			semanticFacts,
-			episodicEvents,
-			e.memEngine.GetRecentDialogue(e.activeCharacter),
-			allGoals,
-			allowedActions,
-			e.coreRules,
-		)
-		if err != nil {
-			ch <- fmt.Sprintf("[ERROR] Snapshot compile failed: %v\n", err)
-			return
-		}
-
-		// Reset to normal budget after first post-switch turn
-		e.compiler.SetMode("normal")
-
-		// 9. Render prompt
-		prompt := e.compiler.RenderSnapshot(snapshot)
-
-		// 10. LLM generation (collect full output server-side)
-		var llmOutput strings.Builder
-		err = e.llmRouter.Generate(llm.TaskNarrative, prompt, func(chunk core.LLMStreamChunk) {
-			if chunk.Done {
+			if stepTrace.Error != "" {
+				if trace.Narrative == "" {
+					trace.Narrative = fmt.Sprintf("[ERROR] %s", stepTrace.Error)
+				}
+				ch <- fmt.Sprintf("[ERROR] %s\n", stepTrace.Error)
 				return
 			}
-			llmOutput.WriteString(chunk.Content)
-		})
-		if err != nil {
-			ch <- fmt.Sprintf("[ERROR] LLM generation failed: %v\n", err)
-			return
-		}
-
-		rawOutput := llmOutput.String()
-
-		// 11. Extract Action Frame + narrative
-		actionFrame, narrative, _ := llm.ExtractActionFrame(rawOutput)
-		if narrative == "" {
-			narrative = rawOutput // Fallback
-		}
-
-		// 12. Validator (on full output)
-		if actionFrame.Action != "" {
-			if err := e.agents.Validate(actionFrame, narrative, e.activeCharacter); err != nil {
-				ch <- fmt.Sprintf("[系统拦截: %v]\n", err)
-				actionFrame.Action = "speak"
-				actionFrame.Intensity = 1
+			if i > 0 {
+				ch <- fmt.Sprintf("\n\n[%s]\n", step.Speaker)
 			}
-		}
-
-		// 13. Stream only the narrative text to user (typing effect)
-		for _, r := range narrative {
-			ch <- string(r)
-		}
-
-		// 13. Execute action (via gatekeeper — action results are canonical)
-		if actionFrame.Action != "" {
-			evts, execErr := e.executor.Execute(actionFrame, worldState)
-			if execErr != nil {
-				ch <- fmt.Sprintf("\n[ERROR] Action execution failed: %v\n", execErr)
-			} else {
-				for _, evt := range evts {
-					evt.SessionID = e.sessionID
-					evt.SceneID = worldState.Scene.Location
-					if err := e.gatekeeper.Submit(evt, events.SourceActionResult()); err != nil {
-						// Log but don't fail
-					}
+			for _, r := range stepTrace.Narrative {
+				ch <- string(r)
+			}
+			if stepTrace.Narrative != "" {
+				if trace.Narrative != "" {
+					trace.Narrative += "\n\n"
 				}
-					// Reset tension heat-death timer on conflict actions
-					if actionFrame.Action == "attack" || actionFrame.Action == "threaten" {
-						e.tensionEng.ResetConflictTimer(e.turnCount)
-					}
+				trace.Narrative += stepTrace.Narrative
 			}
+			handoff = buildStepHandoff(stepTrace)
 		}
 
-		// 14. Auto-promote quarantine events periodically
-		if e.turnCount%5 == 0 {
+		e.mu.Lock()
+		_ = e.setActiveCharacterLocked(leadSpeaker, true, false)
+		if len(e.dialogueHistory)%15 == 0 {
+			for _, speaker := range uniqueTurnSpeakers(plan.Steps) {
+				go e.updateWorkingMemoryFor(speaker)
+			}
+		}
+		if turnNumber%5 == 0 {
 			go func() {
 				if n, err := e.gatekeeper.AutoPromote(); err == nil && n > 0 {
-					// Silently promoted n events
+					_ = n
 				}
 			}()
 		}
-
-		// 15. Record assistant dialogue
-		if narrative != "" {
-			assistantMsg := core.Message{Role: "assistant", Content: narrative}
-			e.memEngine.PushDialogue(assistantMsg, e.activeCharacter)
-			e.dialogueHistory = append(e.dialogueHistory, assistantMsg)
-		}
-
-		// 15. Update working memory every 15 turns
-		if len(e.dialogueHistory)%15 == 0 {
-			go e.updateWorkingMemory()
-		}
-
-		// 16. Store semantic facts from narrative (P1: simplified, quarantined)
-		go e.extractAndStoreFacts(narrative)
+		e.mu.Unlock()
 
 		ch <- "\n"
 	}()
@@ -305,13 +385,13 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 	return ch, nil
 }
 
-func (e *Engine) updateWorkingMemory() {
-	dialogue := e.memEngine.GetRecentDialogue(e.activeCharacter)
+func (e *Engine) updateWorkingMemoryFor(character string) {
+	dialogue := e.memEngine.GetRecentDialogue(character)
 	var dialogueText strings.Builder
 	for _, m := range dialogue {
 		role := "角色"
 		if m.Role == "user" {
-			role = "用户"
+			role = e.playerRoleName()
 		}
 		dialogueText.WriteString(fmt.Sprintf("%s: %s\n", role, m.Content))
 	}
@@ -324,17 +404,15 @@ func (e *Engine) updateWorkingMemory() {
 	if err != nil {
 		return
 	}
-	e.memEngine.SetWorkingMemory(e.activeCharacter, summary)
+	e.memEngine.SetWorkingMemory(character, summary)
 }
 
-func (e *Engine) extractAndStoreFacts(narrative string) {
+func (e *Engine) extractAndStoreFactsFor(character, narrative string, turnNumber int) {
 	if narrative == "" {
 		return
 	}
-	// P2: store narrative as quarantined fact event
-	// Structured extraction will be added later
-	evt := events.BuildEvent("fact_extracted", e.activeCharacter, "",
-		map[string]interface{}{"narrative": narrative, "turn": e.turnCount})
+	evt := events.BuildEvent("fact_extracted", character, "",
+		map[string]interface{}{"narrative": narrative, "turn": turnNumber})
 	e.gatekeeper.Submit(evt, events.SourceLLMExtracted())
 }
 
@@ -344,6 +422,7 @@ func (e *Engine) GetState() core.WorldState {
 
 func (e *Engine) SeedScene(scene core.SceneState) {
 	// Write scene_init event to Event Store — always overrides stale state
+	scene = normalizeSceneForCharacter(scene, e.activeCharacter, e.playerRoleName())
 	evt := events.BuildEvent("scene_init", "system", "",
 		map[string]interface{}{
 			"location":    scene.Location,
@@ -364,10 +443,68 @@ func (e *Engine) GetCharacterName() string {
 	return e.activeCharacter
 }
 
+func (e *Engine) GetPlayerRole() core.PlayerRole {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return normalizePlayerRole(e.playerRole)
+}
+
 func (e *Engine) GetLoadedCharacters() []string {
 	names := make([]string, len(e.loadedCharacters))
 	copy(names, e.loadedCharacters)
 	return names
+}
+
+func (e *Engine) SetInstanceMetadata(id string, createdAt time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if strings.TrimSpace(id) != "" {
+		e.instanceID = strings.TrimSpace(id)
+	}
+	if !createdAt.IsZero() {
+		e.instanceCreated = createdAt.UTC()
+	}
+	if e.eventStore != nil {
+		e.eventStore.SetInstanceID(e.instanceID)
+	}
+	if e.memEngine != nil {
+		e.memEngine.SetInstanceID(e.instanceID)
+	}
+	if e.decayEngine != nil {
+		e.decayEngine.SetInstanceID(e.instanceID)
+	}
+	if e.actionLogger != nil {
+		e.actionLogger.SetInstanceID(e.instanceID)
+		_ = e.actionLogger.LoadFromDB(200)
+	}
+	if e.dataDir != "" {
+		if dir, err := e.instanceDataDirLocked(); err == nil {
+			_ = os.MkdirAll(dir, 0755)
+		}
+		if role, err := e.readPlayerRoleLocked(); err == nil {
+			e.playerRole = role
+		}
+	}
+}
+
+func (e *Engine) GetInstanceID() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.instanceID
+}
+
+func (e *Engine) InstanceSummary() core.RuntimeInstanceSummary {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return core.RuntimeInstanceSummary{
+		ID:               e.instanceID,
+		Label:            e.worldName,
+		WorldName:        e.worldName,
+		ActiveCharacter:  e.activeCharacter,
+		LoadedCharacters: append([]string(nil), e.loadedCharacters...),
+		CreatedAt:        e.instanceCreated,
+		Status:           InstanceStatusRunning,
+	}
 }
 
 // SwitchCharacter changes the active character. Saves working memory for
@@ -376,30 +513,34 @@ func (e *Engine) SwitchCharacter(name string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	return e.setActiveCharacterLocked(name, true, true)
+}
+
+func (e *Engine) switchCharacterLocked(name string, syncWorld bool) error {
+	return e.setActiveCharacterLocked(name, syncWorld, true)
+}
+
+func (e *Engine) setActiveCharacterLocked(name string, syncWorld, resetTurn bool) error {
 	if _, ok := e.agents.GetCharacter(name); !ok {
 		return fmt.Errorf("character '%s' not loaded", name)
 	}
 
 	if name == e.activeCharacter {
+		if syncWorld {
+			e.syncActiveWorldContextLocked()
+		}
 		return nil
 	}
 
-	e.dialogueHistory = nil
-	e.turnCount = 0
+	if resetTurn {
+		e.dialogueHistory = nil
+		e.compiler.SetMode("full_load")
+	}
 	e.activeCharacter = name
 	e.memEngine.LoadRecentDialogueFromDB(e.activeCharacter, 15)
 
-	// Use full_load budget for the first turn after switch
-	e.compiler.SetMode("full_load")
-
-	// Switch world context
-	if cw, ok := e.charWorlds[name]; ok {
-		e.worldName = cw.WorldName
-		e.coreRules = cw.CoreRules
-		// Update scene in world state
-		state := e.stateMgr.Get()
-		state.Scene = cw.Scene
-		e.stateMgr.Set(state)
+	if syncWorld {
+		e.syncActiveWorldContextLocked()
 	}
 
 	return nil
@@ -459,6 +600,8 @@ func (e *Engine) handleRollCommand(input string, ch chan<- string) {
 			"difficulty": result.Difficulty,
 			"summary":    result.Summary,
 		})
+	rollEvent.SessionID = e.sessionID
+	rollEvent.SceneID = e.stateMgr.Get().Scene.Location
 	e.gatekeeper.Submit(rollEvent, events.SourceUserInput())
 
 	// Store in dialogue so LLM sees it next turn
@@ -550,11 +693,25 @@ func (e *Engine) GetDialogueLimit(limit int) []core.Message {
 func (e *Engine) ResetDialogue() {
 	e.memEngine.ResetDialogue(e.activeCharacter)
 	e.dialogueHistory = nil
-	e.turnCount = 0
 }
 
 func (e *Engine) GetWorldName() string {
 	return e.worldName
+}
+
+func (e *Engine) UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	role = normalizePlayerRole(role)
+	e.playerRole = role
+	if err := e.writePlayerRoleLocked(); err != nil {
+		return core.PlayerRole{}, err
+	}
+	state := e.stateMgr.Get()
+	state.Scene = normalizeSceneForCharacter(state.Scene, e.activeCharacter, e.playerRoleNameLocked())
+	e.stateMgr.Set(state)
+	return e.playerRole, nil
 }
 
 // DebugInfo returns internal state for debugging.
@@ -575,17 +732,19 @@ func (e *Engine) DebugInfo() map[string]interface{} {
 	canon, quarantined, _ := e.gatekeeper.Stats()
 
 	return map[string]interface{}{
-		"turn_count":          e.turnCount,
-		"dialogue_in_memory":  len(recent),
-		"dialogue_history":    dialoguePreview,
-		"world_clock":         state.Clock,
-		"scene":               state.Scene,
-		"tension":             state.Tension,
-		"narrative_state":     e.stateMachine.Current(),
-		"canonical_events":    canon,
-		"quarantined_events":  quarantined,
-			"npc_actions":         e.scheduler.RecentActions(0),
-			"vector_search":        e.memEngine.CountFacts(e.activeCharacter) >= 100,
+		"turn_count":         e.turnCount,
+		"dialogue_in_memory": len(recent),
+		"dialogue_history":   dialoguePreview,
+		"world_clock":        state.Clock,
+		"scene":              state.Scene,
+		"tension":            state.Tension,
+		"narrative_state":    e.stateMachine.Current(),
+		"canonical_events":   canon,
+		"quarantined_events": quarantined,
+		"npc_actions":        e.scheduler.RecentActions(0),
+		"vector_search":      e.memEngine.CountFacts(e.activeCharacter) >= 100,
+		"director_config":    normalizeDirectorConfig(e.directorCfg),
+		"director_plan":      e.lastPlan,
 	}
 }
 
@@ -665,15 +824,56 @@ func (e *Engine) onTick() {
 	// 7. Update state manager with all tick changes
 	e.stateMgr.Set(state)
 
-	// 8. NPC Scheduler: run autonomous actions for non-active characters
+	// 8. NPC Desire-driven autonomous actions (non-active characters)
 	e.tickCount++
-	// Build scene map for NPC world contexts
 	npcScenes := make(map[string]core.SceneState)
 	for _, name := range e.loadedCharacters {
 		if cw, ok := e.charWorlds[name]; ok {
 			npcScenes[name] = cw.Scene
 		}
 	}
+
+	// For each non-active NPC, attempt desire-driven autonomous action
+	for _, name := range e.loadedCharacters {
+		if name == e.activeCharacter {
+			continue
+		}
+		// Compute emotional state
+		char, ok := e.agents.GetCharacter(name)
+		if !ok {
+			continue
+		}
+		vec := emotionVectorFromAdaptive(char.Identity.Adaptive)
+		desires, _ := e.desireStore.GetByCharacter(name)
+		var threads []emotion.UnresolvedThread
+		if e.emotionEng != nil {
+			threads, _ = e.emotionEng.GetUnresolvedThreads(name)
+		}
+		pressure := emotion.CalculatePressure(vec, threads, nil, e.tickCount)
+
+		action := emotion.TryAutonomousAction(name, pressure, desires, vec, e.actionBudget, e.tickCount, e.actionLogger)
+		if action != nil {
+			e.actionBudget.Record(name, e.tickCount)
+			// Execute the autonomous action
+			frame := core.ActionFrame{
+				Actor:     name,
+				Action:    action.ActionType,
+				Target:    action.Target,
+				Intensity: int(action.Urgency * 10),
+				Emotion:   core.EmotionState{Primary: vec.Dominant(), Intensity: action.Urgency},
+				Intent:    action.Reason,
+			}
+			evts, err := e.executor.Execute(frame, state)
+			if err == nil {
+				for _, evt := range evts {
+					evt.Actor = name
+					e.gatekeeper.Submit(evt, events.SourceTick())
+				}
+			}
+		}
+	}
+
+	// Fallback: rule-based scheduler for NPCs that didn't act
 	e.scheduler.Tick(
 		e.loadedCharacters,
 		e.activeCharacter,
@@ -705,4 +905,109 @@ func (e *Engine) SetTension(v float64) {
 	if e.stateMachine != nil {
 		e.stateMachine.Transition(v, "director_inject")
 	}
+}
+
+// emotionVectorFromAdaptive converts character adaptive stats to an emotion vector.
+func emotionVectorFromAdaptive(adaptive map[string]float64) emotion.EmotionVector {
+	vec := emotion.EmotionVector{}
+	if v, ok := adaptive["trust"]; ok {
+		vec.Trust = v / 10
+		vec.Attachment = v / 10
+	}
+	if v, ok := adaptive["intimacy"]; ok {
+		vec.Attachment = clamp01((vec.Attachment + v/10) / 2)
+	}
+	if v, ok := adaptive["fear"]; ok {
+		vec.Fear = v / 10
+	}
+	// Default: mild positive disposition
+	if vec.Trust == 0 && vec.Attachment == 0 {
+		vec.Trust = 0.3
+		vec.Attachment = 0.3
+	}
+	return vec
+}
+
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+// QueryActionLog returns action log entries filtered by character and mode.
+func (e *Engine) QueryActionLog(character string, firedOnly, blockedOnly bool, limit int) []interface{} {
+	if e.actionLogger == nil {
+		return nil
+	}
+	entries, _ := e.actionLogger.QueryDB(character, firedOnly, blockedOnly, limit)
+	out := make([]interface{}, len(entries))
+	for i, ent := range entries {
+		out[i] = ent
+	}
+	return out
+}
+
+// ActionLogStats returns aggregate statistics for the action log.
+func (e *Engine) ActionLogStats() map[string]interface{} {
+	if e.actionLogger == nil {
+		return map[string]interface{}{"total_entries": 0}
+	}
+	return e.actionLogger.Stats()
+}
+
+// GetCausalityChainNarrative returns chain filtered to narrative events only.
+func (e *Engine) GetCausalityChainNarrative(eventID string, depth int) (interface{}, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.gatekeeper.Causality().GetChainNarrativeOnly(eventID, depth)
+}
+
+// GetCausalitySummaryNarrative returns summary with system/tick events filtered out.
+func (e *Engine) GetCausalitySummaryNarrative(eventID string, depth int) (string, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.gatekeeper.Causality().GetChainSummaryNarrativeOnly(eventID, depth)
+}
+
+// SeedNPCDesires generates initial desires for all loaded characters.
+// Safe to call multiple times — only seeds characters with zero desires.
+func (e *Engine) SeedNPCDesires() {
+	for _, name := range e.loadedCharacters {
+		if name == e.activeCharacter {
+			continue // skip active character (they're driven by player interaction)
+		}
+		char, ok := e.agents.GetCharacter(name)
+		if !ok {
+			continue
+		}
+
+		var goals []emotion.GoalSeed
+		var hidden []emotion.HiddenGoalSeed
+		for _, g := range char.Goals {
+			if g.Type == "hidden" {
+				hidden = append(hidden, emotion.HiddenGoalSeed{ID: g.ID, Priority: g.Priority})
+			} else {
+				goals = append(goals, emotion.GoalSeed{ID: g.ID, Priority: g.Priority, Target: g.Target})
+			}
+		}
+
+		desires := emotion.SeedDesires(e.desireStore, name, char.Identity.Immutable, char.Identity.Adaptive, goals, hidden)
+		if len(desires) > 0 {
+			log.Printf("Seeded %d desires for NPC '%s'", len(desires), name)
+		}
+	}
+}
+
+// SwitchLLM hot-swaps the active LLM adapter without restart.
+func (e *Engine) SwitchLLM(name, endpoint, apiKey, model string) {
+	if endpoint == "" || model == "" {
+		log.Printf("LLM switch rejected: incomplete config for '%s' (model=%q endpoint=%q)", name, model, endpoint)
+		return
+	}
+	e.llmRouter.UpdateAdapter("default", endpoint, apiKey, model)
+	log.Printf("LLM switched to %s @ %s", model, endpoint)
 }

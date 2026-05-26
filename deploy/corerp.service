@@ -4,10 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=kelebit
-WorkingDirectory=/home/kelebit/corerp
-ExecStart=/home/kelebit/corerp/corerp serve \
-  -characters /home/kelebit/corerp/characters \
+User=kelebituo
+WorkingDirectory=/home/kelebituo/corerp
+ExecStart=/home/kelebituo/corerp/corerp serve \
+  -data /home/kelebituo/corerp/data \
+  -characters /home/kelebituo/corerp/characters \
   -llm-url $LLM_URL \
   -llm-key $LLM_API_KEY \
   -llm-model $LLM_MODEL
@@ -20,9 +21,9 @@ Environment=LLM_MODEL=gemini-3-flash-preview
 Environment=LLM_API_KEY=
 
 # Fill in LLM_API_KEY above or use a separate env file:
-# EnvironmentFile=/home/kelebit/corerp/.env
+# EnvironmentFile=/home/kelebituo/corerp/.env
 
-# SQLite backup hint: cp data/memory.db backup/memory_$(date +%Y%m%d).db
+# Smoke check hint: /home/kelebituo/corerp/deploy/smoke-check.sh
 
 [Install]
 WantedBy=multi-user.target

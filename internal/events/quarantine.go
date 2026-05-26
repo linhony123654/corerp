@@ -1,7 +1,9 @@
 package events
 
 import (
+	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"corerp/internal/core"
@@ -58,20 +60,24 @@ func (g *Gatekeeper) Replay() *ReplayEngine {
 // Review manually confirms or rejects a quarantined event.
 func (g *Gatekeeper) Review(eventID string, confirm bool) error {
 	if confirm {
-		return g.store.ConfirmEvent(eventID)
+		return g.Promote(eventID)
 	}
-	_, err := g.store.db.Exec(`DELETE FROM events WHERE id = ? AND canonical = 0`, eventID)
-	return err
+	return g.Reject(eventID)
 }
 
 // AutoPromote promotes quarantined events that meet confidence thresholds.
 // Rules: confidence >= 0.7 AND (confirmations >= 1 OR age >= 60s)
 func (g *Gatekeeper) AutoPromote() (int, error) {
 	cutoff := time.Now().Add(-60 * time.Second).Format("2006-01-02 15:04:05")
+	where, args := g.store.instanceScopeArgs(cutoff)
+	query := `UPDATE events SET canonical = 1 WHERE canonical = 0
+		 AND (confidence >= 0.7 AND (confirmations >= 1 OR created_at <= ?))`
+	if where != "" {
+		query += " AND " + where
+	}
 	result, err := g.store.db.Exec(
-		`UPDATE events SET canonical = 1 WHERE canonical = 0
-		 AND (confidence >= 0.7 AND (confirmations >= 1 OR created_at <= ?))`,
-		cutoff,
+		query,
+		args...,
 	)
 	if err != nil {
 		return 0, err
@@ -81,10 +87,37 @@ func (g *Gatekeeper) AutoPromote() (int, error) {
 }
 
 // ListPending returns quarantined events pending review.
-func (g *Gatekeeper) ListPending(limit int) ([]core.Event, error) {
-	rows, err := g.store.db.Query(
-		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at
-		 FROM events WHERE canonical = 0 ORDER BY created_at DESC LIMIT ?`, limit)
+func (g *Gatekeeper) ListPending(limit int, character string) ([]core.Event, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if strings.TrimSpace(character) != "" {
+		where, args := g.store.instanceScopeArgs(character)
+		query := `SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at
+			 FROM events WHERE canonical = 0 AND actor = ?`
+		if where != "" {
+			query += " AND " + where
+		}
+		query += " ORDER BY created_at DESC LIMIT ?"
+		args = append(args, limit)
+		rows, err = g.store.db.Query(
+			query, args...)
+	} else {
+		where, args := g.store.instanceScopeArgs()
+		query := `SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at
+			 FROM events WHERE canonical = 0`
+		if where != "" {
+			query += " AND " + where
+		}
+		query += " ORDER BY created_at DESC LIMIT ?"
+		args = append(args, limit)
+		rows, err = g.store.db.Query(
+			query, args...)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -92,20 +125,33 @@ func (g *Gatekeeper) ListPending(limit int) ([]core.Event, error) {
 	return scanEvents(rows)
 }
 
+func (g *Gatekeeper) Promote(eventID string) error {
+	return g.store.ConfirmEvent(eventID)
+}
+
+func (g *Gatekeeper) Reject(eventID string) error {
+	query := `DELETE FROM events WHERE id = ? AND canonical = 0` + g.store.instanceScopeSuffix(" AND ")
+	_, args := g.store.instanceScopeArgs(eventID)
+	_, err := g.store.db.Exec(query, args...)
+	return err
+}
+
 // IncrementConfirmation bumps confirmation count for an event (e.g. when multiple sources agree).
 func (g *Gatekeeper) IncrementConfirmation(eventID string) error {
-	_, err := g.store.db.Exec(
-		`UPDATE events SET confirmations = confirmations + 1 WHERE id = ?`, eventID)
+	query := `UPDATE events SET confirmations = confirmations + 1 WHERE id = ?` + g.store.instanceScopeSuffix(" AND ")
+	_, args := g.store.instanceScopeArgs(eventID)
+	_, err := g.store.db.Exec(query, args...)
 	return err
 }
 
 // Stats returns counts of canonical vs quarantined events.
 func (g *Gatekeeper) Stats() (canonical int, quarantined int, err error) {
-	row := g.store.db.QueryRow(`SELECT COUNT(*) FROM events WHERE canonical = 1`)
+	_, args := g.store.instanceScopeArgs()
+	row := g.store.db.QueryRow(`SELECT COUNT(*) FROM events WHERE canonical = 1`+g.store.instanceScopeSuffix(" AND "), args...)
 	if err := row.Scan(&canonical); err != nil {
 		return 0, 0, err
 	}
-	row = g.store.db.QueryRow(`SELECT COUNT(*) FROM events WHERE canonical = 0`)
+	row = g.store.db.QueryRow(`SELECT COUNT(*) FROM events WHERE canonical = 0`+g.store.instanceScopeSuffix(" AND "), args...)
 	if err := row.Scan(&quarantined); err != nil {
 		return 0, 0, err
 	}
@@ -113,11 +159,11 @@ func (g *Gatekeeper) Stats() (canonical int, quarantined int, err error) {
 }
 
 // source helpers for runtime
-func SourceUserInput() string   { return "user_input" }
-func SourceSystem() string      { return "system" }
+func SourceUserInput() string    { return "user_input" }
+func SourceSystem() string       { return "system" }
 func SourceActionResult() string { return "action_result" }
 func SourceLLMExtracted() string { return "llm_extracted" }
-func SourceTick() string        { return "tick" }
+func SourceTick() string         { return "tick" }
 
 // BuildEvent is a convenience constructor.
 func BuildEvent(typ, actor, target string, payload map[string]interface{}) core.Event {

@@ -45,9 +45,36 @@ paths:
                   格式: data: <chunk>\n\n
                   最后发送: data: \n\n 表示结束
 
+  /api/health:
+    get:
+      summary: 存活探针
+      responses:
+        "200":
+          description: 服务存活
+
+  /api/ready:
+    get:
+      summary: 就绪探针
+      responses:
+        "200":
+          description: 服务就绪
+        "503":
+          description: 服务未就绪
+
+  /api/version:
+    get:
+      summary: 服务版本信息（version / commit / time）
+      responses:
+        "200":
+          description: 版本信息
+
   /api/state:
     get:
       summary: 获取当前世界状态
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
       responses:
         "200":
           description: WorldState JSON
@@ -56,9 +83,198 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorldState"
 
+  /api/instances:
+    get:
+      summary: 列出当前可用 runtime instances
+      responses:
+        "200":
+          description: 实例列表
+
+  /api/instances/status:
+    get:
+      summary: 获取单个 runtime instance 状态
+      parameters:
+        - in: query
+          name: id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 实例摘要
+
+  /api/instances/create:
+    post:
+      summary: 从现有实例创建新实例
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                label: { type: string }
+                source_id: { type: string }
+                active_character: { type: string }
+              required: [id]
+      responses:
+        "200":
+          description: 新实例摘要
+
+  /api/instances/default:
+    post:
+      summary: 切换默认 runtime instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+              required: [id]
+      responses:
+        "200":
+          description: 默认实例切换成功
+
+  /api/instances/stop:
+    post:
+      summary: 停止 runtime instance 的 tick loop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+              required: [id]
+      responses:
+        "200":
+          description: 实例已停止
+
+  /api/instances/delete:
+    post:
+      summary: 删除 runtime instance 及其实例级持久化数据
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+              required: [id]
+      responses:
+        "200":
+          description: 实例已删除
+
+  /api/traces:
+    get:
+      summary: 获取最近若干轮 turn trace 历史
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: trace 列表
+
+  /api/checkpoints:
+    get:
+      summary: 列出当前实例的 checkpoints
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: checkpoint 列表
+    post:
+      summary: 为当前实例创建 checkpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                branch: { type: string }
+                note: { type: string }
+              required: [name]
+      responses:
+        "200":
+          description: checkpoint 已创建
+
+  /api/checkpoints/load:
+    post:
+      summary: rollback 到指定 checkpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+              required: [name]
+      responses:
+        "200":
+          description: checkpoint 已加载
+
+  /api/presets:
+    get:
+      summary: 列出当前实例的 scenario presets
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: preset 列表
+    post:
+      summary: 保存当前 scene/player role/active character 为 scenario preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                branch: { type: string }
+                note: { type: string }
+              required: [name]
+      responses:
+        "200":
+          description: preset 已保存
+
+  /api/presets/apply:
+    post:
+      summary: 套用 scenario preset 到当前实例
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+              required: [name]
+      responses:
+        "200":
+          description: preset 已套用
+
   /api/character:
     get:
       summary: 获取当前角色卡
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
       responses:
         "200":
           description: Character JSON
@@ -69,9 +285,39 @@ paths:
         "404":
           description: 角色未找到
 
+  /api/character-config:
+    get:
+      summary: 获取当前或指定角色的可编辑配置
+      parameters:
+        - in: query
+          name: character
+          schema: { type: string }
+      responses:
+        "200":
+          description: 角色配置
+    post:
+      summary: 更新角色卡并回写 YAML
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                character: { type: string }
+                card:
+                  $ref: "#/components/schemas/Character"
+      responses:
+        "200":
+          description: 更新后的角色配置
+
   /api/characters:
     get:
       summary: 获取所有已加载角色列表和当前活跃角色
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
       responses:
         "200":
           description: 角色列表
@@ -92,6 +338,10 @@ paths:
   /api/switch:
     post:
       summary: 切换活跃角色
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -113,6 +363,10 @@ paths:
   /api/world:
     get:
       summary: 获取当前世界名称
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
       responses:
         "200":
           description:
@@ -123,6 +377,96 @@ paths:
                 properties:
                   name:
                     type: string
+
+  /api/memory:
+    get:
+      summary: 获取角色记忆快照
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+        - in: query
+          name: character
+          schema: { type: string }
+        - in: query
+          name: facts
+          schema: { type: integer }
+        - in: query
+          name: episodic
+          schema: { type: integer }
+        - in: query
+          name: dialogue
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 记忆快照
+
+  /api/export:
+    get:
+      summary: 导出当前会话为 JSON 或 Markdown
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+        - in: query
+          name: format
+          schema: { type: string, enum: [json, markdown, md] }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 导出文件
+
+  /api/saves:
+    get:
+      summary: 列出世界存档
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 存档列表
+    post:
+      summary: 保存当前世界到指定存档名
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                branch: { type: string }
+                note: { type: string }
+      responses:
+        "200":
+          description: 新建或覆盖后的存档
+
+  /api/saves/load:
+    post:
+      summary: 读档到指定世界锚点
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+              required: [name]
+      responses:
+        "200":
+          description: 已载入的存档
 
 components:
   schemas:

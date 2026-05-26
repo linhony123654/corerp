@@ -1,26 +1,129 @@
 package main
 
 import (
+	"bufio"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"corerp/internal/agents"
 	"corerp/internal/api"
 	"corerp/internal/auth"
+	"corerp/internal/character"
 	"corerp/internal/core"
 	"corerp/internal/events"
 	"corerp/internal/importer"
 	"corerp/internal/llm"
 	"corerp/internal/memory"
 	"corerp/internal/runtime"
+	"corerp/internal/world"
 
 	"gopkg.in/yaml.v3"
 )
+
+type apiInstanceResolver struct {
+	manager *runtime.Manager
+}
+
+var (
+	buildVersion = "dev"
+	buildCommit  = "unknown"
+	buildTime    = "unknown"
+)
+
+type buildMetadata struct {
+	Version string
+	Commit  string
+	Time    string
+}
+
+func (r apiInstanceResolver) DefaultInstanceID() string {
+	return r.manager.DefaultID()
+}
+
+func (r apiInstanceResolver) ResolveInstance(id string) (api.RuntimeEngine, error) {
+	return r.manager.Resolve(id)
+}
+
+func (r apiInstanceResolver) ListInstances() []core.RuntimeInstanceSummary {
+	return r.manager.List()
+}
+
+func (r apiInstanceResolver) InstanceStatus(id string) (core.RuntimeInstanceSummary, error) {
+	return r.manager.Status(id)
+}
+
+func (r apiInstanceResolver) SetDefaultInstance(id string) error {
+	return r.manager.SetDefault(id)
+}
+
+func (r apiInstanceResolver) StopInstance(id string) (core.RuntimeInstanceSummary, error) {
+	return r.manager.Stop(id)
+}
+
+func (r apiInstanceResolver) DeleteInstance(id string) error {
+	return r.manager.Delete(id)
+}
+
+func (r apiInstanceResolver) CreateInstance(sourceID, id, label, activeCharacter string) (core.RuntimeInstanceSummary, error) {
+	return r.manager.CreateFrom(sourceID, id, label, activeCharacter)
+}
+
+func resolveBuildMetadata() buildMetadata {
+	meta := buildMetadata{
+		Version: strings.TrimSpace(buildVersion),
+		Commit:  strings.TrimSpace(buildCommit),
+		Time:    strings.TrimSpace(buildTime),
+	}
+	if meta.Version == "" {
+		meta.Version = "dev"
+	}
+	if meta.Commit == "" {
+		meta.Commit = "unknown"
+	}
+	if meta.Time == "" {
+		meta.Time = "unknown"
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return meta
+	}
+	if meta.Version == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		meta.Version = info.Main.Version
+	}
+
+	settings := map[string]string{}
+	for _, setting := range info.Settings {
+		settings[setting.Key] = setting.Value
+	}
+
+	if meta.Commit == "unknown" && settings["vcs.revision"] != "" {
+		meta.Commit = settings["vcs.revision"]
+	}
+	if meta.Time == "unknown" && settings["vcs.time"] != "" {
+		meta.Time = settings["vcs.time"]
+	}
+	if settings["vcs.modified"] == "true" && !strings.Contains(meta.Version, "+dirty") {
+		meta.Version += "+dirty"
+	}
+
+	return meta
+}
+
+func shortCommit(commit string) string {
+	if len(commit) > 12 {
+		return commit[:12]
+	}
+	return commit
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -44,6 +147,8 @@ func runImport(args []string) {
 	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	src := fs.String("src", "", "Source PNG file or directory")
 	dst := fs.String("dst", "./characters", "Output directory for YAML files")
+	mode := fs.String("mode", "auto", "Import mode: auto | single | ensemble")
+	interactive := fs.Bool("interactive", false, "Preview import result and confirm/override mode interactively")
 	fs.Parse(args)
 
 	if *src == "" {
@@ -59,28 +164,102 @@ func runImport(args []string) {
 	os.MkdirAll(*dst, 0755)
 
 	if info.IsDir() {
-		results, err := importer.ImportDirectory(*src, *dst)
+		results, err := importer.ImportDirectoryWithMode(*src, *dst, *mode)
 		if err != nil {
 			log.Fatalf("Import failed: %v", err)
 		}
 		for _, r := range results {
 			fmt.Println(r)
 		}
-	} else if strings.HasSuffix(strings.ToLower(*src), ".json") {
-		charPath, worldPath, err := importer.ImportJSON(*src, *dst)
+	}
+
+	finalMode := *mode
+	if *interactive {
+		finalMode = previewAndChooseImportMode(*src, finalMode)
+	}
+
+	if strings.HasSuffix(strings.ToLower(*src), ".json") {
+		charPath, worldPath, err := importer.ImportJSONWithMode(*src, *dst, finalMode)
 		if err != nil {
 			log.Fatalf("Import failed: %v", err)
 		}
 		fmt.Printf("Imported character: %s\n", charPath)
 		fmt.Printf("Imported world:     %s\n", worldPath)
 	} else {
-		charPath, worldPath, err := importer.ImportPNG(*src, *dst)
+		charPath, worldPath, err := importer.ImportPNGWithMode(*src, *dst, finalMode)
 		if err != nil {
 			log.Fatalf("Import failed: %v", err)
 		}
 		fmt.Printf("Imported character: %s\n", charPath)
 		fmt.Printf("Imported world:     %s\n", worldPath)
 	}
+}
+
+func previewAndChooseImportMode(srcPath, currentMode string) string {
+	st, err := loadSillyTavernCardForPreview(srcPath)
+	if err != nil {
+		log.Printf("Preview skipped: %v", err)
+		return currentMode
+	}
+
+	preview := importer.PreviewBundle(st, currentMode)
+	fmt.Printf("Auto-detected mode: %s\n", preview.Kind)
+	fmt.Printf("World: %s\n", preview.WorldName)
+	fmt.Printf("Primary character: %s\n", preview.PrimaryCharacter)
+	fmt.Printf("Generated characters (%d): %s\n", len(preview.CharacterNames), strings.Join(preview.CharacterNames, ", "))
+	fmt.Print("Accept? [Y/n], or type 'single' / 'ensemble': ")
+
+	return chooseImportModeFromReader(bufio.NewReader(os.Stdin), currentMode)
+}
+
+func chooseImportModeFromReader(reader *bufio.Reader, currentMode string) string {
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return currentMode
+	}
+	choice := strings.ToLower(strings.TrimSpace(line))
+	switch choice {
+	case "", "y", "yes":
+		return currentMode
+	case "single", "ensemble":
+		return choice
+	default:
+		return currentMode
+	}
+}
+
+func loadSillyTavernCardForPreview(srcPath string) (importer.SillyTavernChar, error) {
+	if strings.HasSuffix(strings.ToLower(srcPath), ".json") {
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			return importer.SillyTavernChar{}, err
+		}
+		var st importer.SillyTavernChar
+		if err := json.Unmarshal(data, &st); err != nil {
+			return importer.SillyTavernChar{}, err
+		}
+		return st, nil
+	}
+
+	f, err := os.Open(srcPath)
+	if err != nil {
+		return importer.SillyTavernChar{}, err
+	}
+	defer f.Close()
+
+	charaB64, err := importer.ExtractPreviewCharaChunk(f)
+	if err != nil {
+		return importer.SillyTavernChar{}, err
+	}
+	jsonBytes, err := base64.StdEncoding.DecodeString(charaB64)
+	if err != nil {
+		return importer.SillyTavernChar{}, err
+	}
+	var st importer.SillyTavernChar
+	if err := json.Unmarshal(jsonBytes, &st); err != nil {
+		return importer.SillyTavernChar{}, err
+	}
+	return st, nil
 }
 
 // === serve subcommand ===
@@ -95,9 +274,10 @@ func runServe(args []string) {
 	llmURL := fs.String("llm-url", os.Getenv("LLM_URL"), "LLM API endpoint")
 	llmKey := fs.String("llm-key", os.Getenv("LLM_API_KEY"), "LLM API key")
 	llmModel := fs.String("llm-model", os.Getenv("LLM_MODEL"), "LLM model name")
-		summaryURL := fs.String("llm-summary-url", "", "Optional separate LLM endpoint for summaries (defaults to main)")
-		summaryModel := fs.String("llm-summary-model", "", "Optional separate model for summaries (defaults to main)")
-		authKey := fs.String("auth-key", os.Getenv("CORERP_AUTH_KEY"), "Access password (empty = no auth)")
+	summaryURL := fs.String("llm-summary-url", "", "Optional separate LLM endpoint for summaries (defaults to main)")
+	summaryModel := fs.String("llm-summary-model", "", "Optional separate model for summaries (defaults to main)")
+	authKey := fs.String("auth-key", os.Getenv("CORERP_AUTH_KEY"), "Access password (empty = no auth)")
+	secureCookie := fs.Bool("secure-cookie", true, "Set Secure flag on session cookie (disable for localhost dev)")
 	fs.Parse(args)
 
 	if *llmURL == "" {
@@ -107,7 +287,20 @@ func runServe(args []string) {
 		*llmModel = "qwen2.5:7b"
 	}
 
+	buildMeta := resolveBuildMetadata()
+	api.BuildVersion = buildMeta.Version
+	api.BuildCommit = buildMeta.Commit
+	api.BuildTime = buildMeta.Time
+
 	os.MkdirAll(*dataDir, 0755)
+	log.Printf(
+		"CoreRP booting version=%s commit=%s build_time=%s data=%s port=%s",
+		buildMeta.Version,
+		shortCommit(buildMeta.Commit),
+		buildMeta.Time,
+		*dataDir,
+		*port,
+	)
 
 	// Load characters: directory mode takes precedence
 	var chars []core.Character
@@ -125,10 +318,13 @@ func runServe(args []string) {
 		charPaths = []string{*charFile}
 	}
 	activeName := charNames[0]
+	charPathMap := make(map[string]string, len(charNames))
 
 	// Load per-character worlds
 	charWorlds := make(map[string]runtime.CharWorld)
+	worldPathMap := make(map[string]string, len(charNames))
 	for i, name := range charNames {
+		charPathMap[name] = charPaths[i]
 		var wf string
 		if *charDir != "" {
 			wf = findWorldFile(charPaths[i])
@@ -136,24 +332,27 @@ func runServe(args []string) {
 		if wf == "" {
 			wf = *worldFile
 		}
-		var w loadedWorld
-		if strings.HasSuffix(wf, "/") || strings.HasSuffix(wf, string(filepath.Separator)) {
-			w = loadWorldDir(wf)
-		} else {
-			w = loadWorld(wf)
+		worldPathMap[name] = wf
+		bundle, err := world.LoadBundle(wf)
+		if err != nil {
+			log.Fatalf("Failed to load world '%s': %v", wf, err)
+		}
+		defaultScene := core.SceneState{}
+		if len(bundle.Scenes) > 0 {
+			defaultScene = bundle.Scenes[0].Scene
+			for _, scene := range bundle.Scenes {
+				if scene.Name == "default" {
+					defaultScene = scene.Scene
+					break
+				}
+			}
 		}
 		charWorlds[name] = runtime.CharWorld{
-			WorldName: w.Name,
-			CoreRules: w.CoreRules,
-			Scene: core.SceneState{
-				Location:    w.Scene.Location,
-				TimeOfDay:   w.Scene.TimeOfDay,
-				Weather:     w.Scene.Weather,
-				Characters:  w.Scene.Characters,
-				Description: w.Scene.Description,
-			},
+			WorldName: bundle.Config.Name,
+			CoreRules: bundle.Config.CoreRules,
+			Scene:     defaultScene,
 		}
-		log.Printf("Character '%s' → world '%s' (%s)", name, w.Name, wf)
+		log.Printf("Character '%s' → world '%s' (%s)", name, bundle.Config.Name, wf)
 	}
 
 	// Init stores
@@ -187,15 +386,14 @@ func runServe(args []string) {
 		if wf == "" {
 			wf = *worldFile
 		}
-		var fullWorld loadedWorld
-		if strings.HasSuffix(wf, "/") || strings.HasSuffix(wf, string(filepath.Separator)) {
-			fullWorld = loadWorldDir(wf)
-		} else {
-			fullWorld = loadWorld(wf)
+		bundle, err := world.LoadBundle(wf)
+		if err != nil {
+			log.Fatalf("Failed to load world '%s': %v", wf, err)
 		}
-		seedOntology(memEngine, &fullWorld, name)
-		log.Printf("Ontology seeded: %d facts, %d events into '%s'",
-			countOntologyFacts(&fullWorld), countOntologyEvents(&fullWorld), name)
+		if err := world.SeedMemory(memEngine, bundle, name); err != nil {
+			log.Printf("Warning: world seed failed for '%s': %v", name, err)
+		}
+		log.Printf("Ontology seeded: %s into '%s'", world.SeedSummary(bundle), name)
 	}
 
 	// Init agents — load all characters
@@ -206,10 +404,13 @@ func runServe(args []string) {
 	}
 
 	// Init auth
-	auth.Init(*authKey)
-	if auth.IsEnabled() {
-		log.Printf("Auth: enabled (set via -auth-key or CORERP_AUTH_KEY)")
+	if *authKey != "" {
+		auth.Init(*authKey)
+	} else {
+		auth.Init("admin") // default password
 	}
+	auth.SetSecureCookie(*secureCookie)
+	log.Printf("Auth: enabled (访问密码: %s, 修改: POST /api/change-password)", auth.MaskPassword())
 
 	// Init LLM config store
 	llm.InitConfigStore(*dataDir + "/llm_configs.json")
@@ -245,21 +446,33 @@ func runServe(args []string) {
 	if err != nil {
 		log.Fatalf("Failed to init runtime: %v", err)
 	}
+	engine.ConfigurePersistence(*dataDir, charPathMap, worldPathMap)
 
 	// Load existing state from events
 	if err := engine.LoadState(); err != nil {
 		log.Printf("Warning: failed to load state: %v", err)
 	}
+	if err := gatekeeper.Causality().RebuildAll(); err != nil {
+		log.Printf("Warning: failed to rebuild causality: %v", err)
+	} else {
+		log.Printf("Causality rebuilt")
+	}
 
-	// Seed initial scene if empty
+	// Seed initial scene only when no prior scene projection exists.
 	initWorld := charWorlds[activeName]
-	engine.SeedScene(core.SceneState{
-		Location:    initWorld.Scene.Location,
-		TimeOfDay:   initWorld.Scene.TimeOfDay,
-		Weather:     initWorld.Scene.Weather,
-		Characters:  initWorld.Scene.Characters,
-		Description: initWorld.Scene.Description,
-	})
+	if sceneIsEmpty(engine.GetState().Scene) {
+		engine.SeedScene(core.SceneState{
+			Location:    initWorld.Scene.Location,
+			TimeOfDay:   initWorld.Scene.TimeOfDay,
+			Weather:     initWorld.Scene.Weather,
+			Characters:  initWorld.Scene.Characters,
+			Description: initWorld.Scene.Description,
+		})
+	}
+	engine.SyncActiveWorldContext()
+
+	// Auto-seed NPC desires from character cards (idempotent)
+	engine.SeedNPCDesires()
 
 	// Start autonomous tick loop
 	engine.StartTickLoop()
@@ -275,7 +488,7 @@ func runServe(args []string) {
 		log.Printf("Embed server started (PID %d)", cmd.Process.Pid)
 	}()
 
-	log.Printf("CoreRP started")
+	log.Printf("CoreRP started version=%s commit=%s", buildMeta.Version, shortCommit(buildMeta.Commit))
 	log.Printf("Active character: %s", activeName)
 	log.Printf("World: %s", charWorlds[activeName].WorldName)
 	log.Printf("LLM: %s @ %s", *llmModel, *llmURL)
@@ -283,7 +496,11 @@ func runServe(args []string) {
 
 	// Setup HTTP
 	mux := http.NewServeMux()
-	server := api.NewServer(engine)
+	instanceManager := runtime.NewManager()
+	if err := instanceManager.Register("default", "Primary Runtime", engine, true); err != nil {
+		log.Fatalf("Failed to register runtime instance: %v", err)
+	}
+	server := api.NewServer(engine, apiInstanceResolver{manager: instanceManager})
 	server.Register(mux)
 
 	if err := http.ListenAndServe(":"+*port, mux); err != nil {
@@ -341,68 +558,18 @@ func loadCharactersFromDir(dir string) (chars []core.Character, names []string, 
 	return
 }
 
-func loadCharacter(path string) core.Character {
-	charData, err := os.ReadFile(path)
-	if err != nil {
-		log.Fatalf("Failed to read character file: %v", err)
-	}
-	var charRaw struct {
-		Identity struct {
-			Name         string             `yaml:"name"`
-			Immutable    []string           `yaml:"immutable"`
-			Adaptive     map[string]float64 `yaml:"adaptive"`
-			Forbidden    []string           `yaml:"forbidden"`
-			Voice        struct {
-				Style  string `yaml:"style"`
-				Rhythm string `yaml:"rhythm"`
-			} `yaml:"voice"`
-			WritingGuide string `yaml:"writing_guide"`
-		} `yaml:"identity"`
-		Goals struct {
-			Primary []struct {
-				ID        string `yaml:"id"`
-				Priority  int    `yaml:"priority"`
-				Condition string `yaml:"condition"`
-				Target    string `yaml:"target"`
-			} `yaml:"primary"`
-			Secondary []struct {
-				ID        string `yaml:"id"`
-				Priority  int    `yaml:"priority"`
-				Condition string `yaml:"condition"`
-				Target    string `yaml:"target"`
-			} `yaml:"secondary"`
-			Hidden []struct {
-				ID              string   `yaml:"id"`
-				Priority        int      `yaml:"priority"`
-				KnownBy         []string `yaml:"known_by"`
-				RevealCondition string   `yaml:"reveal_condition"`
-			} `yaml:"hidden"`
-		} `yaml:"goals"`
-	}
-	if err := yaml.Unmarshal(charData, &charRaw); err != nil {
-		log.Fatalf("Failed to parse character YAML: %v", err)
-	}
+func sceneIsEmpty(scene core.SceneState) bool {
+	return scene.Location == "" &&
+		scene.TimeOfDay == "" &&
+		scene.Weather == "" &&
+		scene.Description == "" &&
+		len(scene.Characters) == 0
+}
 
-	var char core.Character
-	char.Identity = core.IdentityEnvelope{
-		Name:         charRaw.Identity.Name,
-		Immutable:    charRaw.Identity.Immutable,
-		Adaptive:     charRaw.Identity.Adaptive,
-		Forbidden:    charRaw.Identity.Forbidden,
-		Voice: core.VoiceConfig{
-			Style:  charRaw.Identity.Voice.Style,
-			Rhythm: charRaw.Identity.Voice.Rhythm,
-		},
-		WritingGuide: charRaw.Identity.WritingGuide,
-	}
-	for _, g := range charRaw.Goals.Primary {
-		char.Goals = append(char.Goals, core.Goal{ID: g.ID, Priority: g.Priority, Type: "primary", Target: g.Target, Condition: g.Condition})
-	}
-	for _, g := range charRaw.Goals.Secondary {
-		char.Goals = append(char.Goals, core.Goal{ID: g.ID, Priority: g.Priority, Type: "secondary", Target: g.Target, Condition: g.Condition})
-	}
-	for _, g := range charRaw.Goals.Hidden {
-		char.Goals = append(char.Goals, core.Goal{ID: g.ID, Priority: g.Priority, Type: "hidden", KnownBy: g.KnownBy, RevealCondition: g.RevealCondition})
+func loadCharacter(path string) core.Character {
+	char, err := character.Load(path)
+	if err != nil {
+		log.Fatalf("Failed to load character YAML: %v", err)
 	}
 	return char
 }
@@ -419,14 +586,14 @@ type loadedWorld struct {
 		Description string   `yaml:"description"`
 	} `yaml:"scene"`
 	Ontology struct {
-		Characters []ontologyEntry  `yaml:"characters"`
-		Locations  []ontologyEntry  `yaml:"locations"`
-		Factions   []ontologyEntry  `yaml:"factions"`
-		Items      []ontologyEntry  `yaml:"items"`
-		Lore       []ontologyEntry  `yaml:"lore"`
-		Events     []ontologyEvent  `yaml:"events"`
-		Timelines  []ontologyEntry  `yaml:"timelines"`
-			Settings   []ontologyEntry  `yaml:"settings"`
+		Characters []ontologyEntry `yaml:"characters"`
+		Locations  []ontologyEntry `yaml:"locations"`
+		Factions   []ontologyEntry `yaml:"factions"`
+		Items      []ontologyEntry `yaml:"items"`
+		Lore       []ontologyEntry `yaml:"lore"`
+		Events     []ontologyEvent `yaml:"events"`
+		Timelines  []ontologyEntry `yaml:"timelines"`
+		Settings   []ontologyEntry `yaml:"settings"`
 	} `yaml:"ontology"`
 	DirectFacts []FactEntry
 }
@@ -495,14 +662,14 @@ func loadWorldDir(dir string) loadedWorld {
 	if data, err := os.ReadFile(filepath.Join(dir, "canon", "ontology.yml")); err == nil {
 		var ontoDoc struct {
 			Ontology struct {
-				Characters []ontologyEntry  `yaml:"characters"`
-				Locations  []ontologyEntry  `yaml:"locations"`
-				Factions   []ontologyEntry  `yaml:"factions"`
-				Items      []ontologyEntry  `yaml:"items"`
-				Lore       []ontologyEntry  `yaml:"lore"`
-				Events     []ontologyEvent  `yaml:"events"`
-				Timelines  []ontologyEntry  `yaml:"timelines"`
-				Settings   []ontologyEntry  `yaml:"settings"`
+				Characters []ontologyEntry `yaml:"characters"`
+				Locations  []ontologyEntry `yaml:"locations"`
+				Factions   []ontologyEntry `yaml:"factions"`
+				Items      []ontologyEntry `yaml:"items"`
+				Lore       []ontologyEntry `yaml:"lore"`
+				Events     []ontologyEvent `yaml:"events"`
+				Timelines  []ontologyEntry `yaml:"timelines"`
+				Settings   []ontologyEntry `yaml:"settings"`
 			} `yaml:"ontology"`
 		}
 		yaml.Unmarshal(data, &ontoDoc)
@@ -720,7 +887,7 @@ func truncateStr(s string, max int) string {
 
 func countOntologyFacts(world *loadedWorld) int {
 	n := 0
-	n += len(world.Ontology.Characters)*2  // each char produces ~2 facts
+	n += len(world.Ontology.Characters) * 2 // each char produces ~2 facts
 	n += len(world.Ontology.Locations)
 	n += len(world.Ontology.Factions)
 	n += len(world.Ontology.Items)

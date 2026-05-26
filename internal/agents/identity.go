@@ -5,15 +5,18 @@ import (
 	"strings"
 
 	"corerp/internal/core"
+	"corerp/internal/goalexpr"
 )
 
 type EnvelopeManager struct {
-	characters map[string]core.Character
+	characters     map[string]core.Character
+	goalLastActive map[string]map[string]int
 }
 
 func NewEnvelopeManager() *EnvelopeManager {
 	return &EnvelopeManager{
-		characters: make(map[string]core.Character),
+		characters:     make(map[string]core.Character),
+		goalLastActive: make(map[string]map[string]int),
 	}
 }
 
@@ -75,8 +78,8 @@ func (em *EnvelopeManager) extractForbiddenKeywords(forbidden []string) []string
 	return keywords
 }
 
-// ActiveGoals returns goals that currently apply based on state
-func (em *EnvelopeManager) ActiveGoals(charName string, state core.WorldState) []core.Goal {
+// ActiveGoals returns goals that currently apply based on state.
+func (em *EnvelopeManager) ActiveGoals(charName string, state core.WorldState, turn int) []core.Goal {
 	c, ok := em.characters[charName]
 	if !ok {
 		return nil
@@ -84,26 +87,62 @@ func (em *EnvelopeManager) ActiveGoals(charName string, state core.WorldState) [
 
 	var active []core.Goal
 	for _, g := range c.Goals {
-		// P1: simplified condition evaluation
 		if g.Type == "hidden" && !em.checkRevealCondition(g, state) {
 			continue
 		}
-		// P1: skip complex condition parsing, activate all non-hidden
-		if g.Type != "hidden" {
+		ok := true
+		if strings.TrimSpace(g.Condition) != "" {
+			evaluated, err := goalexpr.Eval(g.Condition, state)
+			if err != nil {
+				ok = false
+			} else {
+				ok = evaluated
+			}
+		}
+		if ok && em.goalOnCooldown(charName, g, turn) {
+			ok = false
+		}
+		if ok {
 			active = append(active, g)
+			em.markGoalActive(charName, g.ID, turn)
 		}
 	}
 	return active
 }
 
 func (em *EnvelopeManager) checkRevealCondition(g core.Goal, state core.WorldState) bool {
-	// P1: simple string matching on flags
-	// e.g. "trust > 9 AND scene == safehouse" -> just check if "revealed_xxx" flag exists
-	// This is a placeholder for P2/P3 proper condition parser
-	if revealed, ok := state.Flags["revealed_"+g.ID]; ok && revealed {
-		return true
+	if strings.TrimSpace(g.RevealCondition) == "" {
+		return false
 	}
-	return false
+	revealed, err := goalexpr.Eval(g.RevealCondition, state)
+	return err == nil && revealed
+}
+
+func (em *EnvelopeManager) goalOnCooldown(charName string, g core.Goal, turn int) bool {
+	if g.CooldownTurns <= 0 || turn <= 0 {
+		return false
+	}
+	byChar := em.goalLastActive[charName]
+	if byChar == nil {
+		return false
+	}
+	lastTurn, ok := byChar[g.ID]
+	if !ok {
+		return false
+	}
+	return turn-lastTurn < g.CooldownTurns
+}
+
+func (em *EnvelopeManager) markGoalActive(charName, goalID string, turn int) {
+	if turn <= 0 {
+		return
+	}
+	byChar := em.goalLastActive[charName]
+	if byChar == nil {
+		byChar = make(map[string]int)
+		em.goalLastActive[charName] = byChar
+	}
+	byChar[goalID] = turn
 }
 
 // GetPersonaFrame builds the persona snapshot for a character

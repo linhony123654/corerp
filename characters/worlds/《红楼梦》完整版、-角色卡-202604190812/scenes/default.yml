@@ -1,0 +1,8 @@
+scene:
+    location: 未知地点
+    time_of_day: 未知时间
+    weather: 未知天气
+    characters:
+        - 薛宝钗
+        - 玩家
+    description: ""

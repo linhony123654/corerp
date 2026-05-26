@@ -41,6 +41,7 @@ func (te *TensionEngine) Tick(state core.WorldState, turnCount int) []core.Event
 			Actor:     "system",
 			Payload:   map[string]interface{}{"delta": 0.2, "reason": "heat_death_detected"},
 			Canonical: true,
+			Tag:       core.TagTick,
 			CreatedAt: time.Now(),
 		})
 		// Reset counter after injection
@@ -55,6 +56,7 @@ func (te *TensionEngine) Tick(state core.WorldState, turnCount int) []core.Event
 			Actor:     "system",
 			Payload:   map[string]interface{}{"delta": -0.05, "reason": "natural_decay"},
 			Canonical: true,
+			Tag:       core.TagTick,
 			CreatedAt: time.Now(),
 		})
 	}

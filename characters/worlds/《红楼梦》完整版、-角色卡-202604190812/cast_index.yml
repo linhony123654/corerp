@@ -1,0 +1,695 @@
+kind: ensemble_world
+world_name: 《红楼梦》完整版、
+primary_character: 薛宝钗
+generated_at_import:
+    - name: 薛宝钗
+      role: primary
+      source_type: character_book
+      file: 薛宝钗.yml
+    - name: 贾宝玉
+      role: primary_cast
+      source_type: character_book
+      file: 贾宝玉.yml
+    - name: 林红玉
+      role: primary_cast
+      source_type: character_book
+      file: 林红玉.yml
+    - name: 史湘云
+      role: primary_cast
+      source_type: character_book
+      file: 史湘云.yml
+    - name: 林黛玉
+      role: primary_cast
+      source_type: character_book
+      file: 林黛玉.yml
+    - name: 贾元春
+      role: primary_cast
+      source_type: character_book
+      file: 贾元春.yml
+secondary_cast:
+    - name: 贾惜春
+      role: secondary
+      source_type: character_book
+    - name: 彩云
+      role: secondary
+      source_type: character_book
+    - name: 王熙凤
+      role: secondary
+      source_type: character_book
+    - name: 夏金桂
+      role: secondary
+      source_type: character_book
+    - name: 春燕
+      role: secondary
+      source_type: character_book
+    - name: 平儿
+      role: secondary
+      source_type: character_book
+    - name: 秦可卿
+      role: secondary
+      source_type: character_book
+    - name: 薛二爷
+      role: secondary
+      source_type: character_book
+    - name: 贾二舍
+      role: secondary
+      source_type: character_book
+    - name: 贾存周
+      role: secondary
+      source_type: character_book
+    - name: 贾探春
+      role: secondary
+      source_type: character_book
+    - name: 贾环
+      role: secondary
+      source_type: character_book
+    - name: 贾珍
+      role: secondary
+      source_type: character_book
+    - name: 贾老先生
+      role: secondary
+      source_type: character_book
+    - name: 金鸳鸯
+      role: secondary
+      source_type: character_book
+    - name: 香菱妹子
+      role: secondary
+      source_type: character_book
+    - name: 刘亲家
+      role: secondary
+      source_type: character_book
+    - name: 尤氏
+      role: secondary
+      source_type: character_book
+    - name: 王夫人
+      role: secondary
+      source_type: character_book
+    - name: 秦小爷
+      role: secondary
+      source_type: character_book
+    - name: 薛呆子
+      role: secondary
+      source_type: character_book
+    - name: 贾蓉
+      role: secondary
+      source_type: character_book
+    - name: 贾赦
+      role: secondary
+      source_type: character_book
+    - name: 赵姨娘
+      role: secondary
+      source_type: character_book
+    - name: 邢夫人
+      role: secondary
+      source_type: character_book
+    - name: 尤二姐
+      role: secondary
+      source_type: character_book
+    - name: 贾迎春
+      role: secondary
+      source_type: character_book
+    - name: 李宫裁
+      role: secondary
+      source_type: character_book
+    - name: 蒋玉菡
+      role: secondary
+      source_type: character_book
+    - name: 邢女儿
+      role: secondary
+      source_type: character_book
+    - name: 甄士隐
+      role: secondary
+      source_type: character_book
+    - name: 雪雁
+      role: secondary
+      source_type: character_book
+    - name: 贾二爷
+      role: secondary
+      source_type: character_book
+    - name: 尤三姐
+      role: secondary
+      source_type: character_book
+    - name: 尤老安人
+      role: secondary
+      source_type: character_book
+    - name: 警幻仙姑
+      role: secondary
+      source_type: character_book
+    - name: 王大夫
+      role: secondary
+      source_type: character_book
+    - name: 贾代儒
+      role: secondary
+      source_type: character_book
+    - name: 石兄
+      role: secondary
+      source_type: character_book
+    - name: 智能儿
+      role: secondary
+      source_type: character_book
+    - name: 凤辣子
+      role: secondary
+      source_type: character_book
+    - name: 晴雯
+      role: secondary
+      source_type: character_book
+    - name: 茗烟
+      role: secondary
+      source_type: character_book
+    - name: 薛姨妈
+      role: secondary
+      source_type: character_book
+    - name: 袭人
+      role: secondary
+      source_type: character_book
+    - name: 贾母
+      role: secondary
+      source_type: character_book
+    - name: 龄官
+      role: secondary
+      source_type: character_book
+    - name: 紫鹃
+      role: secondary
+      source_type: character_book
+    - name: 绛珠仙子
+      role: secondary
+      source_type: character_book
+    - name: 菂官
+      role: secondary
+      source_type: character_book
+    - name: 金氏
+      role: secondary
+      source_type: character_book
+    - name: 倪二金刚
+      role: secondary
+      source_type: character_book
+    - name: 马道婆
+      role: secondary
+      source_type: character_book
+    - name: 妙玉
+      role: secondary
+      source_type: character_book
+    - name: 邢大舅
+      role: secondary
+      source_type: character_book
+    - name: 乌庄头
+      role: secondary
+      source_type: character_book
+    - name: 和尚
+      role: secondary
+      source_type: character_book
+    - name: 柳湘莲
+      role: secondary
+      source_type: character_book
+    - name: 薛宝琴
+      role: secondary
+      source_type: character_book
+    - name: 金钏儿
+      role: secondary
+      source_type: character_book
+    - name: 冯大爷
+      role: secondary
+      source_type: character_book
+    - name: 林之孝
+      role: secondary
+      source_type: character_book
+    - name: 贾天祥
+      role: secondary
+      source_type: character_book
+    - name: 贾芹
+      role: secondary
+      source_type: character_book
+    - name: 北静王爷
+      role: secondary
+      source_type: character_book
+    - name: 李奶子
+      role: secondary
+      source_type: character_book
+    - name: 林如海
+      role: secondary
+      source_type: character_book
+    - name: 甄英莲
+      role: secondary
+      source_type: character_book
+    - name: 藕官
+      role: secondary
+      source_type: character_book
+    - name: 司棋
+      role: secondary
+      source_type: character_book
+    - name: 王善保
+      role: secondary
+      source_type: character_book
+    - name: 贾敬
+      role: secondary
+      source_type: character_book
+    - name: 贾蔷
+      role: secondary
+      source_type: character_book
+    - name: 神瑛侍者
+      role: secondary
+      source_type: character_book
+    - name: 秋纹
+      role: secondary
+      source_type: character_book
+    - name: 贾兰
+      role: secondary
+      source_type: character_book
+    - name: 贾氏夫人
+      role: secondary
+      source_type: character_book
+    - name: 赖大爷
+      role: secondary
+      source_type: character_book
+    - name: 傅二爷
+      role: secondary
+      source_type: character_book
+    - name: 张先生
+      role: secondary
+      source_type: character_book
+    - name: 狗儿
+      role: secondary
+      source_type: character_book
+    - name: 跏腿道士
+      role: secondary
+      source_type: character_book
+    - name: 鲍二
+      role: secondary
+      source_type: character_book
+    - name: 麝月
+      role: secondary
+      source_type: character_book
+    - name: 兴儿
+      role: secondary
+      source_type: character_book
+    - name: 宝蟾
+      role: secondary
+      source_type: character_book
+    - name: 巧姐
+      role: secondary
+      source_type: character_book
+    - name: 张金哥
+      role: secondary
+      source_type: character_book
+    - name: 王太医
+      role: secondary
+      source_type: character_book
+    - name: 碧痕
+      role: secondary
+      source_type: character_book
+    - name: 金荣
+      role: secondary
+      source_type: character_book
+    - name: 鹦哥
+      role: secondary
+      source_type: character_book
+    - name: 傻大姐
+      role: secondary
+      source_type: character_book
+    - name: 冯渊
+      role: secondary
+      source_type: character_book
+    - name: 冷子兴
+      role: secondary
+      source_type: character_book
+    - name: 张三
+      role: secondary
+      source_type: character_book
+    - name: 张华
+      role: secondary
+      source_type: character_book
+    - name: 玉钏儿
+      role: secondary
+      source_type: character_book
+    - name: 石呆子
+      role: secondary
+      source_type: character_book
+    - name: 空空道人
+      role: secondary
+      source_type: character_book
+    - name: 贾珠
+      role: secondary
+      source_type: character_book
+    - name: 金文翔
+      role: secondary
+      source_type: character_book
+    - name: 香怜
+      role: secondary
+      source_type: character_book
+    - name: 佩凤
+      role: secondary
+      source_type: character_book
+    - name: 侍书
+      role: secondary
+      source_type: character_book
+    - name: 入画
+      role: secondary
+      source_type: character_book
+    - name: 净虚
+      role: secondary
+      source_type: character_book
+    - name: 卜世仁
+      role: secondary
+      source_type: character_book
+    - name: 多浑虫
+      role: secondary
+      source_type: character_book
+    - name: 宝珠
+      role: secondary
+      source_type: character_book
+    - name: 封肃
+      role: secondary
+      source_type: character_book
+    - name: 板儿
+      role: secondary
+      source_type: character_book
+    - name: 槛外人
+      role: secondary
+      source_type: character_book
+    - name: 焦大
+      role: secondary
+      source_type: character_book
+    - name: 王子腾
+      role: secondary
+      source_type: character_book
+    - name: 琥珀
+      role: secondary
+      source_type: character_book
+    - name: 秦业
+      role: secondary
+      source_type: character_book
+    - name: 赵堂官
+      role: secondary
+      source_type: character_book
+    - name: 司棋表兄
+      role: secondary
+      source_type: character_book
+    - name: 夏三
+      role: secondary
+      source_type: character_book
+    - name: 水溶
+      role: secondary
+      source_type: character_book
+    - name: 潘又安
+      role: secondary
+      source_type: character_book
+    - name: 蕊官
+      role: secondary
+      source_type: character_book
+    - name: 四儿
+      role: secondary
+      source_type: character_book
+    - name: 嫣红
+      role: secondary
+      source_type: character_book
+    - name: 文官
+      role: secondary
+      source_type: character_book
+    - name: 曹雪芹先生
+      role: secondary
+      source_type: character_book
+    - name: 来旺儿
+      role: secondary
+      source_type: character_book
+    - name: 韦大英
+      role: secondary
+      source_type: character_book
+    - name: 李贵
+      role: secondary
+      source_type: character_book
+    - name: 渺渺真人
+      role: secondary
+      source_type: character_book
+    - name: 相思
+      role: secondary
+      source_type: character_book
+    - name: 霍启
+      role: secondary
+      source_type: character_book
+    - name: 包勇
+      role: secondary
+      source_type: character_book
+    - name: 贾璜
+      role: secondary
+      source_type: character_book
+    - name: 云儿
+      role: secondary
+      source_type: character_book
+    - name: 北静郡王
+      role: secondary
+      source_type: character_book
+    - name: 单聘仁
+      role: secondary
+      source_type: character_book
+    - name: 喜鸾
+      role: secondary
+      source_type: character_book
+    - name: 张德辉
+      role: secondary
+      source_type: character_book
+    - name: 王善保家的
+      role: secondary
+      source_type: character_book
+    - name: 芳官干娘
+      role: secondary
+      source_type: character_book
+    - name: 茜雪
+      role: secondary
+      source_type: character_book
+    - name: 费大娘
+      role: secondary
+      source_type: character_book
+    - name: 赖尚荣
+      role: secondary
+      source_type: character_book
+    - name: 黄金莺
+      role: secondary
+      source_type: character_book
+    - name: 夏守忠
+      role: secondary
+      source_type: character_book
+    - name: 来升
+      role: secondary
+      source_type: character_book
+    - name: 温都里纳
+      role: secondary
+      source_type: character_book
+    - name: 甄家学生
+      role: secondary
+      source_type: character_book
+    - name: 花大哥
+      role: secondary
+      source_type: character_book
+    - name: 詹光
+      role: secondary
+      source_type: character_book
+    - name: 赵奶妈
+      role: secondary
+      source_type: character_book
+    - name: 忠顺府长史官
+      role: secondary
+      source_type: character_book
+    - name: 王嬷嬷
+      role: secondary
+      source_type: character_book
+    - name: 素云
+      role: secondary
+      source_type: character_book
+    - name: 二丫头
+      role: secondary
+      source_type: character_book
+    - name: 众清客
+      role: secondary
+      source_type: character_book
+    - name: 傅秋芳
+      role: secondary
+      source_type: character_book
+    - name: 史老太君
+      role: secondary
+      source_type: character_book
+    - name: 吴良
+      role: secondary
+      source_type: character_book
+    - name: 富贵闲人
+      role: secondary
+      source_type: character_book
+    - name: 戴权
+      role: secondary
+      source_type: character_book
+    - name: 春燕姑妈
+      role: secondary
+      source_type: character_book
+    - name: 昭儿
+      role: secondary
+      source_type: character_book
+    - name: 玉爱
+      role: secondary
+      source_type: character_book
+    - name: 瑞珠
+      role: secondary
+      source_type: character_book
+    - name: 甄家大丫鬟
+      role: secondary
+      source_type: character_book
+    - name: 荳官
+      role: secondary
+      source_type: character_book
+    - name: 西平郡王
+      role: secondary
+      source_type: character_book
+    - name: 贾菌
+      role: secondary
+      source_type: character_book
+    - name: 银蝶
+      role: secondary
+      source_type: character_book
+    - name: 都判官
+      role: secondary
+      source_type: character_book
+    - name: 俞禄
+      role: secondary
+      source_type: character_book
+    - name: 守备之子
+      role: secondary
+      source_type: character_book
+    - name: 文花
+      role: secondary
+      source_type: character_book
+    - name: 沁香
+      role: secondary
+      source_type: character_book
+    - name: 茄官
+      role: secondary
+      source_type: character_book
+    - name: 鹤仙
+      role: secondary
+      source_type: character_book
+    - name: 仙姑之妹
+      role: secondary
+      source_type: character_book
+    - name: 墨雨
+      role: secondary
+      source_type: character_book
+    - name: 多姑娘儿
+      role: secondary
+      source_type: character_book
+    - name: 张如圭
+      role: secondary
+      source_type: character_book
+    - name: 张王氏
+      role: secondary
+      source_type: character_book
+    - name: 慧娘
+      role: secondary
+      source_type: character_book
+    - name: 林大娘
+      role: secondary
+      source_type: character_book
+    - name: 柳嫂儿
+      role: secondary
+      source_type: character_book
+    - name: 甄夫人
+      role: secondary
+      source_type: character_book
+    - name: 荣儿
+      role: secondary
+      source_type: character_book
+    - name: 葫芦庙沙弥
+      role: secondary
+      source_type: character_book
+    - name: 贾芹之母
+      role: secondary
+      source_type: character_book
+    - name: 赖大之母
+      role: secondary
+      source_type: character_book
+    - name: 丰儿
+      role: secondary
+      source_type: character_book
+    - name: 佳蕙
+      role: secondary
+      source_type: character_book
+    - name: 山子野
+      role: secondary
+      source_type: character_book
+    - name: 彩明
+      role: secondary
+      source_type: character_book
+    - name: 碧月
+      role: secondary
+      source_type: character_book
+    - name: 翠墨
+      role: secondary
+      source_type: character_book
+    - name: 艾官
+      role: secondary
+      source_type: character_book
+    - name: 隆儿
+      role: secondary
+      source_type: character_book
+    - name: 万儿
+      role: secondary
+      source_type: character_book
+    - name: 偕鸳
+      role: secondary
+      source_type: character_book
+    - name: 冷二郎
+      role: secondary
+      source_type: character_book
+    - name: 南安王太妃
+      role: secondary
+      source_type: character_book
+    - name: 周大娘
+      role: secondary
+      source_type: character_book
+    - name: 四姐儿
+      role: secondary
+      source_type: character_book
+    - name: 大妞妞
+      role: secondary
+      source_type: character_book
+    - name: 悲愤
+      role: secondary
+      source_type: character_book
+    - name: 晴姐
+      role: secondary
+      source_type: character_book
+    - name: 炒豆子
+      role: secondary
+      source_type: character_book
+    - name: 甄家仆
+      role: secondary
+      source_type: character_book
+    - name: 甄家娘子
+      role: secondary
+      source_type: character_book
+    - name: 痴颦
+      role: secondary
+      source_type: character_book
+    - name: 秋爽居士
+      role: secondary
+      source_type: character_book
+    - name: 缕儿
+      role: secondary
+      source_type: character_book
+    - name: 花大姐
+      role: secondary
+      source_type: character_book
+    - name: 荣国太君
+      role: secondary
+      source_type: character_book
+    - name: 那僧
+      role: secondary
+      source_type: character_book
+    - name: 金寡妇
+      role: secondary
+      source_type: character_book
+    - name: 鲍二女人
+      role: secondary
+      source_type: character_book
+    - name: 金文翔媳妇
+      role: secondary
+      source_type: character_book
+    - name: 秦显家的
+      role: secondary
+      source_type: character_book

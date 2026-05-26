@@ -19,11 +19,11 @@ type Scheduler struct {
 
 // NPCActionLog records a human-readable summary of an NPC action.
 type NPCActionLog struct {
-	Character string `json:"character"`
-	Action    string `json:"action"`
-	Target    string `json:"target"`
-	Summary   string `json:"summary"`
-	Tick      int    `json:"tick"`
+	Character string    `json:"character"`
+	Action    string    `json:"action"`
+	Target    string    `json:"target"`
+	Summary   string    `json:"summary"`
+	Tick      int       `json:"tick"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -68,7 +68,7 @@ func (s *Scheduler) Tick(
 			npcState.Scene = npcScene
 		}
 
-		goals := agentsMgr.ActiveGoals(name, npcState)
+		goals := agentsMgr.ActiveGoals(name, npcState, currentTick)
 		planner := NewPlanner()
 		steps := planner.Plan(name, npcState, goals, "")
 		if len(steps) == 0 {
@@ -89,9 +89,9 @@ func (s *Scheduler) Tick(
 
 		// Build ActionFrame
 		frame := core.ActionFrame{
-			Actor:  name,
-			Action: best.Action,
-			Target: best.Target,
+			Actor:     name,
+			Action:    best.Action,
+			Target:    best.Target,
 			Intensity: best.Priority,
 			Emotion: core.EmotionState{
 				Primary:   "neutral",

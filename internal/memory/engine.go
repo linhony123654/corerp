@@ -14,8 +14,9 @@ import (
 )
 
 type Engine struct {
-	db          *sql.DB
-	mu          sync.RWMutex
+	db           *sql.DB
+	mu           sync.RWMutex
+	instanceID   string
 	shortTerm    map[string][]core.Message // per-character ring buffer
 	shortTermCap int
 }
@@ -25,6 +26,12 @@ func New(dbPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	if _, err := db.Exec(`PRAGMA busy_timeout = 5000`); err != nil {
+		db.Close()
+		return nil, err
+	}
 
 	e := &Engine{
 		db:           db,
@@ -32,6 +39,7 @@ func New(dbPath string) (*Engine, error) {
 		shortTerm:    make(map[string][]core.Message),
 	}
 	if err := e.migrate(); err != nil {
+		db.Close()
 		return nil, err
 	}
 	return e, nil
@@ -81,6 +89,14 @@ CREATE INDEX IF NOT EXISTS idx_dialogue_created ON dialogue_history(created_at);
 	// Migration: add character column to dialogue_history (P3 multi-character)
 	e.db.Exec(`ALTER TABLE dialogue_history ADD COLUMN character TEXT DEFAULT ''`)
 	e.db.Exec(`CREATE INDEX IF NOT EXISTS idx_dialogue_character ON dialogue_history(character)`)
+	e.db.Exec(`ALTER TABLE dialogue_history ADD COLUMN instance_id TEXT DEFAULT ''`)
+	e.db.Exec(`CREATE INDEX IF NOT EXISTS idx_dialogue_instance ON dialogue_history(instance_id)`)
+	e.db.Exec(`ALTER TABLE working_memory ADD COLUMN instance_id TEXT DEFAULT ''`)
+	e.db.Exec(`CREATE INDEX IF NOT EXISTS idx_working_memory_instance ON working_memory(instance_id)`)
+	e.db.Exec(`ALTER TABLE semantic_facts ADD COLUMN instance_id TEXT DEFAULT ''`)
+	e.db.Exec(`CREATE INDEX IF NOT EXISTS idx_semantic_facts_instance ON semantic_facts(instance_id)`)
+	e.db.Exec(`ALTER TABLE episodic_events ADD COLUMN instance_id TEXT DEFAULT ''`)
+	e.db.Exec(`CREATE INDEX IF NOT EXISTS idx_episodic_events_instance ON episodic_events(instance_id)`)
 
 	return nil
 }
@@ -101,8 +117,8 @@ func (e *Engine) PushDialogue(msg core.Message, character string) {
 	// Persist to SQLite for cross-session recall
 	id := fmt.Sprintf("dlg_%d_%s", time.Now().UnixNano(), msg.Role)
 	e.db.Exec(
-		`INSERT INTO dialogue_history (id, role, content, character, created_at) VALUES (?, ?, ?, ?, ?)`,
-		id, msg.Role, msg.Content, character, time.Now(),
+		`INSERT INTO dialogue_history (id, role, content, character, instance_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, msg.Role, msg.Content, character, e.instanceID, time.Now(),
 	)
 }
 
@@ -121,7 +137,9 @@ func (e *Engine) ResetDialogue(character string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.shortTerm, character)
-	e.db.Exec(`DELETE FROM dialogue_history WHERE character = ?`, character)
+	query := `DELETE FROM dialogue_history WHERE character = ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(character)
+	e.db.Exec(query, args...)
 }
 
 // LoadRecentDialogueFromDB restores the last N messages for a character from SQLite into short-term memory.
@@ -129,8 +147,14 @@ func (e *Engine) LoadRecentDialogueFromDB(character string, limit int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	rows, err := e.db.Query(
-		`SELECT role, content FROM dialogue_history WHERE character = ? ORDER BY created_at DESC LIMIT ?`, character, limit)
+	where, args := e.instanceScopeArgs(character)
+	query := `SELECT role, content FROM dialogue_history WHERE character = ?`
+	if where != "" {
+		query += " AND " + where
+	}
+	query += " ORDER BY created_at DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := e.db.Query(query, args...)
 	if err != nil {
 		return
 	}
@@ -144,22 +168,6 @@ func (e *Engine) LoadRecentDialogueFromDB(character string, limit int) {
 		}
 	}
 
-	// Fallback: load legacy messages with empty character field, then migrate them
-	if len(msgs) == 0 {
-		legacyRows, err := e.db.Query(
-			`SELECT role, content FROM dialogue_history WHERE character = '' ORDER BY created_at DESC LIMIT ?`, limit)
-		if err == nil {
-			defer legacyRows.Close()
-			for legacyRows.Next() {
-				var msg core.Message
-				if err := legacyRows.Scan(&msg.Role, &msg.Content); err == nil {
-					msgs = append([]core.Message{msg}, msgs...)
-				}
-			}
-			e.db.Exec(`UPDATE dialogue_history SET character = ? WHERE character = ''`, character)
-		}
-	}
-
 	if len(msgs) > e.shortTermCap {
 		msgs = msgs[len(msgs)-e.shortTermCap:]
 	}
@@ -170,16 +178,18 @@ func (e *Engine) LoadRecentDialogueFromDB(character string, limit int) {
 
 func (e *Engine) SetWorkingMemory(character, content string) error {
 	_, err := e.db.Exec(
-		`INSERT INTO working_memory (id, character, content, updated_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at`,
-		fmt.Sprintf("wm_%s", character), character, content, time.Now(),
+		`INSERT INTO working_memory (id, character, content, instance_id, updated_at) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET content=excluded.content, instance_id=excluded.instance_id, updated_at=excluded.updated_at`,
+		fmt.Sprintf("wm_%s_%s", e.instanceScopeKey(), character), character, content, e.instanceID, time.Now(),
 	)
 	return err
 }
 
 func (e *Engine) GetWorkingMemory(character string) (string, error) {
 	var content string
-	err := e.db.QueryRow(`SELECT content FROM working_memory WHERE character = ?`, character).Scan(&content)
+	query := `SELECT content FROM working_memory WHERE character = ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(character)
+	err := e.db.QueryRow(query, args...).Scan(&content)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -191,20 +201,23 @@ func (e *Engine) GetWorkingMemory(character string) (string, error) {
 func (e *Engine) RememberFact(fact core.FactFrame, character string, confidence float64) error {
 	id := fmt.Sprintf("fact_%s_%s_%s_%d", character, fact.Subject, fact.Predicate, time.Now().Unix())
 	_, err := e.db.Exec(
-		`INSERT INTO semantic_facts (id, character, subject, predicate, object, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, character, fact.Subject, fact.Predicate, fact.Object, confidence, time.Now(),
+		`INSERT INTO semantic_facts (id, character, subject, predicate, object, confidence, instance_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, character, fact.Subject, fact.Predicate, fact.Object, confidence, e.instanceID, time.Now(),
 	)
 	return err
 }
 
 func (e *Engine) RecallFacts(query string, character string, limit int) ([]core.FactFrame, error) {
 	// P1: simple keyword matching, no vector search yet
-	rows, err := e.db.Query(
-		`SELECT subject, predicate, object, confidence FROM semantic_facts
-		WHERE character = ? AND (subject LIKE ? OR predicate LIKE ? OR object LIKE ?)
-		ORDER BY confidence DESC LIMIT ?`,
-		character, "%"+query+"%", "%"+query+"%", "%"+query+"%", limit,
-	)
+	scope, args := e.instanceScopeArgs(character, "%"+query+"%", "%"+query+"%", "%"+query+"%")
+	sqlQuery := `SELECT subject, predicate, object, confidence FROM semantic_facts
+		WHERE character = ? AND (subject LIKE ? OR predicate LIKE ? OR object LIKE ?)`
+	if scope != "" {
+		sqlQuery += " AND " + scope
+	}
+	sqlQuery += " ORDER BY confidence DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := e.db.Query(sqlQuery, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -222,10 +235,13 @@ func (e *Engine) RecallFacts(query string, character string, limit int) ([]core.
 }
 
 func (e *Engine) GetAllFacts(character string) ([]core.FactFrame, error) {
-	rows, err := e.db.Query(
-		`SELECT subject, predicate, object, confidence FROM semantic_facts WHERE character = ? ORDER BY created_at DESC`,
-		character,
-	)
+	scope, args := e.instanceScopeArgs(character)
+	query := `SELECT subject, predicate, object, confidence FROM semantic_facts WHERE character = ?`
+	if scope != "" {
+		query += " AND " + scope
+	}
+	query += " ORDER BY created_at DESC"
+	rows, err := e.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -244,9 +260,11 @@ func (e *Engine) GetAllFacts(character string) ([]core.FactFrame, error) {
 
 // SeedFacts inserts ontology facts with high confidence (canonical truth).
 func (e *Engine) SeedFacts(facts []core.FactFrame, character string) error {
-	// Skip if already seeded (prevent accumulation on restart)
+	// Skip if ontology seed IDs already exist for this character.
 	var count int
-	e.db.QueryRow(`SELECT COUNT(*) FROM semantic_facts WHERE character = ? AND confidence >= 1.0`, character).Scan(&count)
+	query := `SELECT COUNT(*) FROM semantic_facts WHERE id LIKE ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(fmt.Sprintf("ont_%s_%%", character))
+	e.db.QueryRow(query, args...).Scan(&count)
 	if count > 0 {
 		return nil
 	}
@@ -257,7 +275,7 @@ func (e *Engine) SeedFacts(facts []core.FactFrame, character string) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`INSERT INTO semantic_facts (id, character, subject, predicate, object, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO semantic_facts (id, character, subject, predicate, object, confidence, instance_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -266,7 +284,35 @@ func (e *Engine) SeedFacts(facts []core.FactFrame, character string) error {
 	now := time.Now()
 	for i, f := range facts {
 		id := fmt.Sprintf("ont_%s_%d", character, i)
-		if _, err := stmt.Exec(id, character, f.Subject, f.Predicate, f.Object, f.Confidence, now); err != nil {
+		if _, err := stmt.Exec(id, character, f.Subject, f.Predicate, f.Object, f.Confidence, e.instanceID, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (e *Engine) ReplaceSeedFacts(facts []core.FactFrame, character string) error {
+	tx, err := e.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `DELETE FROM semantic_facts WHERE id LIKE ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(fmt.Sprintf("ont_%s_%%", character))
+	if _, err := tx.Exec(query, args...); err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO semantic_facts (id, character, subject, predicate, object, confidence, instance_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	now := time.Now()
+	for i, f := range facts {
+		id := fmt.Sprintf("ont_%s_%d", character, i)
+		if _, err := stmt.Exec(id, character, f.Subject, f.Predicate, f.Object, f.Confidence, e.instanceID, now); err != nil {
 			return err
 		}
 	}
@@ -276,7 +322,9 @@ func (e *Engine) SeedFacts(facts []core.FactFrame, character string) error {
 // SeedEpisodics inserts ontology events as episodic memory.
 func (e *Engine) SeedEpisodics(events []core.EventFrame, character string) error {
 	var count int
-	e.db.QueryRow(`SELECT COUNT(*) FROM episodic_events WHERE character = ? AND emotional_weight >= 1.0`, character).Scan(&count)
+	query := `SELECT COUNT(*) FROM episodic_events WHERE id LIKE ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(fmt.Sprintf("ont_epi_%s_%%", character))
+	e.db.QueryRow(query, args...).Scan(&count)
 	if count > 0 {
 		return nil
 	}
@@ -287,7 +335,7 @@ func (e *Engine) SeedEpisodics(events []core.EventFrame, character string) error
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`INSERT INTO episodic_events (id, character, event_id, event_type, description, emotional_weight, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO episodic_events (id, character, event_id, event_type, description, emotional_weight, instance_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -296,7 +344,35 @@ func (e *Engine) SeedEpisodics(events []core.EventFrame, character string) error
 	now := time.Now()
 	for i, evt := range events {
 		id := fmt.Sprintf("ont_epi_%s_%d", character, i)
-		if _, err := stmt.Exec(id, character, evt.EventID, evt.Type, evt.Description, evt.EmotionalWeight, now); err != nil {
+		if _, err := stmt.Exec(id, character, evt.EventID, evt.Type, evt.Description, evt.EmotionalWeight, e.instanceID, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (e *Engine) ReplaceSeedEpisodics(events []core.EventFrame, character string) error {
+	tx, err := e.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `DELETE FROM episodic_events WHERE id LIKE ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(fmt.Sprintf("ont_epi_%s_%%", character))
+	if _, err := tx.Exec(query, args...); err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO episodic_events (id, character, event_id, event_type, description, emotional_weight, instance_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	now := time.Now()
+	for i, evt := range events {
+		id := fmt.Sprintf("ont_epi_%s_%d", character, i)
+		if _, err := stmt.Exec(id, character, evt.EventID, evt.Type, evt.Description, evt.EmotionalWeight, e.instanceID, now); err != nil {
 			return err
 		}
 	}
@@ -308,20 +384,23 @@ func (e *Engine) SeedEpisodics(events []core.EventFrame, character string) error
 func (e *Engine) RecordEpisodic(event core.EventFrame, character string) error {
 	id := fmt.Sprintf("epi_%s_%s_%d", character, event.EventID, time.Now().Unix())
 	_, err := e.db.Exec(
-		`INSERT INTO episodic_events (id, character, event_id, event_type, description, emotional_weight, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, character, event.EventID, event.Type, event.Description, event.EmotionalWeight, time.Now(),
+		`INSERT INTO episodic_events (id, character, event_id, event_type, description, emotional_weight, instance_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, character, event.EventID, event.Type, event.Description, event.EmotionalWeight, e.instanceID, time.Now(),
 	)
 	return err
 }
 
 func (e *Engine) RecallEpisodic(query string, character string, limit int) ([]core.EventFrame, error) {
 	// P1: keyword matching on description
-	rows, err := e.db.Query(
-		`SELECT event_id, event_type, description, emotional_weight FROM episodic_events
-		WHERE character = ? AND description LIKE ?
-		ORDER BY emotional_weight DESC, created_at DESC LIMIT ?`,
-		character, "%"+query+"%", limit,
-	)
+	scope, args := e.instanceScopeArgs(character, "%"+query+"%")
+	sqlQuery := `SELECT event_id, event_type, description, emotional_weight FROM episodic_events
+		WHERE character = ? AND description LIKE ?`
+	if scope != "" {
+		sqlQuery += " AND " + scope
+	}
+	sqlQuery += " ORDER BY emotional_weight DESC, created_at DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := e.db.Query(sqlQuery, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -339,11 +418,15 @@ func (e *Engine) RecallEpisodic(query string, character string, limit int) ([]co
 }
 
 func (e *Engine) GetRecentEpisodic(character string, limit int) ([]core.EventFrame, error) {
-	rows, err := e.db.Query(
-		`SELECT event_id, event_type, description, emotional_weight FROM episodic_events
-		WHERE character = ? ORDER BY created_at DESC LIMIT ?`,
-		character, limit,
-	)
+	scope, args := e.instanceScopeArgs(character)
+	query := `SELECT event_id, event_type, description, emotional_weight FROM episodic_events
+		WHERE character = ?`
+	if scope != "" {
+		query += " AND " + scope
+	}
+	query += " ORDER BY created_at DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := e.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -468,23 +551,31 @@ func TakeUntilBudget(memories []core.Memory, maxTokens int) []core.Memory {
 // CountFacts returns the total number of semantic facts for a character.
 func (e *Engine) CountFacts(character string) int {
 	var count int
-	e.db.QueryRow(`SELECT COUNT(*) FROM semantic_facts WHERE character = ?`, character).Scan(&count)
+	query := `SELECT COUNT(*) FROM semantic_facts WHERE character = ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(character)
+	e.db.QueryRow(query, args...).Scan(&count)
 	return count
 }
 
 // CountEpisodic returns the total number of episodic events for a character.
 func (e *Engine) CountEpisodic(character string) int {
 	var count int
-	e.db.QueryRow(`SELECT COUNT(*) FROM episodic_events WHERE character = ?`, character).Scan(&count)
+	query := `SELECT COUNT(*) FROM episodic_events WHERE character = ?` + e.instanceScopeSuffix(" AND ")
+	_, args := e.instanceScopeArgs(character)
+	e.db.QueryRow(query, args...).Scan(&count)
 	return count
 }
 
 // GetAllEpisodic returns all episodic events for a character (used by vector search).
 func (e *Engine) GetAllEpisodic(character string) ([]core.EventFrame, error) {
-	rows, err := e.db.Query(
-		`SELECT event_id, event_type, description, emotional_weight FROM episodic_events
-		WHERE character = ? ORDER BY created_at DESC`, character,
-	)
+	scope, args := e.instanceScopeArgs(character)
+	query := `SELECT event_id, event_type, description, emotional_weight FROM episodic_events
+		WHERE character = ?`
+	if scope != "" {
+		query += " AND " + scope
+	}
+	query += " ORDER BY created_at DESC"
+	rows, err := e.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -508,4 +599,66 @@ func (e *Engine) Close() error {
 // DB exposes the underlying database connection for other modules.
 func (e *Engine) DB() *sql.DB {
 	return e.db
+}
+
+func (e *Engine) LastAssistantAt(character string) (time.Time, bool) {
+	var raw string
+	query := `SELECT created_at FROM dialogue_history WHERE character = ? AND role = 'assistant'` + e.instanceScopeSuffix(" AND ") + ` ORDER BY created_at DESC LIMIT 1`
+	_, args := e.instanceScopeArgs(character)
+	err := e.db.QueryRow(query, args...).Scan(&raw)
+	if err != nil {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05",
+		time.RFC3339Nano,
+	} {
+		if ts, err := time.Parse(layout, raw); err == nil {
+			return ts, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func (e *Engine) SetInstanceID(id string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.instanceID = strings.TrimSpace(id)
+}
+
+func (e *Engine) InstanceID() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.instanceID
+}
+
+func (e *Engine) instanceScopeKey() string {
+	if strings.TrimSpace(e.instanceID) == "" {
+		return "legacy"
+	}
+	return e.instanceID
+}
+
+func (e *Engine) instanceScopeSuffix(prefix string) string {
+	where, _ := e.instanceScopeArgs()
+	if where == "" {
+		return ""
+	}
+	return prefix + where
+}
+
+func (e *Engine) instanceScopeArgs(prefixArgs ...interface{}) (string, []interface{}) {
+	args := append([]interface{}{}, prefixArgs...)
+	switch strings.TrimSpace(e.instanceID) {
+	case "":
+		return "", args
+	case "default":
+		args = append(args, "default")
+		return `(instance_id = ? OR COALESCE(instance_id, '') = '')`, args
+	default:
+		args = append(args, e.instanceID)
+		return `instance_id = ?`, args
+	}
 }

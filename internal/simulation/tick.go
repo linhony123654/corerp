@@ -1,6 +1,8 @@
 package simulation
 
 import (
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -9,9 +11,11 @@ import (
 type Loop struct {
 	interval   time.Duration // real-world tick interval
 	worldRatio time.Duration // how much world time advances per tick
-	tickCount  int
+	tickCount  atomic.Int64
 	stopCh     chan struct{}
 	handlers   []func()
+	mu         sync.Mutex
+	stopped    bool
 }
 
 func NewLoop(realInterval time.Duration) *Loop {
@@ -35,8 +39,14 @@ func (l *Loop) Start() {
 	go l.run()
 }
 
-// Stop signals the tick loop to terminate.
+// Stop signals the tick loop to terminate. Safe to call multiple times.
 func (l *Loop) Stop() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.stopped {
+		return
+	}
+	l.stopped = true
 	close(l.stopCh)
 }
 
@@ -48,7 +58,7 @@ func (l *Loop) run() {
 		case <-l.stopCh:
 			return
 		case <-ticker.C:
-			l.tickCount++
+			l.tickCount.Add(1)
 			for _, h := range l.handlers {
 				h()
 			}
@@ -58,10 +68,10 @@ func (l *Loop) run() {
 
 // TickCount returns how many ticks have fired.
 func (l *Loop) TickCount() int {
-	return l.tickCount
+	return int(l.tickCount.Load())
 }
 
 // WorldAdvancement returns total world time advanced so far.
 func (l *Loop) WorldAdvancement() time.Duration {
-	return time.Duration(l.tickCount) * l.worldRatio
+	return time.Duration(l.tickCount.Load()) * l.worldRatio
 }

@@ -9,18 +9,18 @@ import (
 
 // APIConfig holds one LLM API configuration.
 type APIConfig struct {
-	Name           string  `json:"name"`
-	Endpoint       string  `json:"endpoint"`
-	APIKey         string  `json:"api_key"`
-	Model          string  `json:"model"`
-	PromptPrice    float64 `json:"prompt_price"`    // ¥ per 1M tokens
+	Name            string  `json:"name"`
+	Endpoint        string  `json:"endpoint"`
+	APIKey          string  `json:"api_key"`
+	Model           string  `json:"model"`
+	PromptPrice     float64 `json:"prompt_price"`     // ¥ per 1M tokens
 	CompletionPrice float64 `json:"completion_price"` // ¥ per 1M tokens
 }
 
 // ConfigStore manages persisted LLM API configurations.
 type ConfigStore struct {
-	mu     sync.RWMutex
-	path   string
+	mu      sync.RWMutex
+	path    string
 	configs []APIConfig
 }
 
@@ -29,13 +29,25 @@ var activeConfig APIConfig
 
 // SetActiveConfig records the CLI/env-provided LLM config.
 func SetActiveConfig(name, endpoint, apiKey, model string) {
-	activeConfig = APIConfig{
+	SetActiveConfigFull(APIConfig{
 		Name: name, Endpoint: endpoint, APIKey: apiKey, Model: model,
 		PromptPrice: 1.0, CompletionPrice: 4.0, // DeepSeek defaults
+	})
+}
+
+// SetActiveConfigFull records the fully specified active config, preserving
+// custom pricing when it is already known.
+func SetActiveConfigFull(cfg APIConfig) {
+	if cfg.PromptPrice <= 0 {
+		cfg.PromptPrice = 1.0
 	}
+	if cfg.CompletionPrice <= 0 {
+		cfg.CompletionPrice = 4.0
+	}
+	activeConfig = cfg
 	// Also save to store for persistence
 	if globalConfigStore != nil {
-		globalConfigStore.Add(activeConfig)
+		globalConfigStore.Add(cfg)
 	}
 }
 

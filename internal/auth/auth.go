@@ -14,15 +14,51 @@ const cookieName = "corerp_session"
 const tokenTTL = 24 * time.Hour
 
 var sharedSecret string
+var secureCookie bool
 
-// Init sets the shared secret for token signing.
+// Init sets the shared secret for token signing and secure cookie flag.
 func Init(secret string) {
 	sharedSecret = secret
+}
+
+// SetSecureCookie controls the Secure flag on session cookies.
+// Should be true in production (behind HTTPS), false for local dev.
+func SetSecureCookie(secure bool) {
+	secureCookie = secure
 }
 
 // IsEnabled returns true if authentication is configured.
 func IsEnabled() bool {
 	return sharedSecret != ""
+}
+
+// SetPassword changes the shared secret at runtime.
+// Returns true if no auth was previously set (first-time setup).
+func SetPassword(newPassword string) {
+	sharedSecret = newPassword
+}
+
+// MaskPassword returns a masked version for logging.
+func MaskPassword() string {
+	if sharedSecret == "" {
+		return "(无)"
+	}
+	if len(sharedSecret) <= 3 {
+		return "***"
+	}
+	return sharedSecret[:1] + "***" + sharedSecret[len(sharedSecret)-1:]
+}
+
+// ChangePassword validates the old password and sets a new one.
+func ChangePassword(old, new string) error {
+	if sharedSecret != "" && old != sharedSecret {
+		return fmt.Errorf("原密码错误")
+	}
+	if new == "" {
+		return fmt.Errorf("新密码不能为空")
+	}
+	sharedSecret = new
+	return nil
 }
 
 // GenerateToken creates a time-limited HMAC token.
@@ -116,7 +152,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   false, // set true behind HTTPS
+			Secure:   secureCookie,
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   int(tokenTTL.Seconds()),
 		})

@@ -1,8 +1,8 @@
 package events
 
 import (
+	"database/sql"
 	"fmt"
-	"time"
 
 	"corerp/internal/core"
 )
@@ -17,60 +17,41 @@ func NewReplayEngine(store *Store) *ReplayEngine {
 	return &ReplayEngine{store: store}
 }
 
-// ReplayTo reconstructs WorldState by replaying all canonical events
-// on the main branch up to and including the given event.
+// ReplayTo reconstructs WorldState by replaying the effective branch lineage
+// up to and including the given event.
 func (r *ReplayEngine) ReplayTo(eventID string, branch string) (core.WorldState, error) {
-	if branch == "" {
-		branch = "main"
-	}
-
-	events, err := r.store.GetCanonicalEvents()
+	events, err := r.lineageEvents(branch)
 	if err != nil {
 		return core.WorldState{}, err
 	}
 
-	state := core.WorldState{
-		Relationships: make(map[string]core.Relationship),
-		Variables:     make(map[string]interface{}),
-		Flags:         make(map[string]bool),
-	}
-
+	state := emptyWorldState()
+	found := false
 	for _, e := range events {
-		// Skip events from other branches
-		// (branch info not on core.Event, use a separate query)
-		if !e.Canonical {
-			continue
-		}
 		state = applyEvent(state, e)
 		if e.ID == eventID {
+			found = true
 			break
 		}
 	}
-
+	if eventID != "" && !found {
+		return core.WorldState{}, fmt.Errorf("event '%s' not found on branch '%s'", eventID, normalizeBranch(branch))
+	}
 	return state, nil
 }
 
-// ReplayAtTime reconstructs WorldState by replaying events up to a
-// specific world clock time.
+// ReplayAtTime reconstructs WorldState by replaying events on the effective
+// branch lineage up to a specific world clock time.
 func (r *ReplayEngine) ReplayAtTime(hour, minute, day int) (core.WorldState, error) {
-	events, err := r.store.GetCanonicalEvents()
+	events, err := r.lineageEvents("main")
 	if err != nil {
 		return core.WorldState{}, err
 	}
 
-	state := core.WorldState{
-		Relationships: make(map[string]core.Relationship),
-		Variables:     make(map[string]interface{}),
-		Flags:         make(map[string]bool),
-	}
-
+	state := emptyWorldState()
 	for _, e := range events {
-		if !e.Canonical {
-			continue
-		}
 		state = applyEvent(state, e)
 
-		// Check if we've reached the target time
 		if state.Clock.Day > day {
 			break
 		}
@@ -85,21 +66,25 @@ func (r *ReplayEngine) ReplayAtTime(hour, minute, day int) (core.WorldState, err
 	return state, nil
 }
 
-// ForkPoint marks an event as the start of a new timeline branch.
-// Events after this point on the new branch will diverge from the original.
+// Fork creates a branch metadata record instead of mutating existing events.
 func (r *ReplayEngine) Fork(eventID string, branchName string) error {
-	// Tag the fork point event and all subsequent events can be branched
-	_, err := r.store.db.Exec(
-		`UPDATE events SET branch = ? WHERE id = ?`, branchName, eventID,
-	)
-	return err
+	evt, err := r.store.GetByID(eventID)
+	if err != nil {
+		return err
+	}
+	parent := normalizeBranch(evt.Branch)
+	return r.store.CreateBranch(branchName, parent, eventID)
 }
 
-// GetBranch returns all events on a specific branch in order.
+// GetBranch returns all events authored directly on a specific branch.
 func (r *ReplayEngine) GetBranch(branchName string) ([]core.Event, error) {
+	branchName = normalizeBranch(branchName)
 	rows, err := r.store.db.Query(
 		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at
-		 FROM events WHERE branch = ? ORDER BY created_at ASC`, branchName,
+		 FROM events WHERE branch = ?`+r.store.instanceScopeSuffix(" AND ")+` ORDER BY created_at ASC`, func() []interface{} {
+			_, args := r.store.instanceScopeArgs(branchName)
+			return args
+		}()...,
 	)
 	if err != nil {
 		return nil, err
@@ -108,23 +93,15 @@ func (r *ReplayEngine) GetBranch(branchName string) ([]core.Event, error) {
 	return scanEvents(rows)
 }
 
-// ListBranches returns all unique branch names.
+// ListBranches returns all known branch names.
 func (r *ReplayEngine) ListBranches() ([]string, error) {
-	rows, err := r.store.db.Query(
-		`SELECT DISTINCT branch FROM events ORDER BY branch`,
-	)
+	records, err := r.store.ListBranchesMetadata()
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var branches []string
-	for rows.Next() {
-		var b string
-		if err := rows.Scan(&b); err != nil {
-			return nil, err
-		}
-		branches = append(branches, b)
+	branches := make([]string, 0, len(records))
+	for _, rec := range records {
+		branches = append(branches, rec.Name)
 	}
 	return branches, nil
 }
@@ -136,31 +113,22 @@ type EventTimeline struct {
 	EventIndex int        `json:"index"`
 }
 
-// GetTimeline returns the full event timeline for a branch.
+// GetTimeline returns the effective canonical timeline for a branch, including
+// inherited ancestor events up to the fork point.
 func (r *ReplayEngine) GetTimeline(branch string, limit int) ([]EventTimeline, error) {
-	if branch == "" {
-		branch = "main"
-	}
-
-	rows, err := r.store.db.Query(
-		`SELECT id, type, actor, target, payload, causes, effects, canonical, confidence, confirmations, scene_id, session_id, branch, created_at
-		 FROM events WHERE branch = ? AND canonical = 1 ORDER BY created_at ASC LIMIT ?`, branch, limit,
-	)
+	events, err := r.lineageEvents(branch)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	events, err := scanEvents(rows)
-	if err != nil {
-		return nil, err
+	if limit > 0 && len(events) > limit {
+		events = events[:limit]
 	}
 
-	var timeline []EventTimeline
+	timeline := make([]EventTimeline, 0, len(events))
 	for i, e := range events {
 		timeline = append(timeline, EventTimeline{
 			Event:      e,
-			Branch:     branch,
+			Branch:     e.Branch,
 			EventIndex: i,
 		})
 	}
@@ -175,22 +143,26 @@ func (r *ReplayEngine) CompareStates(branchA, branchB string, atEventIndex int) 
 		"branch_b": branchB,
 	}
 
-	timelineA, err := r.GetTimeline(branchA, atEventIndex+1)
+	timelineA, err := r.GetTimeline(branchA, 1000000)
 	if err != nil {
 		return nil, fmt.Errorf("branch %s: %w", branchA, err)
 	}
-	timelineB, err := r.GetTimeline(branchB, atEventIndex+1)
+	timelineB, err := r.GetTimeline(branchB, 1000000)
 	if err != nil {
 		return nil, fmt.Errorf("branch %s: %w", branchB, err)
 	}
 
-	stateA := core.WorldState{
-		Relationships: make(map[string]core.Relationship),
-		Variables:     make(map[string]interface{}),
-		Flags:         make(map[string]bool),
+	if atEventIndex >= 0 {
+		if atEventIndex+1 < len(timelineA) {
+			timelineA = timelineA[:atEventIndex+1]
+		}
+		if atEventIndex+1 < len(timelineB) {
+			timelineB = timelineB[:atEventIndex+1]
+		}
 	}
-	stateB := stateA
 
+	stateA := emptyWorldState()
+	stateB := emptyWorldState()
 	for _, t := range timelineA {
 		stateA = applyEvent(stateA, t.Event)
 	}
@@ -198,7 +170,6 @@ func (r *ReplayEngine) CompareStates(branchA, branchB string, atEventIndex int) 
 		stateB = applyEvent(stateB, t.Event)
 	}
 
-	// Diff key fields
 	diffs := make(map[string]interface{})
 	if stateA.Tension != stateB.Tension {
 		diffs["tension"] = map[string]float64{"a": stateA.Tension, "b": stateB.Tension}
@@ -210,7 +181,6 @@ func (r *ReplayEngine) CompareStates(branchA, branchB string, atEventIndex int) 
 		diffs["clock"] = map[string]core.WorldTime{"a": stateA.Clock, "b": stateB.Clock}
 	}
 
-	// Relationship diffs
 	relDiffs := make(map[string]interface{})
 	allKeys := make(map[string]bool)
 	for k := range stateA.Relationships {
@@ -265,9 +235,84 @@ func (r *ReplayEngine) ReplaySummary(eventID string) (string, error) {
 	), nil
 }
 
-// --- helpers ---
+func (r *ReplayEngine) lineageEvents(branch string) ([]core.Event, error) {
+	branch = normalizeBranch(branch)
+	records, err := r.branchLineage(branch)
+	if err != nil {
+		return nil, err
+	}
 
-func init() {
-	// ensure time package is used (for BuildTimeline's CreatedAt.Format)
-	_ = time.Now()
+	var all []core.Event
+	for i, rec := range records {
+		events, err := r.store.GetCanonicalEventsByBranch(rec.Name)
+		if err != nil {
+			return nil, err
+		}
+		if i < len(records)-1 && rec.ForkEventID != "" {
+			cut := indexOfEvent(events, rec.ForkEventID)
+			if cut < 0 {
+				return nil, fmt.Errorf("fork event '%s' not found on branch '%s'", rec.ForkEventID, rec.Name)
+			}
+			events = events[:cut+1]
+		}
+		all = append(all, events...)
+	}
+	return all, nil
+}
+
+func (r *ReplayEngine) branchLineage(branch string) ([]branchRecord, error) {
+	var chain []branchRecord
+	seen := map[string]bool{}
+	current := normalizeBranch(branch)
+	for {
+		if seen[current] {
+			return nil, fmt.Errorf("branch cycle detected at '%s'", current)
+		}
+		seen[current] = true
+
+		rec, err := r.store.GetBranch(current)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				if current == "main" {
+					return []branchRecord{{Name: "main"}}, nil
+				}
+				return []branchRecord{{Name: current}}, nil
+			}
+			return nil, err
+		}
+		chain = append([]branchRecord{rec}, chain...)
+		if rec.ParentBranch == "" {
+			break
+		}
+		current = rec.ParentBranch
+	}
+
+	for i := 1; i < len(chain); i++ {
+		chain[i-1].ForkEventID = chain[i].ForkEventID
+	}
+	return chain, nil
+}
+
+func emptyWorldState() core.WorldState {
+	return core.WorldState{
+		Relationships: make(map[string]core.Relationship),
+		Variables:     make(map[string]interface{}),
+		Flags:         make(map[string]bool),
+	}
+}
+
+func normalizeBranch(branch string) string {
+	if branch == "" {
+		return "main"
+	}
+	return branch
+}
+
+func indexOfEvent(events []core.Event, eventID string) int {
+	for i, e := range events {
+		if e.ID == eventID {
+			return i
+		}
+	}
+	return -1
 }

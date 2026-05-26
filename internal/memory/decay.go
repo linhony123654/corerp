@@ -9,7 +9,8 @@ import (
 
 // DecayEngine runs periodic memory and relationship decay.
 type DecayEngine struct {
-	db        *sql.DB
+	db            *sql.DB
+	instanceID    string
 	factThreshold float64
 }
 
@@ -25,7 +26,7 @@ func (de *DecayEngine) Tick(state core.WorldState) (core.WorldState, DecayReport
 	var report DecayReport
 
 	// 1. Fact decay
-	deleted, err := ApplyFactDecay(de.db, de.factThreshold)
+	deleted, err := ApplyFactDecayForInstance(de.db, de.factThreshold, de.instanceID)
 	if err == nil {
 		report.FactsDeleted = deleted
 	}
@@ -37,29 +38,24 @@ func (de *DecayEngine) Tick(state core.WorldState) (core.WorldState, DecayReport
 
 	// 3. Episodic decay: remove very old events
 	cutoff := time.Now().Add(-30 * 24 * time.Hour).Format("2006-01-02 15:04:05")
-	res, _ := de.db.Exec(`DELETE FROM episodic_events WHERE created_at < ?`, cutoff)
+	cp := NewConfidencePipelineForInstance(de.db, de.instanceID)
+	res, _ := de.db.Exec(`DELETE FROM episodic_events WHERE created_at < ?`+cp.instanceScopeSuffix(" AND "), cp.instanceScopeArgs(cutoff)...)
 	if res != nil {
 		n, _ := res.RowsAffected()
 		report.EpisodicPruned = int(n)
 	}
 
 	// 4. Process pending facts pipeline
-	if cp := NewConfidencePipeline(de.db); cp != nil {
+	if cp := NewConfidencePipelineForInstance(de.db, de.instanceID); cp != nil {
 		promoted, _ := cp.ProcessPending(0.75)
 		report.FactsPromoted = len(promoted)
-		for _, f := range promoted {
-			// Insert promoted facts into canonical semantic memory
-			id := "fact_" + f.Subject + "_" + f.Predicate + "_" + time.Now().Format("20060102")
-			de.db.Exec(
-				`INSERT INTO semantic_facts (id, character, subject, predicate, object, confidence, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)
-				 ON CONFLICT(id) DO UPDATE SET confidence = excluded.confidence`,
-				id, "", f.Subject, f.Predicate, f.Object, f.Confidence, time.Now(),
-			)
-		}
 	}
 
 	return state, report
+}
+
+func (de *DecayEngine) SetInstanceID(id string) {
+	de.instanceID = id
 }
 
 // DecayReport summarizes what decay tick did.

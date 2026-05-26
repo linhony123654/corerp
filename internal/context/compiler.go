@@ -97,6 +97,10 @@ func (c *Compiler) SetMode(mode string) {
 	}
 }
 
+func (c *Compiler) BudgetMode() string {
+	return c.mode
+}
+
 // Budget returns the active budget.
 func (c *Compiler) Budget() Budget {
 	if b, ok := c.budgets[c.mode]; ok {
@@ -109,6 +113,7 @@ func (c *Compiler) Budget() Budget {
 func (c *Compiler) Compile(
 	state core.WorldState,
 	persona core.PersonaFrame,
+	playerRole core.PlayerRole,
 	workingMem string,
 	semanticFacts []core.FactFrame,
 	episodicEvents []core.EventFrame,
@@ -123,6 +128,7 @@ func (c *Compiler) Compile(
 		UsedTokens:     0,
 		CoreRules:      c.truncate(coreRules, b.CoreRules),
 		PersonaState:   persona,
+		PlayerRole:     playerRole,
 		SceneState:     state.Scene,
 		ActiveGoals:    goals,
 		WorkingMemory:  c.truncate(workingMem, b.WorkingMemory),
@@ -210,6 +216,7 @@ func (c *Compiler) estimateSnapshotTokens(s core.WorldSnapshot) int {
 	total += len(s.CoreRules) / 2
 	total += len(s.PersonaState.Name) * 2
 	total += len(strings.Join(s.PersonaState.Immutable, " ")) / 2
+	total += len(s.PlayerRole.Name+s.PlayerRole.Description) / 2
 	total += len(s.SceneState.Location+s.SceneState.Description) / 2
 	total += len(s.WorkingMemory) / 2
 	for _, f := range s.SemanticFacts {
@@ -257,6 +264,22 @@ func (c *Compiler) RenderSnapshot(s core.WorldSnapshot) string {
 	}
 	b.WriteString("\n")
 
+	playerName := strings.TrimSpace(s.PlayerRole.Name)
+	if playerName == "" {
+		playerName = "用户"
+	}
+	playerKey := strings.ReplaceAll(playerName, " ", "_")
+
+	b.WriteString("=== 对话对象 ===\n")
+	b.WriteString(fmt.Sprintf("名称: %s\n", playerName))
+	if s.PlayerRole.BoundCharacter != "" {
+		b.WriteString(fmt.Sprintf("绑定角色: %s\n", s.PlayerRole.BoundCharacter))
+	}
+	if s.PlayerRole.Description != "" {
+		b.WriteString(fmt.Sprintf("身份说明: %s\n", s.PlayerRole.Description))
+	}
+	b.WriteString("\n")
+
 	b.WriteString("=== 场景状态 ===\n")
 	b.WriteString(fmt.Sprintf("地点: %s\n", s.SceneState.Location))
 	b.WriteString(fmt.Sprintf("时间: %s\n", s.SceneState.TimeOfDay))
@@ -301,7 +324,7 @@ func (c *Compiler) RenderSnapshot(s core.WorldSnapshot) string {
 	for _, m := range s.RecentDialogue {
 		role := "你"
 		if m.Role == "user" {
-			role = "用户"
+			role = playerName
 		}
 		b.WriteString(fmt.Sprintf("%s: %s\n", role, m.Content))
 	}
@@ -318,7 +341,7 @@ func (c *Compiler) RenderSnapshot(s core.WorldSnapshot) string {
 	b.WriteString("你必须严格按以下格式输出，不要有任何前缀说明，不要省略任何字段：\n\n")
 	b.WriteString(fmt.Sprintf("1. 先输出 Action Frame，放在 ```json 代码块中。actor 必须是 \"%s\"，action 必填。effects 必须是对象数组 [{\"path\":\"...\",\"delta\":数字}]，不能是字符串数组。示例：\n", actorName))
 	b.WriteString("```json\n")
-	b.WriteString(fmt.Sprintf("{\"actor\":\"%s\",\"action\":\"speak\",\"target\":\"用户\",\"intensity\":5,\"emotion\":{\"primary\":\"警惕\",\"secondary\":\"冷淡\",\"intensity\":0.7},\"intent\":\"试探对方意图\",\"suggested_line\":\"什么事？\",\"effects\":[{\"path\":\"relationships.%s_用户.trust\",\"delta\":-0.5}]}\n", actorName, actorKey))
+	b.WriteString(fmt.Sprintf("{\"actor\":\"%s\",\"action\":\"speak\",\"target\":\"%s\",\"intensity\":5,\"emotion\":{\"primary\":\"警惕\",\"secondary\":\"冷淡\",\"intensity\":0.7},\"intent\":\"试探对方意图\",\"suggested_line\":\"什么事？\",\"effects\":[{\"path\":\"relationships.%s_%s.trust\",\"delta\":-0.5}]}\n", actorName, playerName, actorKey, playerKey))
 	b.WriteString("```\n\n")
 	b.WriteString("2. 然后输出叙事文本，放在 ```text 代码块中。不要包含 Action Frame 的任何内容：\n")
 	b.WriteString("```text\n")

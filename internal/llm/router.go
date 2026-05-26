@@ -43,6 +43,12 @@ func (r *Router) AddAdapter(name string, adapter *Adapter) {
 	r.adapters[name] = adapter
 }
 
+// UpdateAdapter replaces an existing adapter (or adds if new).
+// Used for hot-swapping LLM configs without restart.
+func (r *Router) UpdateAdapter(name, endpoint, apiKey, model string) {
+	r.adapters[name] = NewAdapter(endpoint, apiKey, model)
+}
+
 // SetRoute maps a task to a specific adapter.
 func (r *Router) SetRoute(task, adapterName string) error {
 	if _, ok := r.adapters[adapterName]; !ok {

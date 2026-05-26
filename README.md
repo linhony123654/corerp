@@ -1,193 +1,189 @@
 # CoreRP — Persistent Narrative Runtime
 
-世界状态驱动的 LLM 叙事引擎。不是一个更好的 SillyTavern，而是一个**文字世界模拟器**。
+世界状态驱动的 LLM 叙事引擎。CoreRP 不是 prompt UI，也不是并发多 agent 群聊工具；它的目标是一个**可回放、可分叉、可解释**的文字世界运行时。
 
-**状态：Phase 1/2/3 全部完成。** 所有架构模块已实现，前端 100% 覆盖后端 API。
+**状态：Experimental / Prototype。** 核心 runtime 已成型，仍在迭代。
 
-## 核心哲学
+## 文档导航
 
-- **三种真相分离**：Canonical Truth（YAML定义）→ Runtime State（Event Store 投影）→ Narrative Output（LLM 生成，经 Validator 校验）
-- **LLM 不直接改世界**：所有状态变更必须经过 Action Frame → Executor → Event Commit → State Projection
-- **Action Layer 强制存在**：LLM 先输出结构化 ActionFrame，Runtime 执行后再渲染文本
+- [ARCHITECTURE.md](ARCHITECTURE.md): 当前分层架构与技术选型
+- [ARCHITECTURE_RUNTIME.md](ARCHITECTURE_RUNTIME.md): runtime 合约、event/replay/fork 约束
+- [FINAL_ARCHITECTURE_BLUEPRINT.md](FINAL_ARCHITECTURE_BLUEPRINT.md): 项目的目标终态蓝图
+- [AGENTS.md](AGENTS.md): 仓库协作与贡献约束
+- [SESSION_LOG.md](SESSION_LOG.md): 变更会话记录
+
+## 核心原则
+
+- 世界状态只允许通过 committed events 变化
+- LLM 只负责受约束的规划和渲染，不直接写世界真相
+- 一轮对话可以有多个角色参与，但必须按 `TurnStep` 严格串行执行
+- replay、fork、trace 都必须可解释、可复现
+
+当前 runtime 已经从“单轮单角色回复”演进为：
+
+```text
+DirectorPlan -> TurnStep[0..n] -> serial execution -> event commit -> reprojection
+```
+
+同时，runtime 现在已经引入**显式实例层**：
+
+```text
+RuntimeInstance(id) -> instance-scoped state/event/memory/save/branch data
+```
+
+目前默认实例为 `default`，绝大部分 runtime API 支持通过 `?instance_id=<id>` 显式访问指定实例。
+
+当前运行基线：
+
+- `data/` 已重建为新的干净运行目录
+- 旧测试库已删除，不再作为恢复目标
+- PM2 当前固定使用标准 `data/` 启动
+
+如果你要看完整设计，不要继续从 README 推断，直接读 [FINAL_ARCHITECTURE_BLUEPRINT.md](FINAL_ARCHITECTURE_BLUEPRINT.md)。
 
 ## 快速开始
 
 ```bash
-go build -o corerp ./cmd/corerp/
-./corerp serve -characters ./characters
+go build -o corerp ./cmd/corerp
+./corerp serve -characters ./characters -secure-cookie=false
 ```
 
-打开 `http://localhost:8080`。首次访问需输入密码（如果设置了 `-auth-key`）。
-
-### 配置
+打开 `http://localhost:8080`。
 
 ```bash
 export LLM_URL="https://your-api/v1"
 export LLM_API_KEY="your-key"
 export LLM_MODEL="model-name"
-export CORERP_AUTH_KEY="your-password"  # 可选，不设则免认证
+export CORERP_AUTH_KEY="your-password"  # 可选
 ```
 
-## 架构
+默认登录页是 `/login`。如果没有显式设置 `CORERP_AUTH_KEY` 或 `-auth-key`，默认密码是 `admin`。
 
-```
-Interface (PWA/SSE) → API Gateway (Auth) → Runtime Core
-  ├── Context OS     (Snapshot Compiler + 48K/96K Budget)
-  ├── State Machine  (calm/tense/crisis/resolution)
-  ├── Event Bus      (Store + Projector + Causality + Replay)
-  ├── Goal System    (Primary/Secondary/Hidden + Planner)
-  ├── Action Layer   (Frame + Executor + Dice)
-  ├── Memory Engine  (Short-term/Working/Semantic/Episodic + Vector)
-  └── Canon Layer    (Ontology + Facts + 三层目录)
-→ Narrative Layer (Renderer + Tension + Compression)
-→ LLM Adapter (Router: narrative/summary/extraction)
-→ Storage (SQLite + Vector | YAML worlds/)
-```
+## 导入角色卡
 
-## 前端
-
-Swiss Modernism editorial design。三主题：暗色 / 亮色 / 牛皮纸。
-
-右侧面板全覆盖：场景、用量、LLM 配置管理、模型拉取、时间线（可点击因果链+回放）、分叉、角色切换、NPC 动态、记忆状态、Tension 滑块、事件压缩。
-
-## 多角色支持
-
-- 加载 `characters/` 目录下所有 `.yml`，面板点击或下拉框切换
-- 每个角色独立记忆、世界场景、对话历史、写作风格
-- 非活跃角色后台规则式自主行动（Scheduler，零 LLM 消耗）
-- 切换时显示"你不在时发生的事"摘要
-
-## 世界文件结构（三层分离）
-
-```
-worlds/{name}/
-├── world.yml              # meta + core_rules（世界观底层规则）
-├── canon/
-│   ├── ontology.yml       # 实体定义（角色/地点/物品/体系）
-│   └── facts.yml          # 不可变事实（subject-predicate-object）
-└── scenes/
-    └── default.yml        # 场景状态（atmosphere/present_chars/tension）
-```
-
-导入角色卡自动生成三层结构。向后兼容旧版单文件 `_world.yml`。
-
-## TRPG 骰子判定
+当前 `import` 会把 SillyTavern PNG/JSON 卡拆成 CoreRP 的角色卡与世界卡：
 
 ```bash
-/roll trust           # 2d6 + trust修正
-/roll 3d6+fear 10     # 3d6+fear，难度10
-/r d20                # 快捷方式
+./corerp import -src ./card.json -dst ./characters
+./corerp import -src ./cards_dir -dst ./characters
+./corerp import -src ./card.json -dst ./characters -interactive
 ```
 
-角色数值 0-10 → 修正 -3 到 +5。判定结果注入对话上下文。
+默认模式是 `auto`：
 
-## 写作指导
+- 单角色卡：`1 character + 1 world`
+- 群像/大世界卡：`multiple characters + 1 world + cast_index.yml`
 
-角色卡 YAML 支持 `writing_guide`，放入"风格约束"层（不影响事实记忆）：
+`-interactive` 会先展示自动判断结果，再决定是否改成 `single` 或 `ensemble`。
 
-```yaml
-identity:
-  writing_guide: |
-    每轮回复 400-600 字。感官细节优先，内心活动占 30%。
-    叙事节奏：环境观察 → 身体反应 → 动作 → 对话。
-```
+## 前端与运行台
 
-## 向量检索
+`web/` 是单页运行台，不承载世界规则。当前 UI 重点是：
 
-- < 100 条：关键词 LIKE
-- >= 100 条：自动切换向量（256-dim 2-gram 或 bge-small-zh-v1.5 512-dim）
-- 质量过滤：RecallMinScore=0.30, RecallTopK=5
+- 场景、角色、聊天流和输入区
+- 首页已收成更简约的编辑风主版面：
+  - 顶部“运行数据”默认折叠
+  - 主区优先保留场景 headline、对话流和输入区
+  - 超窄屏下角色摘要默认折叠
+- 侧栏查看 trace、memory、timeline、LLM 配置、存档和世界信息
+- 侧栏已接入实例管理，可直接 create / set default / stop / delete runtime instance
+- 顶栏已支持显式实例选择，运行台请求会自动附带当前视图实例的 `instance_id`
+- `step_traces` 已接入前端，可按 step 查看 speaker、kind、action、validator 和 committed events
+- 作者工具已接入前端：
+  - checkpoint create / rollback
+  - scenario preset save / apply
+  - trace turn 历史浏览
+  - 当前 turn 高亮、上一轮 / 下一轮切换、checkpoint 与 trace 联动
+
+静态资源默认禁缓存，移动端侧栏会收成抽屉。
+
+## 主要端点
+
+- `POST /api/chat`: SSE 流式对话
+- `GET /api/health`: 存活探针
+- `GET /api/ready`: 就绪探针
+- `GET /api/version`: 服务版本信息（`version / commit / time`）
+- `GET /api/state`: 当前世界状态
+- `GET /api/instances`: 列出 runtime instances
+- `GET /api/instances/status`: 查询单个实例状态
+- `POST /api/instances/create`: 从现有实例创建新实例
+- `POST /api/instances/default`: 切换默认实例
+- `POST /api/instances/stop`: 停止实例 tick loop
+- `POST /api/instances/delete`: 删除实例及其实例级数据
+- `GET /api/trace/latest`: 最近一轮 trace
+- `GET /api/trace?turn=<n>`: 指定轮次 trace
+- `GET /api/traces`: 最近若干轮 trace 历史
+- `GET/POST /api/checkpoints`: 列出或创建 checkpoint
+- `POST /api/checkpoints/load`: rollback 到指定 checkpoint
+- `GET/POST /api/presets`: 列出或创建 scenario preset
+- `POST /api/presets/apply`: 套用 scenario preset
+- `GET/POST /api/saves`: 列出或保存存档
+- `POST /api/saves/load`: 载入存档
+- `GET /api/characters`, `POST /api/switch`: 角色列表与切换
+- `GET/POST /api/player-role`: 用户身份配置
+
+更完整的运行时行为和接口语义，请看 [ARCHITECTURE_RUNTIME.md](ARCHITECTURE_RUNTIME.md) 与 `api-contract.yaml`。
+
+### 实例化说明
+
+- `data/instances/<instance_id>/`：实例级文件持久化（如 `player_role.json`、`save_slots.json`）
+- SQLite 共享 `data/memory.db`，但 `events / branches / dialogue / working_memory / semantic_facts / episodic_events / pending_facts` 已按 `instance_id` 隔离
+- 实例摘要现在包含 `status=running|stopped`
+- 默认实例兼容旧数据：`instance_id=''` 的历史记录会被 `default` 实例读取
+
+## 开发与验证
 
 ```bash
-pip3 install sentence-transformers
-python3 embed_server.py &
+go test ./...
+go test -race ./...
+node --check web/app.js
+./deploy/smoke-check.sh
 ```
 
-## Token 用量 + 定价
+当前 UI 回归基线：
 
-每次 LLM 调用记录到 `data/llm_usage.jsonl`。面板显示实时统计 + 费用估算，可自定义模型单价。按天/周/月/任务/模型聚合。每月自动压缩。
+- 浏览器自动化暂时未在这台机器上跑 Chromium
+- 当前使用 `jsdom` 做等价 UI 回归，已覆盖：
+  - checkpoint / rollback
+  - scenario preset 保存 / 套用
+  - trace 历史切 turn
+  - trace 作者控制台高亮 / 轮切换 / checkpoint 联动
+  - 首页折叠与瘦身后主链路可用
+- 原因是本机缺 Chromium 运行库（如 `libnspr4.so`）
 
-## 认证
+本地开发常用运行方式：
 
 ```bash
-./corerp serve -auth-key "your-password"
+./corerp serve -characters ./characters -secure-cookie=false
 ```
 
-HMAC 签名 session token，24h TTL，httpOnly cookie。不设则免认证。
-
-## 角色卡导入
+PM2 重建/固化当前启动参数：
 
 ```bash
-./corerp import -src card.png -dst ./characters       # PNG
-./corerp import -src card.json -dst ./characters      # JSON (v3)
-./corerp import -src ./cards_dir -dst ./characters    # 批量
+./deploy/pm2-start-corerp.sh
+pm2 show corerp
 ```
 
-支持 SillyTavern v1/v2/v3，自动提取 character_book → 三层世界目录。
+服务启动日志现在会打印 `version / commit / build_time / data / port`，便于排查 PM2 启动与部署漂移。
 
-## API 端点（全部 24 个）
+## 目录概览
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/chat` | POST | SSE 流式对话 |
-| `/api/state` | GET | 当前世界状态 |
-| `/api/characters` | GET | 角色列表 + 当前活跃 |
-| `/api/switch` | POST | 切换角色 |
-| `/api/dialogue` | GET | 对话历史 |
-| `/api/dialogue/reset` | POST | 重置对话 |
-| `/api/world` | GET | 世界信息 |
-| `/api/npc-actions` | GET | NPC 行动日志 |
-| `/api/causality` | GET | 因果链查询 |
-| `/api/replay` | GET | 回放世界状态 |
-| `/api/fork` | POST | 创建时间线分叉 |
-| `/api/timeline` | GET | 时间线事件列表 |
-| `/api/branches` | GET | 分叉列表 |
-| `/api/compress` | POST | 手动事件压缩 |
-| `/api/compression-stats` | GET | 压缩统计 |
-| `/api/usage` | GET | Token 用量 + 费用 |
-| `/api/llm-configs` | GET/POST | LLM 配置管理 |
-| `/api/llm-configs/<name>` | DELETE | 删除配置 |
-| `/api/llm-active` | GET/POST | 活跃配置 + 定价 |
-| `/api/llm-models` | GET | 拉取模型列表 |
-| `/api/llm-routes` | GET | 路由表 |
-| `/api/director` | POST | 调整 Tension |
-| `/api/debug/memory` | GET | 调试信息 |
-
-## 部署
-
-```bash
-sudo cp deploy/corerp.service /etc/systemd/system/
-sudo systemctl enable --now corerp
-cp data/memory.db backup/memory_$(date +%Y%m%d).db  # 备份
-```
-
-## 技术栈
-
-Go 1.22+ / SQLite / SSE / Vanilla JS PWA / BGE-small-zh / Swiss Modernism / 单二进制
-
-## 目录结构
-
-```
+```text
 corerp/
-├── cmd/corerp/main.go      # CLI
-├── internal/
-│   ├── actions/            # Action Frame + Executor + Dice
-│   ├── agents/             # Identity + Validator + Planner + Scheduler
-│   ├── api/                # HTTP + SSE
-│   ├── auth/               # HMAC 认证
-│   ├── context/            # Snapshot Compiler + Token Budget
-│   ├── core/               # 共享类型
-│   ├── events/             # Store + Quarantine + Causality + Replay
-│   ├── importer/           # PNG/JSON 导入 → 三层目录
-│   ├── llm/                # Adapter + Router + Usage + Config
-│   ├── memory/             # 四层记忆 + Vector Search
-│   ├── narrative/          # Tension + Compression
-│   ├── runtime/            # 对话循环内核
-│   ├── simulation/         # Tick Loop
-│   └── state/              # WorldState + 状态机
-├── web/                    # PWA (Swiss Modernism editorial)
-├── deploy/                 # systemd
-├── embed_server.py         # BGE 嵌入服务
-├── budgets.yml             # Token 预算配置
-└── data/                   # SQLite / 用量日志 (gitignored)
+├── cmd/corerp/                 # CLI entry
+├── internal/runtime/           # DirectorPlan / TurnStep / orchestration
+├── internal/events/            # event store / replay / fork / hash
+├── internal/state/             # world projection and state machine
+├── internal/actions/           # ActionFrame + executor
+├── internal/agents/            # identity / speaker selection / planner
+├── internal/memory/            # short-term / semantic / episodic
+├── internal/emotion/           # pressure / residue / unresolved threads
+├── internal/api/               # HTTP + SSE routes
+├── web/                        # single-page runtime console
+├── characters/                 # imported/authored content
+└── data/                       # SQLite and runtime data
 ```
+
+## 许可证
+
+MIT
