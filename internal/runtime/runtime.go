@@ -699,6 +699,16 @@ func (e *Engine) GetWorldName() string {
 	return e.worldName
 }
 
+func (e *Engine) GetWorldPaths() map[string]string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := make(map[string]string, len(e.worldPaths))
+	for name, path := range e.worldPaths {
+		out[name] = path
+	}
+	return out
+}
+
 func (e *Engine) UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

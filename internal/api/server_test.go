@@ -294,6 +294,10 @@ func (m *mockEngine) GetCharacterName() string                { return m.name }
 func (m *mockEngine) GetLoadedCharacters() []string           { return []string{m.name} }
 func (m *mockEngine) SwitchCharacter(name string) error       { m.name = name; return nil }
 func (m *mockEngine) GetWorldName() string                    { return "test-world" }
+func (m *mockEngine) GetWorldPaths() map[string]string {
+	cfg, _ := m.GetWorldConfig()
+	return map[string]string{m.name: cfg.Path}
+}
 func (m *mockEngine) GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
 	return core.MemorySnapshot{
 		Character:     m.name,
@@ -498,6 +502,7 @@ func TestRouteWrongMethod(t *testing.T) {
 		{"/api/character-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/characters", "POST", http.StatusMethodNotAllowed},
 		{"/api/world", "POST", http.StatusMethodNotAllowed},
+		{"/api/worlds", "POST", http.StatusMethodNotAllowed},
 		{"/api/world-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/director-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/trace", "POST", http.StatusMethodNotAllowed},
@@ -563,6 +568,7 @@ func TestRouteValidMethod2xx(t *testing.T) {
 		{"/api/character-config", "GET"},
 		{"/api/characters", "GET"},
 		{"/api/world", "GET"},
+		{"/api/worlds", "GET"},
 		{"/api/world-config", "GET"},
 		{"/api/director-config", "GET"},
 		{"/api/trace", "GET"},

@@ -4,6 +4,21 @@
 
 **状态：Experimental / Prototype。** 核心 runtime 已成型，仍在迭代。
 
+## 产品方向
+
+CoreRP 不是“高级酒馆”，也不以预写任务树为核心。目标体验是：
+
+```text
+一个会长期演化、可回放、可分叉、人物会被经历改变的文字世界 runtime。
+```
+
+当前方向是 world-first：
+
+- 世界是入口，角色是世界中的实体和运行时视角
+- 导入内容优先沉淀为 world seed / canon / scene，而不是直接变成可选角色
+- NPC 后续应从低分辨率 population 中被玩家关注或事件卷入，再晋升为主要角色
+- LLM 不拥有世界，只提出 ActionFrame 和渲染表达；世界真相只能由 committed events 改变
+
 ## 文档导航
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): 当前分层架构与技术选型
@@ -84,6 +99,7 @@ export CORERP_AUTH_KEY="your-password"  # 可选
 `web/` 是单页运行台，不承载世界规则。当前 UI 重点是：
 
 - 场景、角色、聊天流和输入区
+- 顶栏已开始转向 world-first，新增世界目录 selector；角色 selector 暂时保留为兼容视角
 - 首页已收成更简约的编辑风主版面：
   - 顶部“运行数据”默认折叠
   - 主区优先保留场景 headline、对话流和输入区
@@ -107,6 +123,7 @@ export CORERP_AUTH_KEY="your-password"  # 可选
 - `GET /api/ready`: 就绪探针
 - `GET /api/version`: 服务版本信息（`version / commit / time`）
 - `GET /api/state`: 当前世界状态
+- `GET /api/worlds`: 列出本地 world catalog
 - `GET /api/instances`: 列出 runtime instances
 - `GET /api/instances/status`: 查询单个实例状态
 - `POST /api/instances/create`: 从现有实例创建新实例

@@ -565,3 +565,20 @@ Modified by: Codex (GPT-5)
   - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
   - `pm2 restart corerp --update-env` ✅
   - `/api/health` ✅
+
+### 2026-05-26 14:10:04 UTC — world-first 入口第一步
+Modified by: Codex (GPT-5)
+
+- 明确产品方向：
+  - CoreRP 不是高级酒馆或预写任务树 RPG
+  - 目标是长期演化、可回放、可分叉、人物会被经历改变的文字世界 runtime
+- 新增 world catalog：
+  - `core.WorldSummary`
+  - `internal/world.ListCatalog()`
+  - `GET /api/worlds`
+- 前端顶栏新增“世界”选择器，角色选择改为“视角”兼容层
+- 当前切口只改变入口展示与 catalog API，不直接拆除 active character runtime 锚点
+- 验证：
+  - `/usr/local/go/bin/go test ./...` ✅
+  - `node --check web/app.js` ✅
+  - `git diff --check` ✅

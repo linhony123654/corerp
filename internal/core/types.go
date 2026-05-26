@@ -213,6 +213,21 @@ type WorldConfig struct {
 	Format    string `json:"format"`
 }
 
+type WorldSummary struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Path            string `json:"path"`
+	Format          string `json:"format"`
+	SceneCount      int    `json:"scene_count"`
+	CharacterCount  int    `json:"character_count"`
+	LocationCount   int    `json:"location_count"`
+	FactionCount    int    `json:"faction_count"`
+	ItemCount       int    `json:"item_count"`
+	EventCount      int    `json:"event_count"`
+	TimelineCount   int    `json:"timeline_count"`
+	LoadedCharacter string `json:"loaded_character,omitempty"`
+}
+
 type SceneConfig struct {
 	Name  string     `json:"name"`
 	Path  string     `json:"path"`

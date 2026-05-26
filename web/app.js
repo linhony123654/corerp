@@ -15,6 +15,7 @@ const els = {
   sendBtn: $('send-btn'),
   resetBtn: $('reset-btn'),
   instanceSelect: $('instance-select'),
+  worldSelect: $('world-select'),
   charSelect: $('char-select'),
   themeToggle: $('theme-toggle'),
   themeIndicator: $('theme-indicator'),
@@ -472,7 +473,7 @@ async function savePlayerRole() {
   };
   els.playerRoleName.value = state.playerRole.name;
   els.playerRoleDesc.value = state.playerRole.description;
-  await Promise.all([loadCharacters(), restoreDialogue(), refreshPanel()]);
+  await Promise.all([loadWorlds(), loadCharacters(), restoreDialogue(), refreshPanel()]);
 }
 
 function renderDirectorPlan(plan) {
@@ -548,7 +549,7 @@ async function switchCharacter(name) {
     const summary = data.npc_actions.map(item => item.summary).join(' / ');
     renderMessage('system', '', `你不在时的动态：${summary}`);
   }
-  await Promise.all([loadCharacters(), refreshPanel(), restoreDialogue()]);
+  await Promise.all([loadWorlds(), loadCharacters(), refreshPanel(), restoreDialogue()]);
   closePanelOnMobile();
 }
 
@@ -923,7 +924,7 @@ async function setDefaultInstance(id) {
     return;
   }
   renderSceneDivider(`默认实例已切换到 ${id}`);
-  await Promise.all([loadInstancesView(), loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(), loadMemoryView(), loadCharacterConfig(), loadSaveSlots(), loadScenarioPresets(), loadTraceHistory(), loadTraceView()]);
+  await Promise.all([loadInstancesView(), loadWorlds(), loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(), loadMemoryView(), loadCharacterConfig(), loadSaveSlots(), loadScenarioPresets(), loadTraceHistory(), loadTraceView()]);
 }
 
 async function stopInstance(id) {
@@ -1055,7 +1056,7 @@ async function switchInstanceView(id) {
   els.chatScroll.innerHTML = '';
   state.msgCount = 0;
   renderSceneDivider(`切换到实例 ${next}`);
-  await Promise.all([loadInstancesView(), loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(), loadMemoryView(), loadCharacterConfig(), loadSaveSlots(), loadScenarioPresets(), loadTraceHistory(), loadTraceView()]);
+  await Promise.all([loadInstancesView(), loadWorlds(), loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(), loadMemoryView(), loadCharacterConfig(), loadSaveSlots(), loadScenarioPresets(), loadTraceHistory(), loadTraceView()]);
 }
 
 function renderGoalsForEditor(goals) {
@@ -1530,7 +1531,7 @@ async function loadSaveSlot(name) {
   const slot = await resp.json();
   state.selectedTraceTurn = null;
   renderSceneDivider(`已回滚到 checkpoint ${slot.name}`);
-  await Promise.all([loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(slot.branch), loadMemoryView(), loadCharacterConfig(), loadSaveSlots(), loadTraceHistory(), loadTraceView()]);
+  await Promise.all([loadWorlds(), loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(slot.branch), loadMemoryView(), loadCharacterConfig(), loadSaveSlots(), loadTraceHistory(), loadTraceView()]);
 }
 
 async function loadScenarioPresets() {
@@ -1598,7 +1599,7 @@ async function applyScenarioPreset(name) {
   const preset = await resp.json();
   state.selectedTraceTurn = null;
   renderSceneDivider(`已套用 preset ${preset.name}`);
-  await Promise.all([loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(preset.branch), loadMemoryView(), loadCharacterConfig(), loadScenarioPresets(), loadTraceHistory(), loadTraceView()]);
+  await Promise.all([loadWorlds(), loadCharacters(), loadPlayerRole(), restoreDialogue(), refreshPanel(), loadTimeline(preset.branch), loadMemoryView(), loadCharacterConfig(), loadScenarioPresets(), loadTraceHistory(), loadTraceView()]);
 }
 
 function exportSession(format) {
@@ -1640,6 +1641,39 @@ function refreshDiffSelectors() {
     b.selected = slot.name === saveB || (!saveB && slot.name === state.saves[1]?.name);
     els.saveDiffB.appendChild(b);
   });
+}
+
+async function loadWorlds() {
+  if (!els.worldSelect) {
+    return;
+  }
+  const data = await fetchJSON('/api/worlds');
+  const worlds = data.worlds || [];
+  const active = data.active || '';
+
+  els.worldSelect.innerHTML = '';
+  worlds.forEach(world => {
+    const opt = document.createElement('option');
+    opt.value = world.path || world.id || world.name;
+    const label = world.loaded_character
+      ? `${world.name || world.id || world.path} · ${world.loaded_character}`
+      : (world.name || world.id || world.path);
+    opt.textContent = label;
+    opt.title = [
+      world.path,
+      `${world.character_count || 0} 人物`,
+      `${world.location_count || 0} 地点`,
+      `${world.event_count || 0} 事件`
+    ].filter(Boolean).join(' · ');
+    opt.selected = world.name === active;
+    els.worldSelect.appendChild(opt);
+  });
+  els.worldSelect.disabled = worlds.length === 0;
+  if (worlds.length === 0) {
+    const opt = document.createElement('option');
+    opt.textContent = '未发现世界';
+    els.worldSelect.appendChild(opt);
+  }
 }
 
 function renderDiffObject(diff) {
@@ -2350,6 +2384,7 @@ async function init() {
   applyMobileSpotlightState();
 
   await loadInstancesView();
+  await loadWorlds();
   await loadCharacters();
   await loadPlayerRole();
 
@@ -2357,6 +2392,7 @@ async function init() {
     restoreDialogue(),
     refreshPanel(),
     loadInstancesView(),
+    loadWorlds(),
     loadLLMConfigs(),
     loadTimeline(),
     loadMemoryView(),

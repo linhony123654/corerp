@@ -17,6 +17,7 @@ import (
 	"corerp/internal/goalexpr"
 	"corerp/internal/llm"
 	"corerp/internal/narrative"
+	worldpkg "corerp/internal/world"
 )
 
 var (
@@ -29,6 +30,8 @@ var (
 	errInstanceNotFound = errors.New("instance not found")
 	errInstanceConflict = errors.New("instance conflict")
 )
+
+var WorldCatalogRoot = "worlds"
 
 // RuntimeEngine is the interface the server needs from the runtime engine.
 type RuntimeEngine interface {
@@ -64,6 +67,7 @@ type RuntimeEngine interface {
 	GetLoadedCharacters() []string
 	SwitchCharacter(name string) error
 	GetWorldName() string
+	GetWorldPaths() map[string]string
 	GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error)
 	ListSaveSlots() ([]core.SaveSlot, error)
 	CreateSaveSlot(name, branch, note string) (core.SaveSlot, error)
@@ -144,6 +148,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/characters", a(s.handleCharacters))
 	mux.HandleFunc("/api/switch", a(s.handleSwitch))
 	mux.HandleFunc("/api/world", a(s.handleWorld))
+	mux.HandleFunc("/api/worlds", a(s.handleWorlds))
 	mux.HandleFunc("/api/world-config", a(s.handleWorldConfig))
 	mux.HandleFunc("/api/scenes", a(s.handleScenes))
 	mux.HandleFunc("/api/canon-facts", a(s.handleCanonFacts))
@@ -628,6 +633,29 @@ func (s *Server) handleCharacters(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"active":     active,
 		"characters": chars,
+	})
+}
+
+func (s *Server) handleWorlds(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	worlds, err := worldpkg.ListCatalog(WorldCatalogRoot, engine.GetWorldPaths())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"active": engine.GetWorldName(),
+		"worlds": worlds,
 	})
 }
 
