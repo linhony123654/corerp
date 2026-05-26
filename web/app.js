@@ -1663,7 +1663,9 @@ async function loadWorlds() {
       world.path,
       `${world.character_count || 0} 人物`,
       `${world.location_count || 0} 地点`,
-      `${world.event_count || 0} 事件`
+      `${world.event_count || 0} 事件`,
+      `${world.background_npc_count || 0} 背景NPC`,
+      `${world.promoted_npc_count || 0} 晋升角色`
     ].filter(Boolean).join(' · ');
     opt.selected = world.name === active;
     els.worldSelect.appendChild(opt);

@@ -71,18 +71,21 @@ func summarizeWorld(path, fallbackID string, loadedByPath map[string]string) (co
 		name = fallbackID
 	}
 	return core.WorldSummary{
-		ID:              fallbackID,
-		Name:            name,
-		Path:            filepath.ToSlash(filepath.Clean(path)),
-		Format:          bundle.Config.Format,
-		SceneCount:      len(bundle.Scenes),
-		CharacterCount:  len(bundle.Ontology.Characters),
-		LocationCount:   len(bundle.Ontology.Locations),
-		FactionCount:    len(bundle.Ontology.Factions),
-		ItemCount:       len(bundle.Ontology.Items),
-		EventCount:      len(bundle.Ontology.Events),
-		TimelineCount:   len(bundle.Ontology.Timelines),
-		LoadedCharacter: loadedByPath[cleanPath(path)],
+		ID:                 fallbackID,
+		Name:               name,
+		Path:               filepath.ToSlash(filepath.Clean(path)),
+		Format:             bundle.Config.Format,
+		SceneCount:         len(bundle.Scenes),
+		CharacterCount:     len(bundle.Ontology.Characters),
+		LocationCount:      len(bundle.Ontology.Locations),
+		FactionCount:       len(bundle.Ontology.Factions),
+		ItemCount:          len(bundle.Ontology.Items),
+		EventCount:         len(bundle.Ontology.Events),
+		TimelineCount:      len(bundle.Ontology.Timelines),
+		BackgroundNPCCount: len(bundle.Population.BackgroundNPCs),
+		PromotedNPCCount:   len(bundle.Population.PromotedNPCs),
+		IdentityCoreCount:  len(bundle.Population.IdentityCores),
+		LoadedCharacter:    loadedByPath[cleanPath(path)],
 	}, true
 }
 

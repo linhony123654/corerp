@@ -607,6 +607,34 @@ func TestWorldConfigSceneAndFactsEditing(t *testing.T) {
 	if len(memFacts) != 2 || memFacts[0].Subject != "黛玉" {
 		t.Fatalf("memory facts = %#v, want replaced canon facts", memFacts)
 	}
+
+	population, err := engine.GetPopulationConfig()
+	if err != nil {
+		t.Fatalf("GetPopulationConfig: %v", err)
+	}
+	if population.Policy.PromoteThreshold != 10 || population.Path != filepath.ToSlash(filepath.Clean(worldDir)) {
+		t.Fatalf("population defaults = %#v", population)
+	}
+
+	updatedPopulation, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "tea_vendor",
+			Name:     "茶摊老板",
+			Role:     "商贩",
+			Location: "荣国府外街",
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:  14,
+			MajorThreshold:    28,
+			InteractionWeight: 4,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+	if len(updatedPopulation.BackgroundNPCs) != 1 || updatedPopulation.Policy.PromoteThreshold != 14 {
+		t.Fatalf("updated population = %#v", updatedPopulation)
+	}
 }
 
 func TestQuarantineAndPendingFactsReview(t *testing.T) {

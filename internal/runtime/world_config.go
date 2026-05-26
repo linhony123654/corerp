@@ -93,6 +93,27 @@ func (e *Engine) UpdateCanonFactsConfig(cfg core.CanonFactsConfig) (core.CanonFa
 	return saved, nil
 }
 
+func (e *Engine) GetPopulationConfig() (core.PopulationConfig, error) {
+	e.mu.RLock()
+	path := e.worldPaths[e.activeCharacter]
+	e.mu.RUnlock()
+	if path == "" {
+		return core.PopulationConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+	}
+	return world.LoadPopulation(path)
+}
+
+func (e *Engine) UpdatePopulationConfig(cfg core.PopulationConfig) (core.PopulationConfig, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	path := e.worldPaths[e.activeCharacter]
+	if path == "" {
+		return core.PopulationConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+	}
+	return world.SavePopulation(path, cfg)
+}
+
 func (e *Engine) reloadWorldLocked(path string) error {
 	bundle, err := world.LoadBundle(path)
 	if err != nil {

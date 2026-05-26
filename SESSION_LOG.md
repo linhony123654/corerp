@@ -582,3 +582,29 @@ Modified by: Codex (GPT-5)
   - `/usr/local/go/bin/go test ./...` ✅
   - `node --check web/app.js` ✅
   - `git diff --check` ✅
+
+### 2026-05-26 14:10:04 UTC — population skeleton 落地
+Modified by: Codex (GPT-5)
+
+- 新增 world population 骨架：
+  - `background_npcs.yml`
+  - `promoted_npcs.yml`
+  - `identity_core.yml`
+  - `policy.yml`
+- 新增类型与接口：
+  - `core.PopulationConfig`
+  - `core.BackgroundNPC`
+  - `core.PromotedNPC`
+  - `core.IdentityCoreConfig`
+  - `core.PromotionPolicy`
+- `internal/world` 支持读取/保存 population
+- `internal/runtime` / `internal/api` 新增：
+  - `GetPopulationConfig()`
+  - `UpdatePopulationConfig()`
+  - `GET/POST /api/population`
+- importer 创建 world 目录时会一并初始化 `population/`
+- world catalog 补充 population 统计字段
+- 验证：
+  - `/usr/local/go/bin/go test ./...` ✅
+  - `node --check web/app.js` ✅
+  - `git diff --check` ✅

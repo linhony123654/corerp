@@ -124,6 +124,7 @@ type mockEngine struct {
 	world                   core.WorldConfig
 	scenes                  core.SceneConfigList
 	facts                   core.CanonFactsConfig
+	population              core.PopulationConfig
 	director                core.DirectorConfig
 	plan                    core.DirectorPlan
 	trace                   core.TurnTrace
@@ -233,6 +234,28 @@ func (m *mockEngine) UpdateCanonFactsConfig(cfg core.CanonFactsConfig) (core.Can
 		m.facts.Path = "worlds/test/canon/facts.yml"
 	}
 	return m.facts, nil
+}
+func (m *mockEngine) GetPopulationConfig() (core.PopulationConfig, error) {
+	if m.population.Path == "" {
+		m.population = core.PopulationConfig{
+			Path: "worlds/test/population",
+			BackgroundNPCs: []core.BackgroundNPC{{
+				ID:       "tea_vendor",
+				Name:     "茶摊老板",
+				Role:     "商贩",
+				Location: "镇口",
+			}},
+			Policy: core.PromotionPolicy{PromoteThreshold: 10, MajorThreshold: 25},
+		}
+	}
+	return m.population, nil
+}
+func (m *mockEngine) UpdatePopulationConfig(cfg core.PopulationConfig) (core.PopulationConfig, error) {
+	m.population = cfg
+	if m.population.Path == "" {
+		m.population.Path = "worlds/test/population"
+	}
+	return m.population, nil
 }
 func (m *mockEngine) GetDirectorConfig() core.DirectorConfig {
 	if m.director.Mode == "" {
@@ -504,6 +527,7 @@ func TestRouteWrongMethod(t *testing.T) {
 		{"/api/world", "POST", http.StatusMethodNotAllowed},
 		{"/api/worlds", "POST", http.StatusMethodNotAllowed},
 		{"/api/world-config", "DELETE", http.StatusMethodNotAllowed},
+		{"/api/population", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/director-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/trace", "POST", http.StatusMethodNotAllowed},
 		{"/api/traces", "POST", http.StatusMethodNotAllowed},
@@ -570,6 +594,7 @@ func TestRouteValidMethod2xx(t *testing.T) {
 		{"/api/world", "GET"},
 		{"/api/worlds", "GET"},
 		{"/api/world-config", "GET"},
+		{"/api/population", "GET"},
 		{"/api/director-config", "GET"},
 		{"/api/trace", "GET"},
 		{"/api/traces", "GET"},
@@ -1156,6 +1181,30 @@ func TestWorldConfigRoutes(t *testing.T) {
 	mux.ServeHTTP(postRec, postReq)
 	if postRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/world-config = %d", postRec.Code)
+	}
+}
+
+func TestPopulationRoutes(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/population", nil)
+	getRec := httptest.NewRecorder()
+	mux.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/population = %d", getRec.Code)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/population", strings.NewReader(`{
+		"background_npcs":[{"id":"tea_vendor","name":"茶摊老板","role":"商贩"}],
+		"policy":{"promote_threshold":14,"major_threshold":30}
+	}`))
+	postReq.Header.Set("Content-Type", "application/json")
+	postRec := httptest.NewRecorder()
+	mux.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/population = %d", postRec.Code)
 	}
 }
 

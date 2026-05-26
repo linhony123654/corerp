@@ -9,6 +9,9 @@ import (
 	"sort"
 	"strings"
 
+	"corerp/internal/core"
+	"corerp/internal/world"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -315,6 +318,9 @@ func writeWorldDir(dir string, w WorldYAML) (string, error) {
 	sceneFile := filepath.Join(scenesDir, "default.yml")
 	sceneData, _ := yaml.Marshal(map[string]interface{}{"scene": w.Scene})
 	os.WriteFile(sceneFile, sceneData, 0644)
+
+	// 5. population/ — world-first runtime skeleton
+	_, _ = world.SavePopulation(dir, core.PopulationConfig{})
 
 	return worldFile, nil
 }

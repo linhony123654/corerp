@@ -51,6 +51,8 @@ type RuntimeEngine interface {
 	UpdateSceneConfig(scene core.SceneConfig) (core.SceneConfig, error)
 	GetCanonFactsConfig() (core.CanonFactsConfig, error)
 	UpdateCanonFactsConfig(cfg core.CanonFactsConfig) (core.CanonFactsConfig, error)
+	GetPopulationConfig() (core.PopulationConfig, error)
+	UpdatePopulationConfig(cfg core.PopulationConfig) (core.PopulationConfig, error)
 	GetDirectorConfig() core.DirectorConfig
 	UpdateDirectorConfig(cfg core.DirectorConfig) core.DirectorConfig
 	GetDirectorPlan() core.DirectorPlan
@@ -152,6 +154,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/world-config", a(s.handleWorldConfig))
 	mux.HandleFunc("/api/scenes", a(s.handleScenes))
 	mux.HandleFunc("/api/canon-facts", a(s.handleCanonFacts))
+	mux.HandleFunc("/api/population", a(s.handlePopulation))
 	mux.HandleFunc("/api/director-config", a(s.handleDirectorConfig))
 	mux.HandleFunc("/api/trace", a(s.handleTrace))
 	mux.HandleFunc("/api/traces", a(s.handleTraces))
@@ -774,6 +777,37 @@ func (s *Server) handleScenes(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(scene)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handlePopulation(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		cfg, err := engine.GetPopulationConfig()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	case http.MethodPost:
+		var req core.PopulationConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cfg, err := engine.UpdatePopulationConfig(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}

@@ -18,6 +18,7 @@ type Bundle struct {
 	Selected    string
 	Ontology    Ontology
 	DirectFacts []core.FactFrame
+	Population  core.PopulationConfig
 }
 
 type Ontology struct {
@@ -127,6 +128,21 @@ func LoadFacts(path string) (core.CanonFactsConfig, error) {
 	return core.CanonFactsConfig{Path: factsPath, Facts: b.DirectFacts}, nil
 }
 
+func LoadPopulation(path string) (core.PopulationConfig, error) {
+	b, err := LoadBundle(path)
+	if err != nil {
+		return core.PopulationConfig{}, err
+	}
+	return b.Population, nil
+}
+
+func SavePopulation(path string, cfg core.PopulationConfig) (core.PopulationConfig, error) {
+	if isDirPath(path) {
+		return saveDirPopulation(path, cfg)
+	}
+	return saveFilePopulation(path, cfg)
+}
+
 func SaveFacts(path string, cfg core.CanonFactsConfig) (core.CanonFactsConfig, error) {
 	if isDirPath(path) {
 		return saveDirFacts(path, cfg.Facts)
@@ -153,12 +169,14 @@ func loadDirBundle(dir string) (Bundle, error) {
 	}
 	onto, _ := readOntology(dir)
 	facts, _ := readDirFacts(dir)
+	population, _ := readDirPopulation(dir)
 	return Bundle{
 		Config:      cfg,
 		Scenes:      scenes,
 		Selected:    "default",
 		Ontology:    onto,
 		DirectFacts: facts,
+		Population:  population,
 	}, nil
 }
 
@@ -192,6 +210,7 @@ func loadFileBundle(path string) (Bundle, error) {
 		Selected:    "default",
 		Ontology:    raw.Ontology,
 		DirectFacts: nil,
+		Population:  defaultPopulationConfig(path),
 	}, nil
 }
 
@@ -398,9 +417,25 @@ func saveDirFacts(dir string, facts []core.FactFrame) (core.CanonFactsConfig, er
 	return core.CanonFactsConfig{Path: path, Facts: facts}, nil
 }
 
+func saveDirPopulation(dir string, cfg core.PopulationConfig) (core.PopulationConfig, error) {
+	cfg = normalizePopulationConfig(cfg, dir)
+	popDir := filepath.Join(dir, "population")
+	if err := os.MkdirAll(popDir, 0755); err != nil {
+		return core.PopulationConfig{}, err
+	}
+	if err := writePopulationFiles(popDir, cfg); err != nil {
+		return core.PopulationConfig{}, err
+	}
+	return cfg, nil
+}
+
 func saveFileFacts(path string, facts []core.FactFrame) (core.CanonFactsConfig, error) {
 	// Single-file worlds do not have a dedicated facts section yet.
 	return core.CanonFactsConfig{}, fmt.Errorf("single-file world does not support canon/facts editing; import into directory format first")
+}
+
+func saveFilePopulation(path string, cfg core.PopulationConfig) (core.PopulationConfig, error) {
+	return core.PopulationConfig{}, fmt.Errorf("single-file world does not support population editing; import into directory format first")
 }
 
 func sceneFromState(scene core.SceneState) sceneYAML {
@@ -451,4 +486,136 @@ func sceneByName(scenes []core.SceneConfig, name string) core.SceneConfig {
 		}
 	}
 	return core.SceneConfig{Name: name}
+}
+
+type backgroundNPCDoc struct {
+	BackgroundNPCs []core.BackgroundNPC `yaml:"background_npcs"`
+}
+
+type promotedNPCDoc struct {
+	PromotedNPCs []core.PromotedNPC `yaml:"promoted_npcs"`
+}
+
+type identityCoreDoc struct {
+	IdentityCores []core.IdentityCoreConfig `yaml:"identity_cores"`
+}
+
+type promotionPolicyDoc struct {
+	Policy core.PromotionPolicy `yaml:"policy"`
+}
+
+func readDirPopulation(dir string) (core.PopulationConfig, error) {
+	cfg := normalizePopulationConfig(defaultPopulationConfig(dir), dir)
+	popDir := filepath.Join(dir, "population")
+
+	if data, err := os.ReadFile(filepath.Join(popDir, "background_npcs.yml")); err == nil {
+		var raw backgroundNPCDoc
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return core.PopulationConfig{}, err
+		}
+		cfg.BackgroundNPCs = raw.BackgroundNPCs
+	} else if !os.IsNotExist(err) {
+		return core.PopulationConfig{}, err
+	}
+
+	if data, err := os.ReadFile(filepath.Join(popDir, "promoted_npcs.yml")); err == nil {
+		var raw promotedNPCDoc
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return core.PopulationConfig{}, err
+		}
+		cfg.PromotedNPCs = raw.PromotedNPCs
+	} else if !os.IsNotExist(err) {
+		return core.PopulationConfig{}, err
+	}
+
+	if data, err := os.ReadFile(filepath.Join(popDir, "identity_core.yml")); err == nil {
+		var raw identityCoreDoc
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return core.PopulationConfig{}, err
+		}
+		cfg.IdentityCores = raw.IdentityCores
+	} else if !os.IsNotExist(err) {
+		return core.PopulationConfig{}, err
+	}
+
+	if data, err := os.ReadFile(filepath.Join(popDir, "policy.yml")); err == nil {
+		var raw promotionPolicyDoc
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return core.PopulationConfig{}, err
+		}
+		cfg.Policy = normalizePromotionPolicy(raw.Policy)
+	} else if !os.IsNotExist(err) {
+		return core.PopulationConfig{}, err
+	}
+
+	return normalizePopulationConfig(cfg, dir), nil
+}
+
+func writePopulationFiles(popDir string, cfg core.PopulationConfig) error {
+	files := []struct {
+		name string
+		doc  interface{}
+	}{
+		{name: "background_npcs.yml", doc: backgroundNPCDoc{BackgroundNPCs: cfg.BackgroundNPCs}},
+		{name: "promoted_npcs.yml", doc: promotedNPCDoc{PromotedNPCs: cfg.PromotedNPCs}},
+		{name: "identity_core.yml", doc: identityCoreDoc{IdentityCores: cfg.IdentityCores}},
+		{name: "policy.yml", doc: promotionPolicyDoc{Policy: cfg.Policy}},
+	}
+	for _, file := range files {
+		data, err := yaml.Marshal(file.doc)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(popDir, file.name), data, 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func defaultPopulationConfig(path string) core.PopulationConfig {
+	return core.PopulationConfig{
+		Path:   filepath.ToSlash(filepath.Clean(path)),
+		Policy: normalizePromotionPolicy(core.PromotionPolicy{}),
+	}
+}
+
+func normalizePopulationConfig(cfg core.PopulationConfig, path string) core.PopulationConfig {
+	cfg.Path = filepath.ToSlash(filepath.Clean(path))
+	cfg.Policy = normalizePromotionPolicy(cfg.Policy)
+	if cfg.BackgroundNPCs == nil {
+		cfg.BackgroundNPCs = []core.BackgroundNPC{}
+	}
+	if cfg.PromotedNPCs == nil {
+		cfg.PromotedNPCs = []core.PromotedNPC{}
+	}
+	if cfg.IdentityCores == nil {
+		cfg.IdentityCores = []core.IdentityCoreConfig{}
+	}
+	return cfg
+}
+
+func normalizePromotionPolicy(policy core.PromotionPolicy) core.PromotionPolicy {
+	if policy.PromoteThreshold <= 0 {
+		policy.PromoteThreshold = 10
+	}
+	if policy.MajorThreshold <= 0 {
+		policy.MajorThreshold = 25
+	}
+	if policy.InteractionWeight == 0 {
+		policy.InteractionWeight = 3
+	}
+	if policy.MentionWeight == 0 {
+		policy.MentionWeight = 1
+	}
+	if policy.EventWeight == 0 {
+		policy.EventWeight = 5
+	}
+	if policy.RelationshipWeight == 0 {
+		policy.RelationshipWeight = 4
+	}
+	if policy.SceneWeight == 0 {
+		policy.SceneWeight = 2
+	}
+	return policy
 }

@@ -213,19 +213,79 @@ type WorldConfig struct {
 	Format    string `json:"format"`
 }
 
+type PopulationAttention struct {
+	DirectInteractions int     `json:"direct_interactions" yaml:"direct_interactions"`
+	Mentions           int     `json:"mentions" yaml:"mentions"`
+	SharedEvents       int     `json:"shared_events" yaml:"shared_events"`
+	RelationshipDelta  float64 `json:"relationship_delta" yaml:"relationship_delta"`
+	SceneCarryover     int     `json:"scene_carryover" yaml:"scene_carryover"`
+	Score              float64 `json:"score" yaml:"score"`
+}
+
+type BackgroundNPC struct {
+	ID        string              `json:"id" yaml:"id"`
+	Name      string              `json:"name" yaml:"name"`
+	Role      string              `json:"role" yaml:"role"`
+	Location  string              `json:"location" yaml:"location"`
+	Faction   string              `json:"faction" yaml:"faction"`
+	Traits    []string            `json:"traits" yaml:"traits"`
+	Hooks     []string            `json:"hooks" yaml:"hooks"`
+	Attention PopulationAttention `json:"attention" yaml:"attention"`
+}
+
+type PromotedNPC struct {
+	ID           string              `json:"id" yaml:"id"`
+	Name         string              `json:"name" yaml:"name"`
+	From         string              `json:"from" yaml:"from"`
+	Status       string              `json:"status" yaml:"status"`
+	IdentityCore string              `json:"identity_core" yaml:"identity_core"`
+	Attention    PopulationAttention `json:"attention" yaml:"attention"`
+	LastEventID  string              `json:"last_event_id" yaml:"last_event_id"`
+}
+
+type IdentityCoreConfig struct {
+	ID          string             `json:"id" yaml:"id"`
+	Name        string             `json:"name" yaml:"name"`
+	Immutable   []string           `json:"immutable" yaml:"immutable"`
+	Adaptive    map[string]float64 `json:"adaptive" yaml:"adaptive"`
+	SpeechHints []string           `json:"speech_hints" yaml:"speech_hints"`
+	Drives      []string           `json:"drives" yaml:"drives"`
+}
+
+type PromotionPolicy struct {
+	PromoteThreshold   float64 `json:"promote_threshold" yaml:"promote_threshold"`
+	MajorThreshold     float64 `json:"major_threshold" yaml:"major_threshold"`
+	InteractionWeight  float64 `json:"interaction_weight" yaml:"interaction_weight"`
+	MentionWeight      float64 `json:"mention_weight" yaml:"mention_weight"`
+	EventWeight        float64 `json:"event_weight" yaml:"event_weight"`
+	RelationshipWeight float64 `json:"relationship_weight" yaml:"relationship_weight"`
+	SceneWeight        float64 `json:"scene_weight" yaml:"scene_weight"`
+}
+
+type PopulationConfig struct {
+	Path           string               `json:"path"`
+	BackgroundNPCs []BackgroundNPC      `json:"background_npcs"`
+	PromotedNPCs   []PromotedNPC        `json:"promoted_npcs"`
+	IdentityCores  []IdentityCoreConfig `json:"identity_cores"`
+	Policy         PromotionPolicy      `json:"policy"`
+}
+
 type WorldSummary struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Path            string `json:"path"`
-	Format          string `json:"format"`
-	SceneCount      int    `json:"scene_count"`
-	CharacterCount  int    `json:"character_count"`
-	LocationCount   int    `json:"location_count"`
-	FactionCount    int    `json:"faction_count"`
-	ItemCount       int    `json:"item_count"`
-	EventCount      int    `json:"event_count"`
-	TimelineCount   int    `json:"timeline_count"`
-	LoadedCharacter string `json:"loaded_character,omitempty"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Path               string `json:"path"`
+	Format             string `json:"format"`
+	SceneCount         int    `json:"scene_count"`
+	CharacterCount     int    `json:"character_count"`
+	LocationCount      int    `json:"location_count"`
+	FactionCount       int    `json:"faction_count"`
+	ItemCount          int    `json:"item_count"`
+	EventCount         int    `json:"event_count"`
+	TimelineCount      int    `json:"timeline_count"`
+	BackgroundNPCCount int    `json:"background_npc_count"`
+	PromotedNPCCount   int    `json:"promoted_npc_count"`
+	IdentityCoreCount  int    `json:"identity_core_count"`
+	LoadedCharacter    string `json:"loaded_character,omitempty"`
 }
 
 type SceneConfig struct {
