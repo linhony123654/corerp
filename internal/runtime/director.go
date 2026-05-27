@@ -7,16 +7,26 @@ import (
 	"time"
 
 	"corerp/internal/core"
+	"corerp/internal/world"
 )
 
 type directorCandidateScore struct {
-	name         string
-	score        float64
-	reason       string
-	mentioned    bool
-	mentionIndex int
-	present      bool
-	silenceBoost float64
+	name          string
+	score         float64
+	reason        string
+	breakdown     map[string]float64
+	kind          string
+	source        string
+	loaded        bool
+	switchable    bool
+	mentioned     bool
+	mentionIndex  int
+	present       bool
+	silenceBoost  float64
+	locationMatch bool
+	factionMatch  bool
+	pressureMatch bool
+	hookMatch     bool
 }
 
 func (e *Engine) GetDirectorConfig() core.DirectorConfig {
@@ -29,6 +39,11 @@ func (e *Engine) UpdateDirectorConfig(cfg core.DirectorConfig) core.DirectorConf
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.directorCfg = normalizeDirectorConfig(cfg)
+	if path := e.currentWorldPathLocked(); path != "" {
+		if saved, err := world.SaveDirectorConfig(path, e.directorCfg); err == nil {
+			e.directorCfg = normalizeDirectorConfig(saved)
+		}
+	}
 	return e.directorCfg
 }
 
@@ -56,20 +71,79 @@ func normalizeDirectorConfig(cfg core.DirectorConfig) core.DirectorConfig {
 	if cfg.MaxSpeakers > 3 {
 		cfg.MaxSpeakers = 3
 	}
+	cfg.Weights = normalizeDirectorWeights(cfg.Weights)
 	return cfg
+}
+
+func normalizeDirectorWeights(weights map[string]float64) map[string]float64 {
+	out := map[string]float64{
+		"mentioned":         100,
+		"mention_order":     12,
+		"continuity":        4,
+		"present":           8,
+		"location_match":    9,
+		"faction_match":     6,
+		"pressure_match":    7,
+		"hook_match":        12,
+		"silence_cap":       12,
+		"silence_divisor":   5,
+		"trust":             0.15,
+		"intimacy":          0.1,
+		"fear":              0.05,
+		"opened_by_user":    6,
+		"tension_switch":    3,
+		"kind_persona":      3,
+		"kind_npc":          1,
+		"source_promoted":   4,
+		"source_definition": 2,
+		"source_background": 0,
+		"loaded":            2,
+		"faction_rivalry":   -2,
+	}
+	for key, value := range weights {
+		if value == 0 {
+			continue
+		}
+		out[key] = value
+	}
+	return out
 }
 
 func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) core.DirectorPlan {
 	cfg := normalizeDirectorConfig(e.directorCfg)
+	weights := cfg.Weights
+	focusCharacter := e.GetFocusCharacter()
 	plan := core.DirectorPlan{
 		Mode:            cfg.Mode,
 		Trigger:         "user_turn",
-		PreviousSpeaker: e.activeCharacter,
+		PreviousSpeaker: focusCharacter,
 		CreatedAt:       time.Now().UTC(),
 	}
-	if cfg.Mode == "manual" || len(e.loadedCharacters) <= 1 {
-		plan.Selected = []string{e.activeCharacter}
-		plan.Candidates = []string{e.activeCharacter}
+	populationCandidates := e.ensureScenePopulationCandidatesLocked(worldState, userInput)
+	participantByName := make(map[string]core.ParticipantSummary)
+	for _, participant := range e.sceneParticipantDetailsLocked() {
+		participantByName[participant.Name] = participant
+	}
+	for _, name := range e.loadedCharacters {
+		if _, ok := participantByName[name]; !ok {
+			participantByName[name] = e.participantSummaryLocked(name, containsString(worldState.Scene.Characters, name))
+		}
+	}
+	if cfg.Mode == "manual" {
+		focusParticipant := participantByName[focusCharacter]
+		plan.Selected = []string{focusCharacter}
+		plan.Candidates = []string{focusCharacter}
+		plan.CandidateDetails = []core.DirectorCandidate{{
+			Name:       focusCharacter,
+			Score:      1,
+			Reason:     "director manual mode",
+			Kind:       focusParticipant.Kind,
+			Source:     focusParticipant.Source,
+			Loaded:     focusParticipant.Loaded,
+			Switchable: focusParticipant.Switchable,
+			Present:    true,
+			Selected:   true,
+		}}
 		plan.Reason = "director manual mode"
 		plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, false, worldState, userInput, nil)
 		e.lastPlan = plan
@@ -79,7 +153,19 @@ func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) 
 	candidates := e.directorCandidatesLocked(worldState)
 	plan.Candidates = append([]string(nil), candidates...)
 	if len(candidates) == 0 {
-		plan.Selected = []string{e.activeCharacter}
+		focusParticipant := participantByName[focusCharacter]
+		plan.Selected = []string{focusCharacter}
+		plan.CandidateDetails = []core.DirectorCandidate{{
+			Name:       focusCharacter,
+			Score:      1,
+			Reason:     "no alternate candidates",
+			Kind:       focusParticipant.Kind,
+			Source:     focusParticipant.Source,
+			Loaded:     focusParticipant.Loaded,
+			Switchable: focusParticipant.Switchable,
+			Present:    true,
+			Selected:   true,
+		}}
 		plan.Reason = "no alternate candidates"
 		plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, false, worldState, userInput, nil)
 		e.lastPlan = plan
@@ -89,59 +175,134 @@ func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) 
 	var scoredList []directorCandidateScore
 	needle := strings.ToLower(strings.TrimSpace(userInput))
 	for _, name := range candidates {
+		participant := participantByName[name]
 		score := 0.0
 		var reasons []string
+		breakdown := map[string]float64{}
 		mentionIndex := strings.Index(needle, strings.ToLower(name))
 		mentioned := mentionIndex >= 0
 		present := containsString(worldState.Scene.Characters, name)
 		silenceBoost := 0.0
 		if mentioned {
-			score += 100
+			score += weights["mentioned"]
+			breakdown["mentioned"] += weights["mentioned"]
 			reasons = append(reasons, "mentioned by user")
-			score += maxFloat(0, 12-float64(mentionIndex))
+			mentionOrderBoost := maxFloat(0, weights["mention_order"]-float64(mentionIndex))
+			score += mentionOrderBoost
+			breakdown["mention_order"] += mentionOrderBoost
 			reasons = append(reasons, fmt.Sprintf("mention order %d", mentionIndex))
 		}
-		if name == e.activeCharacter {
-			score += 4
+		if name == focusCharacter && participant.Source != "scene_presence" && participant.Source != "scene_shell" && participant.Kind != "player" {
+			score += weights["continuity"]
+			breakdown["continuity"] += weights["continuity"]
 			reasons = append(reasons, "current speaker continuity")
 		}
 		if present {
-			score += 8
+			score += weights["present"]
+			breakdown["present"] += weights["present"]
 			reasons = append(reasons, "present in scene")
+		}
+		if candidate, ok := populationCandidates[name]; ok {
+			if candidate.LocationMatch {
+				score += weights["location_match"]
+				breakdown["location_match"] += weights["location_match"]
+			}
+			if candidate.FactionMatch {
+				score += weights["faction_match"]
+				breakdown["faction_match"] += weights["faction_match"]
+			}
+			if candidate.PressureMatch {
+				score += weights["pressure_match"]
+				breakdown["pressure_match"] += weights["pressure_match"]
+			}
+			if candidate.HookMatch {
+				score += weights["hook_match"]
+				breakdown["hook_match"] += weights["hook_match"]
+			}
+			if candidate.Reason != "" {
+				reasons = append(reasons, candidate.Reason)
+			}
 		}
 		if last, ok := e.memEngine.LastAssistantAt(name); ok {
 			silence := time.Since(last).Minutes()
 			if silence > 0 {
-				silenceBoost = minFloat(silence/5, 12)
+				silenceBoost = minFloat(silence/weights["silence_divisor"], weights["silence_cap"])
 				score += silenceBoost
+				breakdown["silence_boost"] += silenceBoost
 				reasons = append(reasons, fmt.Sprintf("silent %.0fm", silence))
 			}
 		} else {
-			silenceBoost = 10
+			silenceBoost = minFloat(weights["silence_cap"], 10)
 			score += silenceBoost
+			breakdown["silence_boost"] += silenceBoost
 			reasons = append(reasons, "has not spoken recently")
 		}
 		if char, ok := e.agents.GetCharacter(name); ok {
-			score += char.Identity.Adaptive["trust"] * 0.15
-			score += char.Identity.Adaptive["intimacy"] * 0.1
-			score += char.Identity.Adaptive["fear"] * 0.05
+			trustBoost := char.Identity.Adaptive["trust"] * weights["trust"]
+			intimacyBoost := char.Identity.Adaptive["intimacy"] * weights["intimacy"]
+			fearBoost := char.Identity.Adaptive["fear"] * weights["fear"]
+			score += trustBoost
+			score += intimacyBoost
+			score += fearBoost
+			breakdown["trust"] += trustBoost
+			breakdown["intimacy"] += intimacyBoost
+			breakdown["fear"] += fearBoost
 		}
 		if mentioned && mentionIndex == 0 {
-			score += 6
+			score += weights["opened_by_user"]
+			breakdown["opened_by_user"] += weights["opened_by_user"]
 			reasons = append(reasons, "opened by user cue")
 		}
-		if worldState.Tension >= 0.6 && name != e.activeCharacter {
-			score += 3
+		if worldState.Tension >= 0.6 && name != focusCharacter {
+			score += weights["tension_switch"]
+			breakdown["tension_switch"] += weights["tension_switch"]
 			reasons = append(reasons, "high tension favors switch")
 		}
+		if participant.Kind == "persona" {
+			score += weights["kind_persona"]
+			breakdown["kind_persona"] += weights["kind_persona"]
+			reasons = append(reasons, "kind=persona")
+		} else if participant.Kind == "npc" {
+			score += weights["kind_npc"]
+			breakdown["kind_npc"] += weights["kind_npc"]
+			reasons = append(reasons, "kind=npc")
+		}
+		switch participant.Source {
+		case "promoted_population":
+			score += weights["source_promoted"]
+			breakdown["source_promoted"] += weights["source_promoted"]
+			reasons = append(reasons, "source=promoted")
+		case "character_definition":
+			score += weights["source_definition"]
+			breakdown["source_definition"] += weights["source_definition"]
+			reasons = append(reasons, "source=definition")
+		case "background_population":
+			score += weights["source_background"]
+			breakdown["source_background"] += weights["source_background"]
+			reasons = append(reasons, "source=background")
+		}
+		if participant.Loaded {
+			score += weights["loaded"]
+			breakdown["loaded"] += weights["loaded"]
+			reasons = append(reasons, "loaded")
+		}
 		scoredList = append(scoredList, directorCandidateScore{
-			name:         name,
-			score:        score,
-			reason:       strings.Join(reasons, ", "),
-			mentioned:    mentioned,
-			mentionIndex: mentionIndex,
-			present:      present,
-			silenceBoost: silenceBoost,
+			name:          name,
+			score:         score,
+			reason:        strings.Join(reasons, ", "),
+			breakdown:     breakdown,
+			kind:          participant.Kind,
+			source:        participant.Source,
+			loaded:        participant.Loaded,
+			switchable:    participant.Switchable,
+			mentioned:     mentioned,
+			mentionIndex:  mentionIndex,
+			present:       present,
+			silenceBoost:  silenceBoost,
+			locationMatch: populationCandidates[name].LocationMatch,
+			factionMatch:  populationCandidates[name].FactionMatch,
+			pressureMatch: populationCandidates[name].PressureMatch,
+			hookMatch:     populationCandidates[name].HookMatch,
 		})
 	}
 
@@ -164,10 +325,15 @@ func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) 
 	}
 	plan.Selected = buildSelectedSpeakers(scoredList, worldState, cfg.Mode == "auto_chain", maxSpeakers)
 	if len(plan.Selected) == 0 {
-		plan.Selected = []string{e.activeCharacter}
+		plan.Selected = []string{focusCharacter}
 	}
+	selectedSet := make(map[string]bool, len(plan.Selected))
+	for _, name := range plan.Selected {
+		selectedSet[name] = true
+	}
+	plan.CandidateDetails = buildDirectorCandidateDetails(scoredList, selectedSet)
 	plan.Reason = buildPlanReason(scoredList, plan.Selected, cfg.Mode == "auto_chain")
-	if lead := plan.Selected[0]; lead != "" && lead != e.activeCharacter {
+	if lead := plan.Selected[0]; lead != "" && lead != focusCharacter {
 		plan.Switched = true
 	}
 	plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, cfg.Mode == "auto_chain", worldState, userInput, scoredList)
@@ -262,6 +428,41 @@ func buildPlanReason(scoredList []directorCandidateScore, selected []string, all
 	return strings.Join(parts, " | ")
 }
 
+func buildDirectorCandidateDetails(scoredList []directorCandidateScore, selectedSet map[string]bool) []core.DirectorCandidate {
+	out := make([]core.DirectorCandidate, 0, len(scoredList))
+	for _, candidate := range scoredList {
+		out = append(out, core.DirectorCandidate{
+			Name:           candidate.name,
+			Score:          candidate.score,
+			Reason:         candidate.reason,
+			Kind:           candidate.kind,
+			Source:         candidate.source,
+			Loaded:         candidate.loaded,
+			Switchable:     candidate.switchable,
+			Mentioned:      candidate.mentioned,
+			Present:        candidate.present,
+			LocationMatch:  candidate.locationMatch,
+			FactionMatch:   candidate.factionMatch,
+			PressureMatch:  candidate.pressureMatch,
+			HookMatch:      candidate.hookMatch,
+			ScoreBreakdown: cloneScoreBreakdown(candidate.breakdown),
+			Selected:       selectedSet[candidate.name],
+		})
+	}
+	return out
+}
+
+func cloneScoreBreakdown(src map[string]float64) map[string]float64 {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]float64, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
 func buildTurnSteps(selected []string, previousSpeaker string, allowChain bool, worldState core.WorldState, userInput string, scoredList []directorCandidateScore) []core.TurnStep {
 	if len(selected) == 0 {
 		return nil
@@ -330,19 +531,40 @@ func relationshipWeight(worldState core.WorldState, a, b string) float64 {
 func (e *Engine) directorCandidatesLocked(worldState core.WorldState) []string {
 	seen := map[string]bool{}
 	var out []string
+	activeWorldPath := e.currentWorldPathLocked()
+	participantByName := make(map[string]core.ParticipantSummary)
+	for _, participant := range e.sceneParticipantDetailsLocked() {
+		participantByName[participant.Name] = participant
+	}
 	for _, name := range worldState.Scene.Characters {
+		participant, ok := participantByName[name]
+		if !ok {
+			participant = e.participantSummaryLocked(name, true)
+		}
+		if participant.Kind == "player" || participant.Source == "player_role" || participant.Source == "scene_presence" || participant.Source == "scene_shell" || !participant.Switchable {
+			continue
+		}
 		if _, ok := e.agents.GetCharacter(name); ok && !seen[name] {
 			seen[name] = true
 			out = append(out, name)
 		}
 	}
-	if len(out) == 0 {
-		for _, name := range e.loadedCharacters {
-			if !seen[name] {
-				seen[name] = true
-				out = append(out, name)
-			}
+	for _, name := range e.loadedCharacters {
+		if seen[name] {
+			continue
 		}
+		participant, ok := participantByName[name]
+		if !ok {
+			participant = e.participantSummaryLocked(name, containsString(worldState.Scene.Characters, name))
+		}
+		if participant.Kind == "player" || participant.Source == "player_role" || participant.Source == "scene_presence" || participant.Source == "scene_shell" || !participant.Switchable {
+			continue
+		}
+		if activeWorldPath != "" && e.currentWorldPathFor(name) != "" && e.currentWorldPathFor(name) != activeWorldPath {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
 	}
 	return out
 }

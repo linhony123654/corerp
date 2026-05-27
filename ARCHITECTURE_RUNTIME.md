@@ -151,11 +151,11 @@ DirectorPlan
     -> ...
 ```
 
-- `DirectorPlan` 只负责决定本轮有哪些 step，不直接改 `activeCharacter`
+- `DirectorPlan` 只负责决定本轮有哪些 step，不直接改 `focusCharacter`
 - `TurnStep` 是最小执行单位：一次 snapshot / 一次 LLM / 一次 validator / 一次 event commit
 - 多角色参与同一轮时，必须按 step 严格串行执行
 - 允许多个角色参与同一轮；不允许多个角色并发写入世界状态
-- `activeCharacter` 现在表示当前主视角 / 默认角色，而不是“整轮唯一发言人”
+- `focusCharacter` 现在表示当前主视角 / 默认角色，而不是“整轮唯一发言人”
 - `auto_chain` 的默认选 step 规则是：
   - 先定 `lead`
   - 再补 `addressed_reply`

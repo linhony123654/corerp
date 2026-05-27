@@ -1,58 +1,77 @@
 # CoreRP TODO
 
-## 当前状态
+## 当前主线
 
-- [x] Persistent Narrative Runtime 基础内核
-- [x] World / Scene / Canon 编辑台
-- [x] Quarantine / Pending Facts 审核台
-- [x] Director + TurnPlan / TurnStep 多 step 串行执行
-- [x] Branch replay / diff / merge
-- [x] Trace 面板与 step_traces 前端展示
-- [x] Runtime Instance 多实例隔离
-- [x] Runtime Instance 生命周期第一版：`list / status / create / set default / stop / delete`
+项目主方向保持不变：
 
-## 当前架构缺口
+- `world-first persistent narrative runtime`
+- `focus_character` 是观察视角
+- `participants` 是场景在场者
+- `participant_details` 是 switch / director / trace / UI 共用的结构化参与者模型
+- 人物定义负责 persona seed，background NPC 通过事件与关注度自然晋升
 
-### P0
+完成标准请直接参考 [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md)。
 
-- [x] `internal/runtime/`：为删除实例补更高层集成测试，覆盖 event/branch/memory/file 全量清理
-- [x] `internal/api/server.go`：为实例删除补更明确的错误语义（如默认实例删除冲突、唯一实例删除冲突）
+## 当前可信状态
 
-### P1
+以下项目已在代码中落地，并且本轮重新抽查通过：
 
-- [ ] `internal/runtime/`：把单实例内部多角色协作继续推进到更完整的多角色 turn 链
-- [x] `web/app.js`：trace 历史列表与 turn 翻阅 UI
-- [x] `internal/runtime/`：checkpoint / rollback / scenario preset 作者工具
+- [x] `focus_character` 已成为内部主语义，`/api/characters` 与 `/api/instances` 输出新字段
+- [x] `participant_details` 已进入 `/api/characters`、`/api/instances`、trace 视图与前端参与者面板
+- [x] 视角切换不再覆盖 scene truth；切换 focus 后原场景参与者继续保留
+- [x] director 已接入参与者模型；`player_role` / `scene_shell` / `scene_presence` 不进入 speaker candidate
+- [x] director 权重已显式支持 `kind/source/loaded`
+- [x] population runtime 已接入 attention / promotion / promoted persona / director candidate 主链路
+- [x] world structure API、population API、simulation API 已存在并可正常读取
+- [x] Simulation 运维接口已落地：`/api/sim/status`、`/api/sim/tick`、`/api/sim/pause`、`/api/sim/resume`
+- [x] `PUT /api/worlds` 与 `PATCH /api/worlds` 已实现
+- [x] `README.md` 当前与 world-first 主路线基本一致
 
-### P2
+## 待补验证
 
-- [ ] `internal/simulation/`：无用户输入时的长期自主事件推进
-- [ ] `internal/events/causality.go`：strongest cause / strongest effect 视图
-- [ ] `deploy/`：PM2 / systemd / reverse proxy 健康检查与巡检示例
+这些方向代码已存在，但当前不要夸大成“完全完成”：
 
-## 近期完成
+- [ ] simulation 长期稳定性还需要更长时间回归；目前只能确认 `pressure_states / faction_tensions / npc_tick_exposure` 已产生
+- [ ] world structure 对 planner / scheduler / tick 的深度驱动已接线，但仍需更多场景回放验证
+- [ ] population growth 闭环已成型，但“人格慢变量长期塑形”还不是最终形态
+- [ ] trace / 作者控制台已经能解释多数候选差距，但还不是完整的 runtime 诊断面板
 
-- [x] `data/` 已重建为新的标准运行目录
-- [x] PM2 启动参数固化到标准 `data/`
-- [x] `deploy/smoke-check.sh`：启动后检查 `/api/health` 与 `/api/ready`
-- [x] `GET /api/health` / `GET /api/ready` / `GET /api/version`
-- [x] 共享 SQLite 下的 `instance_id` 事件、分支、记忆隔离
-- [x] `data/instances/<instance_id>/` 文件级持久化隔离
-- [x] `POST /api/instances/create`
-- [x] `POST /api/instances/default`
-- [x] `GET /api/instances/status`
-- [x] `POST /api/instances/stop`
-- [x] `POST /api/instances/delete`
-- [x] `web/` 实例管理面板，支持 create / default / stop / delete
-- [x] `web/` 页面内显式实例选择，runtime 请求自动附带 `instance_id`
-- [x] `GET /api/traces`：turn trace 历史列表
-- [x] `GET/POST /api/checkpoints` + `POST /api/checkpoints/load`
-- [x] `GET/POST /api/presets` + `POST /api/presets/apply`
-- [x] `web/` 作者工具面板：
-  - checkpoint / rollback
-  - scenario preset 保存与套用
-  - trace turn 历史浏览
-- [x] `web/` trace 作者控制台第二轮：
-  - 当前 turn 高亮
-  - 上一轮 / 下一轮切换
-  - checkpoint 与 trace 联动跳转
+## 文档约束
+
+- [ ] 不再把“未来路线”写成 `[x]`
+- [ ] 不再把错误的 HTTP 预期写成回归结论
+  - `GET /api/switch` 返回 `405` 是正确行为
+  - `POST /api/switch` 返回 `200` 才表示兼容路径可用
+- [ ] `SESSION_LOG.md` 当前可作为变更素材库，不可直接当严格时间线；后续需要统一时区并重排
+
+## 下一阶段
+
+按价值排序，后续优先做这些：
+
+1. 强化 simulation / population / world structure 的真实闭环，而不是继续堆角色定义。
+2. 继续让前端与 API 实际依赖 `focus_* + participants + participant_details`，把旧字段压缩为兼容层。
+3. 让 trace / 作者控制台更像 runtime 调试器，补齐“为何进入 / 为何未进入 / 当前世界压力如何作用”的解释链。
+4. 继续让世界目录成为唯一主入口；人物卡只作为导入材料，不再主导运行时语义。
+
+是否能把这些项从“做过”升级为“闭环完成”，统一按 [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md) 判断。
+
+## 最小验证
+
+```bash
+/usr/local/go/bin/go test -count=1 ./internal/api ./internal/runtime ./internal/core
+node --check web/app.js
+/usr/local/go/bin/go build -o corerp ./cmd/corerp
+pm2 restart corerp && pm2 save
+```
+
+## 建议抽查接口
+
+```text
+GET  /api/characters
+GET  /api/instances
+GET  /api/world-structure
+GET  /api/population
+GET  /api/population-insights
+GET  /api/sim/status
+POST /api/switch
+```

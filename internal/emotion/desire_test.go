@@ -215,10 +215,11 @@ func TestBudgetAllowFirstAction(t *testing.T) {
 
 func TestBudgetCooldownBlocks(t *testing.T) {
 	b := DefaultBudget()
+	b.SetCooldown(5)
 	b.Record("V", 0)
 
 	// Same NPC at tick 2 (within cooldown of 5)
-	allowed, reason := b.Allow("V", 0.8, 2)
+	allowed, reason := b.Allow("V", 0.75, 2)
 	if allowed {
 		t.Error("should be blocked by cooldown")
 	}
@@ -229,6 +230,7 @@ func TestBudgetCooldownBlocks(t *testing.T) {
 
 func TestBudgetCooldownExpires(t *testing.T) {
 	b := DefaultBudget()
+	b.SetCooldown(5)
 	b.Record("V", 0)
 
 	// After cooldown expires (tick 5, cooldown is 5, so diff=5 >= 5)
@@ -246,7 +248,7 @@ func TestBudgetSceneCap(t *testing.T) {
 	b.Record("B", 0)
 
 	// Third NPC should be blocked
-	allowed, reason := b.Allow("C", 0.8, 1)
+	allowed, reason := b.Allow("C", 0.75, 1)
 	if allowed {
 		t.Error("should be blocked by scene cap")
 	}
@@ -257,9 +259,10 @@ func TestBudgetSceneCap(t *testing.T) {
 
 func TestBudgetUrgencyBypassCooldown(t *testing.T) {
 	b := DefaultBudget()
+	b.SetCooldown(5)
 	b.Record("V", 0)
 
-	// Urgency 0.95 >= bypass 0.9 → allowed even on cooldown
+	// Urgency 0.95 >= bypass 0.8 → allowed even on cooldown
 	allowed, _ := b.Allow("V", 0.95, 2)
 	if !allowed {
 		t.Error("high urgency should bypass cooldown")
@@ -271,18 +274,20 @@ func TestBudgetUrgencyBypassSceneCap(t *testing.T) {
 	b.SetMaxPerScene(1)
 	b.Record("A", 0)
 
-	// Urgency 0.9 → not quite at bypass (>=0.9)
+	// Urgency 0.9 >= bypass (0.8) → allowed
 	allowed, _ := b.Allow("B", 0.9, 1)
 	if !allowed {
 		t.Error("urgency >= bypass threshold should skip scene cap")
 	}
 
-	// Urgency 0.85 → below bypass, should be blocked
-	allowed2, reason2 := b.Allow("C", 0.85, 1)
+	// Urgency 0.75 → below bypass, should be blocked
+	allowed2, reason2 := b.Allow("C", 0.75, 1)
 	if allowed2 {
 		t.Error("sub-bypass urgency should be blocked by scene cap")
 	}
-	_ = reason2
+	if reason2 != "scene_cap" {
+		t.Errorf("reason = %s, want scene_cap", reason2)
+	}
 }
 
 func TestBudgetDifferentCharacters(t *testing.T) {
@@ -311,6 +316,7 @@ func TestBudgetResetScene(t *testing.T) {
 
 func TestGenerateActionBudgetBlocks(t *testing.T) {
 	b := DefaultBudget()
+	b.SetCooldown(5)
 	vec := EmotionVector{Attachment: 0.6, Longing: 0.7}
 	p := EmotionalPressure{Total: 0.85}
 	desires := []Desire{{ID: "d1", Type: DesireAffection, Target: "玩家", Intensity: 0.9, Reason: "test"}}
@@ -323,7 +329,8 @@ func TestGenerateActionBudgetBlocks(t *testing.T) {
 	b.Record("V", 0)
 
 	// Second call at tick 1: blocked by cooldown
-	action2 := GenerateAutonomousAction("V", p, desires, vec, b, 1)
+	p2 := EmotionalPressure{Total: 0.75}
+	action2 := GenerateAutonomousAction("V", p2, desires, vec, b, 1)
 	if action2 != nil {
 		t.Error("second call within cooldown should be blocked")
 	}
@@ -331,6 +338,7 @@ func TestGenerateActionBudgetBlocks(t *testing.T) {
 
 func TestGenerateActionBudgetUrgencyBypass(t *testing.T) {
 	b := DefaultBudget()
+	b.SetCooldown(5)
 	vec := EmotionVector{Attachment: 0.6, Longing: 0.7}
 	desires := []Desire{{ID: "d1", Type: DesireAffection, Target: "玩家", Intensity: 0.9, Reason: "test"}}
 
@@ -346,7 +354,7 @@ func TestGenerateActionBudgetUrgencyBypass(t *testing.T) {
 	pHigh := EmotionalPressure{Total: 0.95}
 	action2 := GenerateAutonomousAction("V", pHigh, desires, vec, b, 1)
 	if action2 == nil {
-		t.Error("urgency >= 0.9 should bypass cooldown")
+		t.Error("urgency >= 0.8 should bypass cooldown")
 	}
 }
 

@@ -192,12 +192,12 @@ func (m *Manager) Delete(id string) error {
 	return nil
 }
 
-func (m *Manager) CreateFrom(sourceID, id, label, activeCharacter string) (core.RuntimeInstanceSummary, error) {
+func (m *Manager) CreateFrom(sourceID, id, label, focusCharacter string) (core.RuntimeInstanceSummary, error) {
 	source, err := m.Resolve(sourceID)
 	if err != nil {
 		return core.RuntimeInstanceSummary{}, err
 	}
-	engine, err := source.SpawnInstance(id, activeCharacter)
+	engine, err := source.SpawnInstance(id, focusCharacter)
 	if err != nil {
 		return core.RuntimeInstanceSummary{}, err
 	}

@@ -32,6 +32,8 @@ type apiInstanceResolver struct {
 	manager *runtime.Manager
 }
 
+var _ api.InstanceResolver = (*apiInstanceResolver)(nil)
+
 var (
 	buildVersion = "dev"
 	buildCommit  = "unknown"
@@ -72,8 +74,8 @@ func (r apiInstanceResolver) DeleteInstance(id string) error {
 	return r.manager.Delete(id)
 }
 
-func (r apiInstanceResolver) CreateInstance(sourceID, id, label, activeCharacter string) (core.RuntimeInstanceSummary, error) {
-	return r.manager.CreateFrom(sourceID, id, label, activeCharacter)
+func (r apiInstanceResolver) CreateInstance(sourceID, id, label, focusCharacter string) (core.RuntimeInstanceSummary, error) {
+	return r.manager.CreateFrom(sourceID, id, label, focusCharacter)
 }
 
 func resolveBuildMetadata() buildMetadata {
@@ -269,9 +271,10 @@ func runServe(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	port := fs.String("port", "8080", "HTTP server port")
 	dataDir := fs.String("data", "./data", "Data directory")
+	bootMode := fs.String("boot", "auto", "Bootstrap mode: auto|character|world")
 	charFile := fs.String("character", "characters/anya.yml", "Single character YAML (use -characters dir for multi)")
 	charDir := fs.String("characters", "", "Directory of character YAML files (loads all *.yml)")
-	worldFile := fs.String("world", "worlds/cyberpunk2077/world.yml", "World YAML file")
+	worldFile := fs.String("world", "worlds/cyberpunk2077/world.yml", "World YAML file or world directory")
 	llmURL := fs.String("llm-url", os.Getenv("LLM_URL"), "LLM API endpoint")
 	llmKey := fs.String("llm-key", os.Getenv("LLM_API_KEY"), "LLM API key")
 	llmModel := fs.String("llm-model", os.Getenv("LLM_MODEL"), "LLM model name")
@@ -286,6 +289,9 @@ func runServe(args []string) {
 	}
 	if *llmModel == "" {
 		*llmModel = "qwen2.5:7b"
+	}
+	if strings.TrimSpace(*worldFile) != "" {
+		*worldFile = filepath.Clean(strings.TrimSpace(*worldFile))
 	}
 
 	buildMeta := resolveBuildMetadata()
@@ -303,57 +309,70 @@ func runServe(args []string) {
 		*port,
 	)
 
-	// Load characters: directory mode takes precedence
+	mode := normalizeServeBootMode(*bootMode)
+	if mode == "" {
+		log.Fatalf("Invalid -boot mode %q (want auto|character|world)", *bootMode)
+	}
+
+	// Load characters: directory mode takes precedence when booting from character cards.
 	var chars []core.Character
 	var charNames []string
 	var charPaths []string
-	if *charDir != "" {
-		chars, charNames, charPaths = loadCharactersFromDir(*charDir)
-		if len(chars) == 0 {
-			log.Fatalf("No character YAML files found in %s", *charDir)
+	if mode != "world" {
+		if *charDir != "" {
+			chars, charNames, charPaths = loadCharactersFromDir(*charDir)
+		} else if _, err := os.Stat(*charFile); err == nil {
+			char := loadCharacter(*charFile)
+			chars = []core.Character{char}
+			charNames = []string{char.Identity.Name}
+			charPaths = []string{*charFile}
 		}
-	} else {
-		char := loadCharacter(*charFile)
-		chars = []core.Character{char}
-		charNames = []string{char.Identity.Name}
-		charPaths = []string{*charFile}
 	}
-	activeName := charNames[0]
+	mode = resolveServeBootMode(mode, *worldFile, len(charNames) > 0)
+	if mode == "character" && len(charNames) == 0 {
+		log.Fatalf("No character YAML files available for character boot")
+	}
+	activeName := ""
+	if len(charNames) > 0 {
+		activeName = charNames[0]
+	}
 	charPathMap := make(map[string]string, len(charNames))
 
-	// Load per-character worlds
+	// Load per-character worlds for compatibility boot mode.
 	charWorlds := make(map[string]runtime.CharWorld)
 	worldPathMap := make(map[string]string, len(charNames))
-	for i, name := range charNames {
-		charPathMap[name] = charPaths[i]
-		var wf string
-		if *charDir != "" {
-			wf = findWorldFile(charPaths[i])
-		}
-		if wf == "" {
-			wf = *worldFile
-		}
-		worldPathMap[name] = wf
-		bundle, err := world.LoadBundle(wf)
-		if err != nil {
-			log.Fatalf("Failed to load world '%s': %v", wf, err)
-		}
-		defaultScene := core.SceneState{}
-		if len(bundle.Scenes) > 0 {
-			defaultScene = bundle.Scenes[0].Scene
-			for _, scene := range bundle.Scenes {
-				if scene.Name == "default" {
-					defaultScene = scene.Scene
-					break
+	if mode == "character" {
+		for i, name := range charNames {
+			charPathMap[name] = charPaths[i]
+			var wf string
+			if *charDir != "" {
+				wf = findWorldFile(charPaths[i])
+			}
+			if wf == "" {
+				wf = *worldFile
+			}
+			worldPathMap[name] = wf
+			bundle, err := world.LoadBundle(wf)
+			if err != nil {
+				log.Fatalf("Failed to load world '%s': %v", wf, err)
+			}
+			defaultScene := core.SceneState{}
+			if len(bundle.Scenes) > 0 {
+				defaultScene = bundle.Scenes[0].Scene
+				for _, scene := range bundle.Scenes {
+					if scene.Name == "default" {
+						defaultScene = scene.Scene
+						break
+					}
 				}
 			}
+			charWorlds[name] = runtime.CharWorld{
+				WorldName: bundle.Config.Name,
+				CoreRules: bundle.Config.CoreRules,
+				Scene:     defaultScene,
+			}
+			log.Printf("Character '%s' → world '%s' (%s)", name, bundle.Config.Name, wf)
 		}
-		charWorlds[name] = runtime.CharWorld{
-			WorldName: bundle.Config.Name,
-			CoreRules: bundle.Config.CoreRules,
-			Scene:     defaultScene,
-		}
-		log.Printf("Character '%s' → world '%s' (%s)", name, bundle.Config.Name, wf)
 	}
 
 	// Init stores
@@ -377,31 +396,34 @@ func runServe(args []string) {
 		cp.Migrate()
 	}
 
-	// Seed ontology per character from their own world
-	for i, name := range charNames {
-		// Re-load full world for ontology (includes ontology section)
-		var wf string
-		if *charDir != "" {
-			wf = findWorldFile(charPaths[i])
+	// Seed ontology per character from their own world in compatibility mode.
+	if mode == "character" {
+		for i, name := range charNames {
+			var wf string
+			if *charDir != "" {
+				wf = findWorldFile(charPaths[i])
+			}
+			if wf == "" {
+				wf = *worldFile
+			}
+			bundle, err := world.LoadBundle(wf)
+			if err != nil {
+				log.Fatalf("Failed to load world '%s': %v", wf, err)
+			}
+			if err := world.SeedMemory(memEngine, bundle, name); err != nil {
+				log.Printf("Warning: world seed failed for '%s': %v", name, err)
+			}
+			log.Printf("Ontology seeded: %s into '%s'", world.SeedSummary(bundle), name)
 		}
-		if wf == "" {
-			wf = *worldFile
-		}
-		bundle, err := world.LoadBundle(wf)
-		if err != nil {
-			log.Fatalf("Failed to load world '%s': %v", wf, err)
-		}
-		if err := world.SeedMemory(memEngine, bundle, name); err != nil {
-			log.Printf("Warning: world seed failed for '%s': %v", name, err)
-		}
-		log.Printf("Ontology seeded: %s into '%s'", world.SeedSummary(bundle), name)
 	}
 
-	// Init agents — load all characters
+	// Init agents — preload cards only in compatibility mode.
 	agentsMgr := agents.NewEnvelopeManager()
-	for i, c := range chars {
-		agentsMgr.LoadCharacter(charNames[i], c)
-		log.Printf("Loaded character: %s", charNames[i])
+	if mode == "character" {
+		for i, c := range chars {
+			agentsMgr.LoadCharacter(charNames[i], c)
+			log.Printf("Loaded character: %s", charNames[i])
+		}
 	}
 
 	// Init auth
@@ -459,21 +481,39 @@ func runServe(args []string) {
 		log.Printf("Causality rebuilt")
 	}
 
-	// Seed initial scene only when no prior scene projection exists.
-	initWorld := charWorlds[activeName]
-	if sceneIsEmpty(engine.GetState().Scene) {
-		engine.SeedScene(core.SceneState{
-			Location:    initWorld.Scene.Location,
-			TimeOfDay:   initWorld.Scene.TimeOfDay,
-			Weather:     initWorld.Scene.Weather,
-			Characters:  initWorld.Scene.Characters,
-			Description: initWorld.Scene.Description,
-		})
-	}
-	engine.SyncActiveWorldContext()
+	switch mode {
+	case "character":
+		// Seed initial scene only when no prior scene projection exists.
+		initWorld := charWorlds[activeName]
+		if sceneIsEmpty(engine.GetState().Scene) {
+			engine.SeedScene(core.SceneState{
+				Location:    initWorld.Scene.Location,
+				TimeOfDay:   initWorld.Scene.TimeOfDay,
+				Weather:     initWorld.Scene.Weather,
+				Characters:  initWorld.Scene.Characters,
+				Description: initWorld.Scene.Description,
+			})
+		}
+		engine.SyncActiveWorldContext()
 
-	// Auto-seed NPC desires from character cards (idempotent)
-	engine.SeedNPCDesires()
+		// Auto-seed NPC desires from character cards (idempotent)
+		engine.SeedNPCDesires()
+	case "world":
+		preset, err := engine.EnterWorld(*worldFile)
+		if err != nil {
+			log.Fatalf("Failed to enter world '%s': %v", *worldFile, err)
+		}
+		if name := engine.GetFocusCharacter(); strings.TrimSpace(name) != "" {
+			if bundle, err := world.LoadBundle(*worldFile); err == nil {
+				if err := world.SeedMemory(memEngine, bundle, name); err != nil {
+					log.Printf("Warning: world seed failed for '%s': %v", name, err)
+				} else {
+					log.Printf("Ontology seeded: %s into '%s'", world.SeedSummary(bundle), name)
+				}
+			}
+		}
+		log.Printf("World-first boot entered '%s' via preset '%s' as '%s'", engine.GetWorldName(), preset.Name, engine.GetFocusCharacter())
+	}
 
 	// Start autonomous tick loop
 	engine.StartTickLoop()
@@ -490,8 +530,9 @@ func runServe(args []string) {
 	}()
 
 	log.Printf("CoreRP started version=%s commit=%s", buildMeta.Version, shortCommit(buildMeta.Commit))
-	log.Printf("Active character: %s", activeName)
-	log.Printf("World: %s", charWorlds[activeName].WorldName)
+	log.Printf("Boot mode: %s", mode)
+	log.Printf("Focus character: %s", engine.GetFocusCharacter())
+	log.Printf("World: %s", engine.GetWorldName())
 	log.Printf("LLM: %s @ %s", *llmModel, *llmURL)
 	log.Printf("Listening on http://localhost:%s", *port)
 
@@ -580,6 +621,36 @@ func loadCharactersFromDir(dir string) (chars []core.Character, names []string, 
 		paths = append(paths, path)
 	}
 	return
+}
+
+func normalizeServeBootMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "auto":
+		return "auto"
+	case "character":
+		return "character"
+	case "world":
+		return "world"
+	default:
+		return ""
+	}
+}
+
+func resolveServeBootMode(mode, worldPath string, hasCharacters bool) string {
+	mode = normalizeServeBootMode(mode)
+	if mode == "" {
+		return ""
+	}
+	if mode != "auto" {
+		return mode
+	}
+	if hasCharacters {
+		return "character"
+	}
+	if strings.TrimSpace(worldPath) != "" {
+		return "world"
+	}
+	return "character"
 }
 
 func sceneIsEmpty(scene core.SceneState) bool {

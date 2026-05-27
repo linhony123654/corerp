@@ -41,6 +41,15 @@ func TestIntegrationFullPipeline(t *testing.T) {
 		"canon/ontology.yml",
 		"canon/facts.yml",
 		"scenes/default.yml",
+		"world/ruleset.yml",
+		"world/seed.yml",
+		"world/factions.yml",
+		"world/locations.yml",
+		"world/pressures.yml",
+		"population/background_npcs.yml",
+		"population/promoted_npcs.yml",
+		"population/identity_core.yml",
+		"population/policy.yml",
 	} {
 		if _, err := os.Stat(filepath.Join(worldDir, f)); os.IsNotExist(err) {
 			t.Errorf("missing file in three-layer world: %s", f)

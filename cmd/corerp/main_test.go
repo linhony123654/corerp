@@ -27,6 +27,45 @@ func TestSceneIsEmpty(t *testing.T) {
 	}
 }
 
+func TestNormalizeServeBootMode(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "", want: "auto"},
+		{in: "AUTO", want: "auto"},
+		{in: "character", want: "character"},
+		{in: "world", want: "world"},
+		{in: "bad", want: ""},
+	}
+	for _, tc := range tests {
+		if got := normalizeServeBootMode(tc.in); got != tc.want {
+			t.Fatalf("normalizeServeBootMode(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestResolveServeBootMode(t *testing.T) {
+	tests := []struct {
+		name          string
+		mode          string
+		worldPath     string
+		hasCharacters bool
+		want          string
+	}{
+		{name: "explicit world", mode: "world", worldPath: "worlds/neon_block", hasCharacters: true, want: "world"},
+		{name: "explicit character", mode: "character", worldPath: "worlds/neon_block", hasCharacters: false, want: "character"},
+		{name: "auto prefers character when cards exist", mode: "auto", worldPath: "worlds/neon_block", hasCharacters: true, want: "character"},
+		{name: "auto falls back to world when no cards", mode: "auto", worldPath: "worlds/neon_block", hasCharacters: false, want: "world"},
+		{name: "invalid mode stays invalid", mode: "bad", worldPath: "worlds/neon_block", hasCharacters: true, want: ""},
+	}
+	for _, tc := range tests {
+		if got := resolveServeBootMode(tc.mode, tc.worldPath, tc.hasCharacters); got != tc.want {
+			t.Fatalf("%s: resolveServeBootMode(%q, %q, %v) = %q, want %q", tc.name, tc.mode, tc.worldPath, tc.hasCharacters, got, tc.want)
+		}
+	}
+}
+
 func TestChooseImportModeAcceptsOverride(t *testing.T) {
 	reader := bufio.NewReader(strings.NewReader("ensemble\n"))
 	if got := chooseImportModeFromReader(reader, "auto"); got != "ensemble" {

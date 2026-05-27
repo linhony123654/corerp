@@ -8,20 +8,20 @@ import "time"
 // is valid and realistic.
 type EmotionVector struct {
 	// Primary dimensions (Ekman + relationship-specific)
-	Joy         float64 `json:"joy"`
-	Sadness     float64 `json:"sadness"`
-	Anger       float64 `json:"anger"`
-	Fear        float64 `json:"fear"`
-	Trust       float64 `json:"trust"`
-	Disgust     float64 `json:"disgust"`
-	Surprise    float64 `json:"surprise"`
+	Joy      float64 `json:"joy"`
+	Sadness  float64 `json:"sadness"`
+	Anger    float64 `json:"anger"`
+	Fear     float64 `json:"fear"`
+	Trust    float64 `json:"trust"`
+	Disgust  float64 `json:"disgust"`
+	Surprise float64 `json:"surprise"`
 
 	// Relationship dimensions (contradiction-friendly)
-	Attachment  float64 `json:"attachment"`  // wanting closeness
-	Resentment  float64 `json:"resentment"`  // accumulated grievance
-	Gratitude   float64 `json:"gratitude"`   // feeling of debt/thanks
-	Guilt       float64 `json:"guilt"`       // self-blame
-	Longing     float64 `json:"longing"`     // missing someone/something
+	Attachment float64 `json:"attachment"` // wanting closeness
+	Resentment float64 `json:"resentment"` // accumulated grievance
+	Gratitude  float64 `json:"gratitude"`  // feeling of debt/thanks
+	Guilt      float64 `json:"guilt"`      // self-blame
+	Longing    float64 `json:"longing"`    // missing someone/something
 }
 
 // Dominant returns just the name of the strongest emotion.
@@ -78,7 +78,7 @@ func (ev EmotionVector) Contradictions() []string {
 type EmotionalResidue struct {
 	ID          string    `json:"id"`
 	Character   string    `json:"character"`
-	Type        string    `json:"type"`        // disappointment, betrayal, warmth, gratitude, hurt, admiration
+	Type        string    `json:"type"`         // disappointment, betrayal, warmth, gratitude, hurt, admiration
 	SourceEvent string    `json:"source_event"` // event ID that caused it
 	Target      string    `json:"target"`       // who this is directed at
 	Intensity   float64   `json:"intensity"`    // 0-1, initial strength
@@ -110,11 +110,11 @@ type UnresolvedThread struct {
 	ID              string    `json:"id"`
 	Character       string    `json:"character"`
 	Topic           string    `json:"topic"`            // "未回应的告白", "背叛的沉默", "欠下的承诺"
-	Involving       string    `json:"involving"`         // who this is with
-	OpenedAt        string    `json:"opened_at"`         // event ID
-	EmotionalWeight float64   `json:"emotional_weight"`  // how heavy this feels
-	Status          string    `json:"status"`            // unresolved, hinted, addressed, resolved
-	LastReferenced  string    `json:"last_referenced"`   // event ID
+	Involving       string    `json:"involving"`        // who this is with
+	OpenedAt        string    `json:"opened_at"`        // event ID
+	EmotionalWeight float64   `json:"emotional_weight"` // how heavy this feels
+	Status          string    `json:"status"`           // unresolved, hinted, addressed, resolved
+	LastReferenced  string    `json:"last_referenced"`  // event ID
 	HintCount       int       `json:"hint_count"`       // times indirectly referenced
 	CreatedAt       time.Time `json:"created_at"`
 }
@@ -124,12 +124,12 @@ type UnresolvedThread struct {
 type DelayedReaction struct {
 	ID            string        `json:"id"`
 	Character     string        `json:"character"`
-	TriggerEvent  string        `json:"trigger_event"`   // event ID that planted the seed
-	ReactionType  string        `json:"reaction_type"`    // anger, sadness, realization, longing
+	TriggerEvent  string        `json:"trigger_event"` // event ID that planted the seed
+	ReactionType  string        `json:"reaction_type"` // anger, sadness, realization, longing
 	Intensity     float64       `json:"intensity"`
 	Target        string        `json:"target"`
-	DelayEvents   int           `json:"delay_events"`     // trigger after N more events
-	DelayDuration time.Duration `json:"delay_duration"`   // or after this much time
+	DelayEvents   int           `json:"delay_events"`   // trigger after N more events
+	DelayDuration time.Duration `json:"delay_duration"` // or after this much time
 	Triggered     bool          `json:"triggered"`
 	TriggeredAt   time.Time     `json:"triggered_at"`
 	CreatedAt     time.Time     `json:"created_at"`
@@ -151,11 +151,11 @@ func (dr DelayedReaction) ShouldTrigger(eventCount int, now time.Time) bool {
 
 // EmotionalSnapshot is what the LLM sees in its WorldSnapshot.
 type EmotionalSnapshot struct {
-	DominantEmotion  string              `json:"dominant_emotion"`
+	DominantEmotion   string             `json:"dominant_emotion"`
 	DominantIntensity float64            `json:"dominant_intensity"`
-	Vector           EmotionVector       `json:"vector"`
-	Contradictions   []string            `json:"contradictions"`
-	ActiveResidues   []EmotionalResidue  `json:"active_residues"`
+	Vector            EmotionVector      `json:"vector"`
+	Contradictions    []string           `json:"contradictions"`
+	ActiveResidues    []EmotionalResidue `json:"active_residues"`
 	UnresolvedThreads []UnresolvedThread `json:"unresolved_threads"`
-	PendingReactions []DelayedReaction   `json:"pending_reactions"`
+	PendingReactions  []DelayedReaction  `json:"pending_reactions"`
 }

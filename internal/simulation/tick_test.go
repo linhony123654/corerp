@@ -113,3 +113,36 @@ func TestDoubleStop(t *testing.T) {
 	// Double stop should not panic
 	l.Stop()
 }
+
+func TestPauseResume(t *testing.T) {
+	l := NewLoop(5 * time.Millisecond)
+	var count int32
+
+	l.OnTick(func() {
+		atomic.AddInt32(&count, 1)
+	})
+
+	l.Start()
+	time.Sleep(20 * time.Millisecond) // let some ticks fire
+
+	l.Pause()
+	if !l.IsPaused() {
+		t.Fatal("expected IsPaused() == true after Pause()")
+	}
+	snapshot := atomic.LoadInt32(&count)
+	time.Sleep(25 * time.Millisecond) // ticks should be skipped
+	if got := atomic.LoadInt32(&count); got != snapshot {
+		t.Errorf("handlers fired during pause: before=%d after=%d", snapshot, got)
+	}
+
+	l.Resume()
+	if l.IsPaused() {
+		t.Fatal("expected IsPaused() == false after Resume()")
+	}
+	time.Sleep(20 * time.Millisecond) // ticks should resume
+	if got := atomic.LoadInt32(&count); got <= snapshot {
+		t.Errorf("handlers did not resume: snapshot=%d current=%d", snapshot, got)
+	}
+
+	l.Stop()
+}

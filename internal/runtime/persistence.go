@@ -27,6 +27,7 @@ func (e *Engine) ConfigurePersistence(dataDir string, charPaths map[string]strin
 	for k, v := range worldPaths {
 		e.worldPaths[k] = v
 	}
+	e.refreshActiveWorldPathLocked()
 	if dir, err := e.instanceDataDirLocked(); err == nil {
 		_ = os.MkdirAll(dir, 0755)
 	}
@@ -35,13 +36,13 @@ func (e *Engine) ConfigurePersistence(dataDir string, charPaths map[string]strin
 	}
 }
 
-func (e *Engine) GetMemorySnapshot(characterName string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
+func (e *Engine) GetFocusMemorySnapshot(characterName string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
 	name := characterName
 	if name == "" {
-		name = e.activeCharacter
+		name = e.GetFocusCharacter()
 	}
 	if _, ok := e.agents.GetCharacter(name); !ok {
 		return core.MemorySnapshot{}, fmt.Errorf("character '%s' not loaded", name)
@@ -57,41 +58,53 @@ func (e *Engine) GetMemorySnapshot(characterName string, factLimit, episodicLimi
 		facts = facts[:factLimit]
 	}
 	return core.MemorySnapshot{
-		Character:     name,
-		WorkingMemory: working,
-		Facts:         facts,
-		Episodic:      episodic,
-		Dialogue:      dialogue,
+		Character:      name,
+		FocusCharacter: name,
+		WorkingMemory:  working,
+		Facts:          facts,
+		Episodic:       episodic,
+		Dialogue:       dialogue,
 	}, nil
 }
 
-func (e *Engine) GetCharacterConfig(characterName string) (core.CharacterConfig, error) {
+// GetMemorySnapshot is a compatibility alias for older character-centric callers.
+func (e *Engine) GetMemorySnapshot(characterName string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
+	return e.GetFocusMemorySnapshot(characterName, factLimit, episodicLimit, dialogueLimit)
+}
+
+func (e *Engine) GetFocusDefinitionConfig(characterName string) (core.CharacterConfig, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
 	name := characterName
 	if name == "" {
-		name = e.activeCharacter
+		name = e.GetFocusCharacter()
 	}
 	card, ok := e.agents.GetCharacter(name)
 	if !ok {
 		return core.CharacterConfig{}, fmt.Errorf("character '%s' not loaded", name)
 	}
 	return core.CharacterConfig{
-		Character: name,
-		Path:      e.charPaths[name],
-		WorldPath: e.worldPaths[name],
-		Card:      card,
+		Character:      name,
+		FocusCharacter: name,
+		Path:           e.charPaths[name],
+		WorldPath:      e.worldPaths[name],
+		Card:           card,
 	}, nil
 }
 
-func (e *Engine) UpdateCharacterConfig(characterName string, card core.Character) (core.CharacterConfig, error) {
+// GetCharacterConfig is a compatibility alias for older character-centric callers.
+func (e *Engine) GetCharacterConfig(characterName string) (core.CharacterConfig, error) {
+	return e.GetFocusDefinitionConfig(characterName)
+}
+
+func (e *Engine) UpdateFocusDefinitionConfig(characterName string, card core.Character) (core.CharacterConfig, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	name := characterName
 	if name == "" {
-		name = e.activeCharacter
+		name = e.GetFocusCharacter()
 	}
 	path := e.charPaths[name]
 	if path == "" {
@@ -110,11 +123,17 @@ func (e *Engine) UpdateCharacterConfig(characterName string, card core.Character
 
 	e.agents.LoadCharacter(name, card)
 	return core.CharacterConfig{
-		Character: name,
-		Path:      path,
-		WorldPath: e.worldPaths[name],
-		Card:      card,
+		Character:      name,
+		FocusCharacter: name,
+		Path:           path,
+		WorldPath:      e.worldPaths[name],
+		Card:           card,
 	}, nil
+}
+
+// UpdateCharacterConfig is a compatibility alias for older character-centric callers.
+func (e *Engine) UpdateCharacterConfig(characterName string, card core.Character) (core.CharacterConfig, error) {
+	return e.UpdateFocusDefinitionConfig(characterName, card)
 }
 
 func (e *Engine) ListSaveSlots() ([]core.SaveSlot, error) {
@@ -147,15 +166,16 @@ func (e *Engine) CreateSaveSlot(name, branch, note string) (core.SaveSlot, error
 		eventID = timeline[len(timeline)-1].Event.ID
 	}
 	slot := core.SaveSlot{
-		Name:       name,
-		Branch:     branch,
-		EventID:    eventID,
-		Character:  e.activeCharacter,
-		PlayerRole: e.playerRole,
-		Note:       note,
-		Preview:    e.stateMgr.Get().Scene.Description,
-		CreatedAt:  time.Now().UTC(),
-		WorldState: e.stateMgr.Get(),
+		Name:           name,
+		Branch:         branch,
+		EventID:        eventID,
+		Character:      e.GetFocusCharacter(),
+		FocusCharacter: e.GetFocusCharacter(),
+		PlayerRole:     e.playerRole,
+		Note:           note,
+		Preview:        e.stateMgr.Get().Scene.Description,
+		CreatedAt:      time.Now().UTC(),
+		WorldState:     e.stateMgr.Get(),
 	}
 
 	slots, err := e.readSaveSlots()
@@ -192,6 +212,9 @@ func (e *Engine) LoadSaveSlot(name string) (core.SaveSlot, error) {
 		if slot.Name != name {
 			continue
 		}
+		if strings.TrimSpace(slot.FocusCharacter) == "" {
+			slot.FocusCharacter = strings.TrimSpace(slot.Character)
+		}
 		state := slot.WorldState
 		if strings.TrimSpace(slot.EventID) != "" {
 			replayed, err := e.gatekeeper.Replay().ReplayTo(slot.EventID, slot.Branch)
@@ -200,15 +223,19 @@ func (e *Engine) LoadSaveSlot(name string) (core.SaveSlot, error) {
 			}
 			state = replayed
 		}
-		if err := e.switchCharacterLocked(slot.Character, false); err != nil {
+		focusCharacter := strings.TrimSpace(slot.FocusCharacter)
+		if focusCharacter == "" {
+			focusCharacter = strings.TrimSpace(slot.Character)
+		}
+		if err := e.switchCharacterLocked(focusCharacter, false); err != nil {
 			return core.SaveSlot{}, err
 		}
 		e.playerRole = normalizePlayerRole(slot.PlayerRole)
 		e.dialogueHistory = nil
-		e.memEngine.LoadRecentDialogueFromDB(e.activeCharacter, 15)
-		state.Scene = normalizeSceneForCharacter(state.Scene, e.activeCharacter, e.playerRoleNameLocked())
+		e.memEngine.LoadRecentDialogueFromDB(e.GetFocusCharacter(), 15)
+		state.Scene = normalizeSceneForCharacter(state.Scene, e.GetFocusCharacter(), e.playerRoleNameLocked())
 		e.stateMgr.Set(state)
-		if cw, ok := e.charWorlds[e.activeCharacter]; ok {
+		if cw, ok := e.charWorlds[e.GetFocusCharacter()]; ok {
 			e.worldName = cw.WorldName
 			e.coreRules = cw.CoreRules
 		}
@@ -305,6 +332,11 @@ func (e *Engine) readSaveSlots() ([]core.SaveSlot, error) {
 	var slots []core.SaveSlot
 	if err := json.Unmarshal(data, &slots); err != nil {
 		return nil, err
+	}
+	for i := range slots {
+		if strings.TrimSpace(slots[i].FocusCharacter) == "" {
+			slots[i].FocusCharacter = strings.TrimSpace(slots[i].Character)
+		}
 	}
 	return slots, nil
 }

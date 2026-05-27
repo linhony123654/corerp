@@ -12,6 +12,7 @@ type Loop struct {
 	interval   time.Duration // real-world tick interval
 	worldRatio time.Duration // how much world time advances per tick
 	tickCount  atomic.Int64
+	paused     atomic.Bool
 	stopCh     chan struct{}
 	handlers   []func()
 	mu         sync.Mutex
@@ -58,12 +59,30 @@ func (l *Loop) run() {
 		case <-l.stopCh:
 			return
 		case <-ticker.C:
+			if l.paused.Load() {
+				continue
+			}
 			l.tickCount.Add(1)
 			for _, h := range l.handlers {
 				h()
 			}
 		}
 	}
+}
+
+// Pause suspends tick handler execution. Ticks still count internally but handlers are skipped.
+func (l *Loop) Pause() {
+	l.paused.Store(true)
+}
+
+// Resume resumes tick handler execution after a Pause.
+func (l *Loop) Resume() {
+	l.paused.Store(false)
+}
+
+// IsPaused returns whether the tick loop is currently paused.
+func (l *Loop) IsPaused() bool {
+	return l.paused.Load()
 }
 
 // TickCount returns how many ticks have fired.

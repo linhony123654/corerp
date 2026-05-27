@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"corerp/internal/agents"
 	"corerp/internal/core"
 )
 
@@ -15,6 +16,8 @@ type Gatekeeper struct {
 	causality *CausalityEngine
 	replay    *ReplayEngine
 }
+
+var _ agents.EventSubmitter = (*Gatekeeper)(nil)
 
 func NewGatekeeper(store *Store) *Gatekeeper {
 	return &Gatekeeper{

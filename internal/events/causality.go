@@ -528,8 +528,8 @@ func sharesCausalContext(evt, past core.Event) bool {
 		return false
 	}
 
-	// User messages address the active character, so require that target to match
-	// the responding actor when linking them to dialogue.
+	// User messages address the current focus persona, so require that target to
+	// match the responding actor when linking them to dialogue.
 	if past.Type == "user_message" && evt.Type == "dialogue" {
 		return past.Target != "" && evt.Actor != "" && past.Target == evt.Actor
 	}

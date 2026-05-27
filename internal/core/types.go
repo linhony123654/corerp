@@ -52,11 +52,11 @@ type WorldTime struct {
 }
 
 type SceneState struct {
-	Location    string   `json:"location"`
-	TimeOfDay   string   `json:"time_of_day"`
-	Weather     string   `json:"weather"`
-	Characters  []string `json:"characters"`
-	Description string   `json:"description"`
+	Location    string   `json:"location" yaml:"location"`
+	TimeOfDay   string   `json:"time_of_day" yaml:"time_of_day"`
+	Weather     string   `json:"weather" yaml:"weather"`
+	Characters  []string `json:"characters" yaml:"characters"`
+	Description string   `json:"description" yaml:"description"`
 }
 
 type Relationship struct {
@@ -78,9 +78,9 @@ type WorldState struct {
 }
 
 type PlayerRole struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	BoundCharacter string `json:"bound_character"`
+	Name           string `json:"name" yaml:"name"`
+	Description    string `json:"description" yaml:"description"`
+	BoundCharacter string `json:"bound_character" yaml:"bound_character"`
 }
 
 // --- Snapshot ---
@@ -163,47 +163,57 @@ type Memory struct {
 	ID        string    `json:"id"`
 	Type      string    `json:"type"` // short_term, working, semantic, episodic
 	Content   string    `json:"content"`
-	Character string    `json:"character"`
+	Character string    `json:"character"` // actor/focus persona key; kept for compatibility
 	Score     float64   `json:"score"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// MemorySnapshot is scoped to one focus persona.
+// Character is retained as the legacy JSON field name for that focus key.
 type MemorySnapshot struct {
-	Character     string       `json:"character"`
-	WorkingMemory string       `json:"working_memory"`
-	Facts         []FactFrame  `json:"facts"`
-	Episodic      []EventFrame `json:"episodic"`
-	Dialogue      []Message    `json:"dialogue"`
+	Character      string       `json:"character"`
+	FocusCharacter string       `json:"focus_character,omitempty"`
+	WorkingMemory  string       `json:"working_memory"`
+	Facts          []FactFrame  `json:"facts"`
+	Episodic       []EventFrame `json:"episodic"`
+	Dialogue       []Message    `json:"dialogue"`
 }
 
+// SaveSlot stores a world snapshot plus the focus persona used when the slot was created.
 type SaveSlot struct {
-	Name       string     `json:"name"`
-	Branch     string     `json:"branch"`
-	EventID    string     `json:"event_id"`
-	Character  string     `json:"character"`
-	PlayerRole PlayerRole `json:"player_role"`
-	Note       string     `json:"note"`
-	Preview    string     `json:"preview"`
-	CreatedAt  time.Time  `json:"created_at"`
-	WorldState WorldState `json:"world_state,omitempty"`
+	Name           string     `json:"name"`
+	Branch         string     `json:"branch"`
+	EventID        string     `json:"event_id"`
+	Character      string     `json:"character"` // focus persona at save time; kept for compatibility
+	FocusCharacter string     `json:"focus_character,omitempty"`
+	PlayerRole     PlayerRole `json:"player_role"`
+	Note           string     `json:"note"`
+	Preview        string     `json:"preview"`
+	CreatedAt      time.Time  `json:"created_at"`
+	WorldState     WorldState `json:"world_state,omitempty"`
 }
 
+// ScenarioPreset stores a reusable scene/world opening plus its default focus persona.
 type ScenarioPreset struct {
-	Name       string     `json:"name" yaml:"name"`
-	Branch     string     `json:"branch" yaml:"branch"`
-	Character  string     `json:"character" yaml:"character"`
-	PlayerRole PlayerRole `json:"player_role" yaml:"player_role"`
-	Note       string     `json:"note" yaml:"note"`
-	Preview    string     `json:"preview" yaml:"preview"`
-	CreatedAt  time.Time  `json:"created_at" yaml:"created_at"`
-	Scene      SceneState `json:"scene" yaml:"scene"`
+	Name           string     `json:"name" yaml:"name"`
+	Branch         string     `json:"branch" yaml:"branch"`
+	Character      string     `json:"character" yaml:"character"` // default focus persona; kept for compatibility
+	FocusCharacter string     `json:"focus_character,omitempty" yaml:"focus_character,omitempty"`
+	PlayerRole     PlayerRole `json:"player_role" yaml:"player_role"`
+	Note           string     `json:"note" yaml:"note"`
+	Preview        string     `json:"preview" yaml:"preview"`
+	CreatedAt      time.Time  `json:"created_at" yaml:"created_at"`
+	Scene          SceneState `json:"scene" yaml:"scene"`
 }
 
+// CharacterConfig is the editable definition for a focus persona.
+// Character is retained as the legacy identifier field name.
 type CharacterConfig struct {
-	Character string    `json:"character"`
-	Path      string    `json:"path"`
-	WorldPath string    `json:"world_path"`
-	Card      Character `json:"card"`
+	Character      string    `json:"character"`
+	FocusCharacter string    `json:"focus_character,omitempty"`
+	Path           string    `json:"path"`
+	WorldPath      string    `json:"world_path"`
+	Card           Character `json:"card"`
 }
 
 type WorldConfig struct {
@@ -211,6 +221,66 @@ type WorldConfig struct {
 	CoreRules string `json:"core_rules"`
 	Path      string `json:"path"`
 	Format    string `json:"format"`
+}
+
+type WorldRule struct {
+	ID          string   `json:"id" yaml:"id"`
+	Title       string   `json:"title" yaml:"title"`
+	Summary     string   `json:"summary" yaml:"summary"`
+	Constraints []string `json:"constraints" yaml:"constraints"`
+	Effects     []string `json:"effects" yaml:"effects"`
+}
+
+type WorldRulesetConfig struct {
+	Path  string      `json:"path"`
+	Rules []WorldRule `json:"rules"`
+}
+
+type WorldSeedConfig struct {
+	Path             string                 `json:"path"`
+	Premise          string                 `json:"premise" yaml:"premise"`
+	CurrentSituation string                 `json:"current_situation" yaml:"current_situation"`
+	StartingScene    string                 `json:"starting_scene" yaml:"starting_scene"`
+	TimeAnchor       string                 `json:"time_anchor" yaml:"time_anchor"`
+	Stability        string                 `json:"stability" yaml:"stability"`
+	Variables        map[string]interface{} `json:"variables" yaml:"variables"`
+}
+
+type WorldFactionConfig struct {
+	ID            string   `json:"id" yaml:"id"`
+	Name          string   `json:"name" yaml:"name"`
+	Role          string   `json:"role" yaml:"role"`
+	Description   string   `json:"description" yaml:"description"`
+	Goals         []string `json:"goals" yaml:"goals"`
+	Relationships []string `json:"relationships" yaml:"relationships"`
+}
+
+type WorldLocationConfig struct {
+	ID          string   `json:"id" yaml:"id"`
+	Name        string   `json:"name" yaml:"name"`
+	Kind        string   `json:"kind" yaml:"kind"`
+	Description string   `json:"description" yaml:"description"`
+	Controller  string   `json:"controller" yaml:"controller"`
+	Tags        []string `json:"tags" yaml:"tags"`
+}
+
+type WorldPressureConfig struct {
+	ID          string   `json:"id" yaml:"id"`
+	Name        string   `json:"name" yaml:"name"`
+	Kind        string   `json:"kind" yaml:"kind"`
+	Description string   `json:"description" yaml:"description"`
+	Intensity   float64  `json:"intensity" yaml:"intensity"`
+	Target      string   `json:"target" yaml:"target"`
+	Escalates   []string `json:"escalates" yaml:"escalates"`
+}
+
+type WorldStructureConfig struct {
+	Path      string                `json:"path"`
+	Ruleset   WorldRulesetConfig    `json:"ruleset"`
+	Seed      WorldSeedConfig       `json:"seed"`
+	Factions  []WorldFactionConfig  `json:"factions"`
+	Locations []WorldLocationConfig `json:"locations"`
+	Pressures []WorldPressureConfig `json:"pressures"`
 }
 
 type PopulationAttention struct {
@@ -270,6 +340,37 @@ type PopulationConfig struct {
 	Policy         PromotionPolicy      `json:"policy"`
 }
 
+type PopulationCharacterInsight struct {
+	ID            string                  `json:"id"`
+	Name          string                  `json:"name"`
+	Status        string                  `json:"status,omitempty"`
+	IdentityCore  string                  `json:"identity_core,omitempty"`
+	Attention     PopulationAttention     `json:"attention"`
+	LastEventID   string                  `json:"last_event_id,omitempty"`
+	Adaptive      map[string]float64      `json:"adaptive,omitempty"`
+	Immutable     []string                `json:"immutable,omitempty"`
+	SpeechHints   []string                `json:"speech_hints,omitempty"`
+	Drives        []string                `json:"drives,omitempty"`
+	WorldPath     string                  `json:"world_path,omitempty"`
+	GrowthSummary string                  `json:"growth_summary,omitempty"`
+	History       []PopulationGrowthEvent `json:"history,omitempty"`
+}
+
+type PopulationInsights struct {
+	Path       string                       `json:"path"`
+	WorldPath  string                       `json:"world_path"`
+	Promoted   []PopulationCharacterInsight `json:"promoted"`
+	Background []PopulationCharacterInsight `json:"background"`
+}
+
+type PopulationGrowthEvent struct {
+	EventID   string             `json:"event_id"`
+	Type      string             `json:"type"`
+	Summary   string             `json:"summary"`
+	Adaptive  map[string]float64 `json:"adaptive,omitempty"`
+	CreatedAt time.Time          `json:"created_at"`
+}
+
 type WorldSummary struct {
 	ID                 string `json:"id"`
 	Name               string `json:"name"`
@@ -305,31 +406,47 @@ type CanonFactsConfig struct {
 }
 
 type PendingFact struct {
-	ID            string    `json:"id"`
-	Character     string    `json:"character"`
-	Subject       string    `json:"subject"`
-	Predicate     string    `json:"predicate"`
-	Object        string    `json:"object"`
-	Source        string    `json:"source"`
-	Confidence    float64   `json:"confidence"`
-	Confirmations int       `json:"confirmations"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	Character      string    `json:"character"`
+	FocusCharacter string    `json:"focus_character,omitempty"`
+	Subject        string    `json:"subject"`
+	Predicate      string    `json:"predicate"`
+	Object         string    `json:"object"`
+	Source         string    `json:"source"`
+	Confidence     float64   `json:"confidence"`
+	Confirmations  int       `json:"confirmations"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type DirectorConfig struct {
-	Mode        string `json:"mode"`
-	MaxSpeakers int    `json:"max_speakers"`
+	Mode        string             `json:"mode" yaml:"mode"`
+	MaxSpeakers int                `json:"max_speakers" yaml:"max_speakers"`
+	Weights     map[string]float64 `json:"weights,omitempty" yaml:"weights,omitempty"`
+}
+
+type ParticipantSummary struct {
+	Name       string `json:"name"`
+	Kind       string `json:"kind,omitempty"`
+	Source     string `json:"source,omitempty"`
+	WorldPath  string `json:"world_path,omitempty"`
+	Loaded     bool   `json:"loaded"`
+	Switchable bool   `json:"switchable"`
+	Present    bool   `json:"present"`
+	Focus      bool   `json:"focus,omitempty"`
 }
 
 type RuntimeInstanceSummary struct {
-	ID               string    `json:"id"`
-	Label            string    `json:"label"`
-	WorldName        string    `json:"world_name"`
-	ActiveCharacter  string    `json:"active_character"`
-	LoadedCharacters []string  `json:"loaded_characters"`
-	CreatedAt        time.Time `json:"created_at"`
-	IsDefault        bool      `json:"is_default"`
-	Status           string    `json:"status"`
+	ID                 string               `json:"id"`
+	Label              string               `json:"label"`
+	WorldName          string               `json:"world_name"`
+	ActiveCharacter    string               `json:"active_character"`
+	FocusCharacter     string               `json:"focus_character,omitempty"`
+	LoadedCharacters   []string             `json:"loaded_characters"`
+	Participants       []string             `json:"participants,omitempty"`
+	ParticipantDetails []ParticipantSummary `json:"participant_details,omitempty"`
+	CreatedAt          time.Time            `json:"created_at"`
+	IsDefault          bool                 `json:"is_default"`
+	Status             string               `json:"status"`
 }
 
 type TurnStep struct {
@@ -342,15 +459,34 @@ type TurnStep struct {
 }
 
 type DirectorPlan struct {
-	Mode            string     `json:"mode"`
-	Trigger         string     `json:"trigger"`
-	PreviousSpeaker string     `json:"previous_speaker"`
-	Selected        []string   `json:"selected"`
-	Candidates      []string   `json:"candidates"`
-	Steps           []TurnStep `json:"steps"`
-	Reason          string     `json:"reason"`
-	Switched        bool       `json:"switched"`
-	CreatedAt       time.Time  `json:"created_at"`
+	Mode             string              `json:"mode"`
+	Trigger          string              `json:"trigger"`
+	PreviousSpeaker  string              `json:"previous_speaker"`
+	Selected         []string            `json:"selected"`
+	Candidates       []string            `json:"candidates"`
+	CandidateDetails []DirectorCandidate `json:"candidate_details,omitempty"`
+	Steps            []TurnStep          `json:"steps"`
+	Reason           string              `json:"reason"`
+	Switched         bool                `json:"switched"`
+	CreatedAt        time.Time           `json:"created_at"`
+}
+
+type DirectorCandidate struct {
+	Name           string             `json:"name"`
+	Score          float64            `json:"score"`
+	Reason         string             `json:"reason,omitempty"`
+	Kind           string             `json:"kind,omitempty"`
+	Source         string             `json:"source,omitempty"`
+	Loaded         bool               `json:"loaded,omitempty"`
+	Switchable     bool               `json:"switchable,omitempty"`
+	Mentioned      bool               `json:"mentioned,omitempty"`
+	Present        bool               `json:"present,omitempty"`
+	LocationMatch  bool               `json:"location_match,omitempty"`
+	FactionMatch   bool               `json:"faction_match,omitempty"`
+	PressureMatch  bool               `json:"pressure_match,omitempty"`
+	HookMatch      bool               `json:"hook_match,omitempty"`
+	ScoreBreakdown map[string]float64 `json:"score_breakdown,omitempty"`
+	Selected       bool               `json:"selected,omitempty"`
 }
 
 type StateDiffEntry struct {
@@ -445,21 +581,23 @@ type TurnStepTrace struct {
 }
 
 type TurnTrace struct {
-	Turn           int             `json:"turn"`
-	Character      string          `json:"character"`
-	UserInput      string          `json:"user_input"`
-	DirectorPlan   DirectorPlan    `json:"director_plan"`
-	StepTraces     []TurnStepTrace `json:"step_traces"`
-	ActiveGoals    []TraceGoal     `json:"active_goals"`
-	AllowedActions []string        `json:"allowed_actions"`
-	Memories       []TraceMemory   `json:"memories"`
-	SemanticFacts  []TraceFact     `json:"semantic_facts"`
-	EpisodicEvents []EventFrame    `json:"episodic_events"`
-	WorkingMemory  string          `json:"working_memory"`
-	ActionFrame    ActionFrame     `json:"action_frame"`
-	Validator      ValidatorTrace  `json:"validator"`
-	Narrative      string          `json:"narrative"`
-	CreatedAt      time.Time       `json:"created_at"`
+	Turn               int                  `json:"turn"`
+	Character          string               `json:"character"`
+	FocusCharacter     string               `json:"focus_character,omitempty"`
+	UserInput          string               `json:"user_input"`
+	DirectorPlan       DirectorPlan         `json:"director_plan"`
+	ParticipantDetails []ParticipantSummary `json:"participant_details,omitempty"`
+	StepTraces         []TurnStepTrace      `json:"step_traces"`
+	ActiveGoals        []TraceGoal          `json:"active_goals"`
+	AllowedActions     []string             `json:"allowed_actions"`
+	Memories           []TraceMemory        `json:"memories"`
+	SemanticFacts      []TraceFact          `json:"semantic_facts"`
+	EpisodicEvents     []EventFrame         `json:"episodic_events"`
+	WorkingMemory      string               `json:"working_memory"`
+	ActionFrame        ActionFrame          `json:"action_frame"`
+	Validator          ValidatorTrace       `json:"validator"`
+	Narrative          string               `json:"narrative"`
+	CreatedAt          time.Time            `json:"created_at"`
 }
 
 // --- Agent / Identity ---

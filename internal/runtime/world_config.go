@@ -9,21 +9,33 @@ import (
 
 func (e *Engine) GetWorldConfig() (core.WorldConfig, error) {
 	e.mu.RLock()
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
+	focusCharacter := e.GetFocusCharacter()
 	e.mu.RUnlock()
 	if path == "" {
-		return core.WorldConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.WorldConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", focusCharacter)
 	}
 	return world.LoadConfig(path)
+}
+
+func (e *Engine) GetWorldStructureConfig() (core.WorldStructureConfig, error) {
+	e.mu.RLock()
+	path := e.currentWorldPathLocked()
+	focusCharacter := e.GetFocusCharacter()
+	e.mu.RUnlock()
+	if path == "" {
+		return core.WorldStructureConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", focusCharacter)
+	}
+	return world.LoadStructure(path)
 }
 
 func (e *Engine) UpdateWorldConfig(cfg core.WorldConfig) (core.WorldConfig, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
 	if path == "" {
-		return core.WorldConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.WorldConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", e.GetFocusCharacter())
 	}
 	saved, err := world.SaveConfig(path, cfg)
 	if err != nil {
@@ -35,12 +47,24 @@ func (e *Engine) UpdateWorldConfig(cfg core.WorldConfig) (core.WorldConfig, erro
 	return saved, nil
 }
 
+func (e *Engine) UpdateWorldStructureConfig(cfg core.WorldStructureConfig) (core.WorldStructureConfig, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	path := e.currentWorldPathLocked()
+	if path == "" {
+		return core.WorldStructureConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", e.GetFocusCharacter())
+	}
+	return world.SaveStructure(path, cfg)
+}
+
 func (e *Engine) ListSceneConfigs() (core.SceneConfigList, error) {
 	e.mu.RLock()
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
+	focusCharacter := e.GetFocusCharacter()
 	e.mu.RUnlock()
 	if path == "" {
-		return core.SceneConfigList{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.SceneConfigList{}, fmt.Errorf("world path for focus character '%s' is not configured", focusCharacter)
 	}
 	return world.ListScenes(path)
 }
@@ -49,9 +73,9 @@ func (e *Engine) UpdateSceneConfig(scene core.SceneConfig) (core.SceneConfig, er
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
 	if path == "" {
-		return core.SceneConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.SceneConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", e.GetFocusCharacter())
 	}
 	saved, err := world.SaveScene(path, scene)
 	if err != nil {
@@ -67,10 +91,11 @@ func (e *Engine) UpdateSceneConfig(scene core.SceneConfig) (core.SceneConfig, er
 
 func (e *Engine) GetCanonFactsConfig() (core.CanonFactsConfig, error) {
 	e.mu.RLock()
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
+	focusCharacter := e.GetFocusCharacter()
 	e.mu.RUnlock()
 	if path == "" {
-		return core.CanonFactsConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.CanonFactsConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", focusCharacter)
 	}
 	return world.LoadFacts(path)
 }
@@ -79,9 +104,9 @@ func (e *Engine) UpdateCanonFactsConfig(cfg core.CanonFactsConfig) (core.CanonFa
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
 	if path == "" {
-		return core.CanonFactsConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.CanonFactsConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", e.GetFocusCharacter())
 	}
 	saved, err := world.SaveFacts(path, cfg)
 	if err != nil {
@@ -95,21 +120,23 @@ func (e *Engine) UpdateCanonFactsConfig(cfg core.CanonFactsConfig) (core.CanonFa
 
 func (e *Engine) GetPopulationConfig() (core.PopulationConfig, error) {
 	e.mu.RLock()
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
+	focusCharacter := e.GetFocusCharacter()
 	e.mu.RUnlock()
 	if path == "" {
-		return core.PopulationConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.PopulationConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", focusCharacter)
 	}
-	return world.LoadPopulation(path)
+	cfg, _, err := world.EnsureSeededPopulation(path)
+	return cfg, err
 }
 
 func (e *Engine) UpdatePopulationConfig(cfg core.PopulationConfig) (core.PopulationConfig, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	path := e.worldPaths[e.activeCharacter]
+	path := e.currentWorldPathLocked()
 	if path == "" {
-		return core.PopulationConfig{}, fmt.Errorf("world path for '%s' is not configured", e.activeCharacter)
+		return core.PopulationConfig{}, fmt.Errorf("world path for focus character '%s' is not configured", e.GetFocusCharacter())
 	}
 	return world.SavePopulation(path, cfg)
 }

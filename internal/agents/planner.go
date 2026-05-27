@@ -23,24 +23,75 @@ type PlanStep struct {
 	Reason   string `json:"reason"`
 }
 
-// Plan generates steps from current state and goals.
-func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goal, workingMem string) []PlanStep {
+// Plan generates steps from current state, goals, and world structure.
+func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goal, workingMem string, structure core.WorldStructureConfig) []PlanStep {
 	var steps []PlanStep
 
-	// Rule 1: Survival priority
+	// Resolve current location controller and active pressures for the scene
+	sceneLocation := strings.TrimSpace(state.Scene.Location)
+	var locationController string
+	var activePressures []core.WorldPressureConfig
+	for _, loc := range structure.Locations {
+		if strings.TrimSpace(loc.Name) == sceneLocation {
+			locationController = strings.TrimSpace(loc.Controller)
+			break
+		}
+	}
+	for _, pr := range structure.Pressures {
+		if pr.Intensity > 0 && (strings.TrimSpace(pr.Target) == sceneLocation || strings.TrimSpace(pr.Target) == locationController) {
+			activePressures = append(activePressures, pr)
+		}
+	}
+	hasHighIntensityPressure := false
+	for _, pr := range activePressures {
+		if pr.Intensity >= 0.6 {
+			hasHighIntensityPressure = true
+			break
+		}
+	}
+
+	// Rule 1: Survival priority — high tension or high-intensity pressure at location
 	for _, g := range goals {
-		if g.ID == "survive" && g.Priority >= 8 && state.Tension > 0.6 {
+		if g.ID == "survive" && g.Priority >= 8 && (state.Tension > 0.6 || hasHighIntensityPressure) {
 			steps = append(steps, PlanStep{
 				Action:   "hide",
 				Target:   "",
 				Priority: 10,
-				Reason:   "survival_priority: high tension",
+				Reason:   "survival_priority: high tension or active pressure at location",
 			})
 			break
 		}
 	}
 
-	// Rule 2: Relationship repair
+	// Rule 2: Faction conflict — if hostile faction NPC is present in controller's location
+	if locationController != "" {
+		charFaction := ""
+		for _, fac := range structure.Factions {
+			if fac.ID == locationController || fac.Name == locationController {
+				// character belongs to this faction or location controlled by it
+				charFaction = locationController
+				break
+			}
+		}
+		for _, other := range state.Scene.Characters {
+			if other == character || other == "" {
+				continue
+			}
+			otherFaction := characterFactionFromStructure(other, structure)
+			if otherFaction != "" && charFaction != "" && otherFaction != charFaction {
+				// Simplified: different faction presence triggers conflict potential
+				steps = append(steps, PlanStep{
+					Action:   "threaten",
+					Target:   other,
+					Priority: 6,
+					Reason:   fmt.Sprintf("faction_conflict: %s vs %s at %s", charFaction, otherFaction, sceneLocation),
+				})
+				break
+			}
+		}
+	}
+
+	// Rule 3: Relationship repair
 	for key, rel := range state.Relationships {
 		if rel.Trust < -0.3 {
 			parts := strings.Split(key, "_")
@@ -57,7 +108,18 @@ func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goa
 		}
 	}
 
-	// Rule 3: Information gathering
+	// Rule 4: Pressure response — if active pressure at location, observe or react
+	if len(activePressures) > 0 && len(steps) == 0 {
+		pr := activePressures[0]
+		steps = append(steps, PlanStep{
+			Action:   "observe",
+			Target:   sceneLocation,
+			Priority: 4,
+			Reason:   fmt.Sprintf("pressure_response: %s (intensity %.2f) at %s", pr.Name, pr.Intensity, sceneLocation),
+		})
+	}
+
+	// Rule 5: Information gathering
 	if workingMem == "" && len(steps) == 0 {
 		steps = append(steps, PlanStep{
 			Action:   "observe",
@@ -67,7 +129,7 @@ func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goa
 		})
 	}
 
-	// Rule 4: Scene exploration
+	// Rule 6: Scene exploration
 	hasTarget := false
 	for _, c := range state.Scene.Characters {
 		if c != character {
@@ -84,7 +146,7 @@ func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goa
 		})
 	}
 
-	// Rule 5: Default social engagement
+	// Rule 7: Default social engagement
 	if len(steps) == 0 {
 		steps = append(steps, PlanStep{
 			Action:   "speak",
@@ -97,15 +159,24 @@ func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goa
 	return steps
 }
 
+func characterFactionFromStructure(name string, structure core.WorldStructureConfig) string {
+	for _, fac := range structure.Factions {
+		if fac.ID == name || fac.Name == name {
+			return fac.ID
+		}
+	}
+	return ""
+}
+
 // StepsToGoals converts planner output into GoalFrames for snapshot.
 func StepsToGoals(steps []PlanStep) []core.GoalFrame {
 	var frames []core.GoalFrame
 	for i, s := range steps {
 		frames = append(frames, core.GoalFrame{
-			ID:       fmt.Sprintf("plan_%d_%s", i, s.Action),
-			Priority: s.Priority,
-			Type:     "planned",
-			Target:   s.Target,
+			ID:        fmt.Sprintf("plan_%d_%s", i, s.Action),
+			Priority:  s.Priority,
+			Type:      "planned",
+			Target:    s.Target,
 			Condition: s.Reason,
 		})
 	}

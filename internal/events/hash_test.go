@@ -15,11 +15,11 @@ func TestCanonicalHashV1Deterministic(t *testing.T) {
 			Characters:  []string{"V", "玩家", "Jackie"},
 			Description: "霓虹灯闪烁",
 		},
-		Clock:         core.WorldTime{Hour: 23, Minute: 45, Day: 3},
-		Tension:       0.75,
-		Flags:         map[string]bool{"detected": true, "revealed": false},
+		Clock:   core.WorldTime{Hour: 23, Minute: 45, Day: 3},
+		Tension: 0.75,
+		Flags:   map[string]bool{"detected": true, "revealed": false},
 		Relationships: map[string]core.Relationship{
-			"V_玩家":   {Trust: 3.5, Intimacy: 1.2, Fear: 0.5, Respect: 4.0, Debt: 0},
+			"V_玩家":     {Trust: 3.5, Intimacy: 1.2, Fear: 0.5, Respect: 4.0, Debt: 0},
 			"V_Jackie": {Trust: 8.0, Intimacy: 7.0, Fear: 0, Respect: 9.0, Debt: 0},
 		},
 		Variables: map[string]interface{}{"last_location": "酒吧"},
@@ -50,9 +50,9 @@ func TestCanonicalHashV1DifferentState(t *testing.T) {
 func TestCanonicalHashV1MapOrderStable(t *testing.T) {
 	// Insertion order shouldn't matter — sorted serialization
 	s := core.WorldState{
-		Flags: make(map[string]bool),
+		Flags:         make(map[string]bool),
 		Relationships: make(map[string]core.Relationship),
-		Variables: make(map[string]interface{}),
+		Variables:     make(map[string]interface{}),
 	}
 	// Insert out of order
 	s.Flags["z"] = true

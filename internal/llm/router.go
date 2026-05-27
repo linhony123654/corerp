@@ -18,8 +18,8 @@ const (
 // Supports fallback: if a task's assigned adapter fails, the router
 // tries the fallback adapter before returning an error.
 type Router struct {
-	adapters       map[string]*Adapter // name → adapter
-	routes         map[string]string   // task → adapter name
+	adapters        map[string]*Adapter // name → adapter
+	routes          map[string]string   // task → adapter name
 	fallbackAdapter string
 }
 

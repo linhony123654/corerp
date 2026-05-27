@@ -19,7 +19,7 @@ func TestManagerRegisterResolveAndList(t *testing.T) {
 	mgr := NewManager()
 	engine := &Engine{
 		stateMgr:         state.New(),
-		activeCharacter:  "V",
+		focusCharacter:   "V",
 		loadedCharacters: []string{"V", "Johnny"},
 		worldName:        "Night City",
 		instanceCreated:  time.Now().UTC(),
@@ -47,11 +47,15 @@ func TestManagerRegisterResolveAndList(t *testing.T) {
 		Label:            "Primary Runtime",
 		WorldName:        "Night City",
 		ActiveCharacter:  "V",
+		FocusCharacter:   "V",
 		LoadedCharacters: []string{"V", "Johnny"},
 		IsDefault:        true,
 	}
-	if got.ID != want.ID || got.Label != want.Label || got.WorldName != want.WorldName || got.ActiveCharacter != want.ActiveCharacter || !got.IsDefault {
+	if got.ID != want.ID || got.Label != want.Label || got.WorldName != want.WorldName || got.FocusCharacter != want.FocusCharacter || !got.IsDefault {
 		t.Fatalf("summary = %#v, want core fields %#v", got, want)
+	}
+	if got.ActiveCharacter != want.ActiveCharacter {
+		t.Fatalf("active character compatibility = %q, want %q", got.ActiveCharacter, want.ActiveCharacter)
 	}
 	if len(got.LoadedCharacters) != 2 || got.LoadedCharacters[0] != "V" {
 		t.Fatalf("loaded characters = %#v", got.LoadedCharacters)
@@ -65,7 +69,7 @@ func TestManagerStopAndStatus(t *testing.T) {
 	mgr := NewManager()
 	engine := &Engine{
 		stateMgr:         state.New(),
-		activeCharacter:  "V",
+		focusCharacter:   "V",
 		loadedCharacters: []string{"V"},
 		worldName:        "Night City",
 	}

@@ -94,8 +94,8 @@ func ReadUsageStats(path string) (*UsageStats, error) {
 	}
 
 	stats := &UsageStats{
-		ByTask:  make(map[string]TaskStats), ByModel: make(map[string]TaskStats),
-		ByDay:   make(map[string]TaskStats), ByWeek:  make(map[string]TaskStats),
+		ByTask: make(map[string]TaskStats), ByModel: make(map[string]TaskStats),
+		ByDay: make(map[string]TaskStats), ByWeek: make(map[string]TaskStats),
 		ByMonth: make(map[string]TaskStats),
 	}
 

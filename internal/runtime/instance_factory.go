@@ -12,7 +12,7 @@ import (
 	"corerp/internal/world"
 )
 
-func (e *Engine) SpawnInstance(instanceID, activeCharacter string) (*Engine, error) {
+func (e *Engine) SpawnInstance(instanceID, focusCharacter string) (*Engine, error) {
 	e.mu.RLock()
 	dataDir := e.dataDir
 	loadedCharacters := append([]string(nil), e.loadedCharacters...)
@@ -31,14 +31,14 @@ func (e *Engine) SpawnInstance(instanceID, activeCharacter string) (*Engine, err
 	agentsMgr := e.agents
 	llmRouter := e.llmRouter
 	playerRole := e.playerRole
-	currentActive := e.activeCharacter
+	currentFocus := e.focusCharacter
 	e.mu.RUnlock()
 
 	if strings.TrimSpace(instanceID) == "" {
 		return nil, fmt.Errorf("instance id required")
 	}
-	if strings.TrimSpace(activeCharacter) == "" {
-		activeCharacter = currentActive
+	if strings.TrimSpace(focusCharacter) == "" {
+		focusCharacter = currentFocus
 	}
 
 	dbPath := filepath.Join(dataDir, "memory.db")
@@ -66,7 +66,7 @@ func (e *Engine) SpawnInstance(instanceID, activeCharacter string) (*Engine, err
 		decayEngine,
 		agentsMgr,
 		llmRouter,
-		activeCharacter,
+		focusCharacter,
 		loadedCharacters,
 		charWorlds,
 	)
@@ -96,7 +96,7 @@ func (e *Engine) SpawnInstance(instanceID, activeCharacter string) (*Engine, err
 		return nil, err
 	}
 	if instanceSceneIsEmpty(engine.GetState().Scene) {
-		if cw, ok := charWorlds[activeCharacter]; ok {
+		if cw, ok := charWorlds[focusCharacter]; ok {
 			engine.SeedScene(cw.Scene)
 		}
 	}

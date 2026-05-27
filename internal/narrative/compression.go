@@ -12,8 +12,8 @@ import (
 // higher-level narrative summaries. Rule-based only — no LLM tokens spent.
 type CompressionEngine struct {
 	store         EventStore
-	maxEvents     int // auto-compress when canonical events exceed this
-	minAge        time.Duration // only compress events older than this
+	maxEvents     int             // auto-compress when canonical events exceed this
+	minAge        time.Duration   // only compress events older than this
 	compressedIDs map[string]bool // track which events have been summarized
 }
 
@@ -34,18 +34,18 @@ func NewCompressionEngine(store EventStore) *CompressionEngine {
 
 // CompressionResult captures the result of a compression pass.
 type CompressionResult struct {
-	GroupsFound    int            `json:"groups_found"`
-	EventsCompressed int          `json:"events_compressed"`
-	Summaries      []CompressGroup `json:"summaries"`
+	GroupsFound      int             `json:"groups_found"`
+	EventsCompressed int             `json:"events_compressed"`
+	Summaries        []CompressGroup `json:"summaries"`
 }
 
 // CompressGroup is one compressed group of similar events.
 type CompressGroup struct {
-	Type       string   `json:"type"`
-	Count      int      `json:"count"`
-	Summary    string   `json:"summary"`
-	EventIDs   []string `json:"event_ids"`
-	TimeRange  string   `json:"time_range"`
+	Type      string   `json:"type"`
+	Count     int      `json:"count"`
+	Summary   string   `json:"summary"`
+	EventIDs  []string `json:"event_ids"`
+	TimeRange string   `json:"time_range"`
 }
 
 // AutoCompress checks if the event store needs compression and applies it.
@@ -99,27 +99,27 @@ func (c *CompressionEngine) AutoCompress() (*CompressionResult, error) {
 
 		// Store summary as a new canonical event
 		summaryEvent := core.Event{
-			ID:        fmt.Sprintf("compress_%d", time.Now().UnixNano()),
-			Type:      "narrative_compression",
-			Actor:     "system",
+			ID:    fmt.Sprintf("compress_%d", time.Now().UnixNano()),
+			Type:  "narrative_compression",
+			Actor: "system",
 			Payload: map[string]interface{}{
-				"compressed_type":  group[0].Type,
+				"compressed_type": group[0].Type,
 				"summary":         cg.Summary,
 				"original_count":  cg.Count,
 				"original_ids":    cg.EventIDs,
 				"time_range":      cg.TimeRange,
 			},
-			Canonical: true,
+			Canonical:  true,
 			Confidence: 1.0,
-			CreatedAt: time.Now(),
+			CreatedAt:  time.Now(),
 		}
 		c.store.Append(summaryEvent)
 	}
 
 	return &CompressionResult{
-		GroupsFound:    len(summaries),
+		GroupsFound:      len(summaries),
 		EventsCompressed: totalCompressed,
-		Summaries:      summaries,
+		Summaries:        summaries,
 	}, nil
 }
 
@@ -154,27 +154,27 @@ func (c *CompressionEngine) CompressRange(from, to int) (*CompressionResult, err
 		totalCompressed += cg.Count
 
 		summaryEvent := core.Event{
-			ID:        fmt.Sprintf("compress_%d", time.Now().UnixNano()),
-			Type:      "narrative_compression",
-			Actor:     "system",
+			ID:    fmt.Sprintf("compress_%d", time.Now().UnixNano()),
+			Type:  "narrative_compression",
+			Actor: "system",
 			Payload: map[string]interface{}{
 				"compressed_type": group[0].Type,
-				"summary":        cg.Summary,
-				"original_count": cg.Count,
-				"original_ids":   cg.EventIDs,
-				"time_range":     cg.TimeRange,
+				"summary":         cg.Summary,
+				"original_count":  cg.Count,
+				"original_ids":    cg.EventIDs,
+				"time_range":      cg.TimeRange,
 			},
-			Canonical: true,
+			Canonical:  true,
 			Confidence: 1.0,
-			CreatedAt: time.Now(),
+			CreatedAt:  time.Now(),
 		}
 		c.store.Append(summaryEvent)
 	}
 
 	return &CompressionResult{
-		GroupsFound:     len(summaries),
+		GroupsFound:      len(summaries),
 		EventsCompressed: totalCompressed,
-		Summaries:       summaries,
+		Summaries:        summaries,
 	}, nil
 }
 

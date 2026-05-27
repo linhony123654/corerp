@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"corerp/internal/actions"
@@ -19,6 +20,7 @@ import (
 	"corerp/internal/narrative"
 	"corerp/internal/simulation"
 	"corerp/internal/state"
+	"corerp/internal/world"
 )
 
 // CharWorld binds a character to their world context.
@@ -42,6 +44,8 @@ type Engine struct {
 	tickLoop     *simulation.Loop
 	decayEngine  *memory.DecayEngine
 	tensionEng   *narrative.TensionEngine
+	pulseEng     *simulation.PulseEngine
+	factionEng   *simulation.FactionEngine
 	stateMachine *state.StateMachine
 	compressEng  *narrative.CompressionEngine
 	planner      *agents.Planner
@@ -57,8 +61,10 @@ type Engine struct {
 	// Config
 	instanceID       string
 	instanceCreated  time.Time
-	activeCharacter  string
+	focusCharacter   string
+	activeWorldPath  string
 	loadedCharacters []string
+	sceneShells      map[string]bool
 	charWorlds       map[string]CharWorld // per-character world context
 	charPaths        map[string]string
 	worldPaths       map[string]string
@@ -71,7 +77,9 @@ type Engine struct {
 	// Working state
 	dialogueHistory []core.Message
 	turnCount       int
-	tickCount       int
+	tickCount       atomic.Int64
+
+	npcTickExposure map[string]int
 }
 
 func New(
@@ -103,6 +111,7 @@ func New(
 		memEngine:        memEngine,
 		decayEngine:      decayEngine,
 		tensionEng:       narrative.NewTensionEngine(),
+		pulseEng:         simulation.NewPulseEngine(),
 		stateMachine:     state.NewStateMachine(),
 		compressEng:      narrative.NewCompressionEngine(eventStore),
 		planner:          agents.NewPlanner(),
@@ -112,15 +121,19 @@ func New(
 		desireStore:      emotion.NewDesireStore(memEngine.DB()),
 		actionLogger:     actionLogger,
 		actionBudget:     emotion.DefaultBudget(),
-		directorCfg:      core.DirectorConfig{Mode: "manual", MaxSpeakers: 1},
+		directorCfg:      core.DirectorConfig{Mode: "auto_chain", MaxSpeakers: 2},
 		turnTraces:       make([]core.TurnTrace, 0, 32),
+		npcTickExposure:  make(map[string]int),
+		factionEng:       simulation.NewFactionEngine(),
 		compiler:         context.NewCompiler("budgets.yml"),
 		llmRouter:        llmRouter,
 		executor:         actions.NewExecutor(),
 		instanceID:       fmt.Sprintf("inst_%d", time.Now().UnixNano()),
 		instanceCreated:  time.Now().UTC(),
-		activeCharacter:  activeChar,
+		focusCharacter:   activeChar,
+		activeWorldPath:  "",
 		loadedCharacters: loadedChars,
+		sceneShells:      map[string]bool{},
 		charWorlds:       charWorlds,
 		worldName:        cw.WorldName,
 		coreRules:        cw.CoreRules,
@@ -139,11 +152,11 @@ func (e *Engine) LoadState() error {
 	e.stateMgr.UpdateFromProjection(projected)
 
 	// Restore cross-session dialogue history
-	e.memEngine.LoadRecentDialogueFromDB(e.activeCharacter, 15)
+	e.memEngine.LoadRecentDialogueFromDB(e.GetFocusCharacter(), 15)
 	return nil
 }
 
-// SyncActiveWorldContext applies the active character's world metadata and
+// SyncActiveWorldContext applies the focus character's world metadata and
 // scene to the in-memory state without appending a new canonical event.
 func (e *Engine) SyncActiveWorldContext() {
 	e.mu.Lock()
@@ -152,21 +165,54 @@ func (e *Engine) SyncActiveWorldContext() {
 }
 
 func (e *Engine) syncActiveWorldContextLocked() {
-	cw, ok := e.charWorlds[e.activeCharacter]
+	e.refreshActiveWorldPathLocked()
+	cw, ok := e.charWorlds[e.GetFocusCharacter()]
 	if !ok {
 		return
 	}
 
 	e.worldName = cw.WorldName
 	e.coreRules = cw.CoreRules
+	if path := e.currentWorldPathLocked(); path != "" {
+		if cfg, err := world.LoadDirectorConfig(path); err == nil {
+			e.directorCfg = cfg
+		}
+	}
 
 	state := e.stateMgr.Get()
-	state.Scene = normalizeSceneForCharacter(cw.Scene, e.activeCharacter, e.playerRoleNameLocked())
+	state.Scene = normalizeSceneForCharacter(cw.Scene, e.GetFocusCharacter(), e.playerRoleNameLocked())
 	e.stateMgr.Set(state)
 }
 
-func normalizeSceneForCharacter(scene core.SceneState, activeCharacter, playerName string) core.SceneState {
-	if activeCharacter == "" {
+func (e *Engine) currentWorldPathLocked() string {
+	if path := strings.TrimSpace(e.activeWorldPath); path != "" {
+		return path
+	}
+	if path := strings.TrimSpace(e.worldPaths[e.GetFocusCharacter()]); path != "" {
+		return path
+	}
+	return ""
+}
+
+func (e *Engine) currentWorldPathFor(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if path := strings.TrimSpace(e.worldPaths[name]); path != "" {
+		return path
+	}
+	return ""
+}
+
+func (e *Engine) refreshActiveWorldPathLocked() {
+	if path := e.currentWorldPathFor(e.GetFocusCharacter()); path != "" {
+		e.activeWorldPath = path
+	}
+}
+
+func normalizeSceneForCharacter(scene core.SceneState, focusCharacter, playerName string) core.SceneState {
+	if focusCharacter == "" {
 		return scene
 	}
 	if strings.TrimSpace(playerName) == "" {
@@ -175,34 +221,39 @@ func normalizeSceneForCharacter(scene core.SceneState, activeCharacter, playerNa
 
 	chars := append([]string(nil), scene.Characters...)
 	if len(chars) == 0 {
-		scene.Characters = []string{activeCharacter, playerName}
+		if focusCharacter == playerName {
+			scene.Characters = []string{focusCharacter}
+			return scene
+		}
+		scene.Characters = []string{focusCharacter, playerName}
 		return scene
 	}
 
-	activeSeen := false
+	focusSeen := false
 	playerSeen := false
-	leadReplaced := false
 	for i, name := range chars {
-		if name == activeCharacter {
-			activeSeen = true
+		if name == focusCharacter {
+			focusSeen = true
+			if playerName == focusCharacter {
+				playerSeen = true
+			}
 			continue
 		}
 		if isPlayerPlaceholder(name) || name == playerName {
-			chars[i] = playerName
+			if playerName == focusCharacter {
+				chars[i] = focusCharacter
+				focusSeen = true
+			} else {
+				chars[i] = playerName
+			}
 			playerSeen = true
-			continue
-		}
-		if !leadReplaced {
-			chars[i] = activeCharacter
-			activeSeen = true
-			leadReplaced = true
 		}
 	}
 
-	if !activeSeen {
-		chars = append([]string{activeCharacter}, chars...)
+	if !focusSeen {
+		chars = append(chars, focusCharacter)
 	}
-	if !playerSeen {
+	if !playerSeen && playerName != focusCharacter {
 		chars = append(chars, playerName)
 	}
 	scene.Characters = dedupeSceneCharacters(chars)
@@ -277,7 +328,7 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 		e.turnCount++
 		turnNumber := e.turnCount
 		worldState := e.stateMgr.Get()
-		previousSpeaker := e.activeCharacter
+		previousSpeaker := e.GetFocusCharacter()
 		plan := e.directTurnLocked(userInput, worldState)
 		e.mu.Unlock()
 
@@ -287,11 +338,12 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 		}
 
 		trace := core.TurnTrace{
-			Turn:         turnNumber,
-			Character:    plan.Steps[0].Speaker,
-			UserInput:    userInput,
-			DirectorPlan: plan,
-			CreatedAt:    time.Now().UTC(),
+			Turn:           turnNumber,
+			Character:      plan.Steps[0].Speaker,
+			FocusCharacter: e.GetFocusCharacter(),
+			UserInput:      userInput,
+			DirectorPlan:   plan,
+			CreatedAt:      time.Now().UTC(),
 		}
 		defer func() {
 			e.mu.Lock()
@@ -301,6 +353,7 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 
 		userMsg := core.Message{Role: "user", Content: userInput}
 		e.mu.Lock()
+		trace.ParticipantDetails = e.sceneParticipantDetailsLocked()
 		for _, speaker := range uniqueTurnSpeakers(plan.Steps) {
 			e.memEngine.PushDialogue(userMsg, speaker)
 		}
@@ -377,6 +430,7 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 				}
 			}()
 		}
+		e.reconcilePopulationLocked()
 		e.mu.Unlock()
 
 		ch <- "\n"
@@ -422,7 +476,7 @@ func (e *Engine) GetState() core.WorldState {
 
 func (e *Engine) SeedScene(scene core.SceneState) {
 	// Write scene_init event to Event Store — always overrides stale state
-	scene = normalizeSceneForCharacter(scene, e.activeCharacter, e.playerRoleName())
+	scene = normalizeSceneForCharacter(scene, e.GetFocusCharacter(), e.playerRoleName())
 	evt := events.BuildEvent("scene_init", "system", "",
 		map[string]interface{}{
 			"location":    scene.Location,
@@ -436,11 +490,27 @@ func (e *Engine) SeedScene(scene core.SceneState) {
 }
 
 func (e *Engine) GetCharacter() (core.Character, bool) {
-	return e.agents.GetCharacter(e.activeCharacter)
+	return e.agents.GetCharacter(e.GetFocusCharacter())
 }
 
+// GetFocusDefinition returns the current focus persona definition.
+func (e *Engine) GetFocusDefinition() (core.Character, bool) {
+	return e.GetCharacter()
+}
+
+// GetFocusCharacter is the primary semantic accessor for the instance viewpoint.
+func (e *Engine) GetFocusCharacter() string {
+	return e.focusCharacter
+}
+
+// GetActiveCharacter is a compatibility alias for older "active character" callers.
+func (e *Engine) GetActiveCharacter() string {
+	return e.GetFocusCharacter()
+}
+
+// GetCharacterName is a compatibility alias for older API/runtime callers.
 func (e *Engine) GetCharacterName() string {
-	return e.activeCharacter
+	return e.GetActiveCharacter()
 }
 
 func (e *Engine) GetPlayerRole() core.PlayerRole {
@@ -453,6 +523,102 @@ func (e *Engine) GetLoadedCharacters() []string {
 	names := make([]string, len(e.loadedCharacters))
 	copy(names, e.loadedCharacters)
 	return names
+}
+
+func (e *Engine) GetSceneParticipants() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	participants := dedupeSceneCharacters(append([]string(nil), e.stateMgr.Get().Scene.Characters...))
+	if len(participants) > 0 {
+		return participants
+	}
+	names := make([]string, len(e.loadedCharacters))
+	copy(names, e.loadedCharacters)
+	return names
+}
+
+func (e *Engine) GetSceneParticipantDetails() []core.ParticipantSummary {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.sceneParticipantDetailsLocked()
+}
+
+func (e *Engine) participantSummaryLocked(name string, present bool) core.ParticipantSummary {
+	detail := core.ParticipantSummary{
+		Name:       name,
+		WorldPath:  e.currentWorldPathFor(name),
+		Loaded:     containsString(e.loadedCharacters, name),
+		Switchable: true,
+		Present:    present,
+		Focus:      name == e.focusCharacter,
+	}
+	if e.agents != nil {
+		if _, ok := e.agents.GetCharacter(name); ok {
+			detail.Loaded = true
+		}
+	}
+	playerName := e.playerRoleNameLocked()
+	switch {
+	case isPlayerPlaceholder(name) || name == playerName:
+		detail.Kind = "player"
+		detail.Source = "player_role"
+		detail.Switchable = false
+	case strings.TrimSpace(e.charPaths[name]) != "":
+		detail.Kind = "persona"
+		detail.Source = "character_definition"
+	case e.sceneShells[name]:
+		detail.Kind = "persona"
+		detail.Source = "scene_shell"
+	case detail.Loaded:
+		detail.Kind = "persona"
+		detail.Source = "character_definition"
+	default:
+		detail.Kind = "npc"
+		detail.Source = "scene_presence"
+	}
+	return detail
+}
+
+func (e *Engine) sceneParticipantDetailsLocked() []core.ParticipantSummary {
+	sceneParticipants := dedupeSceneCharacters(append([]string(nil), e.stateMgr.Get().Scene.Characters...))
+	names := append([]string(nil), sceneParticipants...)
+	if len(names) == 0 {
+		names = append(names, e.loadedCharacters...)
+	}
+
+	background := map[string]bool{}
+	promoted := map[string]bool{}
+	if path := strings.TrimSpace(e.currentWorldPathLocked()); path != "" {
+		if cfg, _, err := world.EnsureSeededPopulation(path); err == nil {
+			for _, npc := range cfg.BackgroundNPCs {
+				background[npc.Name] = true
+			}
+			for _, npc := range cfg.PromotedNPCs {
+				promoted[npc.Name] = true
+			}
+		}
+	}
+
+	playerName := e.playerRoleNameLocked()
+	details := make([]core.ParticipantSummary, 0, len(names))
+	for _, name := range names {
+		detail := e.participantSummaryLocked(name, containsString(sceneParticipants, name))
+		switch {
+		case isPlayerPlaceholder(name) || name == playerName:
+			detail.Kind = "player"
+			detail.Source = "player_role"
+			detail.Switchable = false
+		case promoted[name]:
+			detail.Kind = "persona"
+			detail.Source = "promoted_population"
+		case background[name]:
+			detail.Kind = "npc"
+			detail.Source = "background_population"
+		}
+		details = append(details, detail)
+	}
+	return details
 }
 
 func (e *Engine) SetInstanceMetadata(id string, createdAt time.Time) {
@@ -497,35 +663,97 @@ func (e *Engine) InstanceSummary() core.RuntimeInstanceSummary {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return core.RuntimeInstanceSummary{
-		ID:               e.instanceID,
-		Label:            e.worldName,
-		WorldName:        e.worldName,
-		ActiveCharacter:  e.activeCharacter,
-		LoadedCharacters: append([]string(nil), e.loadedCharacters...),
-		CreatedAt:        e.instanceCreated,
-		Status:           InstanceStatusRunning,
+		ID:                 e.instanceID,
+		Label:              e.worldName,
+		WorldName:          e.worldName,
+		ActiveCharacter:    e.GetFocusCharacter(),
+		FocusCharacter:     e.GetFocusCharacter(),
+		LoadedCharacters:   append([]string(nil), e.loadedCharacters...),
+		Participants:       dedupeSceneCharacters(append([]string(nil), e.stateMgr.Get().Scene.Characters...)),
+		ParticipantDetails: e.sceneParticipantDetailsLocked(),
+		CreatedAt:          e.instanceCreated,
+		Status:             InstanceStatusRunning,
 	}
 }
 
-// SwitchCharacter changes the active character. Saves working memory for
-// the old character and loads dialogue history + world context for the new one.
-func (e *Engine) SwitchCharacter(name string) error {
+// SwitchFocusCharacter changes the focus character. It saves working memory for
+// the old viewpoint and loads dialogue history + world context for the new one.
+func (e *Engine) SwitchFocusCharacter(name string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	return e.setActiveCharacterLocked(name, true, true)
 }
 
+// SwitchCharacter is a compatibility alias for older "active character" callers.
+func (e *Engine) SwitchCharacter(name string) error {
+	return e.SwitchFocusCharacter(name)
+}
+
 func (e *Engine) switchCharacterLocked(name string, syncWorld bool) error {
 	return e.setActiveCharacterLocked(name, syncWorld, true)
 }
 
-func (e *Engine) setActiveCharacterLocked(name string, syncWorld, resetTurn bool) error {
-	if _, ok := e.agents.GetCharacter(name); !ok {
-		return fmt.Errorf("character '%s' not loaded", name)
+func (e *Engine) ensureSwitchableCharacterLocked(name string) error {
+	if _, ok := e.agents.GetCharacter(name); ok {
+		return nil
 	}
 
-	if name == e.activeCharacter {
+	scene := e.stateMgr.Get().Scene
+	if containsString(scene.Characters, name) {
+		if err := e.ensureWorldCharacterLocked(name, scene); err == nil {
+			return nil
+		}
+		e.ensureSceneParticipantLoadedLocked(name, scene)
+		return nil
+	}
+
+	return fmt.Errorf("character '%s' not loaded", name)
+}
+
+func (e *Engine) ensureSceneParticipantLoadedLocked(name string, scene core.SceneState) {
+	path := e.currentWorldPathLocked()
+	activeWorld := e.charWorlds[e.GetFocusCharacter()]
+	if e.sceneShells == nil {
+		e.sceneShells = map[string]bool{}
+	}
+	if _, ok := e.agents.GetCharacter(name); !ok {
+		e.agents.LoadCharacter(name, core.Character{
+			WorldPath: path,
+			Identity: core.IdentityEnvelope{
+				Name:         name,
+				Adaptive:     map[string]float64{"trust": 3, "fear": 2},
+				Voice:        core.VoiceConfig{},
+				WritingGuide: "scene participant shell",
+			},
+		})
+	}
+	if !containsString(e.loadedCharacters, name) {
+		e.loadedCharacters = append(e.loadedCharacters, name)
+	}
+	if e.worldPaths == nil {
+		e.worldPaths = map[string]string{}
+	}
+	if path != "" {
+		e.worldPaths[name] = path
+	}
+	if e.charWorlds == nil {
+		e.charWorlds = map[string]CharWorld{}
+	}
+	e.charWorlds[name] = CharWorld{
+		WorldName: activeWorld.WorldName,
+		CoreRules: activeWorld.CoreRules,
+		Scene:     normalizeSceneForCharacter(scene, name, e.playerRoleNameLocked()),
+	}
+	e.sceneShells[name] = true
+}
+
+func (e *Engine) setActiveCharacterLocked(name string, syncWorld, resetTurn bool) error {
+	if err := e.ensureSwitchableCharacterLocked(name); err != nil {
+		return err
+	}
+
+	if name == e.focusCharacter {
 		if syncWorld {
 			e.syncActiveWorldContextLocked()
 		}
@@ -536,8 +764,9 @@ func (e *Engine) setActiveCharacterLocked(name string, syncWorld, resetTurn bool
 		e.dialogueHistory = nil
 		e.compiler.SetMode("full_load")
 	}
-	e.activeCharacter = name
-	e.memEngine.LoadRecentDialogueFromDB(e.activeCharacter, 15)
+	e.focusCharacter = name
+	e.refreshActiveWorldPathLocked()
+	e.memEngine.LoadRecentDialogueFromDB(e.focusCharacter, 15)
 
 	if syncWorld {
 		e.syncActiveWorldContextLocked()
@@ -566,7 +795,7 @@ func (e *Engine) handleRollCommand(input string, ch chan<- string) {
 	}
 
 	// Build stat function from character's adaptive values
-	char, _ := e.agents.GetCharacter(e.activeCharacter)
+	char, _ := e.agents.GetCharacter(e.GetFocusCharacter())
 	statFn := func(key string) int {
 		if v, ok := char.Identity.Adaptive[key]; ok {
 			return actions.StatToModifier(v)
@@ -593,7 +822,7 @@ func (e *Engine) handleRollCommand(input string, ch chan<- string) {
 	ch <- "╚══════════╝\n"
 
 	// Record roll as event for narrative context
-	rollEvent := events.BuildEvent("dice_roll", e.activeCharacter, "",
+	rollEvent := events.BuildEvent("dice_roll", e.GetFocusCharacter(), "",
 		map[string]interface{}{
 			"expression": result.Expression,
 			"total":      result.Total,
@@ -606,7 +835,7 @@ func (e *Engine) handleRollCommand(input string, ch chan<- string) {
 
 	// Store in dialogue so LLM sees it next turn
 	rollMsg := core.Message{Role: "system", Content: fmt.Sprintf("[判定] %s", result.Summary)}
-	e.memEngine.PushDialogue(rollMsg, e.activeCharacter)
+	e.memEngine.PushDialogue(rollMsg, e.GetFocusCharacter())
 }
 
 // GetNPCActions returns recent autonomous actions for a character.
@@ -680,18 +909,18 @@ func (e *Engine) LLMRoutes() map[string]interface{} {
 
 // GetDialogue returns recent dialogue messages (default limit).
 func (e *Engine) GetDialogue() []core.Message {
-	return e.memEngine.GetRecentDialogue(e.activeCharacter)
+	return e.memEngine.GetRecentDialogue(e.GetFocusCharacter())
 }
 
 // GetDialogueLimit returns up to N recent dialogue messages.
 func (e *Engine) GetDialogueLimit(limit int) []core.Message {
-	e.memEngine.LoadRecentDialogueFromDB(e.activeCharacter, limit)
-	return e.memEngine.GetRecentDialogue(e.activeCharacter)
+	e.memEngine.LoadRecentDialogueFromDB(e.GetFocusCharacter(), limit)
+	return e.memEngine.GetRecentDialogue(e.GetFocusCharacter())
 }
 
 // ResetDialogue clears the current character's dialogue.
 func (e *Engine) ResetDialogue() {
-	e.memEngine.ResetDialogue(e.activeCharacter)
+	e.memEngine.ResetDialogue(e.GetFocusCharacter())
 	e.dialogueHistory = nil
 }
 
@@ -719,7 +948,7 @@ func (e *Engine) UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, error)
 		return core.PlayerRole{}, err
 	}
 	state := e.stateMgr.Get()
-	state.Scene = normalizeSceneForCharacter(state.Scene, e.activeCharacter, e.playerRoleNameLocked())
+	state.Scene = normalizeSceneForCharacter(state.Scene, e.GetFocusCharacter(), e.playerRoleNameLocked())
 	e.stateMgr.Set(state)
 	return e.playerRole, nil
 }
@@ -730,7 +959,7 @@ func (e *Engine) DebugInfo() map[string]interface{} {
 	defer e.mu.RUnlock()
 
 	state := e.stateMgr.Get()
-	recent := e.memEngine.GetRecentDialogue(e.activeCharacter)
+	recent := e.memEngine.GetRecentDialogue(e.GetFocusCharacter())
 	var dialoguePreview []map[string]string
 	for _, m := range recent {
 		dialoguePreview = append(dialoguePreview, map[string]string{
@@ -752,7 +981,7 @@ func (e *Engine) DebugInfo() map[string]interface{} {
 		"canonical_events":   canon,
 		"quarantined_events": quarantined,
 		"npc_actions":        e.scheduler.RecentActions(0),
-		"vector_search":      e.memEngine.CountFacts(e.activeCharacter) >= 100,
+		"vector_search":      e.memEngine.CountFacts(e.GetFocusCharacter()) >= 100,
 		"director_config":    normalizeDirectorConfig(e.directorCfg),
 		"director_plan":      e.lastPlan,
 	}
@@ -769,6 +998,62 @@ func (e *Engine) StartTickLoop() {
 func (e *Engine) Stop() {
 	if e.tickLoop != nil {
 		e.tickLoop.Stop()
+	}
+}
+
+// TickStatus returns current tick loop state.
+func (e *Engine) TickStatus() map[string]interface{} {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	status := map[string]interface{}{
+		"turn_count":    e.turnCount,
+		"tick_interval": "60s",
+		"world_ratio":   "5m",
+	}
+	if e.tickLoop != nil {
+		status["running"] = !e.tickLoop.IsPaused()
+		status["paused"] = e.tickLoop.IsPaused()
+		status["tick_count"] = e.tickLoop.TickCount()
+		status["world_advance"] = e.tickLoop.WorldAdvancement().String()
+	} else {
+		status["running"] = false
+		status["paused"] = false
+		status["tick_count"] = 0
+		status["world_advance"] = "0s"
+	}
+	if e.pulseEng != nil {
+		status["pressure_states"] = e.pulseEng.PressureStates()
+	}
+	if e.factionEng != nil {
+		status["faction_tensions"] = e.factionEng.Tensions()
+	}
+	if len(e.npcTickExposure) > 0 {
+		exposureCopy := make(map[string]int, len(e.npcTickExposure))
+		for k, v := range e.npcTickExposure {
+			exposureCopy[k] = v
+		}
+		status["npc_tick_exposure"] = exposureCopy
+	}
+	return status
+}
+
+// ManualTick forces one tick cycle immediately.
+func (e *Engine) ManualTick() {
+	e.onTick()
+}
+
+// PauseTick suspends the tick loop handlers.
+func (e *Engine) PauseTick() {
+	if e.tickLoop != nil {
+		e.tickLoop.Pause()
+	}
+}
+
+// ResumeTick resumes the tick loop handlers.
+func (e *Engine) ResumeTick() {
+	if e.tickLoop != nil {
+		e.tickLoop.Resume()
 	}
 }
 
@@ -795,17 +1080,25 @@ func (e *Engine) onTick() {
 	e.gatekeeper.Submit(clockEvent, events.SourceTick())
 
 	// 3. Auto-promote quarantined events
-	if n, err := e.gatekeeper.AutoPromote(); err == nil && n > 0 {
+	if n, err := e.gatekeeper.AutoPromote(); err != nil {
+		log.Printf("[tick] AutoPromote failed: %v", err)
+	} else if n > 0 {
 		// Promoted n events to canonical
 	}
 
 	// 4. Memory & Relationship Decay
 	if e.decayEngine != nil {
-		state, _ = e.decayEngine.Tick(state)
+		var report memory.DecayReport
+		state, report = e.decayEngine.Tick(state)
+		if report.FactsDeleted > 0 || report.EpisodicPruned > 0 || report.FactsPromoted > 0 {
+			log.Printf("[tick] decay: facts_deleted=%d episodic=%d facts_promoted=%d", report.FactsDeleted, report.EpisodicPruned, report.FactsPromoted)
+		}
 	}
 
 	// 5. Reload state from canonical events to pick up promoted events
-	if eventList, err := e.eventStore.GetCanonicalEvents(); err == nil {
+	if eventList, err := e.eventStore.GetCanonicalEvents(); err != nil {
+		log.Printf("[tick] GetCanonicalEvents failed: %v", err)
+	} else {
 		projected := events.Project(eventList)
 		// Preserve current clock since Project doesn't have clock state persistence yet
 		projected.Clock = state.Clock
@@ -813,29 +1106,51 @@ func (e *Engine) onTick() {
 		e.stateMgr.UpdateFromProjection(projected)
 	}
 
-	// 5. Tension Engine check
-	if e.tensionEng != nil {
-		pressureEvents := e.tensionEng.Tick(state, e.turnCount)
-		for _, evt := range pressureEvents {
-			e.gatekeeper.Submit(evt, events.SourceTick())
-			if evt.Type == "tension_change" {
-				if delta, ok := evt.Payload["delta"].(float64); ok {
-					state.Tension += delta
+	// 6. World pulse / pressure injection from world structure
+	if e.pulseEng != nil {
+		if path := e.currentWorldPathLocked(); path != "" {
+			if structure, err := world.LoadStructure(path); err == nil {
+				pulseEvents := e.pulseEng.Tick(structure, state, int(e.tickCount.Load()))
+				for _, evt := range pulseEvents {
+					e.gatekeeper.Submit(evt, events.SourceTick())
+					applyTickEvent(&state, evt)
 				}
 			}
 		}
 	}
 
-	// 6. Narrative State Machine transition
+	// 6.5 Faction tension engine
+	if e.factionEng != nil {
+		if path := e.currentWorldPathLocked(); path != "" {
+			if structure, err := world.LoadStructure(path); err == nil {
+				factionEvents := e.factionEng.Tick(structure, state, int(e.tickCount.Load()))
+				for _, evt := range factionEvents {
+					e.gatekeeper.Submit(evt, events.SourceTick())
+					applyTickEvent(&state, evt)
+				}
+			}
+		}
+	}
+
+	// 7. Tension Engine check
+	if e.tensionEng != nil {
+		pressureEvents := e.tensionEng.Tick(state, e.turnCount)
+		for _, evt := range pressureEvents {
+			e.gatekeeper.Submit(evt, events.SourceTick())
+			applyTickEvent(&state, evt)
+		}
+	}
+
+	// 8. Narrative State Machine transition
 	if e.stateMachine != nil {
 		e.stateMachine.Transition(state.Tension, "tick")
 	}
 
-	// 7. Update state manager with all tick changes
+	// 9. Update state manager with all tick changes
 	e.stateMgr.Set(state)
 
-	// 8. NPC Desire-driven autonomous actions (non-active characters)
-	e.tickCount++
+	// 10. NPC desire-driven autonomous actions for non-focus participants
+	e.tickCount.Add(1)
 	npcScenes := make(map[string]core.SceneState)
 	for _, name := range e.loadedCharacters {
 		if cw, ok := e.charWorlds[name]; ok {
@@ -843,9 +1158,20 @@ func (e *Engine) onTick() {
 		}
 	}
 
-	// For each non-active NPC, attempt desire-driven autonomous action
+	// Accumulate tick exposure for present NPCs (drives population growth without user input)
 	for _, name := range e.loadedCharacters {
-		if name == e.activeCharacter {
+		if name == e.focusCharacter {
+			continue
+		}
+		participant := e.participantSummaryLocked(name, containsString(state.Scene.Characters, name))
+		if participant.Present {
+			e.npcTickExposure[name]++
+		}
+	}
+
+	// For each non-focus NPC, attempt desire-driven autonomous action
+	for _, name := range e.loadedCharacters {
+		if name == e.focusCharacter {
 			continue
 		}
 		// Compute emotional state
@@ -859,11 +1185,11 @@ func (e *Engine) onTick() {
 		if e.emotionEng != nil {
 			threads, _ = e.emotionEng.GetUnresolvedThreads(name)
 		}
-		pressure := emotion.CalculatePressure(vec, threads, nil, e.tickCount)
+		pressure := emotion.CalculatePressure(vec, threads, nil, int(e.tickCount.Load()))
 
-		action := emotion.TryAutonomousAction(name, pressure, desires, vec, e.actionBudget, e.tickCount, e.actionLogger)
+		action := emotion.TryAutonomousAction(name, pressure, desires, vec, e.actionBudget, int(e.tickCount.Load()), e.actionLogger)
 		if action != nil {
-			e.actionBudget.Record(name, e.tickCount)
+			e.actionBudget.Record(name, int(e.tickCount.Load()))
 			// Execute the autonomous action
 			frame := core.ActionFrame{
 				Actor:     name,
@@ -884,23 +1210,48 @@ func (e *Engine) onTick() {
 	}
 
 	// Fallback: rule-based scheduler for NPCs that didn't act
+	schedulerStructure := core.WorldStructureConfig{}
+	if path := e.currentWorldPathLocked(); path != "" {
+		if s, err := world.LoadStructure(path); err == nil {
+			schedulerStructure = s
+		}
+	}
 	e.scheduler.Tick(
 		e.loadedCharacters,
-		e.activeCharacter,
+		e.focusCharacter,
 		npcScenes,
 		state,
 		e.agents,
 		e.executor,
 		e.gatekeeper,
-		e.tickCount,
+		int(e.tickCount.Load()),
+		schedulerStructure,
 	)
 
-	// 9. Narrative compression: every 20 ticks, check if compaction needed
-	if e.tickCount%20 == 0 {
+	// 11. Narrative compression: every 20 ticks, check if compaction needed
+	if e.tickCount.Load()%20 == 0 {
 		result, err := e.compressEng.AutoCompress()
 		if err == nil && result.EventsCompressed > 0 {
 			log.Printf("Compression: %d events across %d groups compressed",
 				result.EventsCompressed, result.GroupsFound)
+		}
+	}
+
+	e.reconcilePopulationLocked()
+}
+
+func applyTickEvent(state *core.WorldState, evt core.Event) {
+	switch evt.Type {
+	case "tension_change":
+		if delta, ok := evt.Payload["delta"].(float64); ok {
+			state.Tension += delta
+		}
+	case "variable_set":
+		if key, ok := evt.Payload["key"].(string); ok {
+			if state.Variables == nil {
+				state.Variables = map[string]interface{}{}
+			}
+			state.Variables[key] = evt.Payload["value"]
 		}
 	}
 }
@@ -987,8 +1338,8 @@ func (e *Engine) GetCausalitySummaryNarrative(eventID string, depth int) (string
 // Safe to call multiple times — only seeds characters with zero desires.
 func (e *Engine) SeedNPCDesires() {
 	for _, name := range e.loadedCharacters {
-		if name == e.activeCharacter {
-			continue // skip active character (they're driven by player interaction)
+		if name == e.focusCharacter {
+			continue // skip focus character (they're driven by player interaction)
 		}
 		char, ok := e.agents.GetCharacter(name)
 		if !ok {

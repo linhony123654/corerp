@@ -37,15 +37,15 @@ func TestPropertyHashMapOrder(t *testing.T) {
 			delta = -10
 		}
 		e1 := core.Event{
-			ID:      "e",
-			Type:    "tension_change",
-			Payload: map[string]interface{}{"delta": delta, "reason": "test", "source": "quick"},
+			ID:        "e",
+			Type:      "tension_change",
+			Payload:   map[string]interface{}{"delta": delta, "reason": "test", "source": "quick"},
 			Canonical: true,
 		}
 		e2 := core.Event{
-			ID:      "e",
-			Type:    "tension_change",
-			Payload: map[string]interface{}{"source": "quick", "reason": "test", "delta": delta},
+			ID:        "e",
+			Type:      "tension_change",
+			Payload:   map[string]interface{}{"source": "quick", "reason": "test", "delta": delta},
 			Canonical: true,
 		}
 		h1 := CanonicalHashV1(Project([]core.Event{e1}))

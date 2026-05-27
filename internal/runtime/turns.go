@@ -9,6 +9,7 @@ import (
 	"corerp/internal/core"
 	"corerp/internal/events"
 	"corerp/internal/llm"
+	"corerp/internal/world"
 )
 
 func uniqueTurnSpeakers(steps []core.TurnStep) []string {
@@ -50,7 +51,13 @@ func (e *Engine) executeTurnStep(step core.TurnStep, userInput string, turnNumbe
 
 	goals := e.agents.ActiveGoals(step.Speaker, worldState, turnNumber)
 	workingMem, _ := e.memEngine.GetWorkingMemory(step.Speaker)
-	planSteps := e.planner.Plan(step.Speaker, worldState, goals, workingMem)
+	structure := core.WorldStructureConfig{}
+	if path := e.currentWorldPathLocked(); path != "" {
+		if s, err := world.LoadStructure(path); err == nil {
+			structure = s
+		}
+	}
+	planSteps := e.planner.Plan(step.Speaker, worldState, goals, workingMem, structure)
 	allGoals := e.compiler.GoalsToFrames(goals)
 	allGoals = append(allGoals, agents.StepsToGoals(planSteps)...)
 	trace.ActiveGoals = traceGoalsFromFrames(allGoals)

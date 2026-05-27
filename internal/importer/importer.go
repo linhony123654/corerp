@@ -321,6 +321,7 @@ func writeWorldDir(dir string, w WorldYAML) (string, error) {
 
 	// 5. population/ — world-first runtime skeleton
 	_, _ = world.SavePopulation(dir, core.PopulationConfig{})
+	_, _ = world.SaveStructure(dir, core.WorldStructureConfig{})
 
 	return worldFile, nil
 }

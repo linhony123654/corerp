@@ -26,7 +26,7 @@ func TestManagerNew(t *testing.T) {
 func TestManagerGetSet(t *testing.T) {
 	m := New()
 	expected := core.WorldState{
-		Scene: core.SceneState{Location: "test-loc"},
+		Scene:   core.SceneState{Location: "test-loc"},
 		Tension: 0.5,
 	}
 	m.Set(expected)
@@ -160,8 +160,8 @@ func TestStateMachineCrisisToResolution(t *testing.T) {
 
 func TestStateMachineResolutionTransitions(t *testing.T) {
 	sm := NewStateMachine()
-	sm.Transition(0.8, "crisis_start")    // calm→crisis
-	sm.Transition(0.3, "de-escalation")   // crisis→resolution
+	sm.Transition(0.8, "crisis_start")  // calm→crisis
+	sm.Transition(0.3, "de-escalation") // crisis→resolution
 
 	// Resolution + high tension → tense
 	if s := sm.Transition(0.6, "re-escalation"); s != StateTense {

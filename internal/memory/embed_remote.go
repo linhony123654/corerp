@@ -14,12 +14,12 @@ import (
 // RemoteEmbedder calls a local Python embedding server (bge-small-zh).
 // Falls back to local 2-gram if the server is unavailable.
 type RemoteEmbedder struct {
-	serverURL   string
-	client      *http.Client
-	mu          sync.RWMutex
-	available   bool
-	lastCheck   time.Time
-	dim         int
+	serverURL string
+	client    *http.Client
+	mu        sync.RWMutex
+	available bool
+	lastCheck time.Time
+	dim       int
 }
 
 const (

@@ -11,14 +11,14 @@ import (
 type DesireType string
 
 const (
-	DesireAffection  DesireType = "affection"  // want closeness with someone
-	DesireAvoidance  DesireType = "avoidance"  // want distance from someone
-	DesireAmbition   DesireType = "ambition"   // want to achieve something
-	DesireProtection DesireType = "protection" // want to protect someone
+	DesireAffection   DesireType = "affection"   // want closeness with someone
+	DesireAvoidance   DesireType = "avoidance"   // want distance from someone
+	DesireAmbition    DesireType = "ambition"    // want to achieve something
+	DesireProtection  DesireType = "protection"  // want to protect someone
 	DesireRecognition DesireType = "recognition" // want to be seen/valued
-	DesireAutonomy   DesireType = "autonomy"   // want freedom/independence
-	DesireRevenge    DesireType = "revenge"    // want payback
-	DesireSecrets    DesireType = "secrets"    // want to know hidden truth
+	DesireAutonomy    DesireType = "autonomy"    // want freedom/independence
+	DesireRevenge     DesireType = "revenge"     // want payback
+	DesireSecrets     DesireType = "secrets"     // want to know hidden truth
 )
 
 // Desire is an internal drive that motivates autonomous NPC behavior.
@@ -35,23 +35,23 @@ type Desire struct {
 // EmotionalPressure is the accumulation of unresolved emotional tension.
 // When pressure exceeds threshold, it triggers autonomous action.
 type EmotionalPressure struct {
-	Character string  `json:"character"`
+	Character  string  `json:"character"`
 	Loneliness float64 `json:"loneliness"` // from lack of interaction
-	Jealousy  float64 `json:"jealousy"`   // from third-party interaction
+	Jealousy   float64 `json:"jealousy"`   // from third-party interaction
 	Guilt      float64 `json:"guilt"`      // from unresolved debts/promises
 	Anxiety    float64 `json:"anxiety"`    // from pending threats/unresolved threads
 	Total      float64 `json:"total"`      // sum, normalized
 }
 
-const pressureThreshold = 0.7 // Total pressure above this triggers autonomous action
+const pressureThreshold = 0.55 // Lower default so scene-adjacent NPCs can enter play earlier
 
 // AutonomousAction is what an NPC does when pressure exceeds threshold.
 type AutonomousAction struct {
-	Character   string `json:"character"`
-	ActionType  string `json:"action_type"` // approach, confront, avoid, seek, confess, protect
-	Target      string `json:"target"`
-	Reason      string `json:"reason"`
-	Urgency     float64 `json:"urgency"` // 0-1
+	Character  string  `json:"character"`
+	ActionType string  `json:"action_type"` // approach, confront, avoid, seek, confess, protect
+	Target     string  `json:"target"`
+	Reason     string  `json:"reason"`
+	Urgency    float64 `json:"urgency"` // 0-1
 }
 
 // === Desire Store ===
@@ -391,9 +391,9 @@ type ActionBudget struct {
 func DefaultBudget() *ActionBudget {
 	return &ActionBudget{
 		lastActionTick: make(map[string]int),
-		cooldownTicks:  5,
-		maxPerScene:    3,
-		urgencyBypass:  0.9,
+		cooldownTicks:  3,
+		maxPerScene:    4,
+		urgencyBypass:  0.8,
 	}
 }
 

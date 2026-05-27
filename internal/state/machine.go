@@ -16,9 +16,9 @@ const (
 
 // StateMachine drives narrative state transitions based on world tension.
 type StateMachine struct {
-	current   NarrativeState
-	prev      NarrativeState
-	history   []StateTransition
+	current NarrativeState
+	prev    NarrativeState
+	history []StateTransition
 }
 
 type StateTransition struct {

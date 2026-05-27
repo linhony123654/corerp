@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,19 +41,26 @@ type RuntimeEngine interface {
 	GetInstanceID() string
 	InstanceSummary() core.RuntimeInstanceSummary
 	GetState() core.WorldState
-	GetCharacter() (core.Character, bool)
+	GetFocusDefinition() (core.Character, bool)
+	GetCharacter() (core.Character, bool) // compatibility accessor for current focus persona
 	GetCharacterName() string
+	GetFocusCharacter() string
 	GetPlayerRole() core.PlayerRole
 	UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, error)
+	GetFocusDefinitionConfig(name string) (core.CharacterConfig, error)
+	UpdateFocusDefinitionConfig(name string, card core.Character) (core.CharacterConfig, error)
 	GetCharacterConfig(name string) (core.CharacterConfig, error)
 	UpdateCharacterConfig(name string, card core.Character) (core.CharacterConfig, error)
 	GetWorldConfig() (core.WorldConfig, error)
 	UpdateWorldConfig(cfg core.WorldConfig) (core.WorldConfig, error)
+	GetWorldStructureConfig() (core.WorldStructureConfig, error)
+	UpdateWorldStructureConfig(cfg core.WorldStructureConfig) (core.WorldStructureConfig, error)
 	ListSceneConfigs() (core.SceneConfigList, error)
 	UpdateSceneConfig(scene core.SceneConfig) (core.SceneConfig, error)
 	GetCanonFactsConfig() (core.CanonFactsConfig, error)
 	UpdateCanonFactsConfig(cfg core.CanonFactsConfig) (core.CanonFactsConfig, error)
 	GetPopulationConfig() (core.PopulationConfig, error)
+	GetPopulationInsights() (core.PopulationInsights, error)
 	UpdatePopulationConfig(cfg core.PopulationConfig) (core.PopulationConfig, error)
 	GetDirectorConfig() core.DirectorConfig
 	UpdateDirectorConfig(cfg core.DirectorConfig) core.DirectorConfig
@@ -67,9 +76,12 @@ type RuntimeEngine interface {
 	DeletePendingFact(eventID string) error
 	PromotePendingFact(eventID string) error
 	GetLoadedCharacters() []string
+	GetSceneParticipants() []string
 	SwitchCharacter(name string) error
+	EnterWorld(path string) (core.ScenarioPreset, error)
 	GetWorldName() string
 	GetWorldPaths() map[string]string
+	GetFocusMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error)
 	GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error)
 	ListSaveSlots() ([]core.SaveSlot, error)
 	CreateSaveSlot(name, branch, note string) (core.SaveSlot, error)
@@ -103,6 +115,11 @@ type RuntimeEngine interface {
 	SetTension(v float64)
 	QueryActionLog(character string, firedOnly, blockedOnly bool, limit int) []interface{}
 	ActionLogStats() map[string]interface{}
+	TickStatus() map[string]interface{}
+	ManualTick()
+	PauseTick()
+	ResumeTick()
+	GetSceneParticipantDetails() []core.ParticipantSummary
 }
 
 type InstanceResolver interface {
@@ -113,7 +130,7 @@ type InstanceResolver interface {
 	SetDefaultInstance(id string) error
 	StopInstance(id string) (core.RuntimeInstanceSummary, error)
 	DeleteInstance(id string) error
-	CreateInstance(sourceID, id, label, activeCharacter string) (core.RuntimeInstanceSummary, error)
+	CreateInstance(sourceID, id, label, focusCharacter string) (core.RuntimeInstanceSummary, error)
 }
 
 type Server struct {
@@ -138,7 +155,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/change-password", s.handleChangePassword)
 	mux.HandleFunc("/api/chat", a(s.handleChat))
 	mux.HandleFunc("/api/state", a(s.handleState))
-	mux.HandleFunc("/api/character", a(s.handleCharacter))
+	mux.HandleFunc("/api/character", a(s.handleFocusDefinitionCompat))
 	mux.HandleFunc("/api/player-role", a(s.handlePlayerRole))
 	mux.HandleFunc("/api/instances", a(s.handleInstances))
 	mux.HandleFunc("/api/instances/status", a(s.handleInstanceStatus))
@@ -146,15 +163,17 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/instances/default", a(s.handleInstanceDefault))
 	mux.HandleFunc("/api/instances/stop", a(s.handleInstanceStop))
 	mux.HandleFunc("/api/instances/delete", a(s.handleInstanceDelete))
-	mux.HandleFunc("/api/character-config", a(s.handleCharacterConfig))
-	mux.HandleFunc("/api/characters", a(s.handleCharacters))
-	mux.HandleFunc("/api/switch", a(s.handleSwitch))
+	mux.HandleFunc("/api/character-config", a(s.handleFocusDefinitionConfigCompat))
+	mux.HandleFunc("/api/characters", a(s.handleSceneParticipants))
+	mux.HandleFunc("/api/switch", a(s.handleFocusSwitch))
 	mux.HandleFunc("/api/world", a(s.handleWorld))
 	mux.HandleFunc("/api/worlds", a(s.handleWorlds))
 	mux.HandleFunc("/api/world-config", a(s.handleWorldConfig))
+	mux.HandleFunc("/api/world-structure", a(s.handleWorldStructure))
 	mux.HandleFunc("/api/scenes", a(s.handleScenes))
 	mux.HandleFunc("/api/canon-facts", a(s.handleCanonFacts))
 	mux.HandleFunc("/api/population", a(s.handlePopulation))
+	mux.HandleFunc("/api/population-insights", a(s.handlePopulationInsights))
 	mux.HandleFunc("/api/director-config", a(s.handleDirectorConfig))
 	mux.HandleFunc("/api/trace", a(s.handleTrace))
 	mux.HandleFunc("/api/traces", a(s.handleTraces))
@@ -196,6 +215,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/dialogue/reset", a(s.handleDialogueReset))
 	mux.HandleFunc("/api/debug/memory", a(s.handleDebugMemory))
 	mux.HandleFunc("/api/director", a(s.handleDirector))
+	mux.HandleFunc("/api/sim/status", a(s.handleSimStatus))
+	mux.HandleFunc("/api/sim/tick", a(s.handleSimTick))
+	mux.HandleFunc("/api/sim/pause", a(s.handleSimPause))
+	mux.HandleFunc("/api/sim/resume", a(s.handleSimResume))
 	mux.HandleFunc("/", a(s.handleStatic))
 }
 
@@ -203,6 +226,28 @@ func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// writeJSONWithETag marshals payload, computes a SHA256 ETag, and returns 304
+// if the client's If-None-Match header matches. This avoids re-transferring
+// unchanged JSON on poll-heavy endpoints.
+func writeJSONWithETag(w http.ResponseWriter, r *http.Request, payload interface{}) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	hash := sha256.Sum256(body)
+	etag := `"` + hex.EncodeToString(hash[:8]) + `"`
+
+	if match := r.Header.Get("If-None-Match"); match == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", etag)
+	w.Write(body)
 }
 
 func writeInstanceError(w http.ResponseWriter, err error) {
@@ -380,11 +425,12 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	if trace, ok := engine.GetLatestTrace(); ok {
 		payload.LatestTrace = &trace
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(payload)
+	writeJSONWithETag(w, r, payload)
 }
 
-func (s *Server) handleCharacter(w http.ResponseWriter, r *http.Request) {
+// handleFocusDefinitionCompat serves the legacy /api/character path while returning
+// the current focus persona definition.
+func (s *Server) handleFocusDefinitionCompat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -395,9 +441,9 @@ func (s *Server) handleCharacter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	char, ok := engine.GetCharacter()
+	char, ok := engine.GetFocusDefinition()
 	if !ok {
-		http.Error(w, "Character not found", http.StatusNotFound)
+		http.Error(w, "focus definition not found", http.StatusNotFound)
 		return
 	}
 
@@ -468,13 +514,18 @@ func (s *Server) handleInstanceCreate(w http.ResponseWriter, r *http.Request) {
 		ID              string `json:"id"`
 		Label           string `json:"label"`
 		SourceID        string `json:"source_id"`
+		FocusCharacter  string `json:"focus_character"`
 		ActiveCharacter string `json:"active_character"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	summary, err := s.resolver.CreateInstance(req.SourceID, req.ID, req.Label, req.ActiveCharacter)
+	focusCharacter := strings.TrimSpace(req.FocusCharacter)
+	if focusCharacter == "" {
+		focusCharacter = strings.TrimSpace(req.ActiveCharacter)
+	}
+	summary, err := s.resolver.CreateInstance(req.SourceID, req.ID, req.Label, focusCharacter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -575,16 +626,21 @@ func (s *Server) handleInstanceDelete(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "deleted": req.ID})
 }
 
-func (s *Server) handleCharacterConfig(w http.ResponseWriter, r *http.Request) {
+// handleFocusDefinitionConfigCompat serves the legacy /api/character-config path
+// for reading and writing the current focus persona definition.
+func (s *Server) handleFocusDefinitionConfigCompat(w http.ResponseWriter, r *http.Request) {
 	engine, _, err := s.engineForRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	name := r.URL.Query().Get("character")
+	name := r.URL.Query().Get("focus_character")
+	if name == "" {
+		name = r.URL.Query().Get("character")
+	}
 	switch r.Method {
 	case http.MethodGet:
-		cfg, err := engine.GetCharacterConfig(name)
+		cfg, err := engine.GetFocusDefinitionConfig(name)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -593,21 +649,24 @@ func (s *Server) handleCharacterConfig(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(cfg)
 	case http.MethodPost:
 		var req struct {
-			Character string         `json:"character"`
-			Card      core.Character `json:"card"`
+			FocusCharacter string         `json:"focus_character"`
+			Character      string         `json:"character"`
+			Card           core.Character `json:"card"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if req.Character != "" {
+		if req.FocusCharacter != "" {
+			name = req.FocusCharacter
+		} else if req.Character != "" {
 			name = req.Character
 		}
 		if err := goalexpr.ValidateCharacter(req.Card); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		cfg, err := engine.UpdateCharacterConfig(name, req.Card)
+		cfg, err := engine.UpdateFocusDefinitionConfig(name, req.Card)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -619,7 +678,7 @@ func (s *Server) handleCharacterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleCharacters(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSceneParticipants(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -630,39 +689,113 @@ func (s *Server) handleCharacters(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	chars := engine.GetLoadedCharacters()
-	active := engine.GetCharacterName()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"active":     active,
-		"characters": chars,
+	chars := engine.GetSceneParticipants()
+	if len(chars) == 0 {
+		chars = engine.GetLoadedCharacters()
+	}
+	details := engine.GetSceneParticipantDetails()
+	focus := engine.GetFocusCharacter()
+	writeJSONWithETag(w, r, map[string]interface{}{
+		"active":              focus,
+		"focus_character":     focus,
+		"characters":          chars,
+		"participants":        chars,
+		"participant_details": details,
 	})
 }
 
 func (s *Server) handleWorlds(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	engine, _, err := s.engineForRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	worlds, err := worldpkg.ListCatalog(WorldCatalogRoot, engine.GetWorldPaths())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	switch r.Method {
+	case http.MethodGet:
+		worlds, err := worldpkg.ListCatalog(WorldCatalogRoot, engine.GetWorldPaths())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSONWithETag(w, r, map[string]interface{}{
+			"active":      engine.GetWorldName(),
+			"active_path": activeWorldPath(engine),
+			"worlds":      worlds,
+		})
+	case http.MethodPost:
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		preset, err := engine.EnterWorld(req.Path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":              true,
+			"world":           engine.GetWorldName(),
+			"character":       engine.GetFocusCharacter(),
+			"focus_character": engine.GetFocusCharacter(),
+			"preset":          preset,
+		})
+	case http.MethodPut:
+		var req struct {
+			Name      string `json:"name"`
+			CoreRules string `json:"core_rules"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		dir, err := worldpkg.CreateWorld(WorldCatalogRoot, req.Name, req.CoreRules)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":   true,
+			"name": req.Name,
+			"path": dir,
+		})
+	case http.MethodPatch:
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		dir, err := worldpkg.ConvertToDir(req.Path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":       true,
+			"old_path": req.Path,
+			"new_path": dir,
+		})
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"active": engine.GetWorldName(),
-		"worlds": worlds,
-	})
 }
 
-func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
+func activeWorldPath(engine RuntimeEngine) string {
+	focus := engine.GetFocusCharacter()
+	if focus == "" {
+		return ""
+	}
+	return engine.GetWorldPaths()[focus]
+}
+
+// handleFocusSwitch serves the legacy /api/switch path while changing the
+// current focus persona/scene viewpoint.
+func (s *Server) handleFocusSwitch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -675,11 +808,36 @@ func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Character string `json:"character"`
+		FocusCharacter string `json:"focus_character"`
+		Character      string `json:"character"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	req.FocusCharacter = strings.TrimSpace(req.FocusCharacter)
+	req.Character = strings.TrimSpace(req.Character)
+	name := req.FocusCharacter
+	if name == "" {
+		name = req.Character
+	}
+	if name == "" {
+		http.Error(w, "focus_character is required", http.StatusBadRequest)
+		return
+	}
+	req.Character = name
+
+	if req.Character != engine.GetFocusCharacter() {
+		for _, participant := range engine.GetSceneParticipantDetails() {
+			if participant.Name != req.Character {
+				continue
+			}
+			if !participant.Switchable {
+				http.Error(w, fmt.Sprintf("participant '%s' is not switchable (%s)", req.Character, participant.Kind), http.StatusBadRequest)
+				return
+			}
+			break
+		}
 	}
 
 	if err := engine.SwitchCharacter(req.Character); err != nil {
@@ -749,6 +907,37 @@ func (s *Server) handleWorldConfig(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleWorldStructure(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		cfg, err := engine.GetWorldStructureConfig()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	case http.MethodPost:
+		var req core.WorldStructureConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		cfg, err := engine.UpdateWorldStructureConfig(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *Server) handleScenes(w http.ResponseWriter, r *http.Request) {
 	engine, _, err := s.engineForRequest(r)
 	if err != nil {
@@ -811,6 +1000,24 @@ func (s *Server) handlePopulation(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handlePopulationInsights(w http.ResponseWriter, r *http.Request) {
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, insights)
 }
 
 func (s *Server) handleCanonFacts(w http.ResponseWriter, r *http.Request) {
@@ -936,7 +1143,10 @@ func (s *Server) handleQuarantine(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	character := r.URL.Query().Get("character")
+	character := r.URL.Query().Get("focus_character")
+	if character == "" {
+		character = r.URL.Query().Get("character")
+	}
 	limit := 50
 	if n := r.URL.Query().Get("n"); n != "" {
 		fmt.Sscanf(n, "%d", &limit)
@@ -958,9 +1168,10 @@ func (s *Server) handleQuarantine(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"events":    events,
-		"count":     len(events),
-		"character": character,
+		"events":          events,
+		"count":           len(events),
+		"focus_character": character,
+		"character":       character,
 	})
 }
 
@@ -992,7 +1203,10 @@ func (s *Server) handlePendingFacts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	character := r.URL.Query().Get("character")
+	character := r.URL.Query().Get("focus_character")
+	if character == "" {
+		character = r.URL.Query().Get("character")
+	}
 	limit := 50
 	if n := r.URL.Query().Get("n"); n != "" {
 		fmt.Sscanf(n, "%d", &limit)
@@ -1004,10 +1218,11 @@ func (s *Server) handlePendingFacts(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"facts":     items,
-		"count":     len(items),
-		"stats":     stats,
-		"character": character,
+		"facts":           items,
+		"count":           len(items),
+		"stats":           stats,
+		"focus_character": character,
+		"character":       character,
 	})
 }
 
@@ -1097,7 +1312,10 @@ func (s *Server) handleMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	character := r.URL.Query().Get("character")
+	character := r.URL.Query().Get("focus_character")
+	if character == "" {
+		character = r.URL.Query().Get("character")
+	}
 	facts := 50
 	episodic := 20
 	dialogue := 20
@@ -1110,13 +1328,23 @@ func (s *Server) handleMemory(w http.ResponseWriter, r *http.Request) {
 	if n := r.URL.Query().Get("dialogue"); n != "" {
 		fmt.Sscanf(n, "%d", &dialogue)
 	}
-	snapshot, err := engine.GetMemorySnapshot(character, facts, episodic, dialogue)
+	snapshot, err := engine.GetFocusMemorySnapshot(character, facts, episodic, dialogue)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(snapshot)
+	focusCharacter := snapshot.FocusCharacter
+	if strings.TrimSpace(focusCharacter) == "" {
+		focusCharacter = strings.TrimSpace(snapshot.Character)
+	}
+	writeJSONWithETag(w, r, map[string]interface{}{
+		"character":       snapshot.Character,
+		"focus_character": focusCharacter,
+		"working_memory":  snapshot.WorkingMemory,
+		"facts":           snapshot.Facts,
+		"episodic":        snapshot.Episodic,
+		"dialogue":        snapshot.Dialogue,
+	})
 }
 
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
@@ -1139,25 +1367,27 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		fmt.Sscanf(n, "%d", &limit)
 	}
 
-	char, _ := engine.GetCharacter()
+	focusDefinition, _ := engine.GetFocusDefinition()
 	dialogue := engine.GetDialogueLimit(limit)
 	timeline, _ := engine.GetTimeline("main", limit)
 	payload := map[string]interface{}{
-		"exported_at": time.Now().UTC(),
-		"character":   char,
-		"world":       engine.GetWorldName(),
-		"state":       engine.GetState(),
-		"dialogue":    dialogue,
-		"timeline":    timeline,
+		"exported_at":      time.Now().UTC(),
+		"character":        focusDefinition,
+		"focus_definition": focusDefinition,
+		"focus_character":  engine.GetFocusCharacter(),
+		"world":            engine.GetWorldName(),
+		"state":            engine.GetState(),
+		"dialogue":         dialogue,
+		"timeline":         timeline,
 	}
 
-	filename := fmt.Sprintf("corerp-%s-%s", engine.GetCharacterName(), time.Now().UTC().Format("20060102T150405Z"))
+	filename := fmt.Sprintf("corerp-%s-%s", engine.GetFocusCharacter(), time.Now().UTC().Format("20060102T150405Z"))
 	switch format {
 	case "md", "markdown":
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.md\"", filename))
 		fmt.Fprintf(w, "# CoreRP Session Export\n\n")
-		fmt.Fprintf(w, "- Character: %s\n", char.Identity.Name)
+		fmt.Fprintf(w, "- Character: %s\n", focusDefinition.Identity.Name)
 		fmt.Fprintf(w, "- World: %s\n", engine.GetWorldName())
 		fmt.Fprintf(w, "- Exported: %s\n\n", time.Now().UTC().Format(time.RFC3339))
 		state := engine.GetState()
@@ -1404,16 +1634,20 @@ func (s *Server) handleNPCActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.URL.Query().Get("character")
+	name := r.URL.Query().Get("focus_character")
 	if name == "" {
-		name = engine.GetCharacterName()
+		name = r.URL.Query().Get("character")
+	}
+	if name == "" {
+		name = engine.GetFocusCharacter()
 	}
 
 	actions := engine.GetNPCActions(name, 0)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"character": name,
-		"actions":   actions,
+		"focus_character": name,
+		"character":       name,
+		"actions":         actions,
 	})
 }
 
@@ -2043,6 +2277,61 @@ func (s *Server) handleDirector(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Unknown action", http.StatusBadRequest)
 	}
+}
+
+func (s *Server) handleSimStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, 200, engine.TickStatus())
+}
+
+func (s *Server) handleSimTick(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	engine.ManualTick()
+	writeJSON(w, 200, map[string]interface{}{"ok": true, "tick_status": engine.TickStatus()})
+}
+
+func (s *Server) handleSimPause(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	engine.PauseTick()
+	writeJSON(w, 200, map[string]interface{}{"ok": true, "paused": true})
+}
+
+func (s *Server) handleSimResume(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	engine, _, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	engine.ResumeTick()
+	writeJSON(w, 200, map[string]interface{}{"ok": true, "paused": false})
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {

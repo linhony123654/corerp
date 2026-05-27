@@ -11,7 +11,7 @@ func (e *Engine) ListQuarantineEvents(character string, limit int) ([]core.Event
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	if character == "" {
-		character = e.activeCharacter
+		character = e.GetFocusCharacter()
 	}
 	return e.gatekeeper.ListPending(limit, character)
 }
@@ -36,7 +36,7 @@ func (e *Engine) ListPendingFacts(character string, limit int) ([]core.PendingFa
 		return nil, nil, fmt.Errorf("pending facts pipeline is not available")
 	}
 	if character == "" {
-		character = e.activeCharacter
+		character = e.GetFocusCharacter()
 	}
 	items, err := cp.ListPending(limit, character)
 	if err != nil {

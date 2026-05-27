@@ -63,11 +63,132 @@ type factsDoc struct {
 	Facts []factYAML `yaml:"facts"`
 }
 
+type presetsDoc struct {
+	Presets []core.ScenarioPreset `yaml:"presets"`
+}
+
 type factYAML struct {
 	Subject    string  `yaml:"subject"`
 	Predicate  string  `yaml:"predicate"`
 	Object     string  `yaml:"object"`
 	Confidence float64 `yaml:"confidence"`
+}
+
+func ConvertToDir(filePath string) (string, error) {
+	if isDirPath(filePath) {
+		return "", fmt.Errorf("already a directory world: %s", filePath)
+	}
+	bundle, err := loadFileBundle(filePath)
+	if err != nil {
+		return "", fmt.Errorf("load single-file world: %w", err)
+	}
+
+	dir := strings.TrimSuffix(filePath, filepath.Ext(filePath))
+	if _, err := os.Stat(dir); err == nil {
+		return "", fmt.Errorf("target directory already exists: %s", dir)
+	}
+
+	for _, sub := range []string{"world", "canon", "scenes", "population"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0755); err != nil {
+			return "", fmt.Errorf("create dir %s: %w", sub, err)
+		}
+	}
+
+	worldYAML := map[string]interface{}{
+		"meta":       map[string]string{"name": bundle.Config.Name},
+		"core_rules": bundle.Config.CoreRules,
+	}
+	data, _ := yaml.Marshal(worldYAML)
+	if err := os.WriteFile(filepath.Join(dir, "world.yml"), data, 0644); err != nil {
+		return "", err
+	}
+
+	if len(bundle.Scenes) > 0 {
+		sceneData, _ := yaml.Marshal(map[string]interface{}{"scene": bundle.Scenes[0].Scene})
+		if err := os.WriteFile(filepath.Join(dir, "scenes", "default.yml"), sceneData, 0644); err != nil {
+			return "", err
+		}
+	}
+
+	emptyYAML := []byte("[]\n")
+	os.WriteFile(filepath.Join(dir, "canon", "facts.yml"), emptyYAML, 0644)
+	os.WriteFile(filepath.Join(dir, "world", "factions.yml"), emptyYAML, 0644)
+	os.WriteFile(filepath.Join(dir, "world", "locations.yml"), emptyYAML, 0644)
+	os.WriteFile(filepath.Join(dir, "world", "pressures.yml"), emptyYAML, 0644)
+	seedData, _ := yaml.Marshal(map[string]interface{}{"premise": ""})
+	os.WriteFile(filepath.Join(dir, "world", "seed.yml"), seedData, 0644)
+
+	backupPath := filePath + ".bak"
+	if err := os.Rename(filePath, backupPath); err != nil {
+		return dir, nil
+	}
+
+	return dir, nil
+}
+
+func CreateWorld(rootDir, name, coreRules string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("world name is required")
+	}
+	id := sanitizeID(name)
+	if id == "" {
+		id = "world"
+	}
+	dir := filepath.Join(rootDir, id)
+	if _, err := os.Stat(dir); err == nil {
+		return "", fmt.Errorf("world '%s' already exists at %s", name, dir)
+	}
+
+	for _, sub := range []string{"world", "canon", "scenes", "population"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0755); err != nil {
+			return "", fmt.Errorf("create dir %s: %w", sub, err)
+		}
+	}
+
+	worldYAML := map[string]interface{}{
+		"meta": map[string]string{"name": name},
+	}
+	if strings.TrimSpace(coreRules) != "" {
+		worldYAML["core_rules"] = coreRules
+	}
+	data, _ := yaml.Marshal(worldYAML)
+	if err := os.WriteFile(filepath.Join(dir, "world.yml"), data, 0644); err != nil {
+		return "", err
+	}
+
+	defaultScene := core.SceneState{Location: "起点", TimeOfDay: "白天", Weather: "晴", Characters: []string{}, Description: ""}
+	sceneData, _ := yaml.Marshal(map[string]interface{}{"scene": defaultScene})
+	if err := os.WriteFile(filepath.Join(dir, "scenes", "default.yml"), sceneData, 0644); err != nil {
+		return "", err
+	}
+
+	emptyYAML := []byte("[]\n")
+	os.WriteFile(filepath.Join(dir, "canon", "facts.yml"), emptyYAML, 0644)
+	os.WriteFile(filepath.Join(dir, "world", "factions.yml"), emptyYAML, 0644)
+	os.WriteFile(filepath.Join(dir, "world", "locations.yml"), emptyYAML, 0644)
+	os.WriteFile(filepath.Join(dir, "world", "pressures.yml"), emptyYAML, 0644)
+
+	seedData, _ := yaml.Marshal(map[string]interface{}{"premise": ""})
+	os.WriteFile(filepath.Join(dir, "world", "seed.yml"), seedData, 0644)
+
+	return dir, nil
+}
+
+func sanitizeID(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-' || r == '_':
+			b.WriteRune('_')
+		}
+	}
+	return strings.Trim(b.String(), "_")
 }
 
 func LoadBundle(path string) (Bundle, error) {
@@ -128,12 +249,59 @@ func LoadFacts(path string) (core.CanonFactsConfig, error) {
 	return core.CanonFactsConfig{Path: factsPath, Facts: b.DirectFacts}, nil
 }
 
+func LoadScenarioPresets(path string) ([]core.ScenarioPreset, error) {
+	if !isDirPath(path) {
+		return []core.ScenarioPreset{}, nil
+	}
+	data, err := os.ReadFile(filepath.Join(path, "world", "presets.yml"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []core.ScenarioPreset{}, nil
+		}
+		return nil, err
+	}
+	var raw presetsDoc
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	for i := range raw.Presets {
+		raw.Presets[i].Name = strings.TrimSpace(raw.Presets[i].Name)
+		raw.Presets[i].Branch = strings.TrimSpace(raw.Presets[i].Branch)
+		raw.Presets[i].Character = strings.TrimSpace(raw.Presets[i].Character)
+		raw.Presets[i].Note = strings.TrimSpace(raw.Presets[i].Note)
+		raw.Presets[i].Preview = strings.TrimSpace(raw.Presets[i].Preview)
+	}
+	return raw.Presets, nil
+}
+
 func LoadPopulation(path string) (core.PopulationConfig, error) {
 	b, err := LoadBundle(path)
 	if err != nil {
 		return core.PopulationConfig{}, err
 	}
 	return b.Population, nil
+}
+
+func EnsureSeededPopulation(path string) (core.PopulationConfig, bool, error) {
+	cfg, err := LoadPopulation(path)
+	if err != nil {
+		return core.PopulationConfig{}, false, err
+	}
+	if !isDirPath(path) {
+		return cfg, false, nil
+	}
+	if len(cfg.BackgroundNPCs) > 0 || len(cfg.PromotedNPCs) > 0 {
+		return cfg, false, nil
+	}
+	seeded, changed, err := seedPopulationFromWorld(path, cfg)
+	if err != nil || !changed {
+		return seeded, changed, err
+	}
+	saved, err := SavePopulation(path, seeded)
+	if err != nil {
+		return core.PopulationConfig{}, false, err
+	}
+	return saved, true, nil
 }
 
 func SavePopulation(path string, cfg core.PopulationConfig) (core.PopulationConfig, error) {
@@ -618,4 +786,174 @@ func normalizePromotionPolicy(policy core.PromotionPolicy) core.PromotionPolicy 
 		policy.SceneWeight = 2
 	}
 	return policy
+}
+
+func seedPopulationFromWorld(path string, cfg core.PopulationConfig) (core.PopulationConfig, bool, error) {
+	bundle, err := LoadBundle(path)
+	if err != nil {
+		return core.PopulationConfig{}, false, err
+	}
+
+	locationNames := orderedPopulationLocations(bundle)
+	if len(locationNames) == 0 {
+		locationNames = []string{"场景边缘"}
+	}
+	factionNames := orderedPopulationFactions(bundle)
+
+	type populationTemplate struct {
+		id       string
+		name     string
+		role     string
+		location string
+		faction  string
+		traits   []string
+		hooks    []string
+	}
+
+	pickLocation := func(index int) string {
+		if len(locationNames) == 0 {
+			return ""
+		}
+		if index < len(locationNames) {
+			return locationNames[index]
+		}
+		return locationNames[0]
+	}
+	pickFaction := func(index int) string {
+		if len(factionNames) == 0 {
+			return ""
+		}
+		if index < len(factionNames) {
+			return factionNames[index]
+		}
+		return factionNames[0]
+	}
+
+	templates := []populationTemplate{
+		{
+			id:       "watcher",
+			name:     buildPopulationName(pickLocation(0), pickFaction(0), "巡守"),
+			role:     "巡守",
+			location: pickLocation(0),
+			faction:  pickFaction(0),
+			traits:   []string{"克制", "警惕"},
+			hooks:    []string{"维持局面稳定", "盯住最近的异常动静"},
+		},
+		{
+			id:       "vendor",
+			name:     buildPopulationName(pickLocation(0), "", "摊主"),
+			role:     "摊主",
+			location: pickLocation(0),
+			traits:   []string{"健谈", "留心风声"},
+			hooks:    []string{"想把消息换成筹码", "对谁在失势很敏感"},
+		},
+		{
+			id:       "runner",
+			name:     buildPopulationName(pickLocation(1), pickFaction(1), "跑腿"),
+			role:     "跑腿",
+			location: pickLocation(1),
+			faction:  pickFaction(1),
+			traits:   []string{"机灵", "不愿站队"},
+			hooks:    []string{"想活着穿过各方夹缝", "总比别人先听到一点消息"},
+		},
+		{
+			id:       "clerk",
+			name:     buildPopulationName(pickLocation(2), "", "管事"),
+			role:     "管事",
+			location: pickLocation(2),
+			traits:   []string{"谨慎", "记账式思维"},
+			hooks:    []string{"试着维持日常秩序", "担心局势继续失衡"},
+		},
+	}
+
+	seenNames := map[string]bool{}
+	background := make([]core.BackgroundNPC, 0, len(templates))
+	for _, tpl := range templates {
+		name := strings.TrimSpace(tpl.name)
+		if name == "" || seenNames[name] {
+			continue
+		}
+		seenNames[name] = true
+		background = append(background, core.BackgroundNPC{
+			ID:       tpl.id,
+			Name:     name,
+			Role:     tpl.role,
+			Location: tpl.location,
+			Faction:  tpl.faction,
+			Traits:   append([]string(nil), tpl.traits...),
+			Hooks:    append([]string(nil), tpl.hooks...),
+		})
+	}
+	if len(background) == 0 {
+		return cfg, false, nil
+	}
+	cfg.BackgroundNPCs = background
+	return normalizePopulationConfig(cfg, path), true, nil
+}
+
+func orderedPopulationLocations(bundle Bundle) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+
+	if scene := sceneByName(bundle.Scenes, bundle.Selected); scene.Scene.Location != "" {
+		add(scene.Scene.Location)
+	}
+	for _, scene := range bundle.Scenes {
+		add(scene.Scene.Location)
+	}
+	if structure, err := LoadStructure(bundle.Config.Path); err == nil {
+		if structure.Seed.StartingScene != "" {
+			add(structure.Seed.StartingScene)
+		}
+		for _, loc := range structure.Locations {
+			add(loc.Name)
+		}
+	}
+	for _, loc := range bundle.Ontology.Locations {
+		add(loc.Name)
+	}
+	return out
+}
+
+func orderedPopulationFactions(bundle Bundle) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	if structure, err := LoadStructure(bundle.Config.Path); err == nil {
+		for _, faction := range structure.Factions {
+			add(faction.Name)
+		}
+	}
+	for _, faction := range bundle.Ontology.Factions {
+		add(faction.Name)
+	}
+	return out
+}
+
+func buildPopulationName(location, faction, role string) string {
+	location = strings.TrimSpace(location)
+	faction = strings.TrimSpace(faction)
+	role = strings.TrimSpace(role)
+	if faction != "" {
+		return faction + role
+	}
+	if location != "" {
+		return location + role
+	}
+	return role
 }

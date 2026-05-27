@@ -10,12 +10,12 @@ import (
 // DiceResult holds the outcome of a dice roll.
 type DiceResult struct {
 	Expression string `json:"expression"` // e.g. "2d6+trust"
-	Rolls      []int  `json:"rolls"`       // individual dice results
-	Modifier   int    `json:"modifier"`     // stat modifier
-	Total      int    `json:"total"`        // sum + modifier
-	Difficulty int    `json:"difficulty"`   // target number (0 = no check)
-	Success    *bool  `json:"success"`      // nil if no difficulty set
-	Summary    string `json:"summary"`      // human-readable
+	Rolls      []int  `json:"rolls"`      // individual dice results
+	Modifier   int    `json:"modifier"`   // stat modifier
+	Total      int    `json:"total"`      // sum + modifier
+	Difficulty int    `json:"difficulty"` // target number (0 = no check)
+	Success    *bool  `json:"success"`    // nil if no difficulty set
+	Summary    string `json:"summary"`    // human-readable
 }
 
 // StatValue maps a stat key to the character's adaptive values.

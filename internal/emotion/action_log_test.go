@@ -121,6 +121,19 @@ func TestActionLoggerStats(t *testing.T) {
 	}
 }
 
+func TestDefaultBudgetIsMorePermissive(t *testing.T) {
+	b := DefaultBudget()
+	if b.cooldownTicks != 3 {
+		t.Fatalf("cooldownTicks = %d, want 3", b.cooldownTicks)
+	}
+	if b.maxPerScene != 4 {
+		t.Fatalf("maxPerScene = %d, want 4", b.maxPerScene)
+	}
+	if b.urgencyBypass != 0.8 {
+		t.Fatalf("urgencyBypass = %.2f, want 0.8", b.urgencyBypass)
+	}
+}
+
 func TestActionLoggerTotal(t *testing.T) {
 	l := NewActionLogger(10)
 	for i := 0; i < 7; i++ {

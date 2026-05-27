@@ -16,7 +16,10 @@ import (
 	"corerp/internal/events"
 	"corerp/internal/llm"
 	"corerp/internal/narrative"
+	"corerp/internal/runtime"
 )
+
+var _ RuntimeEngine = (*runtime.Engine)(nil)
 
 type mockResolver struct {
 	defaultID string
@@ -101,11 +104,11 @@ func (r *mockResolver) DeleteInstance(id string) error {
 	}
 	return nil
 }
-func (r *mockResolver) CreateInstance(sourceID, id, label, activeCharacter string) (core.RuntimeInstanceSummary, error) {
+func (r *mockResolver) CreateInstance(sourceID, id, label, focusCharacter string) (core.RuntimeInstanceSummary, error) {
 	if id == "" {
 		return core.RuntimeInstanceSummary{}, fmt.Errorf("instance id required")
 	}
-	name := activeCharacter
+	name := focusCharacter
 	if name == "" {
 		name = "Anya"
 	}
@@ -122,9 +125,11 @@ type mockEngine struct {
 	dialogue                []core.Message
 	player                  core.PlayerRole
 	world                   core.WorldConfig
+	worldStructure          core.WorldStructureConfig
 	scenes                  core.SceneConfigList
 	facts                   core.CanonFactsConfig
 	population              core.PopulationConfig
+	populationInsights      core.PopulationInsights
 	director                core.DirectorConfig
 	plan                    core.DirectorPlan
 	trace                   core.TurnTrace
@@ -135,6 +140,7 @@ type mockEngine struct {
 	causalityNarrativeChain interface{}
 	causalitySummary        string
 	causalityNarrativeSum   string
+	participantDetails      []core.ParticipantSummary
 }
 
 func (m *mockEngine) ProcessTurn(input string) (<-chan string, error) {
@@ -150,18 +156,25 @@ func (m *mockEngine) GetInstanceID() string {
 	return m.instanceID
 }
 func (m *mockEngine) InstanceSummary() core.RuntimeInstanceSummary {
+	details := m.GetSceneParticipantDetails()
 	return core.RuntimeInstanceSummary{
-		ID:               m.GetInstanceID(),
-		Label:            "test",
-		WorldName:        "test-world",
-		ActiveCharacter:  m.name,
-		LoadedCharacters: []string{m.name},
-		Status:           "running",
+		ID:                 m.GetInstanceID(),
+		Label:              "test",
+		WorldName:          "test-world",
+		ActiveCharacter:    m.name,
+		FocusCharacter:     m.name,
+		LoadedCharacters:   []string{m.name},
+		Participants:       []string{m.name},
+		ParticipantDetails: details,
+		Status:             "running",
 	}
 }
 func (m *mockEngine) GetState() core.WorldState { return m.state }
 func (m *mockEngine) GetCharacter() (core.Character, bool) {
 	return core.Character{Identity: core.IdentityEnvelope{Name: m.name}}, true
+}
+func (m *mockEngine) GetFocusDefinition() (core.Character, bool) {
+	return m.GetCharacter()
 }
 func (m *mockEngine) GetPlayerRole() core.PlayerRole { return m.player }
 func (m *mockEngine) UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, error) {
@@ -171,22 +184,30 @@ func (m *mockEngine) UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, er
 	}
 	return m.player, nil
 }
-func (m *mockEngine) GetCharacterConfig(name string) (core.CharacterConfig, error) {
+func (m *mockEngine) GetFocusDefinitionConfig(name string) (core.CharacterConfig, error) {
 	return core.CharacterConfig{
-		Character: m.name,
-		Path:      "characters/test.yml",
-		WorldPath: "worlds/test.yml",
-		Card:      core.Character{Identity: core.IdentityEnvelope{Name: m.name}},
+		Character:      m.name,
+		FocusCharacter: m.name,
+		Path:           "characters/test.yml",
+		WorldPath:      "worlds/test.yml",
+		Card:           core.Character{Identity: core.IdentityEnvelope{Name: m.name}},
+	}, nil
+}
+func (m *mockEngine) GetCharacterConfig(name string) (core.CharacterConfig, error) {
+	return m.GetFocusDefinitionConfig(name)
+}
+func (m *mockEngine) UpdateFocusDefinitionConfig(name string, card core.Character) (core.CharacterConfig, error) {
+	m.name = card.Identity.Name
+	return core.CharacterConfig{
+		Character:      m.name,
+		FocusCharacter: m.name,
+		Path:           "characters/test.yml",
+		WorldPath:      "worlds/test.yml",
+		Card:           card,
 	}, nil
 }
 func (m *mockEngine) UpdateCharacterConfig(name string, card core.Character) (core.CharacterConfig, error) {
-	m.name = card.Identity.Name
-	return core.CharacterConfig{
-		Character: m.name,
-		Path:      "characters/test.yml",
-		WorldPath: "worlds/test.yml",
-		Card:      card,
-	}, nil
+	return m.UpdateFocusDefinitionConfig(name, card)
 }
 func (m *mockEngine) GetWorldConfig() (core.WorldConfig, error) {
 	if m.world.Name == "" {
@@ -200,6 +221,47 @@ func (m *mockEngine) UpdateWorldConfig(cfg core.WorldConfig) (core.WorldConfig, 
 		m.world.Path = "worlds/test"
 	}
 	return m.world, nil
+}
+func (m *mockEngine) GetWorldStructureConfig() (core.WorldStructureConfig, error) {
+	if m.worldStructure.Path == "" {
+		m.worldStructure = core.WorldStructureConfig{
+			Path: "worlds/test",
+			Ruleset: core.WorldRulesetConfig{
+				Path: "worlds/test/world/ruleset.yml",
+				Rules: []core.WorldRule{{
+					ID:      "test_rule",
+					Title:   "测试规则",
+					Summary: "默认规则",
+				}},
+			},
+			Seed: core.WorldSeedConfig{
+				Path:             "worlds/test/world/seed.yml",
+				Premise:          "默认设定",
+				CurrentSituation: "默认局势",
+				Variables:        map[string]interface{}{},
+			},
+			Factions:  []core.WorldFactionConfig{},
+			Locations: []core.WorldLocationConfig{},
+			Pressures: []core.WorldPressureConfig{},
+		}
+	}
+	return m.worldStructure, nil
+}
+func (m *mockEngine) UpdateWorldStructureConfig(cfg core.WorldStructureConfig) (core.WorldStructureConfig, error) {
+	m.worldStructure = cfg
+	if m.worldStructure.Path == "" {
+		m.worldStructure.Path = "worlds/test"
+	}
+	if m.worldStructure.Ruleset.Path == "" {
+		m.worldStructure.Ruleset.Path = "worlds/test/world/ruleset.yml"
+	}
+	if m.worldStructure.Seed.Path == "" {
+		m.worldStructure.Seed.Path = "worlds/test/world/seed.yml"
+	}
+	if m.worldStructure.Seed.Variables == nil {
+		m.worldStructure.Seed.Variables = map[string]interface{}{}
+	}
+	return m.worldStructure, nil
 }
 func (m *mockEngine) ListSceneConfigs() (core.SceneConfigList, error) {
 	if len(m.scenes.Scenes) == 0 {
@@ -249,6 +311,30 @@ func (m *mockEngine) GetPopulationConfig() (core.PopulationConfig, error) {
 		}
 	}
 	return m.population, nil
+}
+func (m *mockEngine) GetPopulationInsights() (core.PopulationInsights, error) {
+	if m.populationInsights.Path == "" {
+		m.populationInsights = core.PopulationInsights{
+			Path:      "worlds/test/population",
+			WorldPath: "worlds/test",
+			Promoted: []core.PopulationCharacterInsight{{
+				ID:            "tea_vendor",
+				Name:          "茶摊老板",
+				Status:        "promoted",
+				IdentityCore:  "tea_vendor_core",
+				Attention:     core.PopulationAttention{Score: 14, DirectInteractions: 2, Mentions: 1},
+				Adaptive:      map[string]float64{"trust": 4.2, "fear": 2.1},
+				GrowthSummary: "互动2 · 提及1",
+			}},
+			Background: []core.PopulationCharacterInsight{{
+				ID:            "gate_guard",
+				Name:          "守门人",
+				Attention:     core.PopulationAttention{Score: 3, Mentions: 1},
+				GrowthSummary: "提及1",
+			}},
+		}
+	}
+	return m.populationInsights, nil
 }
 func (m *mockEngine) UpdatePopulationConfig(cfg core.PopulationConfig) (core.PopulationConfig, error) {
 	m.population = cfg
@@ -314,49 +400,67 @@ func (m *mockEngine) ConfirmPendingFact(eventID string) error { return nil }
 func (m *mockEngine) DeletePendingFact(eventID string) error  { return nil }
 func (m *mockEngine) PromotePendingFact(eventID string) error { return nil }
 func (m *mockEngine) GetCharacterName() string                { return m.name }
+func (m *mockEngine) GetFocusCharacter() string               { return m.name }
 func (m *mockEngine) GetLoadedCharacters() []string           { return []string{m.name} }
-func (m *mockEngine) SwitchCharacter(name string) error       { m.name = name; return nil }
-func (m *mockEngine) GetWorldName() string                    { return "test-world" }
+func (m *mockEngine) GetSceneParticipants() []string          { return []string{m.name} }
+func (m *mockEngine) GetSceneParticipantDetails() []core.ParticipantSummary {
+	if len(m.participantDetails) > 0 {
+		return m.participantDetails
+	}
+	return []core.ParticipantSummary{{Name: m.name, Kind: "persona", Source: "character_definition", Loaded: true, Switchable: true, Present: true, Focus: true}}
+}
+func (m *mockEngine) SwitchCharacter(name string) error { m.name = name; return nil }
+func (m *mockEngine) EnterWorld(path string) (core.ScenarioPreset, error) {
+	m.name = "entered-character"
+	m.world.Path = path
+	m.world.Name = "entered-world"
+	return core.ScenarioPreset{Name: "opening", Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
+}
+func (m *mockEngine) GetWorldName() string { return "test-world" }
 func (m *mockEngine) GetWorldPaths() map[string]string {
 	cfg, _ := m.GetWorldConfig()
 	return map[string]string{m.name: cfg.Path}
 }
+func (m *mockEngine) GetFocusMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
+	return m.GetMemorySnapshot(character, factLimit, episodicLimit, dialogueLimit)
+}
 func (m *mockEngine) GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
 	return core.MemorySnapshot{
-		Character:     m.name,
-		WorkingMemory: "working",
-		Dialogue:      m.dialogue,
+		Character:      m.name,
+		FocusCharacter: m.name,
+		WorkingMemory:  "working",
+		Dialogue:       m.dialogue,
 	}, nil
 }
 func (m *mockEngine) ListSaveSlots() ([]core.SaveSlot, error) {
-	return []core.SaveSlot{{Name: "slot-1", Character: m.name, Branch: "main"}}, nil
+	return []core.SaveSlot{{Name: "slot-1", Character: m.name, FocusCharacter: m.name, Branch: "main"}}, nil
 }
 func (m *mockEngine) CreateSaveSlot(name, branch, note string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, Branch: branch, Note: note}, nil
+	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
 }
 func (m *mockEngine) LoadSaveSlot(name string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, Branch: "main"}, nil
+	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
 }
 func (m *mockEngine) CompareSaveSlots(saveA, saveB string) (core.WorldStateDiff, error) {
 	return core.WorldStateDiff{SaveA: saveA, SaveB: saveB, Tension: &core.StateDiffEntry{A: 0.1, B: 0.2}}, nil
 }
 func (m *mockEngine) ListCheckpoints() ([]core.SaveSlot, error) {
-	return []core.SaveSlot{{Name: "cp-1", Character: m.name, Branch: "main"}}, nil
+	return []core.SaveSlot{{Name: "cp-1", Character: m.name, FocusCharacter: m.name, Branch: "main"}}, nil
 }
 func (m *mockEngine) CreateCheckpoint(name, branch, note string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, Branch: branch, Note: note}, nil
+	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
 }
 func (m *mockEngine) LoadCheckpoint(name string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, Branch: "main"}, nil
+	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
 }
 func (m *mockEngine) ListScenarioPresets() ([]core.ScenarioPreset, error) {
-	return []core.ScenarioPreset{{Name: "preset-1", Character: m.name, Branch: "main"}}, nil
+	return []core.ScenarioPreset{{Name: "preset-1", Character: m.name, FocusCharacter: m.name, Branch: "main"}}, nil
 }
 func (m *mockEngine) CreateScenarioPreset(name, branch, note string) (core.ScenarioPreset, error) {
-	return core.ScenarioPreset{Name: name, Character: m.name, Branch: branch, Note: note}, nil
+	return core.ScenarioPreset{Name: name, Character: m.name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
 }
 func (m *mockEngine) ApplyScenarioPreset(name string) (core.ScenarioPreset, error) {
-	return core.ScenarioPreset{Name: name, Character: m.name, Branch: "main"}, nil
+	return core.ScenarioPreset{Name: name, Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
 }
 func (m *mockEngine) GetNPCActions(name string, since int) []agents.NPCActionLog { return nil }
 func (m *mockEngine) GetCausalityChain(id string, d int) (interface{}, error) {
@@ -412,6 +516,12 @@ func (m *mockEngine) QueryActionLog(character string, fired, blocked bool, limit
 func (m *mockEngine) ActionLogStats() map[string]interface{} {
 	return map[string]interface{}{"total_entries": 0}
 }
+func (m *mockEngine) TickStatus() map[string]interface{} {
+	return map[string]interface{}{"running": true, "tick_count": 0}
+}
+func (m *mockEngine) ManualTick() {}
+func (m *mockEngine) PauseTick()  {}
+func (m *mockEngine) ResumeTick() {}
 
 func newTestServer() *Server {
 	return NewServer(&mockEngine{instanceID: "default", name: "Anya", state: core.WorldState{
@@ -525,9 +635,11 @@ func TestRouteWrongMethod(t *testing.T) {
 		{"/api/character-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/characters", "POST", http.StatusMethodNotAllowed},
 		{"/api/world", "POST", http.StatusMethodNotAllowed},
-		{"/api/worlds", "POST", http.StatusMethodNotAllowed},
+		{"/api/worlds", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/world-config", "DELETE", http.StatusMethodNotAllowed},
+		{"/api/world-structure", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/population", "DELETE", http.StatusMethodNotAllowed},
+		{"/api/population-insights", "POST", http.StatusMethodNotAllowed},
 		{"/api/director-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/trace", "POST", http.StatusMethodNotAllowed},
 		{"/api/traces", "POST", http.StatusMethodNotAllowed},
@@ -594,7 +706,9 @@ func TestRouteValidMethod2xx(t *testing.T) {
 		{"/api/world", "GET"},
 		{"/api/worlds", "GET"},
 		{"/api/world-config", "GET"},
+		{"/api/world-structure", "GET"},
 		{"/api/population", "GET"},
+		{"/api/population-insights", "GET"},
 		{"/api/director-config", "GET"},
 		{"/api/trace", "GET"},
 		{"/api/traces", "GET"},
@@ -828,7 +942,7 @@ func TestInstanceCreateEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	s.Register(mux)
 
-	req := httptest.NewRequest("POST", "/api/instances/create", strings.NewReader(`{"id":"alt","label":"Alt","active_character":"V"}`))
+	req := httptest.NewRequest("POST", "/api/instances/create", strings.NewReader(`{"id":"alt","label":"Alt","focus_character":"V"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -838,6 +952,16 @@ func TestInstanceCreateEndpoint(t *testing.T) {
 	}
 	if _, ok := resolver.engines["alt"]; !ok {
 		t.Fatal("resolver missing created instance")
+	}
+	var payload core.RuntimeInstanceSummary
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode create payload: %v", err)
+	}
+	if payload.FocusCharacter != "V" {
+		t.Fatalf("payload focus_character = %#v, want V", payload.FocusCharacter)
+	}
+	if payload.ActiveCharacter != "V" {
+		t.Fatalf("payload active_character compatibility = %#v, want V", payload.ActiveCharacter)
 	}
 }
 
@@ -1051,6 +1175,68 @@ func TestSwitchRoutePost(t *testing.T) {
 	}
 }
 
+func TestSwitchRouteRejectsNonSwitchableParticipant(t *testing.T) {
+	s := NewServer(&mockEngine{
+		name: "Anya",
+		participantDetails: []core.ParticipantSummary{
+			{Name: "Anya", Kind: "persona", Source: "character_definition", Loaded: true, Switchable: true, Present: true, Focus: true},
+			{Name: "玩家", Kind: "player", Source: "player_role", Loaded: false, Switchable: false, Present: true},
+		},
+	})
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest("POST", "/api/switch", strings.NewReader(`{"character":"玩家"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/switch non-switchable → %d, want 400", rec.Code)
+	}
+}
+
+func TestWorldsRoutePostEntersWorld(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/worlds", strings.NewReader(`{"path":"worlds/neon_block"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/worlds = %d", rec.Code)
+	}
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["character"] != "entered-character" {
+		t.Fatalf("payload = %#v, want entered character", payload)
+	}
+}
+
+func TestWorldsRouteGetIncludesActivePath(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/worlds", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/worlds = %d", rec.Code)
+	}
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["active_path"] == "" {
+		t.Fatalf("payload = %#v, want active_path", payload)
+	}
+}
+
 func TestForkRoutePost(t *testing.T) {
 	s := newTestServer()
 	mux := http.NewServeMux()
@@ -1208,6 +1394,93 @@ func TestPopulationRoutes(t *testing.T) {
 	}
 }
 
+func TestWorldStructureRoutes(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/world-structure", nil)
+	getRec := httptest.NewRecorder()
+	mux.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/world-structure = %d", getRec.Code)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/world-structure", strings.NewReader(`{
+		"ruleset":{"rules":[{"id":"curfew","title":"宵禁","summary":"夜间不得随意出行"}]},
+		"seed":{"premise":"城中戒严","current_situation":"街头搜查","variables":{"alert":"high"}},
+		"factions":[{"id":"guard","name":"巡城司","role":"law"}],
+		"locations":[{"id":"east_gate","name":"东门","kind":"gate"}],
+		"pressures":[{"id":"panic","name":"恐慌","kind":"social","intensity":0.6}]
+	}`))
+	postReq.Header.Set("Content-Type", "application/json")
+	postRec := httptest.NewRecorder()
+	mux.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/world-structure = %d", postRec.Code)
+	}
+}
+
+func TestPopulationInsightsRoute(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/population-insights", nil)
+	getRec := httptest.NewRecorder()
+	mux.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/population-insights = %d", getRec.Code)
+	}
+	var payload core.PopulationInsights
+	if err := json.NewDecoder(getRec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode population insights: %v", err)
+	}
+	if len(payload.Promoted) != 1 || payload.Promoted[0].Name != "茶摊老板" {
+		t.Fatalf("population insights = %#v", payload)
+	}
+}
+
+func TestCharactersRouteUsesParticipantsView(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/characters", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/characters = %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/characters: %v", err)
+	}
+	if payload["active"] != "Anya" {
+		t.Fatalf("active = %#v, want Anya", payload["active"])
+	}
+	if payload["focus_character"] != "Anya" {
+		t.Fatalf("focus_character = %#v, want Anya", payload["focus_character"])
+	}
+	participants, ok := payload["participants"].([]interface{})
+	if !ok || len(participants) != 1 || participants[0] != "Anya" {
+		t.Fatalf("participants = %#v, want [Anya]", payload["participants"])
+	}
+	details, ok := payload["participant_details"].([]interface{})
+	if !ok || len(details) != 1 {
+		t.Fatalf("participant_details = %#v, want 1 item", payload["participant_details"])
+	}
+	detail, ok := details[0].(map[string]interface{})
+	if !ok || detail["name"] != "Anya" {
+		t.Fatalf("participant_details[0] = %#v, want name=Anya", details[0])
+	}
+	characters, ok := payload["characters"].([]interface{})
+	if !ok || len(characters) != 1 || characters[0] != "Anya" {
+		t.Fatalf("characters = %#v, want [Anya]", payload["characters"])
+	}
+}
+
 func TestDirectorConfigRoute(t *testing.T) {
 	s := newTestServer()
 	mux := http.NewServeMux()
@@ -1220,7 +1493,7 @@ func TestDirectorConfigRoute(t *testing.T) {
 		t.Fatalf("GET /api/director-config = %d", getRec.Code)
 	}
 
-	postReq := httptest.NewRequest(http.MethodPost, "/api/director-config", strings.NewReader(`{"mode":"auto_single","max_speakers":1}`))
+	postReq := httptest.NewRequest(http.MethodPost, "/api/director-config", strings.NewReader(`{"mode":"auto_single","max_speakers":1,"weights":{"mentioned":55,"pressure_match":9}}`))
 	postReq.Header.Set("Content-Type", "application/json")
 	postRec := httptest.NewRecorder()
 	mux.ServeHTTP(postRec, postReq)

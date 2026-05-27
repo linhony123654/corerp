@@ -9,10 +9,10 @@ import (
 
 // Snapshot is a point-in-time capture of projected world state.
 type Snapshot struct {
-	Version int              `json:"version"`
-	Tick    int64            `json:"tick"`
-	State   core.WorldState  `json:"state"`
-	Hash    string           `json:"hash"`
+	Version int             `json:"version"`
+	Tick    int64           `json:"tick"`
+	State   core.WorldState `json:"state"`
+	Hash    string          `json:"hash"`
 }
 
 // TakeSnapshot creates a snapshot from the current projection.

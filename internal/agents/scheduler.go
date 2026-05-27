@@ -8,8 +8,8 @@ import (
 	"corerp/internal/core"
 )
 
-// Scheduler drives autonomous actions for non-active characters.
-// P3: rule-based only, no LLM — token budget stays with the active character.
+// Scheduler drives autonomous actions for non-focus characters.
+// P3: rule-based only, no LLM — token budget stays with the focus character.
 type Scheduler struct {
 	lastActionTick map[string]int
 	npcActions     []NPCActionLog // recent action summaries
@@ -38,16 +38,17 @@ func NewScheduler() *Scheduler {
 // Tick processes one NPC action cycle. Returns events to commit and summaries.
 func (s *Scheduler) Tick(
 	characters []string,
-	activeCharacter string,
+	focusCharacter string,
 	charWorlds map[string]core.SceneState,
 	worldState core.WorldState,
 	agentsMgr *EnvelopeManager,
 	executor ActionExecutor,
 	gatekeeper EventSubmitter,
 	currentTick int,
+	structure core.WorldStructureConfig,
 ) {
 	for _, name := range characters {
-		if name == activeCharacter {
+		if name == focusCharacter {
 			continue
 		}
 		lastTick := s.lastActionTick[name]
@@ -70,7 +71,7 @@ func (s *Scheduler) Tick(
 
 		goals := agentsMgr.ActiveGoals(name, npcState, currentTick)
 		planner := NewPlanner()
-		steps := planner.Plan(name, npcState, goals, "")
+		steps := planner.Plan(name, npcState, goals, "", structure)
 		if len(steps) == 0 {
 			continue
 		}

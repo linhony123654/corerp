@@ -149,7 +149,6 @@ func cosineSimilarity(a, b []float64) float64 {
 
 // VectorStore handles vector storage and similarity search.
 type VectorStore struct {
-	db      interface{ Exec(string, ...interface{}) error }
 	embedder *VectorEmbedder
 }
 
@@ -175,9 +174,9 @@ func DecodeVector(data []byte) ([]float64, error) {
 
 // SearchResult holds a single vector search result.
 type VectorSearchResult struct {
-	ID         string  `json:"id"`
-	Score      float64 `json:"score"`
-	Content    string  `json:"content"`
+	ID      string  `json:"id"`
+	Score   float64 `json:"score"`
+	Content string  `json:"content"`
 }
 
 // SearchFacts performs vector similarity search over semantic facts.

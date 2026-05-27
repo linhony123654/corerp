@@ -31,10 +31,10 @@ func CanonicalHashV1(s core.WorldState) string {
 			Minute: s.Clock.Minute,
 			Day:    s.Clock.Day,
 		},
-		Tension:      round6(s.Tension),
-		Flags:        sortedFlags(s.Flags),
+		Tension:       round6(s.Tension),
+		Flags:         sortedFlags(s.Flags),
 		Relationships: sortedRelationships(s.Relationships),
-		Variables:    sortedVariables(s.Variables),
+		Variables:     sortedVariables(s.Variables),
 	}
 	data, _ := json.Marshal(canon)
 	h := sha256.Sum256(data)
@@ -75,12 +75,12 @@ func AppendEventToChain(prevHash string, e *core.Event) {
 // === internal canonical types (stable serialization format) ===
 
 type canonicalState struct {
-	Scene         canonicalScene            `json:"scene"`
-	Clock         canonicalClock            `json:"clock"`
-	Tension       float64                   `json:"tension"`
-	Flags         []canonicalFlag           `json:"flags"`
-	Relationships []canonicalRelationship   `json:"relationships"`
-	Variables     []canonicalVariable       `json:"variables"`
+	Scene         canonicalScene          `json:"scene"`
+	Clock         canonicalClock          `json:"clock"`
+	Tension       float64                 `json:"tension"`
+	Flags         []canonicalFlag         `json:"flags"`
+	Relationships []canonicalRelationship `json:"relationships"`
+	Variables     []canonicalVariable     `json:"variables"`
 }
 
 type canonicalScene struct {

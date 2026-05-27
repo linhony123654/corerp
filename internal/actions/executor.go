@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"corerp/internal/agents"
 	"corerp/internal/core"
 )
 
 // Executor runs ActionFrames and produces Events.
 type Executor struct{}
+
+var _ agents.ActionExecutor = (*Executor)(nil)
 
 func NewExecutor() *Executor {
 	return &Executor{}

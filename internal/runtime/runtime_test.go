@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,12 +22,13 @@ import (
 	"corerp/internal/memory"
 	"corerp/internal/simulation"
 	"corerp/internal/state"
+	"corerp/internal/world"
 )
 
 func TestSyncActiveWorldContextUpdatesSceneAndMetadata(t *testing.T) {
 	engine := &Engine{
-		stateMgr:        state.New(),
-		activeCharacter: "V",
+		stateMgr:       state.New(),
+		focusCharacter: "V",
 		charWorlds: map[string]CharWorld{
 			"V": {
 				WorldName: "Night City",
@@ -55,30 +57,30 @@ func TestSyncActiveWorldContextUpdatesSceneAndMetadata(t *testing.T) {
 	if scene.Location != "Afterlife" {
 		t.Fatalf("scene.Location = %q, want %q", scene.Location, "Afterlife")
 	}
-	if len(scene.Characters) != 2 || scene.Characters[0] != "V" {
-		t.Fatalf("scene.Characters = %#v, want active world characters", scene.Characters)
+	if !containsString(scene.Characters, "V") || !containsString(scene.Characters, "Johnny") || !containsString(scene.Characters, "玩家") {
+		t.Fatalf("scene.Characters = %#v, want scene participants plus player", scene.Characters)
 	}
 }
 
-func TestNormalizeSceneForCharacterReplacesStaleLead(t *testing.T) {
+func TestNormalizeSceneForCharacterPreservesExistingParticipants(t *testing.T) {
 	scene := normalizeSceneForCharacter(core.SceneState{
 		Location:    "废弃地铁站",
 		Characters:  []string{"安雅", "用户"},
 		Description: "test",
 	}, "111", "贾宝玉")
 
-	if len(scene.Characters) != 2 {
-		t.Fatalf("scene.Characters len = %d, want 2", len(scene.Characters))
+	if len(scene.Characters) != 3 {
+		t.Fatalf("scene.Characters len = %d, want 3", len(scene.Characters))
 	}
-	if scene.Characters[0] != "111" || scene.Characters[1] != "贾宝玉" {
-		t.Fatalf("scene.Characters = %#v, want [111 贾宝玉]", scene.Characters)
+	if scene.Characters[0] != "安雅" || scene.Characters[1] != "贾宝玉" || scene.Characters[2] != "111" {
+		t.Fatalf("scene.Characters = %#v, want [安雅 贾宝玉 111]", scene.Characters)
 	}
 }
 
 func TestSyncActiveWorldContextIgnoresUnknownCharacter(t *testing.T) {
 	engine := &Engine{
-		stateMgr:        state.New(),
-		activeCharacter: "Unknown",
+		stateMgr:       state.New(),
+		focusCharacter: "Unknown",
 		charWorlds: map[string]CharWorld{
 			"V": {
 				WorldName: "Night City",
@@ -105,6 +107,94 @@ func TestSyncActiveWorldContextIgnoresUnknownCharacter(t *testing.T) {
 	}
 }
 
+func TestWorldConfigUsesExplicitActiveWorldPath(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "explicit-world")
+	writeTestWorldBundle(t, worldDir, "显式世界", "world first", core.SceneState{
+		Location:    "测试街",
+		TimeOfDay:   "黄昏",
+		Weather:     "阴",
+		Characters:  []string{"玩家"},
+		Description: "显式 world context",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.focusCharacter = "临时视角"
+	engine.activeWorldPath = worldDir
+
+	cfg, err := engine.GetWorldConfig()
+	if err != nil {
+		t.Fatalf("GetWorldConfig: %v", err)
+	}
+	if cfg.Name != "显式世界" {
+		t.Fatalf("cfg.Name = %q, want 显式世界", cfg.Name)
+	}
+}
+
+func TestDirectorLoadsSceneBackgroundNPCsFromPopulation(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "neon-block")
+	copyDir(t, filepath.Join("..", "..", "worlds", "neon_block"), worldDir)
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "霓虹里街区",
+		CoreRules: "world first",
+		Scene: core.SceneState{
+			Location:    "旧街夜市",
+			TimeOfDay:   "深夜",
+			Weather:     "闷热有雨",
+			Characters:  []string{"玩家"},
+			Description: "night market",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	engine.mu.Lock()
+	plan := engine.directTurnLocked("蓝姐怎么看这事？", engine.stateMgr.Get())
+	engine.mu.Unlock()
+
+	if !containsString(plan.Candidates, "蓝姐") {
+		t.Fatalf("director candidates = %#v, want 蓝姐 from scene population", plan.Candidates)
+	}
+	if got := plan.Selected[0]; got != "蓝姐" {
+		t.Fatalf("lead speaker = %q, want 蓝姐", got)
+	}
+	foundDetail := false
+	for _, candidate := range plan.CandidateDetails {
+		if candidate.Name == "蓝姐" {
+			foundDetail = true
+			if !candidate.Selected || !candidate.LocationMatch {
+				t.Fatalf("candidate detail = %#v, want selected scene candidate", candidate)
+			}
+			if !candidate.FactionMatch || !candidate.PressureMatch {
+				t.Fatalf("candidate detail = %#v, want faction and pressure match", candidate)
+			}
+			if candidate.Score <= 0 {
+				t.Fatalf("candidate detail score = %v, want > 0", candidate.Score)
+			}
+			if len(candidate.ScoreBreakdown) == 0 {
+				t.Fatalf("candidate detail breakdown = %#v, want score breakdown", candidate.ScoreBreakdown)
+			}
+			break
+		}
+	}
+	if !foundDetail {
+		t.Fatalf("candidate details = %#v, want 蓝姐 detail", plan.CandidateDetails)
+	}
+	if _, ok := engine.agents.GetCharacter("蓝姐"); !ok {
+		t.Fatalf("background npc 蓝姐 should be loaded into agents")
+	}
+}
+
 func TestUpdatePlayerRoleRewritesScenePresence(t *testing.T) {
 	engine := newMultiCharacterTestEngine(t)
 	engine.SyncActiveWorldContext()
@@ -123,6 +213,57 @@ func TestUpdatePlayerRoleRewritesScenePresence(t *testing.T) {
 	scene := engine.GetState().Scene
 	if len(scene.Characters) < 2 || scene.Characters[1] != "贾宝玉" {
 		t.Fatalf("scene.Characters = %#v, want player role present", scene.Characters)
+	}
+}
+
+func TestSwitchCharacterLoadsSceneParticipantShellWhenMissing(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	engine.SyncActiveWorldContext()
+
+	engine.mu.Lock()
+	state := engine.stateMgr.Get()
+	state.Scene.Characters = []string{"111", "街区观察者"}
+	engine.stateMgr.Set(state)
+	engine.mu.Unlock()
+
+	if _, ok := engine.agents.GetCharacter("街区观察者"); ok {
+		t.Fatalf("街区观察者 should not be preloaded")
+	}
+	if err := engine.SwitchCharacter("街区观察者"); err != nil {
+		t.Fatalf("SwitchCharacter scene participant: %v", err)
+	}
+	if got := engine.GetFocusCharacter(); got != "街区观察者" {
+		t.Fatalf("focus character = %q, want 街区观察者", got)
+	}
+	if _, ok := engine.agents.GetCharacter("街区观察者"); !ok {
+		t.Fatalf("scene participant shell was not loaded")
+	}
+	if !containsString(engine.GetLoadedCharacters(), "街区观察者") {
+		t.Fatalf("loaded characters = %#v, want 街区观察者 present", engine.GetLoadedCharacters())
+	}
+}
+
+func TestDirectorExcludesSceneParticipantShellFromCandidates(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	engine.SyncActiveWorldContext()
+
+	engine.mu.Lock()
+	state := engine.stateMgr.Get()
+	state.Scene.Characters = []string{"蓝姐", "谭叔", "街区观察者", "玩家"}
+	state.Scene.Location = "旧街夜市"
+	engine.stateMgr.Set(state)
+	engine.ensureSceneParticipantLoadedLocked("街区观察者", state.Scene)
+	engine.focusCharacter = "街区观察者"
+	plan := engine.directTurnLocked("你们先说现在怎么回事。", engine.stateMgr.Get())
+	engine.mu.Unlock()
+
+	if containsString(plan.Candidates, "街区观察者") {
+		t.Fatalf("director candidates = %#v, want scene shell excluded", plan.Candidates)
+	}
+	for _, candidate := range plan.CandidateDetails {
+		if candidate.Name == "街区观察者" {
+			t.Fatalf("candidate details = %#v, want no scene shell detail", plan.CandidateDetails)
+		}
 	}
 }
 
@@ -250,6 +391,210 @@ func TestLoadStateThenSyncActiveWorldContextKeepsActiveCharacterScene(t *testing
 	}
 	if msgs := engine.GetDialogueLimit(10); len(msgs) != 2 || msgs[0].Content != "111 hello" {
 		t.Fatalf("dialogue for 111 = %#v, want 111 dialogue restored", msgs)
+	}
+}
+
+func TestNewEngineDefaultsToAutoChainDirector(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	cfg := engine.GetDirectorConfig()
+	if cfg.Mode != "auto_chain" || cfg.MaxSpeakers != 2 {
+		t.Fatalf("director config = %#v, want auto_chain/2", cfg)
+	}
+	if len(cfg.Weights) == 0 {
+		t.Fatalf("director weights = %#v, want default weights", cfg.Weights)
+	}
+}
+
+func TestDirectorConfigCanOverrideWeights(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	cfg := engine.UpdateDirectorConfig(core.DirectorConfig{
+		Mode:        "auto_single",
+		MaxSpeakers: 1,
+		Weights: map[string]float64{
+			"mentioned":      50,
+			"pressure_match": 11,
+		},
+	})
+	if cfg.Weights["mentioned"] != 50 {
+		t.Fatalf("mentioned weight = %v, want 50", cfg.Weights["mentioned"])
+	}
+	if cfg.Weights["pressure_match"] != 11 {
+		t.Fatalf("pressure_match weight = %v, want 11", cfg.Weights["pressure_match"])
+	}
+	if cfg.Weights["present"] == 0 {
+		t.Fatalf("present weight should keep default, got %#v", cfg.Weights)
+	}
+}
+
+func TestWorldSpecificDirectorConfigLoadsOnWorldSwitch(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldA := filepath.Join(root, "world-a")
+	worldB := filepath.Join(root, "world-b")
+	writeTestWorldBundle(t, worldA, "世界A", "rules a", core.SceneState{
+		Location:    "A街",
+		TimeOfDay:   "夜",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "scene a",
+	})
+	writeTestWorldBundle(t, worldB, "世界B", "rules b", core.SceneState{
+		Location:    "B街",
+		TimeOfDay:   "夜",
+		Weather:     "雨",
+		Characters:  []string{"安雅", "玩家"},
+		Description: "scene b",
+	})
+	if _, err := world.SaveDirectorConfig(worldA, core.DirectorConfig{
+		Mode:        "auto_single",
+		MaxSpeakers: 1,
+		Weights:     map[string]float64{"mentioned": 51},
+	}); err != nil {
+		t.Fatalf("save director worldA: %v", err)
+	}
+	if _, err := world.SaveDirectorConfig(worldB, core.DirectorConfig{
+		Mode:        "auto_chain",
+		MaxSpeakers: 2,
+		Weights:     map[string]float64{"mentioned": 93},
+	}); err != nil {
+		t.Fatalf("save director worldB: %v", err)
+	}
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldA,
+		"安雅":  worldB,
+	})
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "世界A",
+		CoreRules: "rules a",
+		Scene:     core.SceneState{Location: "A街", Characters: []string{"111", "玩家"}},
+	}
+	engine.charWorlds["安雅"] = CharWorld{
+		WorldName: "世界B",
+		CoreRules: "rules b",
+		Scene:     core.SceneState{Location: "B街", Characters: []string{"安雅", "玩家"}},
+	}
+
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+	if got := engine.GetDirectorConfig().Weights["mentioned"]; got != 51 {
+		t.Fatalf("world A mentioned weight = %v, want 51", got)
+	}
+
+	if err := engine.SwitchCharacter("安雅"); err != nil {
+		t.Fatalf("SwitchCharacter: %v", err)
+	}
+	if got := engine.GetDirectorConfig().Weights["mentioned"]; got != 93 {
+		t.Fatalf("world B mentioned weight = %v, want 93", got)
+	}
+}
+
+func TestNeonBlockWorldCarriesDirectorDefaults(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "neon-block")
+	copyDir(t, filepath.Join("..", "..", "worlds", "neon_block"), worldDir)
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "霓虹里街区",
+		CoreRules: "world first",
+		Scene:     core.SceneState{Location: "旧街夜市", Characters: []string{"111", "玩家"}},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	cfg := engine.GetDirectorConfig()
+	if cfg.Mode != "auto_chain" || cfg.MaxSpeakers != 2 {
+		t.Fatalf("director config = %#v, want neon block defaults", cfg)
+	}
+	if cfg.Weights["pressure_match"] != 11 || cfg.Weights["hook_match"] != 14 {
+		t.Fatalf("director weights = %#v, want neon block world weights", cfg.Weights)
+	}
+}
+
+func TestNeonBlockWorldPresetCanBeListedAndApplied(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "neon-block")
+	copyDir(t, filepath.Join("..", "..", "worlds", "neon_block"), worldDir)
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"蓝姐":  worldDir,
+		"111": worldDir,
+	})
+	engine.charWorlds["蓝姐"] = CharWorld{
+		WorldName: "霓虹里街区",
+		CoreRules: "world first",
+		Scene:     core.SceneState{Location: "旧街夜市", Characters: []string{"蓝姐", "谭叔", "玩家"}},
+	}
+	engine.focusCharacter = "蓝姐"
+	engine.SyncActiveWorldContext()
+
+	presets, err := engine.ListScenarioPresets()
+	if err != nil {
+		t.Fatalf("ListScenarioPresets: %v", err)
+	}
+	found := false
+	for _, preset := range presets {
+		if preset.Name == "opening_witness_conflict" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("presets = %#v, want opening_witness_conflict", presets)
+	}
+
+	applied, err := engine.ApplyScenarioPreset("opening_witness_conflict")
+	if err != nil {
+		t.Fatalf("ApplyScenarioPreset: %v", err)
+	}
+	if applied.Character != "蓝姐" || applied.Scene.Location != "旧街夜市" {
+		t.Fatalf("applied preset = %#v", applied)
+	}
+	if got := engine.GetState().Scene.Description; !strings.Contains(got, "监控黑屏") {
+		t.Fatalf("scene description = %q, want opening preset scene", got)
+	}
+}
+
+func TestEnterWorldAppliesNeonBlockOpeningPreset(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "neon-block")
+	copyDir(t, filepath.Join("..", "..", "worlds", "neon_block"), worldDir)
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{})
+
+	preset, err := engine.EnterWorld(worldDir)
+	if err != nil {
+		t.Fatalf("EnterWorld: %v", err)
+	}
+	if preset.Name != "opening_witness_conflict" {
+		t.Fatalf("preset.Name = %q, want opening_witness_conflict", preset.Name)
+	}
+	if got := engine.GetFocusCharacter(); got != "蓝姐" {
+		t.Fatalf("focus character = %q, want 蓝姐", got)
+	}
+	if got := engine.GetWorldName(); got != "霓虹里街区" {
+		t.Fatalf("world name = %q, want 霓虹里街区", got)
+	}
+	if engine.GetWorldPaths()["蓝姐"] != worldDir {
+		t.Fatalf("world paths = %#v, want 蓝姐 bound to entered world", engine.GetWorldPaths())
+	}
+	if got := engine.GetState().Scene.Location; got != "旧街夜市" {
+		t.Fatalf("scene location = %q, want 旧街夜市", got)
+	}
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("GetPopulationInsights after EnterWorld: %v", err)
+	}
+	if insights.WorldPath != worldDir {
+		t.Fatalf("population insights world path = %q, want %q", insights.WorldPath, worldDir)
+	}
+	if len(insights.Background) == 0 {
+		t.Fatalf("population insights background = %#v, want neon_block background NPCs", insights.Background)
 	}
 }
 
@@ -493,8 +838,8 @@ goals:
 	if updatedChar.Identity.WritingGuide != "new guide" {
 		t.Fatalf("updated writing guide = %q, want new guide", updatedChar.Identity.WritingGuide)
 	}
-	if got := engine.GetState().Scene.Characters; len(got) == 0 || got[0] != "安雅" {
-		t.Fatalf("scene characters after switch = %#v, want active character first", got)
+	if got := engine.GetState().Scene.Characters; !containsString(got, "安雅") {
+		t.Fatalf("scene characters after switch = %#v, want 安雅 present", got)
 	}
 }
 
@@ -537,7 +882,7 @@ func TestWorldConfigSceneAndFactsEditing(t *testing.T) {
 			Description: "初始场景",
 		},
 	}
-	engine.activeCharacter = "111"
+	engine.focusCharacter = "111"
 	engine.SyncActiveWorldContext()
 
 	cfg, err := engine.GetWorldConfig()
@@ -615,6 +960,9 @@ func TestWorldConfigSceneAndFactsEditing(t *testing.T) {
 	if population.Policy.PromoteThreshold != 10 || population.Path != filepath.ToSlash(filepath.Clean(worldDir)) {
 		t.Fatalf("population defaults = %#v", population)
 	}
+	if len(population.BackgroundNPCs) == 0 {
+		t.Fatalf("population should be auto-seeded, got %#v", population)
+	}
 
 	updatedPopulation, err := engine.UpdatePopulationConfig(core.PopulationConfig{
 		BackgroundNPCs: []core.BackgroundNPC{{
@@ -634,6 +982,240 @@ func TestWorldConfigSceneAndFactsEditing(t *testing.T) {
 	}
 	if len(updatedPopulation.BackgroundNPCs) != 1 || updatedPopulation.Policy.PromoteThreshold != 14 {
 		t.Fatalf("updated population = %#v", updatedPopulation)
+	}
+
+	structure, err := engine.GetWorldStructureConfig()
+	if err != nil {
+		t.Fatalf("GetWorldStructureConfig: %v", err)
+	}
+	if structure.Path != filepath.ToSlash(filepath.Clean(worldDir)) || structure.Ruleset.Path == "" {
+		t.Fatalf("structure defaults = %#v", structure)
+	}
+
+	updatedStructure, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Ruleset: core.WorldRulesetConfig{
+			Rules: []core.WorldRule{{
+				ID:      "night_watch",
+				Title:   "宵禁",
+				Summary: "入夜后外城盘查加严",
+			}},
+		},
+		Seed: core.WorldSeedConfig{
+			Premise:          "旧都已乱",
+			CurrentSituation: "街头戒严",
+			StartingScene:    "宁荣街",
+			TimeAnchor:       "深秋",
+			Stability:        "fragile",
+			Variables: map[string]interface{}{
+				"district_alert": "high",
+			},
+		},
+		Factions: []core.WorldFactionConfig{{
+			ID:          "city_guard",
+			Name:        "巡城司",
+			Role:        "law",
+			Description: "负责夜间盘查",
+		}},
+		Locations: []core.WorldLocationConfig{{
+			ID:         "ningrong_street",
+			Name:       "宁荣街",
+			Kind:       "street",
+			Controller: "巡城司",
+		}},
+		Pressures: []core.WorldPressureConfig{{
+			ID:        "curfew",
+			Name:      "宵禁升级",
+			Kind:      "security",
+			Intensity: 0.7,
+			Target:    "宁荣街",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpdateWorldStructureConfig: %v", err)
+	}
+	if len(updatedStructure.Ruleset.Rules) != 1 || updatedStructure.Seed.StartingScene != "宁荣街" {
+		t.Fatalf("updated structure = %#v", updatedStructure)
+	}
+}
+
+func TestReconcilePopulationPromotesBackgroundNPC(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "population-world")
+	writeTestWorldBundle(t, worldDir, "人口世界", "人物会被世界抬升", core.SceneState{
+		Location:    "镇口",
+		TimeOfDay:   "午后",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "镇口茶摊生意正忙",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "人口世界",
+		CoreRules: "人物会被世界抬升",
+		Scene: core.SceneState{
+			Location:    "镇口",
+			TimeOfDay:   "午后",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "镇口茶摊生意正忙",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	_, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "tea_vendor",
+			Name:     "茶摊老板",
+			Role:     "商贩",
+			Location: "镇口",
+			Traits:   []string{"健谈", "精明"},
+			Hooks:    []string{"想知道最近城里的消息"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   8,
+			MajorThreshold:     20,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 4,
+			SceneWeight:        2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	for _, evt := range []core.Event{
+		{
+			ID:        "pop_evt_1",
+			Type:      "dialogue",
+			Actor:     "茶摊老板",
+			Target:    "111",
+			Payload:   map[string]interface{}{"content": "茶摊老板压低声音，说昨夜巡城司抓了人。"},
+			SceneID:   "镇口",
+			Canonical: true,
+			CreatedAt: time.Now().UTC(),
+		},
+		{
+			ID:        "pop_evt_2",
+			Type:      "trust_change",
+			Actor:     "111",
+			Target:    "茶摊老板",
+			Payload:   map[string]interface{}{"delta": 1.5},
+			SceneID:   "镇口",
+			Canonical: true,
+			CreatedAt: time.Now().UTC().Add(time.Second),
+		},
+		{
+			ID:        "pop_evt_3",
+			Type:      "user_message",
+			Actor:     "user",
+			Target:    "111",
+			Payload:   map[string]interface{}{"content": "我再问问茶摊老板，昨夜到底发生了什么。"},
+			SceneID:   "镇口",
+			Canonical: true,
+			CreatedAt: time.Now().UTC().Add(2 * time.Second),
+		},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+
+	population, err := engine.GetPopulationConfig()
+	if err != nil {
+		t.Fatalf("GetPopulationConfig: %v", err)
+	}
+	if len(population.PromotedNPCs) != 1 {
+		t.Fatalf("promoted npcs = %#v, want 1", population.PromotedNPCs)
+	}
+	promoted := population.PromotedNPCs[0]
+	if promoted.Name != "茶摊老板" || promoted.Status != "major" {
+		t.Fatalf("promoted npc = %#v", promoted)
+	}
+	if promoted.Attention.Score < population.Policy.PromoteThreshold {
+		t.Fatalf("promotion score = %.2f, want >= %.2f", promoted.Attention.Score, population.Policy.PromoteThreshold)
+	}
+	if len(population.IdentityCores) != 1 || population.IdentityCores[0].Name != "茶摊老板" {
+		t.Fatalf("identity cores = %#v", population.IdentityCores)
+	}
+	if got := population.IdentityCores[0].Adaptive["trust"]; got <= 3 {
+		t.Fatalf("identity core trust = %.2f, want > 3 after lived events", got)
+	}
+	if got := population.IdentityCores[0].Adaptive["intimacy"]; got < 0 {
+		t.Fatalf("identity core intimacy = %.2f, want non-negative", got)
+	}
+	char, ok := engine.agents.GetCharacter("茶摊老板")
+	if !ok {
+		t.Fatalf("promoted runtime character not loaded")
+	}
+	if got := char.Identity.Adaptive["trust"]; got <= 3 {
+		t.Fatalf("runtime character trust = %.2f, want > 3 after sync", got)
+	}
+
+	canonical, err := engine.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("GetCanonicalEvents: %v", err)
+	}
+	foundPromotionEvent := false
+	for _, evt := range canonical {
+		if evt.Type == "population_promoted" && evt.Target == "茶摊老板" {
+			foundPromotionEvent = true
+			break
+		}
+	}
+	if !foundPromotionEvent {
+		t.Fatalf("canonical events missing population_promoted: %#v", canonical)
+	}
+}
+
+func TestGetPopulationInsightsSeedsBackgroundPopulation(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "seeded-population-world")
+	writeTestWorldBundle(t, worldDir, "种群世界", "世界里应该先有人", core.SceneState{
+		Location:    "镇口",
+		TimeOfDay:   "午后",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "街面上有人来人往",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "种群世界",
+		CoreRules: "世界里应该先有人",
+		Scene: core.SceneState{
+			Location:    "镇口",
+			TimeOfDay:   "午后",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "街面上有人来人往",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("GetPopulationInsights: %v", err)
+	}
+	if len(insights.Background) == 0 {
+		t.Fatalf("background insights = %#v, want auto-seeded background population", insights)
+	}
+	if insights.Background[0].Name == "" || insights.Background[0].WorldPath == "" {
+		t.Fatalf("background insight missing fields: %#v", insights.Background[0])
 	}
 }
 
@@ -747,8 +1329,8 @@ func TestDirectorAutoSingleSwitchesSpeaker(t *testing.T) {
 	for range ch {
 	}
 
-	if got := engine.GetCharacterName(); got != "安雅" {
-		t.Fatalf("active speaker = %q, want 安雅", got)
+	if got := engine.GetFocusCharacter(); got != "安雅" {
+		t.Fatalf("focus character = %q, want 安雅", got)
 	}
 	plan := engine.GetDirectorPlan()
 	if plan.Mode != "auto_single" || len(plan.Selected) == 0 || plan.Selected[0] != "安雅" {
@@ -793,6 +1375,218 @@ func TestDirectorAutoChainBuildsRoleBasedSteps(t *testing.T) {
 	}
 	if plan.Steps[1].Kind != "addressed_reply" && plan.Steps[1].Kind != "support_response" && plan.Steps[1].Kind != "tension_response" {
 		t.Fatalf("followup kind = %q, want role-based kind", plan.Steps[1].Kind)
+	}
+}
+
+func TestDirectorCanSelectPromotedPopulationNPC(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "promoted-director-world")
+	writeTestWorldBundle(t, worldDir, "晋升世界", "被关注的人会进入叙事前台", core.SceneState{
+		Location:    "镇口",
+		TimeOfDay:   "傍晚",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "镇口有个熟悉的茶摊",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+		"安雅":  worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.worldPaths["安雅"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "晋升世界",
+		CoreRules: "被关注的人会进入叙事前台",
+		Scene: core.SceneState{
+			Location:    "镇口",
+			TimeOfDay:   "傍晚",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "镇口有个熟悉的茶摊",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	_, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "tea_vendor",
+			Name:     "茶摊老板",
+			Role:     "商贩",
+			Location: "镇口",
+			Traits:   []string{"健谈"},
+			Hooks:    []string{"知道街上的风声"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   6,
+			MajorThreshold:     12,
+			InteractionWeight:  3,
+			MentionWeight:      2,
+			EventWeight:        2,
+			RelationshipWeight: 2,
+			SceneWeight:        1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	for _, evt := range []core.Event{
+		{
+			ID:        "dir_pop_1",
+			Type:      "dialogue",
+			Actor:     "茶摊老板",
+			Target:    "111",
+			Payload:   map[string]interface{}{"content": "茶摊老板低声说，昨夜城门外又出事了。"},
+			SceneID:   "镇口",
+			Canonical: true,
+			CreatedAt: time.Now().UTC(),
+		},
+		{
+			ID:        "dir_pop_2",
+			Type:      "user_message",
+			Actor:     "user",
+			Target:    "111",
+			Payload:   map[string]interface{}{"content": "我想先听茶摊老板怎么说。"},
+			SceneID:   "镇口",
+			Canonical: true,
+			CreatedAt: time.Now().UTC().Add(time.Second),
+		},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+	engine.UpdateDirectorConfig(core.DirectorConfig{Mode: "auto_single", MaxSpeakers: 1})
+	engine.stateMgr.Set(core.WorldState{
+		Scene: core.SceneState{
+			Location:   "镇口",
+			Characters: []string{"111", "玩家"},
+		},
+		Relationships: map[string]core.Relationship{},
+		Variables:     map[string]interface{}{},
+		Flags:         map[string]bool{},
+		Tension:       0.4,
+	})
+
+	ch, err := engine.ProcessTurn("茶摊老板，你先说。")
+	if err != nil {
+		t.Fatalf("ProcessTurn: %v", err)
+	}
+	for range ch {
+	}
+
+	plan := engine.GetDirectorPlan()
+	if len(plan.Selected) == 0 || plan.Selected[0] != "茶摊老板" {
+		t.Fatalf("director selected = %#v, want 茶摊老板", plan.Selected)
+	}
+	if got := engine.GetFocusCharacter(); got != "茶摊老板" {
+		t.Fatalf("focus character = %q, want 茶摊老板", got)
+	}
+}
+
+func TestNeonBlockPopulationPromotionLoop(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "neon-block")
+	copyDir(t, filepath.Join("..", "..", "worlds", "neon_block"), worldDir)
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "霓虹里街区",
+		CoreRules: "world first",
+		Scene: core.SceneState{
+			Location:    "旧街夜市",
+			TimeOfDay:   "深夜",
+			Weather:     "闷热有雨",
+			Characters:  []string{"玩家"},
+			Description: "night market",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	now := time.Now().UTC()
+	eventsToAppend := []core.Event{
+		{
+			ID:        "nb_evt_1",
+			Type:      "dialogue",
+			Actor:     "蓝姐",
+			Target:    "玩家",
+			Payload:   map[string]interface{}{"content": "蓝姐压低声音说，监控坏掉前最后一个进店的人神色很怪。"},
+			SceneID:   "旧街夜市",
+			Canonical: true,
+			CreatedAt: now,
+		},
+		{
+			ID:        "nb_evt_2",
+			Type:      "user_message",
+			Actor:     "user",
+			Target:    "玩家",
+			Payload:   map[string]interface{}{"content": "我想先问蓝姐她看见了什么。"},
+			SceneID:   "旧街夜市",
+			Canonical: true,
+			CreatedAt: now.Add(time.Second),
+		},
+		{
+			ID:        "nb_evt_3",
+			Type:      "trust_change",
+			Actor:     "蓝姐",
+			Target:    "玩家",
+			Payload:   map[string]interface{}{"delta": 1.8},
+			SceneID:   "旧街夜市",
+			Canonical: true,
+			CreatedAt: now.Add(2 * time.Second),
+		},
+	}
+	for _, evt := range eventsToAppend {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.mu.Lock()
+	engine.reconcilePopulationLocked()
+	engine.mu.Unlock()
+
+	cfg, err := engine.GetPopulationConfig()
+	if err != nil {
+		t.Fatalf("GetPopulationConfig: %v", err)
+	}
+	foundPromoted := false
+	for _, npc := range cfg.PromotedNPCs {
+		if npc.Name == "蓝姐" {
+			foundPromoted = true
+			if npc.Status == "" {
+				t.Fatalf("promoted npc missing status: %#v", npc)
+			}
+			break
+		}
+	}
+	if !foundPromoted {
+		t.Fatalf("promoted npcs = %#v, want 蓝姐 promoted", cfg.PromotedNPCs)
+	}
+
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("GetPopulationInsights: %v", err)
+	}
+	foundHistory := false
+	for _, npc := range insights.Promoted {
+		if npc.Name == "蓝姐" {
+			foundHistory = len(npc.History) > 0
+			break
+		}
+	}
+	if !foundHistory {
+		t.Fatalf("promoted insights = %#v, want 蓝姐 with promotion history", insights.Promoted)
 	}
 }
 
@@ -1147,8 +1941,8 @@ func TestSwitchCharacterKeepsPersonaSceneAndDialogueAligned(t *testing.T) {
 	if !ok || char.Identity.Name != "111" {
 		t.Fatalf("initial active character = %#v, want 111", char.Identity)
 	}
-	if got := engine.GetState().Scene.Characters; len(got) == 0 || got[0] != "111" {
-		t.Fatalf("initial scene characters = %#v, want 111 first", got)
+	if got := engine.GetState().Scene.Characters; !containsString(got, "111") {
+		t.Fatalf("initial scene characters = %#v, want 111 present", got)
 	}
 	if msgs := engine.GetDialogueLimit(10); len(msgs) == 0 || msgs[0].Content != "111 hello" {
 		t.Fatalf("initial dialogue = %#v, want 111 dialogue", msgs)
@@ -1162,8 +1956,8 @@ func TestSwitchCharacterKeepsPersonaSceneAndDialogueAligned(t *testing.T) {
 	if !ok || char.Identity.Name != "安雅" {
 		t.Fatalf("switched active character = %#v, want 安雅", char.Identity)
 	}
-	if got := engine.GetState().Scene.Characters; len(got) == 0 || got[0] != "安雅" {
-		t.Fatalf("switched scene characters = %#v, want 安雅 first", got)
+	if got := engine.GetState().Scene.Characters; !containsString(got, "安雅") {
+		t.Fatalf("switched scene characters = %#v, want 安雅 present", got)
 	}
 	if msgs := engine.GetDialogueLimit(10); len(msgs) == 0 || msgs[0].Content != "anya hello" {
 		t.Fatalf("switched dialogue = %#v, want 安雅 dialogue", msgs)
@@ -1242,8 +2036,8 @@ func TestSwitchCharacterRoundTripKeepsPerCharacterWorldSceneDialogueAligned(t *t
 		if scene.Location != wantLocation {
 			t.Fatalf("scene.Location = %q, want %q", scene.Location, wantLocation)
 		}
-		if len(scene.Characters) < 2 || scene.Characters[0] != wantChar || scene.Characters[1] != "贾宝玉" {
-			t.Fatalf("scene.Characters = %#v, want [%s 贾宝玉 ...]", scene.Characters, wantChar)
+		if !containsString(scene.Characters, wantChar) || !containsString(scene.Characters, "贾宝玉") {
+			t.Fatalf("scene.Characters = %#v, want %s and 贾宝玉 present", scene.Characters, wantChar)
 		}
 		msgs := engine.GetDialogueLimit(10)
 		if len(msgs) == 0 || msgs[0].Content != wantDialogueFirst {
@@ -1371,8 +2165,8 @@ goals:
 	if err := json.NewDecoder(stateRec.Body).Decode(&stateResp); err != nil {
 		t.Fatalf("decode state: %v", err)
 	}
-	if len(stateResp.Scene.Characters) == 0 || stateResp.Scene.Characters[0] != "安雅" {
-		t.Fatalf("state scene characters = %#v, want 安雅 first", stateResp.Scene.Characters)
+	if !containsString(stateResp.Scene.Characters, "安雅") {
+		t.Fatalf("state scene characters = %#v, want 安雅 present", stateResp.Scene.Characters)
 	}
 }
 
@@ -1440,14 +2234,14 @@ func TestTickLoopSurvivesScaledSeventyTicks(t *testing.T) {
 
 	deadline := time.Now().Add(1500 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		if engine.tickCount >= 70 {
+		if int(engine.tickCount.Load()) >= 70 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	if engine.tickCount < 70 {
-		t.Fatalf("engine tickCount = %d, want >= 70", engine.tickCount)
+	if int(engine.tickCount.Load()) < 70 {
+		t.Fatalf("engine tickCount = %d, want >= 70", int(engine.tickCount.Load()))
 	}
 	if loop.TickCount() < 70 {
 		t.Fatalf("loop tick count = %d, want >= 70", loop.TickCount())
@@ -1473,6 +2267,76 @@ func TestTickLoopSurvivesScaledSeventyTicks(t *testing.T) {
 	}
 	if logs == nil && stats["total_entries"].(int) < 0 {
 		t.Fatalf("unexpected action log state: logs=%#v stats=%#v", logs, stats)
+	}
+}
+
+func TestOnTickInjectsWorldPressureEvents(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "pressure-world")
+	writeTestWorldBundle(t, worldDir, "压力世界", "世界会自己演化", core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "外城正在收紧控制",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "压力世界",
+		CoreRules: "世界会自己演化",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城正在收紧控制",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Pressures: []core.WorldPressureConfig{{
+			ID:          "curfew",
+			Name:        "宵禁升级",
+			Kind:        "security",
+			Description: "夜间搜查正在扩大",
+			Intensity:   0.9,
+			Target:      "外城",
+			Escalates:   []string{"盘查", "抓捕"},
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig: %v", err)
+	}
+
+	engine.onTick()
+
+	state := engine.GetState()
+	if state.Tension <= 0 {
+		t.Fatalf("state tension = %.2f, want positive after pulse", state.Tension)
+	}
+	if got := state.Variables["world.pressure.curfew.last_tick"]; got == nil {
+		t.Fatalf("pressure variable missing, state = %#v", state.Variables)
+	}
+
+	events, err := engine.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("GetCanonicalEvents: %v", err)
+	}
+	foundPressure := false
+	for _, evt := range events {
+		if evt.Type == "world_pressure" && evt.Payload["pressure_id"] == "curfew" {
+			foundPressure = true
+			break
+		}
+	}
+	if !foundPressure {
+		t.Fatalf("canonical events missing world_pressure: %#v", events)
 	}
 }
 
@@ -1505,5 +2369,223 @@ func writeTestWorldBundle(t *testing.T, worldDir, name, rules string, scene core
 	}
 	if err := os.WriteFile(filepath.Join(worldDir, "canon", "ontology.yml"), []byte("ontology:\n  characters: []\n  locations: []\n  factions: []\n  items: []\n  lore: []\n  events: []\n  timelines: []\n  settings: []\n"), 0644); err != nil {
 		t.Fatalf("write ontology.yml: %v", err)
+	}
+}
+
+func copyDir(t *testing.T, src, dst string) {
+	t.Helper()
+	if err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.Create(target)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		if _, err := io.Copy(out, in); err != nil {
+			return err
+		}
+		return out.Chmod(info.Mode())
+	}); err != nil {
+		t.Fatalf("copy dir %s -> %s: %v", src, dst, err)
+	}
+}
+
+func TestPopulationIdentityShiftAccumulates(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "shift-world")
+	writeTestWorldBundle(t, worldDir, "漂移世界", "关系会随事件累积", core.SceneState{
+		Location:    "酒馆",
+		TimeOfDay:   "夜晚",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "酒馆里灯光昏暗",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "漂移世界",
+		CoreRules: "关系会随事件累积",
+		Scene: core.SceneState{
+			Location:    "酒馆",
+			TimeOfDay:   "夜晚",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "酒馆里灯光昏暗",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	_, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "bartender",
+			Name:     "酒保",
+			Role:     "服务生",
+			Location: "酒馆",
+			Traits:   []string{"沉默寡言"},
+			Hooks:    []string{"见过太多秘密"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   5,
+			MajorThreshold:     15,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 3,
+			SceneWeight:        1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	events := []core.Event{
+		{ID: "shift_1", Type: "dialogue", Actor: "酒保", Target: "111", Payload: map[string]interface{}{"content": "酒保低声说了一句"}, SceneID: "酒馆", Canonical: true, CreatedAt: now},
+		{ID: "shift_2", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 2.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(time.Second)},
+		{ID: "shift_3", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 1.5}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(2 * time.Second)},
+		{ID: "shift_4", Type: "fear_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 0.8}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(3 * time.Second)},
+	}
+	for _, evt := range events {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+
+	population, err := engine.GetPopulationConfig()
+	if err != nil {
+		t.Fatalf("GetPopulationConfig: %v", err)
+	}
+	if len(population.PromotedNPCs) != 1 {
+		t.Fatalf("promoted npcs = %#v, want 1", population.PromotedNPCs)
+	}
+	if len(population.IdentityCores) != 1 {
+		t.Fatalf("identity cores = %#v, want 1", population.IdentityCores)
+	}
+
+	core := population.IdentityCores[0]
+	if core.Adaptive["trust"] <= 3 {
+		t.Fatalf("identity core trust = %.2f, want > 3 after multiple trust_change events", core.Adaptive["trust"])
+	}
+	if core.Adaptive["fear"] <= 2 {
+		t.Fatalf("identity core fear = %.2f, want > 2 after fear_change event", core.Adaptive["fear"])
+	}
+
+	char, ok := engine.agents.GetCharacter("酒保")
+	if !ok {
+		t.Fatalf("promoted runtime character not loaded")
+	}
+	if char.Identity.Adaptive["trust"] != core.Adaptive["trust"] {
+		t.Fatalf("runtime character trust = %.2f, want %.2f (synced with identity core)", char.Identity.Adaptive["trust"], core.Adaptive["trust"])
+	}
+}
+
+func TestPopulationInsightsIncludesPromotionReason(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "reason-world")
+	writeTestWorldBundle(t, worldDir, "原因世界", "每次晋升都有原因", core.SceneState{
+		Location:    "广场",
+		TimeOfDay:   "午后",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "广场上人来人往",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "原因世界",
+		CoreRules: "每次晋升都有原因",
+		Scene: core.SceneState{
+			Location:    "广场",
+			TimeOfDay:   "午后",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "广场上人来人往",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	_, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "vendor",
+			Name:     "小贩",
+			Role:     "商贩",
+			Location: "广场",
+			Traits:   []string{"热情"},
+			Hooks:    []string{"知道城里所有八卦"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   5,
+			MajorThreshold:     15,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 2,
+			SceneWeight:        1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	events := []core.Event{
+		{ID: "reason_1", Type: "dialogue", Actor: "小贩", Target: "111", Payload: map[string]interface{}{"content": "小贩说今天生意不错"}, SceneID: "广场", Canonical: true, CreatedAt: now},
+		{ID: "reason_2", Type: "user_message", Actor: "user", Target: "111", Payload: map[string]interface{}{"content": "我想问问小贩有没有见过可疑的人"}, SceneID: "广场", Canonical: true, CreatedAt: now.Add(time.Second)},
+	}
+	for _, evt := range events {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("GetPopulationInsights: %v", err)
+	}
+
+	found := false
+	for _, npc := range insights.Promoted {
+		if npc.Name == "小贩" {
+			found = true
+			if npc.GrowthSummary == "" || npc.GrowthSummary == "尚未被世界卷入" {
+				t.Fatalf("promoted npc growth_summary = %q, want non-empty after promotion", npc.GrowthSummary)
+			}
+			if npc.Adaptive == nil || len(npc.Adaptive) == 0 {
+				t.Fatalf("promoted npc adaptive = %v, want non-empty", npc.Adaptive)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("promoted insights = %#v, want 小贩 promoted", insights.Promoted)
 	}
 }

@@ -114,7 +114,8 @@ paths:
                 id: { type: string }
                 label: { type: string }
                 source_id: { type: string }
-                active_character: { type: string }
+                focus_character: { type: string }
+                active_character: { type: string, description: "兼容旧字段" }
               required: [id]
       responses:
         "200":
@@ -168,6 +169,40 @@ paths:
         "200":
           description: 实例已删除
 
+  /api/trace/latest:
+    get:
+      summary: 获取最近一轮 turn trace
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 单条 trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TurnTrace"
+
+  /api/trace:
+    get:
+      summary: 获取指定轮次 turn trace
+      parameters:
+        - in: query
+          name: turn
+          schema: { type: integer }
+          required: true
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 单条 trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TurnTrace"
+
   /api/traces:
     get:
       summary: 获取最近若干轮 turn trace 历史
@@ -181,6 +216,15 @@ paths:
       responses:
         "200":
           description: trace 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TurnTrace"
 
   /api/checkpoints:
     get:
@@ -192,6 +236,15 @@ paths:
       responses:
         "200":
           description: checkpoint 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkpoints:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SaveSlot"
     post:
       summary: 为当前实例创建 checkpoint
       requestBody:
@@ -208,6 +261,10 @@ paths:
       responses:
         "200":
           description: checkpoint 已创建
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveSlot"
 
   /api/checkpoints/load:
     post:
@@ -224,6 +281,10 @@ paths:
       responses:
         "200":
           description: checkpoint 已加载
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveSlot"
 
   /api/presets:
     get:
@@ -235,8 +296,17 @@ paths:
       responses:
         "200":
           description: preset 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScenarioPreset"
     post:
-      summary: 保存当前 scene/player role/active character 为 scenario preset
+      summary: 保存当前 scene/player role/focus character 为 scenario preset
       requestBody:
         required: true
         content:
@@ -251,6 +321,10 @@ paths:
       responses:
         "200":
           description: preset 已保存
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioPreset"
 
   /api/presets/apply:
     post:
@@ -267,10 +341,14 @@ paths:
       responses:
         "200":
           description: preset 已套用
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioPreset"
 
   /api/character:
     get:
-      summary: 获取当前角色卡
+      summary: 获取当前视角的人物定义
       parameters:
         - in: query
           name: instance_id
@@ -283,20 +361,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/Character"
         "404":
-          description: 角色未找到
+          description: 当前视角未找到对应人物定义
 
   /api/character-config:
     get:
-      summary: 获取当前或指定角色的可编辑配置
+      summary: 获取当前或指定视角的人物定义配置
       parameters:
         - in: query
           name: character
           schema: { type: string }
       responses:
         "200":
-          description: 角色配置
+          description: 人物定义配置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterConfig"
     post:
-      summary: 更新角色卡并回写 YAML
+      summary: 更新人物定义并回写 YAML
       requestBody:
         required: true
         content:
@@ -309,18 +391,64 @@ paths:
                   $ref: "#/components/schemas/Character"
       responses:
         "200":
-          description: 更新后的角色配置
+          description: 更新后的人物定义配置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterConfig"
 
-  /api/characters:
+  /api/director-config:
     get:
-      summary: 获取所有已加载角色列表和当前活跃角色
+      summary: 获取当前导演配置与最近决策
       parameters:
         - in: query
           name: instance_id
           schema: { type: string }
       responses:
         "200":
-          description: 角色列表
+          description: 导演配置
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config:
+                    $ref: "#/components/schemas/DirectorConfig"
+                  plan:
+                    type: object
+    post:
+      summary: 更新导演配置
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DirectorConfig"
+      responses:
+        "200":
+          description: 更新后的导演配置
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config:
+                    $ref: "#/components/schemas/DirectorConfig"
+
+  /api/characters:
+    get:
+      summary: 获取当前场景参与者列表和当前视角
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 当前场景参与者与视角列表
           content:
             application/json:
               schema:
@@ -328,16 +456,27 @@ paths:
                 properties:
                   active:
                     type: string
-                    description: 当前活跃角色名
+                    description: 当前视角名（兼容字段）
+                  focus_character:
+                    type: string
+                    description: 当前视角名
                   characters:
                     type: array
                     items:
                       type: string
-                    description: 所有已加载角色名
+                  participants:
+                    type: array
+                    items:
+                      type: string
+                    description: 当前场景参与者
+                  participant_details:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ParticipantSummary"
 
   /api/switch:
     post:
-      summary: 切换活跃角色
+      summary: 切换当前视角
       parameters:
         - in: query
           name: instance_id
@@ -351,14 +490,14 @@ paths:
               properties:
                 character:
                   type: string
-                  description: 要切换到的角色名
+                  description: 要切换到的参与者名
               required:
                 - character
       responses:
         "200":
           description: 切换成功
         "400":
-          description: 角色未找到
+          description: 目标参与者未找到
 
   /api/world:
     get:
@@ -380,7 +519,7 @@ paths:
 
   /api/memory:
     get:
-      summary: 获取角色记忆快照
+      summary: 获取当前或指定视角的记忆快照
       parameters:
         - in: query
           name: instance_id
@@ -400,6 +539,10 @@ paths:
       responses:
         "200":
           description: 记忆快照
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemorySnapshot"
 
   /api/export:
     get:
@@ -418,6 +561,73 @@ paths:
         "200":
           description: 导出文件
 
+  /api/world-structure:
+    get:
+      summary: 获取当前世界的完整结构配置
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 世界结构配置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorldStructureConfig"
+    post:
+      summary: 更新当前世界的结构配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorldStructureConfig"
+      responses:
+        "200":
+          description: 更新成功
+
+  /api/population:
+    get:
+      summary: 获取当前世界的人口配置
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 人口配置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulationConfig"
+    post:
+      summary: 更新当前世界的人口配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PopulationConfig"
+      responses:
+        "200":
+          description: 更新成功
+
+  /api/population-insights:
+    get:
+      summary: 获取当前世界的人口运行洞察
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 人口洞察
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulationInsights"
+
   /api/saves:
     get:
       summary: 列出世界存档
@@ -428,6 +638,15 @@ paths:
       responses:
         "200":
           description: 存档列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saves:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SaveSlot"
     post:
       summary: 保存当前世界到指定存档名
       parameters:
@@ -447,6 +666,10 @@ paths:
       responses:
         "200":
           description: 新建或覆盖后的存档
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveSlot"
 
   /api/saves/load:
     post:
@@ -467,6 +690,100 @@ paths:
       responses:
         "200":
           description: 已载入的存档
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveSlot"
+
+  /api/sim/status:
+    get:
+      summary: Tick loop 状态查询
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tick 状态
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  running: { type: boolean }
+                  paused: { type: boolean }
+                  tick_count: { type: integer }
+                  world_advance: { type: string }
+                  turn_count: { type: integer }
+                  tick_interval: { type: string }
+                  world_ratio: { type: string }
+                  pressure_states:
+                    type: object
+                    additionalProperties: { type: number }
+                    description: "pressure_id -> 动态 intensity"
+                  faction_tensions:
+                    type: object
+                    additionalProperties: { type: number }
+                    description: "faction_id -> 紧张度"
+                  npc_tick_exposure:
+                    type: object
+                    additionalProperties: { type: integer }
+                    description: "npc_name -> tick 在场累积次数"
+
+  /api/sim/tick:
+    post:
+      summary: 手动触发一次 tick
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tick 执行结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  tick_status:
+                    type: object
+
+  /api/sim/pause:
+    post:
+      summary: 暂停 tick loop
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 暂停成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  paused: { type: boolean }
+
+  /api/sim/resume:
+    post:
+      summary: 恢复 tick loop
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 恢复成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  paused: { type: boolean }
 
 components:
   schemas:
@@ -560,3 +877,321 @@ components:
           type: array
           items: { type: string }
         reveal_condition: { type: string }
+
+    FactFrame:
+      type: object
+      properties:
+        subject: { type: string }
+        predicate: { type: string }
+        object: { type: string }
+        confidence: { type: number }
+
+    EventFrame:
+      type: object
+      properties:
+        event_id: { type: string }
+        type: { type: string }
+        description: { type: string }
+        emotional_weight: { type: number }
+
+    Message:
+      type: object
+      properties:
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+
+    PlayerRole:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        bound_character: { type: string }
+
+    MemorySnapshot:
+      type: object
+      properties:
+        character: { type: string, description: "兼容旧字段" }
+        focus_character: { type: string, description: "当前视角名" }
+        working_memory: { type: string }
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/FactFrame"
+        episodic:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventFrame"
+        dialogue:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+
+    SaveSlot:
+      type: object
+      properties:
+        name: { type: string }
+        branch: { type: string }
+        event_id: { type: string }
+        character: { type: string, description: "兼容旧字段" }
+        focus_character: { type: string, description: "当前视角名" }
+        player_role:
+          $ref: "#/components/schemas/PlayerRole"
+        note: { type: string }
+        preview: { type: string }
+        created_at: { type: string, format: date-time }
+        world_state:
+          $ref: "#/components/schemas/WorldState"
+
+    ScenarioPreset:
+      type: object
+      properties:
+        name: { type: string }
+        branch: { type: string }
+        character: { type: string, description: "兼容旧字段" }
+        focus_character: { type: string, description: "当前视角名" }
+        player_role:
+          $ref: "#/components/schemas/PlayerRole"
+        note: { type: string }
+        preview: { type: string }
+        created_at: { type: string, format: date-time }
+        scene:
+          $ref: "#/components/schemas/SceneState"
+
+    CharacterConfig:
+      type: object
+      properties:
+        character: { type: string, description: "兼容旧字段" }
+        focus_character: { type: string, description: "当前视角名" }
+        path: { type: string }
+        world_path: { type: string }
+        card:
+          $ref: "#/components/schemas/Character"
+
+    ParticipantSummary:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { type: string, description: "player | npc | persona" }
+        source: { type: string, description: "player_role | character_definition | promoted_population | background_population | scene_shell | scene_presence" }
+        world_path: { type: string }
+        loaded: { type: boolean }
+        switchable: { type: boolean }
+        present: { type: boolean }
+        focus: { type: boolean }
+
+    TurnTrace:
+      type: object
+      properties:
+        turn: { type: integer }
+        character: { type: string, description: "兼容旧字段" }
+        user_input: { type: string }
+        director_plan: { type: object }
+        participant_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantSummary"
+        step_traces: { type: array, items: { type: object } }
+        active_goals: { type: array, items: { type: object } }
+        allowed_actions: { type: array, items: { type: string } }
+        memories: { type: array, items: { type: object } }
+        semantic_facts: { type: array, items: { type: object } }
+        episodic_events: { type: array, items: { type: object } }
+        working_memory: { type: string }
+        action_frame: { type: object }
+        validator: { type: object }
+        narrative: { type: string }
+        created_at: { type: string, format: date-time }
+
+    WorldStructureConfig:
+      type: object
+      properties:
+        path: { type: string }
+        seed:
+          type: object
+          properties:
+            premise: { type: string }
+            current_situation: { type: string }
+            starting_scene: { type: string }
+            time_anchor: { type: string }
+            stability: { type: string }
+            variables: { type: object }
+        factions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              role: { type: string }
+              description: { type: string }
+              goals: { type: array, items: { type: string } }
+              relationships: { type: array, items: { type: string } }
+        locations:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              kind: { type: string }
+              description: { type: string }
+              controller: { type: string }
+              tags: { type: array, items: { type: string } }
+        pressures:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              kind: { type: string }
+              description: { type: string }
+              intensity: { type: number }
+              target: { type: string }
+              escalates: { type: array, items: { type: string } }
+        ruleset:
+          type: object
+          properties:
+            rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  title: { type: string }
+                  summary: { type: string }
+                  constraints: { type: array, items: { type: string } }
+                  effects: { type: array, items: { type: string } }
+
+    PopulationConfig:
+      type: object
+      properties:
+        path: { type: string }
+        background_npcs:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              role: { type: string }
+              location: { type: string }
+              faction: { type: string }
+              traits: { type: array, items: { type: string } }
+              hooks: { type: array, items: { type: string } }
+        promoted_npcs:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              from: { type: string }
+              status: { type: string }
+              identity_core: { type: string }
+        identity_cores:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              immutable: { type: array, items: { type: string } }
+              adaptive: { type: object, additionalProperties: { type: number } }
+              speech_hints: { type: array, items: { type: string } }
+              drives: { type: array, items: { type: string } }
+        policy:
+          type: object
+          properties:
+            promote_threshold: { type: number }
+            major_threshold: { type: number }
+            interaction_weight: { type: number }
+            mention_weight: { type: number }
+            event_weight: { type: number }
+            relationship_weight: { type: number }
+            scene_weight: { type: number }
+
+    PopulationInsights:
+      type: object
+      properties:
+        path: { type: string }
+        world_path: { type: string }
+        promoted:
+          type: array
+          items:
+            $ref: "#/components/schemas/PopulationCharacterInsight"
+        background:
+          type: array
+          items:
+            $ref: "#/components/schemas/PopulationCharacterInsight"
+
+    PopulationCharacterInsight:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string }
+        identity_core: { type: string }
+        attention:
+          type: object
+          properties:
+            direct_interactions: { type: integer }
+            mentions: { type: integer }
+            shared_events: { type: integer }
+            relationship_delta: { type: number }
+            scene_carryover: { type: integer }
+            score: { type: number }
+        last_event_id: { type: string }
+        adaptive: { type: object, additionalProperties: { type: number } }
+        immutable: { type: array, items: { type: string } }
+        speech_hints: { type: array, items: { type: string } }
+        drives: { type: array, items: { type: string } }
+        world_path: { type: string }
+        growth_summary: { type: string }
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              event_id: { type: string }
+              type: { type: string }
+              summary: { type: string }
+              adaptive: { type: object, additionalProperties: { type: number } }
+              created_at: { type: string, format: date-time }
+
+    DirectorConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          description: "manual | auto_single | auto_chain"
+        max_speakers:
+          type: integer
+          description: "每轮最大发言者数（1-3）"
+        weights:
+          type: object
+          description: "导演评分权重表"
+          additionalProperties:
+            type: number
+          example:
+            mentioned: 100
+            mention_order: 12
+            continuity: 4
+            present: 8
+            location_match: 9
+            faction_match: 6
+            pressure_match: 7
+            hook_match: 12
+            silence_cap: 12
+            silence_divisor: 5
+            trust: 0.15
+            intimacy: 0.1
+            fear: 0.05
+            opened_by_user: 6
+            tension_switch: 3
+            kind_persona: 3
+            kind_npc: 1
+            source_promoted: 4
+            source_definition: 2
+            source_background: 0
+            loaded: 2

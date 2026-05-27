@@ -13,10 +13,10 @@ import (
 )
 
 type Adapter struct {
-	endpoint   string
-	apiKey     string
-	model      string
-	httpClient *http.Client
+	endpoint         string
+	apiKey           string
+	model            string
+	httpClient       *http.Client
 	promptTokens     int
 	completionTokens int
 }
