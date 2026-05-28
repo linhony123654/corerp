@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"corerp/internal/actions"
 	"corerp/internal/agents"
@@ -150,6 +151,16 @@ func (e *Engine) executeTurnStep(step core.TurnStep, userInput string, turnNumbe
 				evt.SceneID = worldState.Scene.Location
 				if err := e.gatekeeper.Submit(evt, events.SourceActionResult()); err != nil {
 					continue
+				}
+				for _, result := range e.applyDCLRulesForEvent(evt) {
+					trace.Events = append(trace.Events, core.TraceEvent{
+						ID:        "dcl:" + result.ModID + ":" + result.RuleID,
+						Type:      "dcl_rule_applied",
+						Actor:     result.ModID,
+						Target:    evt.ID,
+						Canonical: true,
+						CreatedAt: time.Now().UTC(),
+					})
 				}
 				trace.Events = append(trace.Events, core.TraceEvent{
 					ID:        evt.ID,

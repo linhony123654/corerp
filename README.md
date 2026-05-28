@@ -363,6 +363,12 @@ experiment report 和 replay workflow。
 DCL 安装为独立 world，运行时通过 World 下拉选择进入，当前版本不会把多个
 DCL 自动合并到同一个 world。
 
+DCL 逻辑采用声明式 Rule Engine，不执行 Lua/JS。DCL 可以在 `logic/hooks.yml`
+里声明 `rules`，runtime 在匹配 canonical event 后执行白名单 action：
+`restore_checkpoint`、`set_variable`、`increment_variable`、`add_pressure`、
+`add_memory_flag`、`emit_event`。例如死亡回归不是专用代码，而是
+`event_type: focus_death` 触发恢复最近 checkpoint、增加变量和 pressure。
+
 ## 目录概览
 
 ```text

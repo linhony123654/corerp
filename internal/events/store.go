@@ -551,6 +551,26 @@ func applyEvent(state core.WorldState, e core.Event) core.WorldState {
 			state.Scene.Description = desc
 		}
 
+	case "checkpoint_restore":
+		if raw, ok := e.Payload["world_state"]; ok {
+			data, err := json.Marshal(raw)
+			if err == nil {
+				var restored core.WorldState
+				if err := json.Unmarshal(data, &restored); err == nil {
+					if restored.Relationships == nil {
+						restored.Relationships = map[string]core.Relationship{}
+					}
+					if restored.Variables == nil {
+						restored.Variables = map[string]interface{}{}
+					}
+					if restored.Flags == nil {
+						restored.Flags = map[string]bool{}
+					}
+					state = restored
+				}
+			}
+		}
+
 	case "clock_advance":
 		if h, ok := e.Payload["hour"].(float64); ok {
 			state.Clock.Hour = int(h)

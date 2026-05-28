@@ -35,6 +35,13 @@ type Hook struct {
 	Effect      map[string]interface{} `json:"effect,omitempty" yaml:"effect,omitempty"`
 }
 
+type Rule struct {
+	ID          string                   `json:"id" yaml:"id"`
+	Description string                   `json:"description,omitempty" yaml:"description,omitempty"`
+	When        map[string]interface{}   `json:"when" yaml:"when"`
+	Do          []map[string]interface{} `json:"do" yaml:"do"`
+}
+
 type Mod struct {
 	Path       string                `json:"path"`
 	Manifest   Manifest              `json:"manifest"`
@@ -43,6 +50,7 @@ type Mod struct {
 	Scenes     []core.SceneConfig    `json:"scenes"`
 	Presets    []core.ScenarioPreset `json:"presets"`
 	Hooks      []Hook                `json:"hooks"`
+	Rules      []Rule                `json:"rules"`
 }
 
 type WorldPatch struct {
@@ -103,6 +111,7 @@ type UploadResult struct {
 
 type hooksDoc struct {
 	Hooks []Hook `yaml:"hooks"`
+	Rules []Rule `yaml:"rules"`
 }
 
 type scenesDoc struct {
@@ -191,6 +200,10 @@ func Load(path string) (Mod, error) {
 	if err != nil {
 		return Mod{}, err
 	}
+	rules, err := loadRules(path)
+	if err != nil {
+		return Mod{}, err
+	}
 	return Mod{
 		Path:       filepath.ToSlash(filepath.Clean(path)),
 		Manifest:   manifest,
@@ -199,6 +212,7 @@ func Load(path string) (Mod, error) {
 		Scenes:     scenes,
 		Presets:    presets,
 		Hooks:      hooks,
+		Rules:      rules,
 	}, nil
 }
 
@@ -253,7 +267,7 @@ func Install(root, id, worldsRoot string, opts InstallOptions) (InstallResult, e
 	if err := writePresets(target, mod.Presets); err != nil {
 		return InstallResult{}, err
 	}
-	if err := writeInstalledHooks(target, mod.Manifest.ID, mod.Hooks); err != nil {
+	if err := writeInstalledHooks(target, mod.Manifest.ID, mod.Hooks, mod.Rules); err != nil {
 		return InstallResult{}, err
 	}
 
@@ -263,7 +277,7 @@ func Install(root, id, worldsRoot string, opts InstallOptions) (InstallResult, e
 		Version:     mod.Manifest.Version,
 		WorldPath:   filepath.ToSlash(filepath.Clean(target)),
 		InstalledAt: time.Now().UTC(),
-		HookCount:   len(mod.Hooks),
+		HookCount:   len(mod.Hooks) + len(mod.Rules),
 	}
 	if err := upsertRegistry(root, RegistryEntry{
 		ID:          result.ID,
@@ -562,6 +576,19 @@ func loadHooks(path string) ([]Hook, error) {
 	return raw.Hooks, nil
 }
 
+func loadRules(path string) ([]Rule, error) {
+	var raw hooksDoc
+	for _, file := range []string{
+		filepath.Join(path, "hooks.yml"),
+		filepath.Join(path, "logic", "hooks.yml"),
+	} {
+		if err := readOptionalYAML(file, &raw); err != nil {
+			return nil, err
+		}
+	}
+	return raw.Rules, nil
+}
+
 func writePresets(worldPath string, presets []core.ScenarioPreset) error {
 	if len(presets) == 0 {
 		return nil
@@ -577,15 +604,15 @@ func writePresets(worldPath string, presets []core.ScenarioPreset) error {
 	return os.WriteFile(filepath.Join(worldDir, "presets.yml"), data, 0644)
 }
 
-func writeInstalledHooks(worldPath, modID string, hooks []Hook) error {
-	if len(hooks) == 0 {
+func writeInstalledHooks(worldPath, modID string, hooks []Hook, rules []Rule) error {
+	if len(hooks) == 0 && len(rules) == 0 {
 		return nil
 	}
 	dir := filepath.Join(worldPath, "mods", safeID(modID))
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(hooksDoc{Hooks: hooks})
+	data, err := yaml.Marshal(hooksDoc{Hooks: hooks, Rules: rules})
 	if err != nil {
 		return err
 	}

@@ -2015,6 +2015,95 @@ func TestCreateAndLoadSaveSlotWithoutEvents(t *testing.T) {
 	}
 }
 
+func TestDCLRuleEngineRestoresCheckpointFromDeclarativeRule(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "loop-world")
+	writeTestWorldBundle(t, worldDir, "循环世界", "declarative rules only", core.SceneState{
+		Location:    "安全屋",
+		TimeOfDay:   "夜晚",
+		Weather:     "雨",
+		Characters:  []string{"111", "玩家"},
+		Description: "safe checkpoint",
+	})
+	if err := os.MkdirAll(filepath.Join(worldDir, "mods", "looping_isekai_return"), 0755); err != nil {
+		t.Fatalf("mkdir dcl hooks: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worldDir, "mods", "looping_isekai_return", "hooks.yml"), []byte(`
+rules:
+  - id: return_by_death
+    when:
+      event_type: focus_death
+    do:
+      - restore_checkpoint:
+          name: last_safe_checkpoint
+      - increment_variable:
+          key: loop_count
+          by: 1
+      - add_pressure:
+          id: witch_scent
+          by: 0.15
+      - add_memory_flag:
+          target: focus
+          key: loop_memory
+      - emit_event:
+          type: loop_returned
+`), 0644); err != nil {
+		t.Fatalf("write dcl hooks: %v", err)
+	}
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{"111": worldDir})
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "循环世界",
+		CoreRules: "declarative rules only",
+		Scene: core.SceneState{
+			Location:    "安全屋",
+			TimeOfDay:   "夜晚",
+			Weather:     "雨",
+			Characters:  []string{"111", "玩家"},
+			Description: "safe checkpoint",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+	if _, err := engine.CreateSaveSlot("safe-start", "main", "last safe checkpoint"); err != nil {
+		t.Fatalf("CreateSaveSlot: %v", err)
+	}
+
+	mutated := engine.GetState()
+	mutated.Scene.Location = "死亡巷口"
+	mutated.Scene.Description = "bad end"
+	mutated.Variables = map[string]interface{}{"loop_count": float64(2)}
+	engine.stateMgr.Set(mutated)
+
+	trigger := events.BuildEvent("focus_death", "111", "", map[string]interface{}{"cause": "test"})
+	trigger.ID = "death-1"
+	results := engine.applyDCLRulesForEvent(trigger)
+	if len(results) != 1 || results[0].RuleID != "return_by_death" {
+		t.Fatalf("results = %#v, want return_by_death applied", results)
+	}
+	state := engine.GetState()
+	if state.Scene.Location != "安全屋" {
+		t.Fatalf("scene location = %q, want checkpoint restore", state.Scene.Location)
+	}
+	if got := state.Variables["loop_count"]; numberValue(got) != 1 {
+		t.Fatalf("loop_count = %#v, want 1 after restored checkpoint increment", got)
+	}
+	if !state.Flags["memory_flag.111.loop_memory"] {
+		t.Fatalf("flags = %#v, want focus memory flag", state.Flags)
+	}
+	if state.Tension < 0.15 {
+		t.Fatalf("tension = %.2f, want pressure delta applied", state.Tension)
+	}
+
+	projected, err := engine.gatekeeper.Replay().ReplayTo("", "main")
+	if err != nil {
+		t.Fatalf("ReplayTo all: %v", err)
+	}
+	if projected.Scene.Location != "安全屋" || numberValue(projected.Variables["loop_count"]) != 1 {
+		t.Fatalf("projected = %#v, want checkpoint_restore and variable_set to survive projection", projected)
+	}
+}
+
 func TestLoadSaveSlotPrefersFocusCharacterOverLegacyCharacter(t *testing.T) {
 	engine := newMultiCharacterTestEngine(t)
 	engine.ConfigurePersistence(t.TempDir(), map[string]string{}, map[string]string{})
