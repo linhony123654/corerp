@@ -358,8 +358,10 @@ POST /api/dcl/remove    {"id":"looping_isekai_return","delete_world":false,"dele
 
 安装后会生成一个普通 world 目录，后续仍走 world-first runtime、checkpoint、
 experiment report 和 replay workflow。
-作者控制台的 World 分组提供 DCL 面板，可上传 ZIP、启用、关闭、删除安装出的
-world，或删除本地 `.dcl` 包目录。
+作者控制台的 World 分组提供 DCL 面板，可上传 ZIP、查看详情、启用、关闭、
+删除安装出的 world，或删除本地 `.dcl` 包目录。可以同时启用多个 DCL；每个
+DCL 安装为独立 world，运行时通过 World 下拉选择进入，当前版本不会把多个
+DCL 自动合并到同一个 world。
 
 ## 目录概览
 

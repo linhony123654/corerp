@@ -2093,7 +2093,7 @@ select { cursor: pointer; }
               <option value="false">不覆盖已有 DCL / World</option>
               <option value="true">允许覆盖已有 DCL / World</option>
             </select></label>
-            <div class="workflow-subtitle">DCL 只安装声明式 world/population/scenes/presets patches 与 hooks，不执行 Lua 或脚本。</div>
+            <div class="workflow-subtitle">DCL 只安装声明式 world/population/scenes/presets patches 与 hooks，不执行 Lua 或脚本。可以同时启用多个 DCL；每个 DCL 会生成独立 world，切换运行时请从 World 下拉选择。</div>
             <div class="list-stack" id="dcl-list"><div class="note-box">暂无 DCL mods</div></div>
           </div>
         </section>
@@ -2274,6 +2274,19 @@ select { cursor: pointer; }
       <textarea id="world-create-rules" rows="4" placeholder="核心规则（可选）&#10;例如：&#10;1. 世界状态只能通过 committed events 改变。&#10;2. NPC 的行动受地点和关系驱动。"></textarea>
       <button class="mini-button" id="world-create-submit" type="button">创建</button>
     </div>
+  </div>
+</div>
+
+<div id="dcl-detail-modal" class="modal" style="display:none">
+  <div class="modal-content" style="max-width:640px;width:90vw">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="dcl-detail-title">DCL 详情</div>
+        <div class="row-subtitle" id="dcl-detail-status" style="margin-top:6px"></div>
+      </div>
+      <button class="modal-close" id="dcl-detail-close" type="button">×</button>
+    </div>
+    <div id="dcl-detail-body" class="input-stack"></div>
   </div>
 </div>
 

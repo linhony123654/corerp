@@ -167,6 +167,11 @@ const els = {
   dclUploadFile: $('dcl-upload-file'),
   dclOverwrite: $('dcl-overwrite'),
   dclList: $('dcl-list'),
+  dclDetailModal: $('dcl-detail-modal'),
+  dclDetailClose: $('dcl-detail-close'),
+  dclDetailTitle: $('dcl-detail-title'),
+  dclDetailStatus: $('dcl-detail-status'),
+  dclDetailBody: $('dcl-detail-body'),
   worldCreateBtn: $('world-create-btn'),
   worldCreateModal: $('world-create-modal'),
   worldCreateClose: $('world-create-close'),
@@ -5969,6 +5974,7 @@ function renderDCLMods() {
   if (!els.dclList) {
     return;
   }
+  const installedCount = state.dclMods.filter(mod => mod.installed).length;
   const items = state.dclMods.map(mod => {
     const id = safeText(mod.id, '');
     const encodedID = encodeURIComponent(id);
@@ -5985,7 +5991,7 @@ function renderDCLMods() {
       ? `<button type="button" class="ghost-button danger-button" data-dcl-delete-world="${encodedID}">关闭并删除 World</button>`
       : '';
     return `
-      <div class="interactive-row">
+      <div class="interactive-row" data-dcl-detail="${encodedID}" tabindex="0" role="button" aria-label="查看 DCL ${htmlText(mod.name || mod.id)} 详情">
         <div class="row-main">
           <div class="row-title">${htmlText(mod.name || mod.id)} · ${htmlText(mod.version || '0.1.0')}</div>
           <div class="row-subtitle">${htmlText(mod.description || '声明式 world pack')}</div>
@@ -6001,13 +6007,86 @@ function renderDCLMods() {
       </div>
     `;
   });
-  renderInfoList('dcl-list', items, '暂无 DCL mods');
+  const summary = state.dclMods.length
+    ? [`<div class="note-box">已发现 ${state.dclMods.length} 个 DCL，已启用 ${installedCount} 个。多 DCL 可同时启用；它们各自生成独立 world，不会自动混合到同一个运行世界。</div>`]
+    : [];
+  renderInfoList('dcl-list', [...summary, ...items], '暂无 DCL mods');
+}
+
+function findDCLMod(id) {
+  return state.dclMods.find(mod => String(mod.id || '') === String(id || '')) || null;
+}
+
+function openDCLDetail(id) {
+  const mod = findDCLMod(id);
+  if (!mod || !els.dclDetailModal) {
+    return;
+  }
+  const encodedID = encodeURIComponent(mod.id || '');
+  const tags = Array.isArray(mod.tags) && mod.tags.length ? mod.tags.map(tag => `<span class="tag">${htmlText(tag)}</span>`).join('') : '<span class="tag">无标签</span>';
+  els.dclDetailTitle.textContent = `${mod.name || mod.id || 'DCL'} · ${mod.version || '0.1.0'}`;
+  els.dclDetailStatus.textContent = mod.installed
+    ? `已启用 · world: ${mod.world_path || '--'}`
+    : '未启用 · 可安装成独立 world';
+  els.dclDetailBody.innerHTML = `
+    <div class="note-box">${htmlText(mod.description || '声明式 CoreRP world pack')}</div>
+    <div class="interactive-row">
+      <div class="row-main">
+        <div class="row-title">运行方式</div>
+        <div class="row-subtitle">DCL 可以同时启用多个。每个 DCL 安装为独立 world，运行时通过 World 下拉选择进入；当前版本不会把多个 DCL patch 自动合并到同一个 world。</div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="note-box mono">id: ${htmlText(mod.id || '--')}</div>
+      <div class="note-box mono">entry_world: ${htmlText(mod.entry_world || mod.id || '--')}</div>
+      <div class="note-box mono">package: ${htmlText(mod.path || '--')}</div>
+      <div class="note-box mono">world: ${htmlText(mod.world_path || '--')}</div>
+    </div>
+    <div class="row-subtitle" style="display:flex;gap:4px;flex-wrap:wrap;">${tags}</div>
+    <div class="row-actions" style="justify-content:flex-start;margin-top:8px">
+      ${mod.installed
+        ? `<button type="button" class="ghost-button" data-dcl-remove="${encodedID}">关闭</button><button type="button" class="ghost-button danger-button" data-dcl-delete-world="${encodedID}">关闭并删除 World</button>`
+        : `<button type="button" class="ghost-button" data-dcl-install="${encodedID}">启用</button>`}
+      <button type="button" class="ghost-button danger-button" data-dcl-delete-package="${encodedID}">删除包</button>
+    </div>
+  `;
+  els.dclDetailModal.style.display = 'flex';
+}
+
+function closeDCLDetail() {
+  if (els.dclDetailModal) {
+    els.dclDetailModal.style.display = 'none';
+  }
+}
+
+function handleDCLActionNode(node) {
+  if (!node) {
+    return false;
+  }
+  if (node.dataset.dclInstall) {
+    installDCLMod(decodeURIComponent(node.dataset.dclInstall));
+    return true;
+  }
+  if (node.dataset.dclRemove) {
+    removeDCLMod(decodeURIComponent(node.dataset.dclRemove));
+    return true;
+  }
+  if (node.dataset.dclDeleteWorld) {
+    removeDCLMod(decodeURIComponent(node.dataset.dclDeleteWorld), { deleteWorld: true });
+    return true;
+  }
+  if (node.dataset.dclDeletePackage) {
+    removeDCLMod(decodeURIComponent(node.dataset.dclDeletePackage), { deletePackage: true });
+    return true;
+  }
+  return false;
 }
 
 async function installDCLMod(id) {
   if (!id) {
     return;
   }
+  closeDCLDetail();
   const overwrite = els.dclOverwrite?.value === 'true';
   const resp = await apiFetch('/api/dcl/install', {
     method: 'POST',
@@ -6028,6 +6107,7 @@ async function removeDCLMod(id, options = {}) {
   if (!id) {
     return;
   }
+  closeDCLDetail();
   const deleteWorld = Boolean(options.deleteWorld);
   const deletePackage = Boolean(options.deletePackage);
   const action = deletePackage
@@ -6814,18 +6894,38 @@ function bindEvents() {
   if (els.dclList) {
     els.dclList.addEventListener('click', event => {
       const node = event.target.closest('button');
-      if (!node) {
+      if (handleDCLActionNode(node)) {
+        event.stopPropagation();
         return;
       }
-      if (node.dataset.dclInstall) {
-        installDCLMod(decodeURIComponent(node.dataset.dclInstall));
-      } else if (node.dataset.dclRemove) {
-        removeDCLMod(decodeURIComponent(node.dataset.dclRemove));
-      } else if (node.dataset.dclDeleteWorld) {
-        removeDCLMod(decodeURIComponent(node.dataset.dclDeleteWorld), { deleteWorld: true });
-      } else if (node.dataset.dclDeletePackage) {
-        removeDCLMod(decodeURIComponent(node.dataset.dclDeletePackage), { deletePackage: true });
+      const row = event.target.closest('[data-dcl-detail]');
+      if (row) {
+        openDCLDetail(decodeURIComponent(row.dataset.dclDetail));
       }
+    });
+    els.dclList.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      const row = event.target.closest('[data-dcl-detail]');
+      if (!row) {
+        return;
+      }
+      event.preventDefault();
+      openDCLDetail(decodeURIComponent(row.dataset.dclDetail));
+    });
+  }
+  if (els.dclDetailClose) {
+    els.dclDetailClose.addEventListener('click', closeDCLDetail);
+  }
+  if (els.dclDetailModal) {
+    els.dclDetailModal.addEventListener('click', event => {
+      if (event.target === els.dclDetailModal) {
+        closeDCLDetail();
+        return;
+      }
+      const node = event.target.closest('button');
+      handleDCLActionNode(node);
     });
   }
   if (els.worldCreateModal) {
