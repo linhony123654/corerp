@@ -163,7 +163,7 @@ type Memory struct {
 	ID        string    `json:"id"`
 	Type      string    `json:"type"` // short_term, working, semantic, episodic
 	Content   string    `json:"content"`
-	Character string    `json:"character"` // actor/focus persona key; kept for compatibility
+	Character string    `json:"character,omitempty"` // actor/focus persona key; kept for compatibility
 	Score     float64   `json:"score"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -171,7 +171,7 @@ type Memory struct {
 // MemorySnapshot is scoped to one focus persona.
 // Character is retained as the legacy JSON field name for that focus key.
 type MemorySnapshot struct {
-	Character      string       `json:"character"`
+	Character      string       `json:"character,omitempty"`
 	FocusCharacter string       `json:"focus_character,omitempty"`
 	WorkingMemory  string       `json:"working_memory"`
 	Facts          []FactFrame  `json:"facts"`
@@ -184,7 +184,7 @@ type SaveSlot struct {
 	Name           string     `json:"name"`
 	Branch         string     `json:"branch"`
 	EventID        string     `json:"event_id"`
-	Character      string     `json:"character"` // focus persona at save time; kept for compatibility
+	Character      string     `json:"character,omitempty"` // focus persona at save time; kept for compatibility
 	FocusCharacter string     `json:"focus_character,omitempty"`
 	PlayerRole     PlayerRole `json:"player_role"`
 	Note           string     `json:"note"`
@@ -197,7 +197,7 @@ type SaveSlot struct {
 type ScenarioPreset struct {
 	Name           string     `json:"name" yaml:"name"`
 	Branch         string     `json:"branch" yaml:"branch"`
-	Character      string     `json:"character" yaml:"character"` // default focus persona; kept for compatibility
+	Character      string     `json:"character,omitempty" yaml:"character,omitempty"` // default focus persona; kept for compatibility
 	FocusCharacter string     `json:"focus_character,omitempty" yaml:"focus_character,omitempty"`
 	PlayerRole     PlayerRole `json:"player_role" yaml:"player_role"`
 	Note           string     `json:"note" yaml:"note"`
@@ -206,10 +206,86 @@ type ScenarioPreset struct {
 	Scene          SceneState `json:"scene" yaml:"scene"`
 }
 
+// ExperimentSnapshot stores a structured simulation outcome snapshot for one instance.
+// FocusCharacter is the viewpoint for that snapshot; LatestTrace should mirror it.
+type ExperimentSnapshot struct {
+	InstanceID           string               `json:"instance_id"`
+	Label                string               `json:"label"`
+	WorldName            string               `json:"world_name"`
+	FocusCharacter       string               `json:"focus_character"`
+	Participants         []string             `json:"participants,omitempty"`
+	ParticipantDetails   []ParticipantSummary `json:"participant_details,omitempty"`
+	SceneLocation        string               `json:"scene_location,omitempty"`
+	SceneDescription     string               `json:"scene_description,omitempty"`
+	TickCount            int                  `json:"tick_count"`
+	TurnCount            int                  `json:"turn_count"`
+	Tension              float64              `json:"tension"`
+	PressureStates       map[string]float64   `json:"pressure_states,omitempty"`
+	FactionTensions      map[string]float64   `json:"faction_tensions,omitempty"`
+	NPCTickExposure      map[string]int       `json:"npc_tick_exposure,omitempty"`
+	PopulationHighlights []string             `json:"population_highlights,omitempty"`
+	Diagnostics          []string             `json:"diagnostics,omitempty"`
+	LastTickSummary      []string             `json:"last_tick_summary,omitempty"`
+	TickHistory          []TickSnapshot       `json:"tick_history,omitempty"`
+	TrajectorySummary    []string             `json:"trajectory_summary,omitempty"`
+	DirectorPlan         *DirectorPlan        `json:"director_plan,omitempty"`
+	LatestTrace          *TurnTrace           `json:"latest_trace,omitempty"`
+}
+
+// ExperimentReport archives a reproducible authoring comparison between instances.
+type ExperimentReport struct {
+	Name              string              `json:"name"`
+	Note              string              `json:"note,omitempty"`
+	BatchCount        int                 `json:"batch_count"`
+	SourceInstanceID  string              `json:"source_instance_id"`
+	CompareInstanceID string              `json:"compare_instance_id,omitempty"`
+	CurrentCheckpoint string              `json:"current_checkpoint,omitempty"`
+	CompareCheckpoint string              `json:"compare_checkpoint,omitempty"`
+	OutcomeSummary    []string            `json:"outcome_summary,omitempty"`
+	Conclusion        []string            `json:"conclusion,omitempty"`
+	Current           ExperimentSnapshot  `json:"current"`
+	Compare           *ExperimentSnapshot `json:"compare,omitempty"`
+	CreatedAt         time.Time           `json:"created_at"`
+}
+
+// ExperimentReplayResult captures the concrete replay branches created from
+// an archived experiment report.
+type ExperimentReplayResult struct {
+	ReportName        string                  `json:"report_name"`
+	CurrentCheckpoint string                  `json:"current_checkpoint,omitempty"`
+	CompareCheckpoint string                  `json:"compare_checkpoint,omitempty"`
+	CurrentInstance   *RuntimeInstanceSummary `json:"current_instance,omitempty"`
+	CompareInstance   *RuntimeInstanceSummary `json:"compare_instance,omitempty"`
+	CreatedAt         time.Time               `json:"created_at"`
+}
+
+// RuntimeAuditSnapshot consolidates the author-facing runtime evidence needed
+// to explain the current world trajectory without switching across panels.
+type RuntimeAuditSnapshot struct {
+	InstanceID         string                 `json:"instance_id"`
+	Instance           RuntimeInstanceSummary `json:"instance"`
+	State              WorldState             `json:"state"`
+	PlayerRole         PlayerRole             `json:"player_role"`
+	FocusCharacter     string                 `json:"focus_character"`
+	Participants       []string               `json:"participants,omitempty"`
+	ParticipantDetails []ParticipantSummary   `json:"participant_details,omitempty"`
+	SimStatus          map[string]interface{} `json:"sim_status,omitempty"`
+	DirectorConfig     DirectorConfig         `json:"director_config"`
+	DirectorPlan       DirectorPlan           `json:"director_plan"`
+	LatestTrace        *TurnTrace             `json:"latest_trace,omitempty"`
+	RecentTraces       []TurnTrace            `json:"recent_traces,omitempty"`
+	Population         PopulationInsights     `json:"population"`
+	Checkpoints        []SaveSlot             `json:"checkpoints,omitempty"`
+	Presets            []ScenarioPreset       `json:"presets,omitempty"`
+	ExperimentReports  []ExperimentReport     `json:"experiment_reports,omitempty"`
+	AuditSummary       []string               `json:"audit_summary,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+}
+
 // CharacterConfig is the editable definition for a focus persona.
 // Character is retained as the legacy identifier field name.
 type CharacterConfig struct {
-	Character      string    `json:"character"`
+	Character      string    `json:"character,omitempty"`
 	FocusCharacter string    `json:"focus_character,omitempty"`
 	Path           string    `json:"path"`
 	WorldPath      string    `json:"world_path"`
@@ -405,9 +481,11 @@ type CanonFactsConfig struct {
 	Facts []FactFrame `json:"facts"`
 }
 
+// PendingFact stores a proposed semantic fact for one focus persona.
+// Character is retained as the legacy field name for that focus key.
 type PendingFact struct {
 	ID             string    `json:"id"`
-	Character      string    `json:"character"`
+	Character      string    `json:"character,omitempty"`
 	FocusCharacter string    `json:"focus_character,omitempty"`
 	Subject        string    `json:"subject"`
 	Predicate      string    `json:"predicate"`
@@ -435,15 +513,14 @@ type ParticipantSummary struct {
 	Focus      bool   `json:"focus,omitempty"`
 }
 
+// RuntimeInstanceSummary exposes the current world-first runtime view for one instance.
 type RuntimeInstanceSummary struct {
 	ID                 string               `json:"id"`
 	Label              string               `json:"label"`
 	WorldName          string               `json:"world_name"`
-	ActiveCharacter    string               `json:"active_character"`
-	FocusCharacter     string               `json:"focus_character,omitempty"`
-	LoadedCharacters   []string             `json:"loaded_characters"`
-	Participants       []string             `json:"participants,omitempty"`
-	ParticipantDetails []ParticipantSummary `json:"participant_details,omitempty"`
+	FocusCharacter     string               `json:"focus_character,omitempty"`     // current viewpoint only
+	Participants       []string             `json:"participants,omitempty"`        // scene truth
+	ParticipantDetails []ParticipantSummary `json:"participant_details,omitempty"` // unified participant model
 	CreatedAt          time.Time            `json:"created_at"`
 	IsDefault          bool                 `json:"is_default"`
 	Status             string               `json:"status"`
@@ -465,6 +542,7 @@ type DirectorPlan struct {
 	Selected         []string            `json:"selected"`
 	Candidates       []string            `json:"candidates"`
 	CandidateDetails []DirectorCandidate `json:"candidate_details,omitempty"`
+	WorldSignals     []string            `json:"world_signals,omitempty"`
 	Steps            []TurnStep          `json:"steps"`
 	Reason           string              `json:"reason"`
 	Switched         bool                `json:"switched"`
@@ -472,21 +550,22 @@ type DirectorPlan struct {
 }
 
 type DirectorCandidate struct {
-	Name           string             `json:"name"`
-	Score          float64            `json:"score"`
-	Reason         string             `json:"reason,omitempty"`
-	Kind           string             `json:"kind,omitempty"`
-	Source         string             `json:"source,omitempty"`
-	Loaded         bool               `json:"loaded,omitempty"`
-	Switchable     bool               `json:"switchable,omitempty"`
-	Mentioned      bool               `json:"mentioned,omitempty"`
-	Present        bool               `json:"present,omitempty"`
-	LocationMatch  bool               `json:"location_match,omitempty"`
-	FactionMatch   bool               `json:"faction_match,omitempty"`
-	PressureMatch  bool               `json:"pressure_match,omitempty"`
-	HookMatch      bool               `json:"hook_match,omitempty"`
-	ScoreBreakdown map[string]float64 `json:"score_breakdown,omitempty"`
-	Selected       bool               `json:"selected,omitempty"`
+	Name            string             `json:"name"`
+	Score           float64            `json:"score"`
+	Reason          string             `json:"reason,omitempty"`
+	Kind            string             `json:"kind,omitempty"`
+	Source          string             `json:"source,omitempty"`
+	Loaded          bool               `json:"loaded,omitempty"`
+	Switchable      bool               `json:"switchable,omitempty"`
+	Mentioned       bool               `json:"mentioned,omitempty"`
+	Present         bool               `json:"present,omitempty"`
+	LocationMatch   bool               `json:"location_match,omitempty"`
+	FactionMatch    bool               `json:"faction_match,omitempty"`
+	PressureMatch   bool               `json:"pressure_match,omitempty"`
+	HookMatch       bool               `json:"hook_match,omitempty"`
+	ScoreBreakdown  map[string]float64 `json:"score_breakdown,omitempty"`
+	DominantFactors []string           `json:"dominant_factors,omitempty"`
+	Selected        bool               `json:"selected,omitempty"`
 }
 
 type StateDiffEntry struct {
@@ -561,9 +640,11 @@ type StepHandoff struct {
 	Events         []TraceEvent `json:"events"`
 }
 
+// TurnStepTrace records one executed speaker step.
+// Character is retained as the legacy field name for the step speaker.
 type TurnStepTrace struct {
 	Step           TurnStep       `json:"step"`
-	Character      string         `json:"character"`
+	Character      string         `json:"character,omitempty"`
 	Handoff        *StepHandoff   `json:"handoff,omitempty"`
 	ActiveGoals    []TraceGoal    `json:"active_goals"`
 	AllowedActions []string       `json:"allowed_actions"`
@@ -580,9 +661,30 @@ type TurnStepTrace struct {
 	Error          string         `json:"error,omitempty"`
 }
 
+type TickSnapshot struct {
+	Tick                 int64                    `json:"tick"`
+	Tension              float64                  `json:"tension"`
+	PressureStates       map[string]float64       `json:"pressure_states,omitempty"`
+	FactionTensions      map[string]float64       `json:"faction_tensions,omitempty"`
+	PopulationHighlights []string                 `json:"population_highlights,omitempty"`
+	Diagnostics          []map[string]interface{} `json:"diagnostics,omitempty"`
+	Summary              []string                 `json:"summary,omitempty"`
+	CreatedAt            time.Time                `json:"created_at"`
+}
+
+type WorldMetrics struct {
+	Tension              float64            `json:"tension"`
+	PressureStates       map[string]float64 `json:"pressure_states,omitempty"`
+	FactionTensions      map[string]float64 `json:"faction_tensions,omitempty"`
+	NPCExposure          map[string]int     `json:"npc_exposure,omitempty"`
+	PopulationHighlights []string           `json:"population_highlights,omitempty"`
+}
+
+// TurnTrace records one authored/runtime turn from a specific viewpoint.
+// Character is retained as the legacy field name for that focus persona.
 type TurnTrace struct {
 	Turn               int                  `json:"turn"`
-	Character          string               `json:"character"`
+	Character          string               `json:"character,omitempty"`
 	FocusCharacter     string               `json:"focus_character,omitempty"`
 	UserInput          string               `json:"user_input"`
 	DirectorPlan       DirectorPlan         `json:"director_plan"`
@@ -597,6 +699,7 @@ type TurnTrace struct {
 	ActionFrame        ActionFrame          `json:"action_frame"`
 	Validator          ValidatorTrace       `json:"validator"`
 	Narrative          string               `json:"narrative"`
+	WorldMetrics       WorldMetrics         `json:"world_metrics,omitempty"`
 	CreatedAt          time.Time            `json:"created_at"`
 }
 

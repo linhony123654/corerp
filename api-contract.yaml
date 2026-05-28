@@ -77,11 +77,11 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: WorldState JSON
+          description: WorldState JSON 与当前 runtime 视图
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WorldState"
+                $ref: "#/components/schemas/StatePayload"
 
   /api/instances:
     get:
@@ -89,6 +89,16 @@ paths:
       responses:
         "200":
           description: 实例列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  default: { type: string }
+                  instances:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RuntimeInstancePayload"
 
   /api/instances/status:
     get:
@@ -100,6 +110,10 @@ paths:
       responses:
         "200":
           description: 实例摘要
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeInstancePayload"
 
   /api/instances/create:
     post:
@@ -115,11 +129,14 @@ paths:
                 label: { type: string }
                 source_id: { type: string }
                 focus_character: { type: string }
-                active_character: { type: string, description: "兼容旧字段" }
               required: [id]
       responses:
         "200":
           description: 新实例摘要
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeInstancePayload"
 
   /api/instances/default:
     post:
@@ -346,6 +363,157 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScenarioPreset"
 
+  /api/experiment-reports:
+    get:
+      summary: 列出当前实例的实验归档
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: 实验归档列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ExperimentReport"
+    post:
+      summary: 保存当前实验归档
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentReport"
+      responses:
+        "200":
+          description: 已保存实验归档
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentReport"
+
+  /api/experiment-reports/replay:
+    post:
+      summary: 从单个实验归档派生 replay branches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+              required: [name]
+      responses:
+        "200":
+          description: replay branches 摘要
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentReplayPayload"
+
+  /api/experiment-reports/replay-batch:
+    post:
+      summary: 按全部或指定 world_name 批量派生实验 replay branches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                world_name: { type: string }
+                report_names:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: 批量 replay 结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentReplayBatchPayload"
+
+  /api/experiment-reports/replay-advance:
+    post:
+      summary: 按指定 replay branches 批量推进实验复现实例 ticks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                world_name: { type: string }
+                report_names:
+                  type: array
+                  items: { type: string }
+                count:
+                  type: integer
+                replays:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ExperimentReplayAdvanceEntry"
+              required: [count, replays]
+      responses:
+        "200":
+          description: 批量推进 replay 结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentReplayBatchPayload"
+
+  /api/proof-audits:
+    get:
+      summary: 列出最近落盘的长期 proof audit 归档
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: proof audit 归档列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProofAuditListPayload"
+
+  /api/runtime-audit:
+    get:
+      summary: 聚合当前实例的 sim / trace / population / archive 审计视图
+      parameters:
+        - in: query
+          name: instance_id
+          schema: { type: string }
+        - in: query
+          name: trace_limit
+          schema: { type: integer }
+        - in: query
+          name: checkpoint_limit
+          schema: { type: integer }
+        - in: query
+          name: preset_limit
+          schema: { type: integer }
+        - in: query
+          name: report_limit
+          schema: { type: integer }
+        - in: query
+          name: population_limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 统一 runtime audit 载荷
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeAuditPayload"
+
   /api/character:
     get:
       summary: 获取当前视角的人物定义
@@ -454,16 +622,9 @@ paths:
               schema:
                 type: object
                 properties:
-                  active:
-                    type: string
-                    description: 当前视角名（兼容字段）
                   focus_character:
                     type: string
                     description: 当前视角名
-                  characters:
-                    type: array
-                    items:
-                      type: string
                   participants:
                     type: array
                     items:
@@ -488,11 +649,11 @@ paths:
             schema:
               type: object
               properties:
-                character:
+                focus_character:
                   type: string
                   description: 要切换到的参与者名
               required:
-                - character
+                - focus_character
       responses:
         "200":
           description: 切换成功
@@ -910,7 +1071,6 @@ components:
     MemorySnapshot:
       type: object
       properties:
-        character: { type: string, description: "兼容旧字段" }
         focus_character: { type: string, description: "当前视角名" }
         working_memory: { type: string }
         facts:
@@ -932,7 +1092,6 @@ components:
         name: { type: string }
         branch: { type: string }
         event_id: { type: string }
-        character: { type: string, description: "兼容旧字段" }
         focus_character: { type: string, description: "当前视角名" }
         player_role:
           $ref: "#/components/schemas/PlayerRole"
@@ -947,7 +1106,6 @@ components:
       properties:
         name: { type: string }
         branch: { type: string }
-        character: { type: string, description: "兼容旧字段" }
         focus_character: { type: string, description: "当前视角名" }
         player_role:
           $ref: "#/components/schemas/PlayerRole"
@@ -960,7 +1118,6 @@ components:
     CharacterConfig:
       type: object
       properties:
-        character: { type: string, description: "兼容旧字段" }
         focus_character: { type: string, description: "当前视角名" }
         path: { type: string }
         world_path: { type: string }
@@ -979,11 +1136,283 @@ components:
         present: { type: boolean }
         focus: { type: boolean }
 
+    RuntimeInstancePayload:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        world_name: { type: string }
+        focus_character: { type: string, description: "当前视角名" }
+        participants:
+          type: array
+          items:
+            type: string
+        participant_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantSummary"
+        created_at:
+          type: string
+          format: date-time
+        is_default:
+          type: boolean
+        status:
+          type: string
+
+    ExperimentSnapshot:
+      type: object
+      properties:
+        instance_id: { type: string }
+        label: { type: string }
+        world_name: { type: string }
+        focus_character: { type: string }
+        participants:
+          type: array
+          items: { type: string }
+        participant_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantSummary"
+        scene_location: { type: string }
+        scene_description: { type: string }
+        tick_count: { type: integer }
+        turn_count: { type: integer }
+        tension: { type: number }
+        pressure_states:
+          type: object
+          additionalProperties: { type: number }
+        faction_tensions:
+          type: object
+          additionalProperties: { type: number }
+        npc_tick_exposure:
+          type: object
+          additionalProperties: { type: integer }
+        population_highlights:
+          type: array
+          items: { type: string }
+        diagnostics:
+          type: array
+          items: { type: string }
+        last_tick_summary:
+          type: array
+          items: { type: string }
+        tick_history:
+          type: array
+          items: { type: object }
+        trajectory_summary:
+          type: array
+          items: { type: string }
+        director_plan:
+          type: object
+        latest_trace:
+          $ref: "#/components/schemas/TurnTrace"
+
+    ExperimentReport:
+      type: object
+      properties:
+        name: { type: string }
+        note: { type: string }
+        batch_count: { type: integer }
+        source_instance_id: { type: string }
+        compare_instance_id: { type: string }
+        current_checkpoint: { type: string }
+        compare_checkpoint: { type: string }
+        outcome_summary:
+          type: array
+          items: { type: string }
+        conclusion:
+          type: array
+          items: { type: string }
+        current:
+          $ref: "#/components/schemas/ExperimentSnapshot"
+        compare:
+          $ref: "#/components/schemas/ExperimentSnapshot"
+        created_at:
+          type: string
+          format: date-time
+
+    ExperimentReplayPayload:
+      type: object
+      properties:
+        report_name: { type: string }
+        world_name: { type: string }
+        current_checkpoint: { type: string }
+        compare_checkpoint: { type: string }
+        current_instance:
+          $ref: "#/components/schemas/RuntimeInstancePayload"
+        compare_instance:
+          $ref: "#/components/schemas/RuntimeInstancePayload"
+        current_evidence:
+          $ref: "#/components/schemas/ExperimentReplayEvidencePayload"
+        compare_evidence:
+          $ref: "#/components/schemas/ExperimentReplayEvidencePayload"
+        created_at:
+          type: string
+          format: date-time
+
+    ExperimentReplayEvidencePayload:
+      type: object
+      properties:
+        sim_status:
+          type: object
+        latest_trace:
+          $ref: "#/components/schemas/TurnTrace"
+        population:
+          $ref: "#/components/schemas/PopulationInsights"
+        audit_summary:
+          type: array
+          items: { type: string }
+
+    ExperimentReplayBatchItem:
+      type: object
+      properties:
+        report_name: { type: string }
+        world_name: { type: string }
+        replay:
+          $ref: "#/components/schemas/ExperimentReplayPayload"
+        error: { type: string }
+
+    ExperimentReplayAdvanceEntry:
+      type: object
+      properties:
+        report_name: { type: string }
+        world_name: { type: string }
+        current_instance_id: { type: string }
+        compare_instance_id: { type: string }
+
+    ExperimentReplayBatchPayload:
+      type: object
+      properties:
+        mode: { type: string }
+        world_name: { type: string }
+        count: { type: integer }
+        total: { type: integer }
+        successes:
+          type: array
+          items: { type: string }
+        failures:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentReplayBatchItem"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentReplayBatchItem"
+        created_at:
+          type: string
+          format: date-time
+
+    ProofAuditFilePayload:
+      type: object
+      properties:
+        name: { type: string }
+        size: { type: integer }
+
+    ProofAuditPayload:
+      type: object
+      properties:
+        name: { type: string }
+        created_at:
+          type: string
+          format: date-time
+        overall: { type: string }
+        summary_path: { type: string }
+        summary_preview: { type: string }
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProofAuditFilePayload"
+
+    ProofAuditListPayload:
+      type: object
+      properties:
+        root: { type: string }
+        count: { type: integer }
+        proof_audits:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProofAuditPayload"
+
+    StatePayload:
+      allOf:
+        - $ref: "#/components/schemas/WorldState"
+        - type: object
+          properties:
+            instance_id: { type: string }
+            instance:
+              $ref: "#/components/schemas/RuntimeInstancePayload"
+            focus_character: { type: string, description: "当前视角名" }
+            participants:
+              type: array
+              items:
+                type: string
+            participant_details:
+              type: array
+              items:
+                $ref: "#/components/schemas/ParticipantSummary"
+            director_config:
+              $ref: "#/components/schemas/DirectorConfig"
+            director_plan:
+              type: object
+            latest_trace:
+              $ref: "#/components/schemas/TurnTrace"
+
+    RuntimeAuditPayload:
+      type: object
+      properties:
+        instance_id: { type: string }
+        instance:
+          $ref: "#/components/schemas/RuntimeInstancePayload"
+        state:
+          $ref: "#/components/schemas/WorldState"
+        player_role:
+          $ref: "#/components/schemas/PlayerRole"
+        focus_character: { type: string }
+        participants:
+          type: array
+          items: { type: string }
+        participant_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantSummary"
+        sim_status:
+          type: object
+        director_config:
+          $ref: "#/components/schemas/DirectorConfig"
+        director_plan:
+          type: object
+        latest_trace:
+          $ref: "#/components/schemas/TurnTrace"
+        recent_traces:
+          type: array
+          items:
+            $ref: "#/components/schemas/TurnTrace"
+        population:
+          type: object
+        checkpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaveSlot"
+        presets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioPreset"
+        experiment_reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentReport"
+        audit_summary:
+          type: array
+          items: { type: string }
+        created_at:
+          type: string
+          format: date-time
+
     TurnTrace:
       type: object
       properties:
         turn: { type: integer }
-        character: { type: string, description: "兼容旧字段" }
+        focus_character: { type: string, description: "当前视角名" }
         user_input: { type: string }
         director_plan: { type: object }
         participant_details:

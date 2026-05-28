@@ -24,6 +24,12 @@ func TestManagerRegisterResolveAndList(t *testing.T) {
 		worldName:        "Night City",
 		instanceCreated:  time.Now().UTC(),
 	}
+	engine.stateMgr.Set(core.WorldState{
+		Scene: core.SceneState{
+			Location:   "Afterlife",
+			Characters: []string{"Rogue", "Panam"},
+		},
+	})
 
 	if err := mgr.Register("default", "Primary Runtime", engine, true); err != nil {
 		t.Fatalf("register: %v", err)
@@ -43,22 +49,17 @@ func TestManagerRegisterResolveAndList(t *testing.T) {
 	}
 	got := summaries[0]
 	want := core.RuntimeInstanceSummary{
-		ID:               "default",
-		Label:            "Primary Runtime",
-		WorldName:        "Night City",
-		ActiveCharacter:  "V",
-		FocusCharacter:   "V",
-		LoadedCharacters: []string{"V", "Johnny"},
-		IsDefault:        true,
+		ID:             "default",
+		Label:          "Primary Runtime",
+		WorldName:      "Night City",
+		FocusCharacter: "V",
+		IsDefault:      true,
 	}
 	if got.ID != want.ID || got.Label != want.Label || got.WorldName != want.WorldName || got.FocusCharacter != want.FocusCharacter || !got.IsDefault {
 		t.Fatalf("summary = %#v, want core fields %#v", got, want)
 	}
-	if got.ActiveCharacter != want.ActiveCharacter {
-		t.Fatalf("active character compatibility = %q, want %q", got.ActiveCharacter, want.ActiveCharacter)
-	}
-	if len(got.LoadedCharacters) != 2 || got.LoadedCharacters[0] != "V" {
-		t.Fatalf("loaded characters = %#v", got.LoadedCharacters)
+	if len(got.Participants) != 2 || got.Participants[0] != "Rogue" || got.Participants[1] != "Panam" {
+		t.Fatalf("participants = %#v, want scene truth [Rogue Panam]", got.Participants)
 	}
 	if got.Status != InstanceStatusRunning {
 		t.Fatalf("status = %q, want %q", got.Status, InstanceStatusRunning)

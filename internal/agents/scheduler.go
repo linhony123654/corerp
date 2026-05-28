@@ -11,10 +11,11 @@ import (
 // Scheduler drives autonomous actions for non-focus characters.
 // P3: rule-based only, no LLM — token budget stays with the focus character.
 type Scheduler struct {
-	lastActionTick map[string]int
-	npcActions     []NPCActionLog // recent action summaries
-	actionInterval int            // ticks between NPC actions (default 3)
-	maxSummaryLog  int
+	lastActionTick   map[string]int
+	npcActions       []NPCActionLog // recent action summaries
+	actionInterval   int            // ticks between NPC actions (default 3)
+	maxSummaryLog    int
+	randomStepChance float64
 }
 
 // NPCActionLog records a human-readable summary of an NPC action.
@@ -29,10 +30,28 @@ type NPCActionLog struct {
 
 func NewScheduler() *Scheduler {
 	return &Scheduler{
-		lastActionTick: make(map[string]int),
-		actionInterval: 3,
-		maxSummaryLog:  50,
+		lastActionTick:   make(map[string]int),
+		actionInterval:   3,
+		maxSummaryLog:    50,
+		randomStepChance: 0.2,
 	}
+}
+
+func (s *Scheduler) SetActionInterval(interval int) {
+	if interval < 0 {
+		interval = 0
+	}
+	s.actionInterval = interval
+}
+
+func (s *Scheduler) SetRandomStepChance(chance float64) {
+	if chance < 0 {
+		chance = 0
+	}
+	if chance > 1 {
+		chance = 1
+	}
+	s.randomStepChance = chance
 }
 
 // Tick processes one NPC action cycle. Returns events to commit and summaries.
@@ -76,15 +95,10 @@ func (s *Scheduler) Tick(
 			continue
 		}
 
-		// Pick highest-priority step
-		best := steps[0]
-		for _, s := range steps {
-			if s.Priority > best.Priority {
-				best = s
-			}
-		}
+		// Pick adaptive-aware best step so long-term identity drift affects scheduler output.
+		best := selectAdaptiveBestStep(steps, char.Identity.Adaptive)
 		// Add noise: 20% chance to pick a random step for variety
-		if rand.Float64() < 0.2 && len(steps) > 1 {
+		if rand.Float64() < s.randomStepChance && len(steps) > 1 {
 			best = steps[rand.Intn(len(steps))]
 		}
 
@@ -154,6 +168,81 @@ func (s *Scheduler) buildSummary(name string, step PlanStep, char core.Character
 	default:
 		return fmt.Sprintf("%s 做了一些事（%s）。", name, step.Action)
 	}
+}
+
+func selectAdaptiveBestStep(steps []PlanStep, adaptive map[string]float64) PlanStep {
+	best := steps[0]
+	bestScore := adaptiveStepPriority(best, adaptive)
+	for _, step := range steps[1:] {
+		score := adaptiveStepPriority(step, adaptive)
+		if score > bestScore {
+			best = step
+			bestScore = score
+			continue
+		}
+		if score == bestScore && step.Priority > best.Priority {
+			best = step
+			bestScore = score
+		}
+	}
+	return best
+}
+
+func adaptiveStepPriority(step PlanStep, adaptive map[string]float64) int {
+	score := step.Priority
+	if len(adaptive) == 0 {
+		return score
+	}
+	trust := adaptive["trust"]
+	intimacy := adaptive["intimacy"]
+	fear := adaptive["fear"]
+	aggression := adaptive["aggression"]
+
+	switch step.Action {
+	case "trust":
+		if trust >= 7 || intimacy >= 6 {
+			score += 3
+		}
+		if trust <= 3 && aggression >= 5 {
+			score--
+		}
+	case "speak", "negotiate":
+		if trust >= 6 {
+			score++
+		}
+		if fear >= 6 {
+			score++
+		}
+	case "hide":
+		if fear >= 6 {
+			score += 3
+		}
+	case "move":
+		if fear >= 6 {
+			score += 2
+		}
+	case "threaten":
+		if trust >= 7 || intimacy >= 6 {
+			score -= 4
+		}
+		if aggression >= 5 && trust <= 4 {
+			score += 3
+		}
+		if fear >= 7 {
+			score -= 2
+		}
+	case "attack":
+		if trust >= 7 || intimacy >= 6 {
+			score -= 5
+		}
+		if aggression >= 6 && trust <= 4 && fear <= 6 {
+			score += 3
+		}
+		if fear >= 6 {
+			score -= 3
+		}
+	}
+	return score
 }
 
 // RecentActions returns summaries since the given tick.

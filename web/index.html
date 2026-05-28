@@ -1618,11 +1618,21 @@ select { cursor: pointer; }
           </div>
           <div class="stack">
             <div class="note-box" id="instance-summary">默认实例：--</div>
+            <div class="field-grid" style="grid-template-columns:1fr 1fr;gap:6px">
+              <label class="field" style="margin:0">
+                <span class="field-label">对照实例</span>
+                <select id="instance-compare-select">
+                  <option value="">不对照</option>
+                </select>
+              </label>
+              <div class="note-box" id="instance-compare-summary" style="margin:0">当前未启用实例对照</div>
+            </div>
             <div class="input-stack">
               <input id="instance-create-id" type="text" placeholder="新实例 ID，例如 alt-night-city">
               <input id="instance-create-label" type="text" placeholder="显示名称，可留空">
-              <input id="instance-create-character" type="text" placeholder="初始视角，可留空继承当前实例">
+              <input id="instance-create-focus" type="text" placeholder="初始视角，可留空继承当前实例">
               <button class="mini-button" id="instance-create-btn" type="button">创建实例</button>
+              <button class="mini-button" id="instance-create-experiment-btn" type="button">创建实验分支</button>
             </div>
           </div>
           <div class="list-stack" id="instance-list" style="margin-top:12px">
@@ -1645,6 +1655,9 @@ select { cursor: pointer; }
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
             <button class="mini-button" id="sim-tick-btn">手动 Tick</button>
+            <input id="sim-batch-count" type="number" min="1" max="200" value="12" style="width:84px" aria-label="批量 tick 数">
+            <button class="mini-button" id="sim-batch-btn">批量 Tick</button>
+            <button class="mini-button" id="sim-batch-compare-btn">双实例同步推进</button>
             <button class="mini-button" id="sim-pause-btn">暂停</button>
             <button class="mini-button" id="sim-resume-btn" style="display:none">恢复</button>
           </div>
@@ -1653,6 +1666,53 @@ select { cursor: pointer; }
             <div id="sim-pressure-states">暂无 pressure 动态数据</div>
             <div id="sim-faction-tensions" style="margin-top:4px">暂无 faction 紧张度数据</div>
             <div id="sim-npc-exposure" style="margin-top:4px">暂无 NPC 累积数据</div>
+            <div id="sim-population-highlights" style="margin-top:4px">暂无 population 摘要</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">运行诊断</div>
+          <div id="sim-diagnostics-panel" style="font-size:11px;color:var(--fg-muted)">
+            <div id="sim-diagnostics">暂无诊断建议</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">长期总结</div>
+          <div id="sim-trajectory-panel" style="font-size:11px;color:var(--fg-muted)">
+            <div id="sim-trajectory-summary">暂无长期总结</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">最近 Tick</div>
+          <div id="sim-last-tick-panel" style="font-size:11px;color:var(--fg-muted)">
+            <div id="sim-last-tick-summary">暂无最近变化摘要</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">近期轨迹</div>
+          <div id="sim-tick-history-panel" style="font-size:11px;color:var(--fg-muted)">
+            <div id="sim-tick-history">暂无近期轨迹</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">状态对照</div>
+          <div id="sim-compare-panel" style="font-size:11px;color:var(--fg-muted)">
+            <div id="sim-compare-summary">暂无对照摘要</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">实例分叉</div>
+          <div id="sim-instance-compare-panel" style="font-size:11px;color:var(--fg-muted)">
+            <div id="sim-instance-compare-summary">当前未启用实例对照</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">实验结论</div>
+          <div id="sim-experiment-panel" style="font-size:11px;color:var(--fg-muted)">
+            <div id="sim-experiment-summary">当前未生成实验结论</div>
+          </div>
+          <div class="panel-section-label" style="font-size:11px;margin:8px 0 4px">实验归档</div>
+          <div class="input-stack" style="margin-bottom:8px">
+            <input id="sim-report-name" type="text" placeholder="报告名，例如 neon-guard-120t">
+            <input id="sim-report-note" type="text" placeholder="备注，可选">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="mini-button" id="sim-report-save-btn" type="button">保存实验报告</button>
+              <button class="mini-button" id="sim-report-refresh-btn" type="button">刷新归档</button>
+              <button class="mini-button" id="sim-report-batch-replay-btn" type="button">批量派生复现</button>
+              <button class="mini-button" id="sim-report-batch-refresh-btn" type="button">批量刷新复现</button>
+              <button class="mini-button" id="sim-report-export-json-btn" type="button">导出当前 JSON</button>
+              <button class="mini-button" id="sim-report-export-md-btn" type="button">导出当前 MD</button>
+              <button class="mini-button" id="sim-report-export-baseline-json-btn" type="button">导出基线 JSON</button>
+              <button class="mini-button" id="sim-report-export-baseline-md-btn" type="button">导出基线 MD</button>
+            </div>
+          </div>
+          <div id="sim-report-list" style="font-size:11px;color:var(--fg-muted)">
+            <div class="note-box">暂无实验归档</div>
           </div>
         </section>
         </div>
@@ -1775,6 +1835,36 @@ select { cursor: pointer; }
           </div>
           <div class="list-stack" id="pan-action-log" style="margin-top:12px">
             <div class="note-box">暂无记录</div>
+          </div>
+        </section>
+
+        <section class="panel-card panel-span-2 panel-group-item" data-panel-group="authoring">
+          <div class="panel-card-header">
+            <div class="panel-title">Runtime Audit</div>
+            <div class="panel-actions">
+              <select id="runtime-audit-filter" class="ghost-button" style="padding-right:28px">
+                <option value="all">全部证据</option>
+                <option value="trace">Trace / Director</option>
+                <option value="world">World / Population</option>
+                <option value="archive">Archive / Replay</option>
+              </select>
+              <select id="runtime-audit-cause" class="ghost-button" style="padding-right:28px">
+                <option value="all">全部原因</option>
+                <option value="director">Director</option>
+                <option value="pressure">Pressure</option>
+                <option value="faction">Faction</option>
+                <option value="population">Population</option>
+                <option value="archive">Archive</option>
+              </select>
+              <button class="mini-button" id="runtime-audit-refresh-btn" type="button">刷新</button>
+            </div>
+          </div>
+          <div class="workflow-subtitle">把 sim、trace、population、checkpoint、preset、experiment report 集中到一处，先按原因筛，再按阶段回放，最后决定去哪一块深挖。</div>
+          <div class="list-stack" id="runtime-audit-summary" style="margin-top:12px">
+            <div class="note-box">暂无统一审计摘要</div>
+          </div>
+          <div class="list-stack" id="runtime-audit-panel" style="margin-top:12px">
+            <div class="note-box">暂无统一审计数据</div>
           </div>
         </section>
 
@@ -2040,7 +2130,7 @@ select { cursor: pointer; }
             </div>
             <div class="metric-box">
               <span class="k">当前视角</span>
-              <span class="v compact" id="pending-character">--</span>
+              <span class="v compact" id="pending-focus">--</span>
             </div>
           </div>
           <div class="list-stack" id="pending-facts-list" style="margin-top:12px">
@@ -2168,6 +2258,6 @@ select { cursor: pointer; }
   </div>
 </div>
 
-<script src="/app.js?v=20260526h"></script>
+<script src="/app.js?v=20260527b"></script>
 </body>
 </html>

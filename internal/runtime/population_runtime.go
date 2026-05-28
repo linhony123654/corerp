@@ -5,11 +5,15 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"corerp/internal/core"
+	"corerp/internal/emotion"
 	"corerp/internal/events"
 	"corerp/internal/world"
 )
+
+const populationAttentionEventWindow = 72 * time.Hour
 
 type populationSceneCandidate struct {
 	Name          string
@@ -35,7 +39,7 @@ func (e *Engine) reconcilePopulationLocked() {
 		return
 	}
 
-	updated, changed, promoted, identityShifts := reconcilePopulationConfig(cfg, e.stateMgr.Get(), eventList, e.npcTickExposure, e.factionEng)
+	updated, changed, promoted, demoted, identityShifts := reconcilePopulationConfig(cfg, e.stateMgr.Get(), eventList, e.npcTickExposure, e.factionEng)
 	if !changed {
 		return
 	}
@@ -43,6 +47,7 @@ func (e *Engine) reconcilePopulationLocked() {
 		return
 	}
 	e.ensurePromotedCharactersLoadedLocked(path, updated)
+	e.refreshPopulationDesiresLocked(updated, promoted, identityShifts)
 	for _, npc := range promoted {
 		evt := events.BuildEvent("population_promoted", "system", npc.Name, map[string]interface{}{
 			"npc_id":        npc.ID,
@@ -50,6 +55,17 @@ func (e *Engine) reconcilePopulationLocked() {
 			"status":        npc.Status,
 			"identity_core": npc.IdentityCore,
 			"score":         npc.Attention.Score,
+		})
+		evt.Tag = core.TagSystem
+		_ = e.gatekeeper.Submit(evt, events.SourceSystem())
+	}
+	for _, npc := range demoted {
+		evt := events.BuildEvent("population_demoted", "system", npc.Name, map[string]interface{}{
+			"npc_id":        npc.ID,
+			"npc_name":      npc.Name,
+			"identity_core": npc.IdentityCore,
+			"score":         npc.Attention.Score,
+			"reason":        "attention fell below demotion threshold",
 		})
 		evt.Tag = core.TagSystem
 		_ = e.gatekeeper.Submit(evt, events.SourceSystem())
@@ -65,6 +81,62 @@ func (e *Engine) reconcilePopulationLocked() {
 		evt.Tag = core.TagSystem
 		_ = e.gatekeeper.Submit(evt, events.SourceSystem())
 	}
+}
+
+func (e *Engine) refreshPopulationDesiresLocked(cfg core.PopulationConfig, promoted []core.PromotedNPC, identityShifts []core.PopulationCharacterInsight) {
+	if e.desireStore == nil {
+		return
+	}
+	seen := make(map[string]bool)
+	for _, npc := range promoted {
+		seen[npc.Name] = true
+	}
+	for _, shift := range identityShifts {
+		seen[shift.Name] = true
+	}
+	for name := range seen {
+		char, ok := e.agents.GetCharacter(name)
+		if !ok {
+			continue
+		}
+		var goals []emotion.GoalSeed
+		var hidden []emotion.HiddenGoalSeed
+		for _, g := range char.Goals {
+			if g.Type == "hidden" {
+				hidden = append(hidden, emotion.HiddenGoalSeed{ID: g.ID, Priority: g.Priority})
+			} else {
+				goals = append(goals, emotion.GoalSeed{ID: g.ID, Priority: g.Priority, Target: g.Target})
+			}
+		}
+		emotion.ReplaceDesires(e.desireStore, name, char.Identity.Immutable, char.Identity.Adaptive, goals, hidden)
+	}
+}
+
+func (e *Engine) syncAutonomousScenePopulationLocked(state *core.WorldState) []string {
+	if state == nil {
+		return nil
+	}
+	candidates := e.ensureScenePopulationCandidatesLocked(*state, "")
+	if len(candidates) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(candidates))
+	for name, candidate := range candidates {
+		if !candidate.LocationMatch && !candidate.FactionMatch && !candidate.PressureMatch {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	added := make([]string, 0, len(names))
+	for _, name := range names {
+		if containsString(state.Scene.Characters, name) {
+			continue
+		}
+		state.Scene.Characters = append(state.Scene.Characters, name)
+		added = append(added, name)
+	}
+	return added
 }
 
 func (e *Engine) ensureScenePopulationCandidatesLocked(state core.WorldState, userInput string) map[string]populationSceneCandidate {
@@ -281,6 +353,49 @@ func (e *Engine) GetPopulationInsights() (core.PopulationInsights, error) {
 	return insights, nil
 }
 
+func (e *Engine) populationHighlightsLocked() []string {
+	path := strings.TrimSpace(e.currentWorldPathLocked())
+	if path == "" {
+		return nil
+	}
+	cfg, _, err := world.EnsureSeededPopulation(path)
+	if err != nil {
+		return nil
+	}
+	highlights := make([]string, 0, 2)
+	if len(cfg.PromotedNPCs) > 0 {
+		promoted := append([]core.PromotedNPC(nil), cfg.PromotedNPCs...)
+		sort.Slice(promoted, func(i, j int) bool {
+			if promoted[i].Attention.Score == promoted[j].Attention.Score {
+				return promoted[i].Name < promoted[j].Name
+			}
+			return promoted[i].Attention.Score > promoted[j].Attention.Score
+		})
+		top := promoted[:minInt(len(promoted), 2)]
+		parts := make([]string, 0, len(top))
+		for _, npc := range top {
+			parts = append(parts, fmt.Sprintf("%s(%.1f)", npc.Name, npc.Attention.Score))
+		}
+		highlights = append(highlights, "promoted: "+strings.Join(parts, ", "))
+	}
+	if len(cfg.BackgroundNPCs) > 0 {
+		background := append([]core.BackgroundNPC(nil), cfg.BackgroundNPCs...)
+		sort.Slice(background, func(i, j int) bool {
+			if background[i].Attention.Score == background[j].Attention.Score {
+				return background[i].Name < background[j].Name
+			}
+			return background[i].Attention.Score > background[j].Attention.Score
+		})
+		top := background[:minInt(len(background), 2)]
+		parts := make([]string, 0, len(top))
+		for _, npc := range top {
+			parts = append(parts, fmt.Sprintf("%s(%.1f)", npc.Name, npc.Attention.Score))
+		}
+		highlights = append(highlights, "rising: "+strings.Join(parts, ", "))
+	}
+	return highlights
+}
+
 func (e *Engine) ensurePromotedCharactersLoadedLocked(path string, cfg core.PopulationConfig) {
 	activeWorld := e.charWorlds[e.GetFocusCharacter()]
 	identityByID := make(map[string]core.IdentityCoreConfig, len(cfg.IdentityCores))
@@ -327,10 +442,11 @@ func (e *Engine) ensurePromotedCharactersLoadedLocked(path string, cfg core.Popu
 	}
 }
 
-func reconcilePopulationConfig(cfg core.PopulationConfig, state core.WorldState, eventList []core.Event, tickExposure map[string]int, factionEng interface{ Tensions() map[string]float64 }) (core.PopulationConfig, bool, []core.PromotedNPC, []core.PopulationCharacterInsight) {
+func reconcilePopulationConfig(cfg core.PopulationConfig, state core.WorldState, eventList []core.Event, tickExposure map[string]int, factionEng interface{ Tensions() map[string]float64 }) (core.PopulationConfig, bool, []core.PromotedNPC, []core.PromotedNPC, []core.PopulationCharacterInsight) {
 	updated := cfg
 	changed := false
 	var promotedNow []core.PromotedNPC
+	var demotedNow []core.PromotedNPC
 	var identityShifts []core.PopulationCharacterInsight
 
 	promotedIndex := make(map[string]int, len(updated.PromotedNPCs))
@@ -409,7 +525,33 @@ func reconcilePopulationConfig(cfg core.PopulationConfig, state core.WorldState,
 		changed = true
 	}
 
-	return updated, changed, promotedNow, identityShifts
+	// Demote promoted NPCs whose attention has fallen below threshold
+	demoteThreshold := updated.Policy.PromoteThreshold / 2
+	if demoteThreshold <= 0 {
+		demoteThreshold = 5
+	}
+	for i := len(updated.PromotedNPCs) - 1; i >= 0; i-- {
+		p := updated.PromotedNPCs[i]
+		bgKey := populationKey(p.ID, p.Name)
+		bgIdx := -1
+		for j := range updated.BackgroundNPCs {
+			if populationKey(updated.BackgroundNPCs[j].ID, updated.BackgroundNPCs[j].Name) == bgKey {
+				bgIdx = j
+				break
+			}
+		}
+		if bgIdx < 0 {
+			continue
+		}
+		if updated.BackgroundNPCs[bgIdx].Attention.Score < demoteThreshold {
+			updated.PromotedNPCs = append(updated.PromotedNPCs[:i], updated.PromotedNPCs[i+1:]...)
+			p.Attention = updated.BackgroundNPCs[bgIdx].Attention
+			demotedNow = append(demotedNow, p)
+			changed = true
+		}
+	}
+
+	return updated, changed, promotedNow, demotedNow, identityShifts
 }
 
 func calculatePopulationAttention(npc core.BackgroundNPC, state core.WorldState, eventList []core.Event, policy core.PromotionPolicy, tickExposure int, factionEng interface{ Tensions() map[string]float64 }) (core.PopulationAttention, string) {
@@ -419,9 +561,16 @@ func calculatePopulationAttention(npc core.BackgroundNPC, state core.WorldState,
 	id := strings.TrimSpace(npc.ID)
 
 	for _, evt := range eventList {
+		if populationEventStale(evt) {
+			continue
+		}
 		matched := false
 		if matchesPopulationRef(evt.Actor, name, id) || matchesPopulationRef(evt.Target, name, id) {
 			att.DirectInteractions++
+			att.SharedEvents++
+			matched = true
+		}
+		if evt.Type == "world_pressure" && worldPressureTouchesNPC(evt, npc) {
 			att.SharedEvents++
 			matched = true
 		}
@@ -474,7 +623,78 @@ func calculatePopulationAttention(npc core.BackgroundNPC, state core.WorldState,
 		}
 	}
 
+	// Pressure match bonus: if NPC's location has active pressure events
+	for _, evt := range eventList {
+		if populationEventStale(evt) {
+			continue
+		}
+		if evt.Type == "pressure" || evt.Type == "faction_pressure" || evt.Type == "world_pressure" {
+			if loc, _ := evt.Payload["location"].(string); loc != "" && loc == npc.Location {
+				att.Score += 0.3
+				break
+			}
+			if target := strings.TrimSpace(evt.Target); target != "" && target == strings.TrimSpace(npc.Faction) {
+				att.Score += 0.3
+				break
+			}
+		}
+	}
+
+	// Event relevance bonus: event types matching NPC's role or hooks
+	for _, evt := range eventList {
+		if populationEventStale(evt) {
+			continue
+		}
+		if matchesPopulationRef(evt.Actor, name, id) || matchesPopulationRef(evt.Target, name, id) {
+			if npc.Role != "" && (strings.Contains(evt.Type, npc.Role) || roleRelevantEventType(evt.Type, npc.Role)) {
+				att.Score += 0.2
+			}
+			for _, hook := range npc.Hooks {
+				if hook != "" {
+					payloadStr := fmt.Sprintf("%v", evt.Payload)
+					if strings.Contains(payloadStr, hook) {
+						att.Score += 0.2
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Relationship network bonus: count relationships involving this NPC
+	for key := range state.Relationships {
+		parts := strings.Split(key, "-")
+		if len(parts) == 2 && (strings.TrimSpace(parts[0]) == name || strings.TrimSpace(parts[1]) == name) {
+			att.Score += 0.1
+		}
+	}
+
 	return att, lastEventID
+}
+
+func populationEventStale(evt core.Event) bool {
+	if evt.CreatedAt.IsZero() {
+		return false
+	}
+	return time.Since(evt.CreatedAt) > populationAttentionEventWindow
+}
+
+// roleRelevantEventType checks if an event type is relevant to a given role.
+func roleRelevantEventType(eventType, role string) bool {
+	role = strings.ToLower(role)
+	switch eventType {
+	case "pressure", "faction_pressure", "faction_conflict":
+		return role == "leader" || role == "guard" || role == "spy"
+	case "trade", "market_shift":
+		return role == "merchant" || role == "trader"
+	case "conflict", "threaten", "attack":
+		return role == "guard" || role == "soldier" || role == "fighter"
+	case "heal", "aid":
+		return role == "healer" || role == "doctor"
+	case "speak", "talk", "rumor":
+		return role == "informant" || role == "bard"
+	}
+	return false
 }
 
 func mentionsPopulation(evt core.Event, name string) bool {
@@ -494,6 +714,25 @@ func matchesPopulationRef(value, name, id string) bool {
 		return false
 	}
 	return value == name || (id != "" && value == id)
+}
+
+func worldPressureTouchesNPC(evt core.Event, npc core.BackgroundNPC) bool {
+	if evt.Type != "world_pressure" {
+		return false
+	}
+	target := strings.TrimSpace(evt.Target)
+	if target != "" {
+		if target == strings.TrimSpace(npc.Faction) || target == strings.TrimSpace(npc.Location) || matchesPopulationRef(target, npc.Name, npc.ID) {
+			return true
+		}
+	}
+	if payloadTarget, _ := evt.Payload["target"].(string); payloadTarget != "" {
+		payloadTarget = strings.TrimSpace(payloadTarget)
+		if payloadTarget == strings.TrimSpace(npc.Faction) || payloadTarget == strings.TrimSpace(npc.Location) || matchesPopulationRef(payloadTarget, npc.Name, npc.ID) {
+			return true
+		}
+	}
+	return false
 }
 
 func ensureIdentityCore(npc core.BackgroundNPC) (string, core.IdentityCoreConfig) {
@@ -641,6 +880,13 @@ func buildPopulationHistory(eventList []core.Event, name string) []core.Populati
 				Adaptive:  payloadAdaptive(evt.Payload["adaptive"]),
 				CreatedAt: evt.CreatedAt,
 			})
+		case "population_demoted":
+			history = append(history, core.PopulationGrowthEvent{
+				EventID:   evt.ID,
+				Type:      evt.Type,
+				Summary:   fmt.Sprintf("降级回背景人口，score %.2f", numberPayload(evt.Payload["score"])),
+				CreatedAt: evt.CreatedAt,
+			})
 		}
 	}
 	return history
@@ -683,9 +929,23 @@ func evolveIdentityCore(coreCfg core.IdentityCoreConfig, npc core.BackgroundNPC,
 	name := strings.TrimSpace(npc.Name)
 	id := strings.TrimSpace(npc.ID)
 
+	// Ensure all base traits exist
+	ensureTrait(evolved.Adaptive, "trust", 3.0)
+	ensureTrait(evolved.Adaptive, "fear", 2.0)
+	ensureTrait(evolved.Adaptive, "intimacy", 2.0)
+	ensureTrait(evolved.Adaptive, "respect", 3.0)
+	ensureTrait(evolved.Adaptive, "loyalty", 2.5)
+	ensureTrait(evolved.Adaptive, "curiosity", 3.0)
+	ensureTrait(evolved.Adaptive, "aggression", 2.0)
+
 	trustDelta := 0.0
 	fearDelta := 0.0
 	intimacyDelta := 0.0
+	respectDelta := 0.0
+	loyaltyDelta := 0.0
+	curiosityDelta := 0.0
+	aggressionDelta := 0.0
+
 	for _, evt := range eventList {
 		if !matchesPopulationRef(evt.Actor, name, id) && !matchesPopulationRef(evt.Target, name, id) {
 			continue
@@ -694,26 +954,75 @@ func evolveIdentityCore(coreCfg core.IdentityCoreConfig, npc core.BackgroundNPC,
 		case "trust_change":
 			if delta, ok := evt.Payload["delta"].(float64); ok {
 				trustDelta += delta * 0.6
+				loyaltyDelta += delta * 0.3
 			}
 		case "fear_change":
 			if delta, ok := evt.Payload["delta"].(float64); ok {
 				fearDelta += delta * 0.8
 				trustDelta -= math.Abs(delta) * 0.2
+				aggressionDelta += math.Abs(delta) * 0.15
 			}
 		case "intimacy_change":
 			if delta, ok := evt.Payload["delta"].(float64); ok {
 				intimacyDelta += delta * 0.7
+				loyaltyDelta += delta * 0.2
 			}
-		case "attack", "threat":
+		case "attack", "threat", "threaten":
 			fearDelta += 0.4
-		case "dialogue", "negotiation":
+			aggressionDelta += 0.3
+			trustDelta -= 0.15
+		case "dialogue", "negotiation", "speak", "talk":
 			trustDelta += 0.05
+			curiosityDelta += 0.03
+		case "observe", "watch":
+			curiosityDelta += 0.1
+		case "hide", "flee":
+			fearDelta += 0.2
+			aggressionDelta -= 0.1
+		case "faction_conflict", "faction_pressure":
+			loyaltyDelta += 0.15
+			fearDelta += 0.1
+		case "pressure":
+			fearDelta += 0.1
+			curiosityDelta += 0.05
+		}
+
+		// Role-based trait amplification
+		role := strings.ToLower(npc.Role)
+		switch role {
+		case "leader", "captain":
+			if evt.Type == "faction_conflict" || evt.Type == "faction_pressure" {
+				loyaltyDelta += 0.1
+				respectDelta += 0.05
+			}
+		case "guard", "soldier":
+			if evt.Type == "attack" || evt.Type == "threaten" {
+				aggressionDelta += 0.1
+				respectDelta += 0.05
+			}
+		case "spy", "informant":
+			if evt.Type == "observe" || evt.Type == "dialogue" {
+				curiosityDelta += 0.1
+			}
+		case "healer", "doctor":
+			if evt.Type == "aid" || evt.Type == "heal" {
+				intimacyDelta += 0.1
+				trustDelta += 0.1
+			}
 		}
 	}
 
-	evolved.Adaptive["trust"] = clampAdaptive(evolved.Adaptive["trust"] + trustDelta)
-	evolved.Adaptive["fear"] = clampAdaptive(evolved.Adaptive["fear"] + fearDelta)
-	evolved.Adaptive["intimacy"] = clampAdaptive(evolved.Adaptive["intimacy"] + intimacyDelta)
+	// Slow variable: traits drift gradually rather than jumping
+	// Apply only a fraction of the delta per tick to simulate gradual personality change
+	slowFactor := 0.5
+	evolved.Adaptive["trust"] = clampAdaptive(evolved.Adaptive["trust"] + trustDelta*slowFactor)
+	evolved.Adaptive["fear"] = clampAdaptive(evolved.Adaptive["fear"] + fearDelta*slowFactor)
+	evolved.Adaptive["intimacy"] = clampAdaptive(evolved.Adaptive["intimacy"] + intimacyDelta*slowFactor)
+	evolved.Adaptive["respect"] = clampAdaptive(evolved.Adaptive["respect"] + respectDelta*slowFactor)
+	evolved.Adaptive["loyalty"] = clampAdaptive(evolved.Adaptive["loyalty"] + loyaltyDelta*slowFactor)
+	evolved.Adaptive["curiosity"] = clampAdaptive(evolved.Adaptive["curiosity"] + curiosityDelta*slowFactor)
+	evolved.Adaptive["aggression"] = clampAdaptive(evolved.Adaptive["aggression"] + aggressionDelta*slowFactor)
+
 	if len(evolved.Drives) == 0 && len(npc.Hooks) > 0 {
 		evolved.Drives = append([]string(nil), npc.Hooks...)
 	}
@@ -758,4 +1067,10 @@ func clampAdaptive(v float64) float64 {
 		return 10
 	}
 	return math.Round(v*100) / 100
+}
+
+func ensureTrait(adaptive map[string]float64, trait string, defaultVal float64) {
+	if _, ok := adaptive[trait]; !ok {
+		adaptive[trait] = defaultVal
+	}
 }

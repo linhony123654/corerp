@@ -111,6 +111,12 @@ func (ds *DesireStore) HasDesires(character string) bool {
 	return count > 0
 }
 
+// DeleteByCharacter removes all stored desires for a character.
+func (ds *DesireStore) DeleteByCharacter(character string) error {
+	_, err := ds.db.Exec(`DELETE FROM npc_desires WHERE character = ?`, character)
+	return err
+}
+
 // SeedDesires generates initial desires from character card data.
 // Only seeds if the character has no existing desires (idempotent).
 func SeedDesires(store *DesireStore, name string, immutable []string, adaptive map[string]float64, goals []GoalSeed, hidden []HiddenGoalSeed) []Desire {
@@ -118,6 +124,24 @@ func SeedDesires(store *DesireStore, name string, immutable []string, adaptive m
 		return nil
 	}
 
+	desires := buildSeedDesires(name, immutable, adaptive, goals, hidden)
+	for _, d := range desires {
+		store.Add(d)
+	}
+	return desires
+}
+
+// ReplaceDesires rebuilds a character's seeded desires from current identity/goals.
+func ReplaceDesires(store *DesireStore, name string, immutable []string, adaptive map[string]float64, goals []GoalSeed, hidden []HiddenGoalSeed) []Desire {
+	_ = store.DeleteByCharacter(name)
+	desires := buildSeedDesires(name, immutable, adaptive, goals, hidden)
+	for _, d := range desires {
+		store.Add(d)
+	}
+	return desires
+}
+
+func buildSeedDesires(name string, immutable []string, adaptive map[string]float64, goals []GoalSeed, hidden []HiddenGoalSeed) []Desire {
 	var desires []Desire
 	now := time.Now()
 
@@ -189,10 +213,6 @@ func SeedDesires(store *DesireStore, name string, immutable []string, adaptive m
 	// Rule 8: Every character gets at least one baseline desire
 	if len(desires) == 0 {
 		addDesire(&desires, name, DesireAutonomy, "活下去", 0.5, "默认生存欲望", now)
-	}
-
-	for _, d := range desires {
-		store.Add(d)
 	}
 	return desires
 }

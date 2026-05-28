@@ -146,7 +146,82 @@ func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goa
 		})
 	}
 
-	// Rule 7: Default social engagement
+	// Rule 7: Faction loyalty patrol — if character's faction controls the location
+	charFaction := characterFactionFromStructure(character, structure)
+	if charFaction != "" && locationController == charFaction && len(steps) == 0 {
+		steps = append(steps, PlanStep{
+			Action:   "patrol",
+			Target:   sceneLocation,
+			Priority: 5,
+			Reason:   fmt.Sprintf("faction_patrol: %s guarding %s territory", character, charFaction),
+		})
+	}
+
+	// Rule 8: Pressure-driven trade — if location has market/trade pressure
+	if len(steps) == 0 {
+		for _, pr := range activePressures {
+			if strings.Contains(strings.ToLower(pr.Name), "market") || strings.Contains(strings.ToLower(pr.Name), "trade") || strings.Contains(strings.ToLower(pr.Name), "economy") {
+				steps = append(steps, PlanStep{
+					Action:   "trade",
+					Target:   sceneLocation,
+					Priority: 4,
+					Reason:   fmt.Sprintf("market_pressure: %s (%.2f) at %s", pr.Name, pr.Intensity, sceneLocation),
+				})
+				break
+			}
+		}
+	}
+
+	// Rule 9: Distress aid — if scene character shows low trust (distress signal)
+	if len(steps) == 0 {
+		for _, other := range state.Scene.Characters {
+			if other == character || other == "" {
+				continue
+			}
+			for key, rel := range state.Relationships {
+				if strings.Contains(key, other) && rel.Trust < 2 {
+					steps = append(steps, PlanStep{
+						Action:   "aid",
+						Target:   other,
+						Priority: 6,
+						Reason:   fmt.Sprintf("distress_aid: %s showing low trust (%.2f)", other, rel.Trust),
+					})
+					break
+				}
+			}
+		}
+	}
+
+	// Rule 10: Hostile faction observation — if different faction NPC present
+	if len(steps) == 0 {
+		for _, other := range state.Scene.Characters {
+			if other == character || other == "" {
+				continue
+			}
+			otherFaction := characterFactionFromStructure(other, structure)
+			if otherFaction != "" && charFaction != "" && otherFaction != charFaction {
+				steps = append(steps, PlanStep{
+					Action:   "observe",
+					Target:   other,
+					Priority: 5,
+					Reason:   fmt.Sprintf("hostile_faction_watch: %s (faction %s) at %s", other, otherFaction, sceneLocation),
+				})
+				break
+			}
+		}
+	}
+
+	// Rule 11: Multiple pressure warning — if location has 2+ active pressures
+	if len(activePressures) >= 2 && len(steps) == 0 {
+		steps = append(steps, PlanStep{
+			Action:   "warn",
+			Target:   sceneLocation,
+			Priority: 5,
+			Reason:   fmt.Sprintf("pressure_escalation: %d active pressures at %s", len(activePressures), sceneLocation),
+		})
+	}
+
+	// Rule 12: Default social engagement
 	if len(steps) == 0 {
 		steps = append(steps, PlanStep{
 			Action:   "speak",

@@ -20,6 +20,7 @@ type pressureState struct {
 	CurrentIntensity float64
 	TriggerCount     int
 	MissedTicks      int
+	CooldownTicks    int // hysteresis: minimum ticks before next trigger
 }
 
 func NewPulseEngine() *PulseEngine {
@@ -41,6 +42,9 @@ func (p *PulseEngine) Tick(structure core.WorldStructureConfig, state core.World
 			continue
 		}
 		ps := p.ensurePressureState(pressure.ID)
+		if ps.CooldownTicks > 0 {
+			ps.CooldownTicks--
+		}
 		cadence := pressureCadence(ps.CurrentIntensity)
 		lastTick, seen := p.lastTriggered[pressure.ID]
 		if seen && tick-lastTick < cadence {
@@ -70,6 +74,9 @@ func (p *PulseEngine) Tick(structure core.WorldStructureConfig, state core.World
 		cadence := pressureCadence(ps.CurrentIntensity)
 		lastTick, seen := p.lastTriggered[pressure.ID]
 		if seen && tick-lastTick < cadence {
+			continue
+		}
+		if ps.CooldownTicks > 0 {
 			continue
 		}
 		// Use dynamic intensity for eligibility sorting
@@ -106,6 +113,7 @@ func (p *PulseEngine) Tick(structure core.WorldStructureConfig, state core.World
 		p.lastTriggered[pressure.ID] = tick
 		ps.TriggerCount++
 		ps.MissedTicks = 0
+		ps.CooldownTicks = 2 // hysteresis: prevent rapid re-triggering
 
 		// Escalation: intensity boost after consecutive triggers
 		if ps.TriggerCount >= 3 {

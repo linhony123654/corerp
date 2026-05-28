@@ -42,6 +42,9 @@ func (e *Engine) ListPendingFacts(character string, limit int) ([]core.PendingFa
 	if err != nil {
 		return nil, nil, err
 	}
+	for i := range items {
+		items[i] = normalizePendingFactCompatibility(items[i])
+	}
 	return items, cp.PendingStats(), nil
 }
 

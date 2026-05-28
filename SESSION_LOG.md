@@ -2,7 +2,889 @@
 
 > 记录规则：每条日志必须使用绝对时间，并标注修改者/模型身份。
 
+## 2026-05-28
+
+### 2026-05-28 03:35:41 UTC — 真实 Runtime Replay Round-Trip 闭环补强
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `internal/api/server.go` 的 experiment replay 派生现在会先从源实例读取 archived checkpoint，再在 replay 实例中创建同名 checkpoint 并加载，避免真实 runtime replay branch 找不到源 checkpoint
+  - `internal/api/server_test.go` 新增 `TestExperimentReportReplayBatchRealRuntimeRoundTrip`，使用真实 `runtime.Manager` 与真实 runtime engine 覆盖 report -> replay-batch -> replay-advance
+  - `scripts/run_world_proof_audit.sh` 的 `api-author-replay-contract` gate 纳入真实 runtime replay round-trip 测试
+  - `TODO.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md` 同步记录作者侧 replay 从 mock contract 升级为真实 runtime round-trip
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^TestExperimentReportReplayBatchRealRuntimeRoundTrip$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayBatchRealRuntimeRoundTrip|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence)$'` ✅
+  - `bash -n scripts/run_world_proof_audit.sh` ✅
+  - `git diff --check` ✅
+  - `./scripts/run_world_proof_audit.sh` ✅
+- 最新 proof audit：
+  - `data/proof-audits/20260528T033924Z/SUMMARY.md`
+  - 8/8 gates PASS，且 `api-author-replay-contract` 已包含 `TestExperimentReportReplayBatchRealRuntimeRoundTrip`
+
+### 2026-05-28 03:17:31 UTC — Proof Archive Gate 纳入长期审计
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `scripts/run_world_proof_audit.sh` 新增 `api-proof-archive-contract` gate
+  - 该 gate 执行 `TestProofAuditsRouteListsLatestAuditArtifacts`，锁定 `/api/proof-audits` 能列出最近 proof audit 归档、summary preview 与文件清单
+  - `TODO.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md` 同步更新到最新审计结果
+- 验证：
+  - `bash -n scripts/run_world_proof_audit.sh` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^TestProofAuditsRouteListsLatestAuditArtifacts$'` ✅
+  - `./scripts/run_world_proof_audit.sh` ✅
+- 当时 proof audit（已被 `20260528T033924Z / 8/8 PASS` supersede）：
+  - `data/proof-audits/20260528T031731Z/SUMMARY.md`
+  - 8/8 gates PASS：world-first contract、author replay contract、proof archive contract、population lifecycle、runtime/API 200 tick sample matrix、runtime/API 200 tick real-world matrix
+
+### 2026-05-28 03:15:46 UTC — Proof Audit 结果交接修正
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `TODO.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md` 从旧的 `20260527T223320Z / 4/4 PASS` 更新到最新 `20260528T030850Z / 7/7 PASS`
+  - 保持结论口径为“长期证据增强，但不能直接标记终态闭环完成”
+- 当时 proof audit（已被 `20260528T033924Z / 8/8 PASS` supersede）：
+  - `data/proof-audits/20260528T030850Z/SUMMARY.md`
+  - 7/7 gates PASS：world-first contract、author replay contract、population lifecycle、runtime/API 200 tick sample matrix、runtime/API 200 tick real-world matrix
+
+### 2026-05-28 00:00:00 UTC — Runtime Audit 前端 legacy character fallback 收束
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `web/app.js` 的 Runtime Audit checkpoint browser、World Experiment Ops、World Experiment Panel、proof bundle Markdown、Ops Matrix 与 step trace tag 不再读取 `slot.character / selectedCheckpoint.character / bundle.selected_checkpoint.character / stepTrace.character`
+  - 前端主路径改为只消费 `focus_character / speaker`，避免 legacy `character` 在作者控制台重新成为隐式主语义
+  - `internal/runtime/compat.go` 改成读取旧 `character` 后只迁移到 `focus_character / step.speaker`，随后清空 legacy 镜像；`buildStepHandoff()` 同步改为只看 canonical speaker
+  - `internal/runtime/population_runtime.go` 的 population attention 改成 72h 滚动事件窗口，旧事件不再永久抬分；promoted NPC 长期脱离 scene/pressure/event 后会生成 `population_demoted` 并退回 background
+  - `internal/runtime/runtime_test.go` 新增 demotion lifecycle 测试，证明 demotion canonical event 与 `/api/population-insights` history 可追踪
+  - `internal/api/server_test.go` 新增 API contract canonical schema 防回流测试，锁住 `MemorySnapshot / SaveSlot / ScenarioPreset / CharacterConfig / RuntimeInstancePayload / ExperimentSnapshot / TurnTrace`
+  - replay 派生 / 批量派生 / 推进响应现在会直接携带 current/compare evidence（sim status、latest trace、population、audit summary）；`web/app.js` 会把这些 evidence 作为 audit 拉取失败时的 fallback
+  - `scripts/run_world_proof_audit.sh` 的 `api-world-first-contract` gate 已纳入该 schema 防回流测试，并新增 `api-author-replay-contract` 与 `runtime-population-lifecycle-contract` gate
+  - `TODO.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md`、`ACCEPTANCE_CHECKLIST.md` 同步记录当前为“接近验收”，但不标记最终闭环完成
+- 验证：
+  - `node --check web/app.js`
+  - `bash -n scripts/run_world_proof_audit.sh`
+  - `rg -n "slot\\.character|selectedCheckpoint\\.character|bundle\\.selected_checkpoint\\.character|stepTrace\\.character|focus_character \\|\\| .*character|speaker \\|\\| .*character|character \\|\\| .*focus_character" web/app.js`
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^TestAPIContractCanonicalSchemasExcludeLegacyFocusMirrors$'`
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence)$'`
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run '^(TestReconcilePopulationPromotesBackgroundNPC|TestReconcilePopulationDemotesStalePromotedNPC|TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow|TestPopulationInsightsIncludesPromotionReason)$'`
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestTraceRoute|TestTraceRoutesNormalizeLegacyCharacterFields|TestCheckpointAndPresetRoutes|TestCharacterConfigRoutePost|TestCharacterConfigRouteGetUsesCanonicalFocusCharacter|TestRuntimeAuditAggregatesAuthoringEvidence|TestMemoryRoutePrefersFocusCharacterOverLegacyCharacter|TestPendingFactsRoutePrefersFocusCharacterOverLegacyCharacter|TestNPCActionsRouteUsesFocusCharacterWithoutTopLevelCharacterMirror)$'`
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run '^(TestListTurnTracesNewestFirst|TestLoadSaveSlotPrefersFocusCharacterOverLegacyCharacter|TestApplyScenarioPresetPrefersFocusCharacterOverLegacyCharacter|TestExperimentReportNormalizesFocusCompatibility|TestLoadSaveSlotDoesNotResetTurnCounter|TestResetDialogueDoesNotResetTurnCounter|TestSwitchCharacterDoesNotResetTurnCounter)$'`
+  - `/usr/local/go/bin/go build -o /home/kelebituo/corerp/corerp ./cmd/corerp`
+- 结论：
+  - world-first 主语义进一步接近验收；仍不能标记终态闭环完成，因为兼容接口、底层旧存储字段与更长窗口作者回放验收仍未完全收束。
+
 ## 2026-05-27
+
+### 2026-05-27 20:48:00 UTC — SaveSlot / Preset / Trace 内部读取统一优先 focus_character
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/compat.go`
+  - 新增兼容归一化 helper：
+    - `normalizeSaveSlotCompatibility`
+    - `normalizeScenarioPresetCompatibility`
+    - `normalizeTurnTraceCompatibility`
+- `internal/runtime/persistence.go`
+  - `CreateSaveSlot` / `LoadSaveSlot` / `readSaveSlots` / `writeSaveSlots`
+  - 统一改为优先 `FocusCharacter`
+  - 旧 `Character` 只在旧数据缺失 `FocusCharacter` 时用于一次性迁移
+- `internal/runtime/authoring.go`
+  - `EnterWorld` / `CreateScenarioPreset` / `ApplyScenarioPreset` / `readScenarioPresetsLocked` / `writeScenarioPresetsLocked`
+  - 统一改为优先 `FocusCharacter`
+- `internal/runtime/trace.go`
+  - `recordTraceLocked` 会先做 trace 兼容归一化
+- `internal/runtime/turns.go`
+  - `StepHandoff` 改为优先使用 `step.speaker`
+- `internal/runtime/runtime_test.go`
+  - 新增：
+    - `TestLoadSaveSlotPrefersFocusCharacterOverLegacyCharacter`
+    - `TestApplyScenarioPresetPrefersFocusCharacterOverLegacyCharacter`
+  - `TestListTurnTracesNewestFirst` 也改为锁定 trace 会自动补齐 compatibility mirror
+- `CLOSURE_AUDIT.md`
+  - World-First 项补充“SaveSlot / ScenarioPreset / TurnTrace 内部读取已优先新字段”的证据
+- `TODO.md`
+  - 同步记录类型层兼容镜像继续退居 mirror 的进展
+- `DELIVERY_TRACKING.md`
+  - World-First 项补充 runtime 内部读取层的新收束
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run 'Test(LoadSaveSlotPrefersFocusCharacterOverLegacyCharacter|ApplyScenarioPresetPrefersFocusCharacterOverLegacyCharacter|ListTurnTracesNewestFirst|CreateAndLoadSaveSlot|ScenarioPresetCreateAndApply)'` ✅
+
+### 2026-05-27 20:32:00 UTC — runtime scene participants 不再回退 loaded roster
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime.go`
+  - `GetSceneParticipants()` 不再在空场景时退回 `loadedCharacters`
+  - `GetSceneParticipantDetails()` 也不再在空场景时用 loaded roster 补 participants truth
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestSceneParticipantsDoNotFallbackToLoadedCharacters`
+  - 锁定 scene truth 为空时，participants / participant_details 为空，但 loaded roster 兼容镜像仍保留
+- `CLOSURE_AUDIT.md`
+  - World-First 项补充 runtime 层已不再回退 loaded roster
+- `TODO.md`
+  - 同步记录 runtime 语义层的新收束
+- `DELIVERY_TRACKING.md`
+  - World-First 项补充 runtime 层证据
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run 'Test(SceneParticipantsDoNotFallbackToLoadedCharacters|SwitchCharacterLoadsSceneParticipantShellWhenMissing)'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'TestCharactersRouteDoesNotFallbackToLoadedCharacters|TestStateIncludesInstanceMetadata|TestRuntimeAuditAggregatesAuthoringEvidence'` ✅
+
+### 2026-05-27 20:05:00 UTC — Runtime Audit 聚合视图落地
+Modified by: Codex (GPT-5)
+
+- `internal/core/types.go`
+  - 新增 `RuntimeAuditSnapshot`
+  - 统一承载作者侧审计所需的聚合证据
+- `internal/api/server.go`
+  - 新增 `GET /api/runtime-audit`
+  - 单次返回：
+    - `sim_status`
+    - `latest_trace`
+    - `recent_traces`
+    - `population`
+    - `checkpoints`
+    - `presets`
+    - `experiment_reports`
+    - `audit_summary`
+  - 支持基础 limit 参数，避免把所有证据面一次性拉满
+- `internal/api/server_test.go`
+  - 新增 `TestRuntimeAuditAggregatesAuthoringEvidence`
+  - 同时把 `/api/runtime-audit` 加入合法/非法 method 抽查
+- `web/index.html`
+  - 作者工具新增 `Runtime Audit` 面板
+- `web/app.js`
+  - 新增 Runtime Audit 的加载、筛选、渲染与 trace/report 联动
+  - 现在作者可以在一个面板里先看“世界为什么这样跑”，再决定跳去 trace 或归档
+- `CLOSURE_AUDIT.md`
+  - 将“尚无单一系统级运行审计视图”的表述收束为“统一读面已落地，但仍缺完整回放/筛选/复现实验能力”
+- `TODO.md`
+  - 下一阶段从“先做统一审计面”切换为“在统一审计面之上继续补完整调试器能力”
+- `DELIVERY_TRACKING.md`
+  - Trace / Authoring 项补充 Runtime Audit 当前实现
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'Test(RuntimeAuditAggregatesAuthoringEvidence|RouteWrongMethod|RouteValidMethod2xx|StateIncludesInstanceMetadata)'` ✅
+
+### 2026-05-27 18:55:00 UTC — 真实 world 目录长窗口矩阵补强
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestRealWorldDirectorySampleMatrixAcrossHundredTwentyTicks`
+  - 直接复制并运行真实 world 目录：
+    - `worlds/neon_block`
+    - `worlds/1_7`
+    - `worlds/《红楼梦》完整版、-角色卡-202604190812`
+  - 证明原生都市世界与两类导入世界在 120 ticks 下都能产出可区分的：
+    - dominant pressure
+    - dominant faction tension
+    - promoted leader
+    - trajectory summary
+- `internal/api/server_test.go`
+  - 新增 `TestAPIRealWorldDirectorySampleMatrixAcrossHundredTwentyTicks`
+  - 在 API 层复现同样的真实目录矩阵
+  - 新增真实 scene helper 与测试目录复制 helper
+- `CLOSURE_AUDIT.md`
+  - 收回“样本仍主要集中在外城压力世界”的旧表述
+  - 更新为“真实 world 目录样本已补到都市世界与导入世界，但仍未达到最终普适性证明”
+- `TODO.md`
+  - 把下一阶段从“补非外城压力世界样本”收束到“扩大真实 world 目录和作者侧回放样本池”
+- `DELIVERY_TRACKING.md`
+  - 同步更新 population / structure / simulation 的证据面
+- `ACCEPTANCE_CHECKLIST.md`
+  - 当前判断口径补充“真实 world 目录矩阵”事实
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run 'TestRealWorldDirectorySampleMatrixAcrossHundredTwentyTicks'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'TestAPIRealWorldDirectorySampleMatrixAcrossHundredTwentyTicks'` ✅
+
+### 2026-05-27 17:20:08 UTC — 实验归档接入 trace / director 证据
+Modified by: Codex (GPT-5)
+
+- `internal/core/types.go`
+  - 扩展 `ExperimentSnapshot`
+  - 新增：
+    - `participant_details`
+    - `scene_description`
+    - `director_plan`
+    - `latest_trace`
+- `web/app.js`
+  - 实验报告生成时会额外拉取 `/api/state`
+  - 当前/对照实例的归档内容不再只保存长期 sim 数值
+  - 现在还会保存：
+    - participants / participant_details
+    - scene description
+    - latest trace
+    - director plan / world signals
+  - Markdown 导出也会带上这些证据
+- `internal/runtime/runtime_test.go`
+  - 扩展 `TestExperimentReportCreateAndList`
+  - 锁定 director / trace 证据会被持久化
+- `internal/api/server_test.go`
+  - 扩展 `TestExperimentReportRoutes`
+  - 锁定 API 层可保存并返回上述归档证据
+- `CLOSURE_AUDIT.md`
+  - 将 Trace / Authoring 项更新为“实验归档已包含 latest trace / director / participants 证据”
+- `TODO.md`
+  - 同步更新 experiment report 的能力边界
+- `DELIVERY_TRACKING.md`
+  - 同步更新 Trace / Authoring 项当前实现与判断
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run 'TestExperimentReportCreateAndList'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'TestExperimentReportRoutes'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api ./internal/runtime` ✅
+
+### 2026-05-27 17:14:26 UTC — `/api/state` 显式 world-first 化
+Modified by: Codex (GPT-5)
+
+- `internal/api/server.go`
+  - `/api/state` 新增显式返回：
+    - `focus_character`
+    - `participants`
+    - `participant_details`
+  - 调用方不再需要从 `instance.active_character` 这类兼容镜像倒推当前语义
+- `internal/api/server_test.go`
+  - 扩展 `TestStateIncludesInstanceMetadata`
+  - 锁定 `/api/state` 的显式 world-first 字段
+- `CLOSURE_AUDIT.md`
+  - World-First 项补充 `/api/state` 已显式返回新语义字段的证据
+- `TODO.md`
+  - 记录 `/api/state` 已显式返回 `focus_character + participants + participant_details`
+- `DELIVERY_TRACKING.md`
+  - 同步更新 World-First 项当前实现
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'TestStateIncludesInstanceMetadata|Test(InstanceCreateEndpoint|CharactersRoute)'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api ./internal/runtime` ✅
+
+### 2026-05-27 17:10:22 UTC — API 主接口不再要求旧 loaded accessor
+Modified by: Codex (GPT-5)
+
+- `internal/api/server.go`
+  - `RuntimeEngine` 接口移除 `GetLoadedCharacters()` 依赖
+  - 进一步确认 API 主链路不再要求旧 loaded accessor
+- `CLOSURE_AUDIT.md`
+  - World-First 项补充“API server 主接口已不再要求旧 accessor”的证据
+- `TODO.md`
+  - 记录兼容层收束到接口层的新进展
+- `DELIVERY_TRACKING.md`
+  - 同步更新 World-First 项当前实现
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api ./internal/runtime` ✅
+
+### 2026-05-27 17:07:31 UTC — 兼容层继续收束到不主导主链路
+Modified by: Codex (GPT-5)
+
+- `internal/api/server.go`
+  - `/api/characters` 不再在空场景时退回 `loaded_characters`
+  - `/api/instances/create` 不再让 `active_character` 决定新实例 focus
+- `internal/api/server_test.go`
+  - 新增 `TestInstanceCreateEndpointIgnoresActiveCharacterFallback`
+  - 新增 `TestCharactersRouteDoesNotFallbackToLoadedCharacters`
+  - mock engine 增加可控的 `sceneParticipants / loadedCharacters`
+- `CLOSURE_AUDIT.md`
+  - World-First 项补充“旧字段已不再决定关键 UI / API 路径”的新证据
+- `TODO.md`
+  - 记录兼容层收束的新完成面
+- `DELIVERY_TRACKING.md`
+  - 区分“旧字段仍暴露”和“旧字段已不再主导主链路”
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'Test(InstanceCreateEndpoint|CharactersRoute)'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api ./internal/runtime` ✅
+
+### 2026-05-27 17:02:22 UTC — 前端主路径脱离旧兼容字段
+Modified by: Codex (GPT-5)
+
+- `web/app.js`
+  - `loadCharacters()` 不再读取 `/api/characters` 的 `active / characters` fallback
+  - `refreshPanel()` 不再读取 legacy `/api/character`
+  - 角色卡面板改为读取 `/api/character-config` 的 `card`
+- `CLOSURE_AUDIT.md`
+  - World-First 项补充“前端主路径已不再依赖旧兼容字段”的当前证据
+  - 同时保留“类型层与兼容接口仍未完全收束”的未验收原因
+- `TODO.md`
+  - 记录前端主路径已迁移到 `focus_character + participants + participant_details`
+- `DELIVERY_TRACKING.md`
+  - 更新 World-First 项的当前实现与未验收原因
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api ./internal/runtime` ✅
+
+### 2026-05-27 16:59:12 UTC — 200 Tick 多样本矩阵验收补强
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks`
+  - 将长窗口验证扩到 200 ticks / 4 样本：
+    - calm
+    - guard pressure
+    - smuggler pressure
+    - infrastructure / blackout
+  - 证明不同 structure 会在更长窗口下继续分叉出：
+    - 不同 promoted leader
+    - 不同 pressure trajectory
+    - 不同 tension level
+- `internal/api/server_test.go`
+  - 新增 `TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks`
+  - 在 API 层复现同样的 200 tick / 4 样本矩阵
+- `CLOSURE_AUDIT.md`
+  - 收回“仍缺 200+ tick / 仍只靠几种外城压力样本”的旧表述
+  - 将剩余缺口收束到：
+    - 兼容层收束
+    - 更大规模 authoring 回放
+    - trace / sim / report 的统一审计面
+- `TODO.md`
+  - 把“补 200+ ticks”从待做切换为已获得证据
+  - 下一阶段改为更广 world family 回放与兼容层收束
+- `DELIVERY_TRACKING.md`
+  - 将 world structure / simulation / population 的长窗口证据升级到 200 tick
+- `ACCEPTANCE_CHECKLIST.md`
+  - 更新当前判断口径，加入 200 tick 多样本矩阵事实
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run 'TestWorldOutcomeSampleMatrixAcross(TwoHundred|Hundred)Ticks'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'TestAPIWorldOutcomeSampleMatrixAcross(TwoHundred|Hundred)Ticks'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+
+### 2026-05-27 16:49:30 UTC — 实验报告归档工作流落地
+Modified by: Codex (GPT-5)
+
+- `internal/core/types.go`
+  - 新增 `ExperimentSnapshot` / `ExperimentReport`
+  - 统一保存作者实验所需的长期结果快照
+- `internal/runtime/authoring.go`
+  - 新增 `ListExperimentReports()` / `CreateExperimentReport()`
+- `internal/runtime/persistence.go`
+  - 新增 `experiment_reports.json` 的实例级持久化与 legacy root fallback
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestExperimentReportCreateAndList`
+- `internal/runtime/persistence_instance_test.go`
+  - 补充 experiment report 的实例级路径与 legacy fallback 测试
+- `internal/api/server.go`
+  - 新增 `/api/experiment-reports` GET / POST
+- `internal/api/server_test.go`
+  - 新增 `TestExperimentReportRoutes`
+- `web/index.html`
+  - Simulation 面板新增“实验归档”区块
+- `web/app.js`
+  - 新增实验报告保存、读取、JSON / Markdown 导出
+  - 归档内容包含：
+    - 当前实例与对照实例的长期 snapshot
+    - outcome summary
+    - experiment conclusion
+- `CLOSURE_AUDIT.md`
+  - 将“缺更正式的 authoring audit / report”从未实现下调为已实现、待更大规模验收
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+
+### 2026-05-27 17:12:00 UTC — Closure Audit 文档化
+Modified by: Codex (GPT-5)
+
+- `CLOSURE_AUDIT.md`
+  - 新增真正按 `ACCEPTANCE_CHECKLIST` 逐项整理的审计文档
+  - 明确区分：
+    - 当前已有强证据的项
+    - 仍待验收的项
+    - 真实剩余缺口
+- `TODO.md`
+  - 增加到 `CLOSURE_AUDIT.md` 的入口
+- `DELIVERY_TRACKING.md`
+  - 增加到 `CLOSURE_AUDIT.md` 的引用，避免继续用交付文档代替闭环审计
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 17:03:00 UTC — 120 Tick 多样本矩阵验收补强
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestWorldOutcomeSampleMatrixAcrossHundredTicks`
+  - 使用 calm / guard-pressure / smuggler-pressure 三个样本连续运行 120 ticks，验证：
+    - calm 样本保持低张力且不自然 promotion
+    - 不同 pressure sample 会长出不同 promoted leader
+    - `trajectory_summary` / pressure leader / promoted outcome 会跨样本分叉
+- `TODO.md`
+  - 将 simulation / world structure 项更新为“已有 120 tick 多样本矩阵证据”
+- `DELIVERY_TRACKING.md`
+  - 将 World Structure / Autonomous Simulation 项更新为“已有 120 tick 多样本矩阵测试”
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+
+### 2026-05-27 16:54:00 UTC — 实验分支一键创建接入
+Modified by: Codex (GPT-5)
+
+- `web/index.html`
+  - 实例管理区新增“创建实验分支”按钮
+- `web/app.js`
+  - 新增 `createExperimentInstance()`
+  - 默认从当前观察实例派生新实例，并自动把它设为对照实例
+  - `instance-list` 里新增“设为对照”快速入口
+- `internal/api/server_test.go`
+  - 新增 `TestInstanceCreateEndpointAcceptsSourceID`
+  - 锁定 `source_id` 派生实例语义
+- `TODO.md`
+  - 同步写明作者控制台已支持一键创建实验分支
+- `DELIVERY_TRACKING.md`
+  - 将作者干预闭环项补充为“支持一键派生实验分支”
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api` ✅
+
+### 2026-05-27 16:45:00 UTC — 双实例实验自动结论接入
+Modified by: Codex (GPT-5)
+
+- `web/index.html`
+  - Simulation 面板新增“实验结论”
+- `web/app.js`
+  - 新增 `buildExperimentConclusion()`
+  - 双实例对照后，作者控制台会自动总结：
+    - 长期张力主导侧
+    - 人口结果主导侧
+    - 诊断密度主导侧
+    - 结构压力主导侧
+- `TODO.md`
+  - 同步写明双实例同步推进后已会自动给出实验结论
+- `DELIVERY_TRACKING.md`
+  - 将作者干预闭环项补充为“已自动归纳实验结论”
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api` ✅
+
+### 2026-05-27 16:39:00 UTC — 批量 Tick 与双实例同步推进接入
+Modified by: Codex (GPT-5)
+
+- `internal/api/server.go`
+  - `POST /api/sim/tick` 现在支持 `count`
+  - 可通过 body 或 query 一次推进 1-200 ticks
+- `internal/api/server_test.go`
+  - 新增 `TestSimTickRouteSupportsBatchCount`
+  - API 长窗口对照测试改为直接使用批量 tick
+- `web/index.html`
+  - Simulation 面板新增批量 tick 输入与“双实例同步推进”按钮
+- `web/app.js`
+  - 新增当前实例批量推进
+  - 新增当前实例 + 对照实例同步推进
+  - 作者现在可以更直接地跑分支实验，而不是反复手点单 tick
+- `TODO.md`
+  - 同步写明 simulation 已支持批量运行与双实例同步推进
+- `DELIVERY_TRACKING.md`
+  - 将作者干预闭环项补充为“可批量推进实验实例”
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+
+### 2026-05-27 16:31:00 UTC — 实例长期结果对照接入作者控制台
+Modified by: Codex (GPT-5)
+
+- `web/index.html`
+  - 实例管理区新增“对照实例”选择
+  - Simulation 面板新增“实例分叉”区块
+- `web/app.js`
+  - 新增跨实例 API URL 构建与 `fetchJSONForInstance()`
+  - 新增对照实例选择、状态读取、结果摘要渲染
+  - 作者现在可以直接比较两个实例的：
+    - `trajectory_summary`
+    - `tension`
+    - `population_highlights`
+    - diagnostics 主导项
+- `TODO.md`
+  - 同步写明作者控制台已有跨实例长期结果对照
+- `DELIVERY_TRACKING.md`
+  - 将 Trace / Authoring 项更新为“已有跨实例结果对照”
+- 验证：
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api` ✅
+
+### 2026-05-27 16:24:00 UTC — Trajectory Summary 接入作者控制台
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime.go`
+  - `TickStatus()` 新增 `trajectory_summary`
+  - 新增长期趋势摘要逻辑：
+    - `tension trend`
+    - `dominant pressure`
+    - `dominant faction tension`
+    - `population outcome`
+    - `recent diagnostics`
+- `internal/runtime/runtime_test.go`
+  - 扩展长窗口测试，验证 `trajectory_summary` 会在单世界与结构分叉场景中稳定产出
+- `internal/api/server_test.go`
+  - 扩展 API 长窗口测试，验证 `/api/sim/status` 返回的 `trajectory_summary` 会随 world outcome 分叉
+- `web/index.html`
+  - Simulation 面板新增“长期总结”
+- `web/app.js`
+  - 新增 `renderTrajectorySummary()`，作者控制台可直接阅读长期趋势
+- `TODO.md`
+  - 同步写明作者控制台已有长期 trajectory summary
+- `DELIVERY_TRACKING.md`
+  - 将 Trace / Authoring 项更新为“已有长期总结能力”
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 16:16:00 UTC — API 层 Long-Window Authoring Divergence 验证
+Modified by: Codex (GPT-5)
+
+- `internal/api/server_test.go`
+  - 新增真实 runtime + resolver 级测试 `TestAPIStructureInterventionDivergesLongWindowOutcomeAcrossInstances`
+  - 通过 API 对两个实例分别执行：
+    - `POST /api/population`
+    - `POST /api/world-structure`
+    - 连续 `POST /api/sim/tick`
+    - `GET /api/sim/status`
+    - `GET /api/population-insights`
+  - 验证作者侧接口已经能读出长期 outcome 分叉，而不只是 runtime 内部测试可见
+- `TODO.md`
+  - 同步写明 API 层已有真实长窗口 authoring 验证
+- `DELIVERY_TRACKING.md`
+  - 将作者干预闭环项补充为“API 侧已证明能读出长期分叉”
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/api` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+
+### 2026-05-27 16:09:00 UTC — Long-Window Structure Divergence 验证补强
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestWorldStructureInterventionDivergesLongWindowAutonomousOutcome`
+  - 用两套 world structure 对同一 population 连续跑 36 ticks，验证：
+    - baseline 与 intervened 世界的 `tension` 长窗口结果分叉
+    - `world_pressure` canonical events 数量分叉
+    - `population promotion` 结果分叉
+    - `tick_history.diagnostics` 与 `population_highlights` 可解释地分叉
+- `TODO.md`
+  - 将 simulation / world structure 项更新为“已有长期 outcome 分叉证据”
+- `DELIVERY_TRACKING.md`
+  - 将 World Structure / Autonomous Simulation 两项更新为“已有 36 tick 长窗口分叉测试”
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+
+### 2026-05-27 16:18:00 UTC — Autonomous Tick 拉入 Scene Population 并补强长窗口闭环
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/population_runtime.go`
+  - 新增 `syncAutonomousScenePopulationLocked()`
+  - autonomous tick 现在会显式把当前 scene/location/faction/pressure 命中的 background NPC 拉入 scene runtime
+- `internal/runtime/runtime.go`
+  - `onTick()` 在自治阶段前会同步 scene population，使无人输入时也能自然积累 exposure / promotion
+  - 抽出 `buildTickDiagnosticsLocked()`
+  - `tick_history` 现在会保存当时的 diagnostics 快照，而不只保留 summary
+- `internal/core/types.go`
+  - `TickSnapshot` 新增 `diagnostics`
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow`
+  - 验证在不触发 directTurn/director 的前提下：
+    - scene 相关 background NPC 会被 tick 拉入当前 scene
+    - 长窗口 36 ticks 后会累积 exposure 并自然 promotion
+    - `population_insights`、canonical events、`tick_history.diagnostics` 都能看到结果
+- `web/app.js`
+  - “近期轨迹”现在会显示每个 recent tick 的首条 diagnostics 提示
+- `TODO.md`
+  - 同步写明 autonomous tick 已可自然拉入 background population
+- `DELIVERY_TRACKING.md`
+  - 将 Population / Autonomous Simulation / Authoring 三项推进状态更新到长窗口事实
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 16:02:00 UTC — Simulation Tick History 接入作者控制台
+Modified by: Codex (GPT-5)
+
+- `internal/core/types.go`
+  - 新增 `TickSnapshot`
+- `internal/runtime/runtime.go`
+  - `Engine` 新增最近 12 次 tick 的 `tickHistory`
+  - `TickStatus()` 现在返回 `tick_history`
+  - 每次 `onTick()` 结束后会记录 tension / pressure / faction / population / summary 快照
+- `internal/runtime/runtime_test.go`
+  - 扩展 `TestStructureDrivenSimulationSustainsEvolutionAcrossTicks`
+  - 验证 `tick_history` 会稳定累积、tick 递增且每条快照都有 summary
+- `web/index.html`
+  - Simulation 面板新增“近期轨迹”
+- `web/app.js`
+  - 新增 `renderTickHistory()`，作者控制台可直接浏览最近多次 tick 轨迹
+- `TODO.md`
+  - 同步写明作者控制台已能看到最近多次 tick 轨迹
+- `DELIVERY_TRACKING.md`
+  - 将 Trace / Authoring 项补充为“已有多 tick 轨迹可视化”
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+
+### 2026-05-27 15:49:00 UTC — 长窗口测试口径收敛与仓库卫生清理
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 重新验证 `TestIdentityShiftSustainsDivergentRelationshipTrajectoryAcrossTicks`
+  - 将其稳定口径收敛为：identity shift 后，多 tick 下 `trust` 型自治动作数量持续高于 pre-shift
+  - 不再把该测试表述成“已证明长期 relationship 轨迹完全分叉”
+- `.gitignore`
+  - 新增 `*.test` 与 `cookies.txt`
+  - 避免本地测试二进制和临时 cookie 文件继续污染工作树
+- `TODO.md`
+  - 将人物成长闭环表述修正为：
+    - 已证明同 tick relationship outcome
+    - 已证明多 tick trust-action trajectory
+    - 尚未证明更长窗口的稳定 world outcome
+- `DELIVERY_TRACKING.md`
+  - 同步收紧人物自然成长闭环措辞，避免把短窗口证据写成长期结果验收
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+
+### 2026-05-27 15:34:53 UTC — 多 Tick Relationship Trajectory 对照补强
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime.go`
+  - `onTick()` 在 scheduler 后新增 `reprojectStateAfterTickLocked()`
+  - 本 tick 内 scheduler / autonomous action 产生的 relationship 事件现在可立即反映到 `stateMgr`
+- `internal/agents/scheduler.go`
+  - 新增 `SetActionInterval()` / `SetRandomStepChance()` 的测试友好入口
+- `internal/agents/scheduler_test.go`
+  - 新文件加入版本控制
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestIdentityShiftChangesSchedulerActionAndRelationshipOutcome`
+  - 验证同一 promoted NPC 在 identity shift 后：
+    - pre-shift 不走 `trust`
+    - post-shift 转向 `trust`
+    - 多 tick 下 `Relationships` 轨迹随之分叉并立刻可见
+- `TODO.md`
+  - 更新人物成长闭环状态：已证明会改变多 tick relationship outcome
+- `DELIVERY_TRACKING.md`
+  - 更新人物自然成长闭环当前实现与剩余缺口
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 15:32:59 UTC — Relationship Outcome 在同 Tick 闭环可见
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime.go`
+  - `onTick()` 在 scheduler 执行后新增 `reprojectStateAfterTickLocked()`
+  - 当前 tick 内由 scheduler / autonomous action 提交的 canonical events 现在会重新投影回 `stateMgr`
+  - 这让 `trust_change / fear_change` 等 relationship 结果不再滞后一拍
+- `internal/agents/scheduler.go`
+  - 新增 `SetRandomStepChance()`
+  - 用于在测试中关闭随机选步噪声，稳定验证长链闭环
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestIdentityShiftChangesSchedulerActionAndRelationshipOutcome`
+  - 验证同一 promoted NPC 在 identity shift 后会：
+    - 从 pre-shift 的非 `trust` 自治动作转向 `trust`
+    - 在同一 tick 内改善 `Relationships`
+- `TODO.md`
+  - 更新人物成长闭环状态：已证明会改变 relationship outcome
+- `DELIVERY_TRACKING.md`
+  - 更新人物自然成长闭环当前实现与剩余缺口
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 15:24:22 UTC — Scheduler 接入人物慢变量选步
+Modified by: Codex (GPT-5)
+
+- `internal/agents/scheduler.go`
+  - 新增 `selectAdaptiveBestStep()` 与 `adaptiveStepPriority()`
+  - scheduler 现在会依据 `trust / intimacy / fear / aggression` 调整 NPC 自治选步
+  - 这让慢变量不只影响 prompt / director / desire，也影响非焦点 NPC 的规则调度结果
+- `internal/agents/scheduler_test.go`
+  - 新增 `TestSelectAdaptiveBestStep`
+  - 新增 `TestSchedulerTickFollowsAdaptiveShift`
+  - 验证同一角色在慢变量漂移前后会从 `threaten` 转向 `trust`
+- `TODO.md`
+  - 更新人物成长闭环状态：已证明会改变 scheduler 选步
+- `DELIVERY_TRACKING.md`
+  - 更新人物自然成长闭环当前实现与剩余缺口
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/agents ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 15:20:09 UTC — Identity Shift 传导到 Desire / Autonomous Intent
+Modified by: Codex (GPT-5)
+
+- `internal/emotion/desire.go`
+  - 新增 `DeleteByCharacter()`
+  - 将 desire 生成逻辑抽出为 `buildSeedDesires()`
+  - 新增 `ReplaceDesires()`，支持按当前 identity/goals 重建角色 desires
+- `internal/runtime/population_runtime.go`
+  - `reconcilePopulationLocked()` 在 promotion / identity shift 后新增 `refreshPopulationDesiresLocked()`
+  - promoted persona 的 adaptive 漂移现在会刷新 `desireStore`
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestPopulationIdentityShiftRefreshesDesiresAndAutonomousIntent`
+  - 验证同一 promoted NPC 在 trust 漂移前后会发生：
+    - dominant desire 从 `autonomy` 转向包含 `affection`
+    - autonomous action type 从 `withdraw` 转向 `approach`
+- `TODO.md`
+  - 更新人物成长闭环状态：已证明会改变 autonomous desire / intent
+- `DELIVERY_TRACKING.md`
+  - 更新人物自然成长闭环当前实现与剩余缺口
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core ./internal/emotion` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 15:15:02 UTC — 人物成长影响 Director 胜出结果
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestPopulationIdentityShiftChangesDirectorWinner`
+  - 验证同一 promoted NPC 在 trust 漂移前后会发生：
+    - director candidate `score` 上升
+    - `score_breakdown.trust` 上升
+    - `dominant_factors` 出现 `信任倾向`
+    - 选人结果从落选变成胜出
+- `TODO.md`
+  - 更新人物成长闭环状态：已证明会改变 future allowed actions 和 director 胜出结果
+- `DELIVERY_TRACKING.md`
+  - 更新人物自然成长闭环的当前实现与剩余缺口
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 15:10:51 UTC — 人物成长前置到动作空间过滤
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/turns.go`
+  - `composeTurnPrompt()` / `stepPromptDirectives()` 现在会吃到角色 `adaptive`
+  - 新增 `filterAllowedActionsForAdaptive()`、`filterActions()`、`prioritizeActions()`
+  - `executeTurnStep()` 里的 `allowedActions` 现在先过 step 过滤，再过人格过滤
+  - 这让 promoted persona 的 trust / intimacy / fear / aggression 直接影响未来动作空间，而不只是事后 validator 拦截
+- `internal/runtime/runtime_test.go`
+  - `TestFilterAllowedActionsForAdaptive`
+  - `TestPopulationIdentityShiftChangesFutureAllowedActions`
+  - 验证同一 promoted NPC 在 trust 漂移后会失去 `attack / threaten` 等高冲突动作
+- `TODO.md`
+  - 更新人物成长闭环的可信状态
+- `DELIVERY_TRACKING.md`
+  - 更新人物自然成长闭环说明与剩余缺口
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 15:03:28 UTC — 多 Tick 结构演化验证补强
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestStructureDrivenSimulationSustainsEvolutionAcrossTicks`
+  - 验证 structure pressure 在连续 8 个 tick 下会持续产出：
+    - 多个不同的 `tension` 状态
+    - 增长的 `faction_tensions`
+    - 演化中的 `pressure_states`
+    - 每 tick 可观测的 `last_tick_summary`
+    - 重复出现的 `world_pressure` canonical events
+- `TODO.md`
+  - 将 simulation 项更新为“已有连续多 tick 演化证据，但仍缺更长窗口验证”
+- `DELIVERY_TRACKING.md`
+  - 将 Autonomous Simulation 项更新为“已证明连续多 tick 结构化变化，仍待长期验收”
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 15:00:39 UTC — World Structure 前后对照闭环测试补强
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestWorldStructureInterventionChangesRuntimeOutputs`
+  - 同一 world / 同一 background NPC 下，验证 structure 干预前后会真实改变：
+    - director candidate 与 `world_signals`
+    - `TickStatus()` 的 `tension / pressure_states / faction_tensions`
+    - authoring diagnostics 中的 `scene_control / active_pressure / scene_population_candidates`
+- `TODO.md`
+  - 将 world structure 项更新为“已有结构前后对照测试，但仍缺长程回放验证”
+- `DELIVERY_TRACKING.md`
+  - 将 world structure 驱动闭环更新为“已有对照证据，但仍待长期验收”
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 14:57:31 UTC — Structure 响应摘要与作者诊断增强
+Modified by: Codex (GPT-5)
+
+- `web/app.js`
+  - simulation compare 摘要拆分为 `structure` 与 `response`
+  - structure 改动不会在保存后立刻被清空，而是等到检测到真实 sim delta 后再消费
+  - 若世界尚未响应，会显式显示 `response: awaiting world response`
+- `internal/runtime/runtime.go`
+  - `TickStatus()` 新增 structure authoring diagnostics
+  - 作者现在可以直接看到：
+    - 当前 scene 是否处于某 faction 控制区
+    - 哪些 pressure 正在命中当前 scene / faction
+    - 哪些 background NPC 已被 structure 命中并可进入 director 候选
+- `internal/runtime/runtime_test.go`
+  - 新增 `TestTickStatusIncludesStructureAuthoringDiagnostics`
+- `TODO.md`
+  - 同步当前可信状态与待补验证口径
+- `DELIVERY_TRACKING.md`
+  - 同步 world structure / trace / authoring 的实际推进状态
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 14:34:45 UTC — Trace 人口成长摘要接入
+Modified by: Codex (GPT-5)
+
+- `internal/core/types.go`
+  - `WorldMetrics` 新增 `population_highlights`
+- `internal/runtime/population_runtime.go`
+  - 新增 `populationHighlightsLocked()`：从当前 world population 中提取 top promoted / top rising 摘要
+- `internal/runtime/runtime.go`
+  - `ProcessTurn()` 构建 trace 时开始填充 `world_metrics.population_highlights`
+- `web/app.js`
+  - Trace 面板新增 `population:` 行，直接展示当前最活跃的 promoted / rising NPC
+- `internal/runtime/runtime_test.go`
+  - 调整 trace 断言，确保 world runtime 下会输出 population highlights
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 14:31:44 UTC — Director 主导因子结构化输出
+Modified by: Codex (GPT-5)
+
+- `internal/core/types.go`
+  - `DirectorPlan` 新增 `world_signals`
+  - `DirectorCandidate` 新增 `dominant_factors`
+- `internal/runtime/director.go`
+  - 新增 `dominantDirectorFactors()`：从 `score_breakdown` 提取前 3 个主导因素
+  - 新增 `buildWorldSignals()`：把世界高张力、pressure/faction/location 命中情况结构化为 director 上下文信号
+  - director manual / no-alternate / normal scoring 三条路径都开始输出 `world_signals`
+- `web/app.js`
+  - Director 面板新增 `world_signals` 展示
+  - Trace 面板新增：
+    - `director-world`
+    - 选中候选的 `drivers`
+  - 让作者能直接看到“这次选角主要被什么驱动”
+- `internal/runtime/runtime_test.go`
+  - 新增断言，确保 `DirectorPlan.WorldSignals` 与 `DirectorCandidate.DominantFactors` 会被真实产出
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime ./internal/api ./internal/core` ✅
+  - `node --check web/app.js` ✅
+
+### 2026-05-27 14:27:31 UTC — Delivery 口径收口 + world metrics/diagnostics 前端接入
+Modified by: Codex (GPT-5)
+
+- `DELIVERY_TRACKING.md`
+  - 整份重写为“实现推进状态”文档，不再伪装成终态验收通过清单
+  - 新增状态定义：`已实现 / 待验收 / 已验收`
+  - 8 个验收项统一改成：
+    - 当前实现
+    - 为什么还不能算已验收
+    - 建议验收动作
+  - 明确写清：终态是否完成，统一以 `ACCEPTANCE_CHECKLIST.md` 为准
+- `web/index.html`
+  - Simulation 面板新增“运行诊断”区块
+- `web/app.js`
+  - 新增 `renderSimDiagnostics()`，渲染 `/api/sim/status` 返回的 `diagnostics`
+  - trace 视图新增 `world_metrics` 展示：`tension / pressure_states / faction_tensions / npc_exposure`
+  - 让作者控制台不需要直接看原始 JSON 也能理解当前世界演化状态
+- 验证：
+  - `node --check web/app.js` ✅
 
 ### 2026-05-27 13:35:13 UTC — 文档审计与交接语义清理
 Modified by: Codex (GPT-5)
@@ -1183,6 +2065,110 @@ Modified by: Codex (GPT-5)
   - `README.md`
   - `ARCHITECTURE.md`
   - `TODO.md`
+
+### 2026-05-27 18:51:04 UTC — Export / World API 主语义收口
+Modified by: Codex (GPT-5)
+
+- `internal/api/server.go`
+  - `/api/experiment-reports` 在 API 层也统一做 compat normalization
+  - `/api/worlds` 返回显式 `participants / participant_details`
+  - `/api/export` 返回显式 `participants / participant_details`
+  - Markdown 导出标题改为 `Focus Character`
+- `internal/api/server_test.go`
+  - 新增 / 更新 world enter、export、experiment report 兼容回归测试
+- 文档同步：
+  - `TODO.md`
+  - `CLOSURE_AUDIT.md`
+  - `DELIVERY_TRACKING.md`
+
+### 2026-05-27 18:39:32 UTC — Experiment Report 兼容语义收口
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/compat.go` / `internal/runtime/authoring.go`
+  - 新增 `ExperimentSnapshot` / `ExperimentReport` compatibility normalization
+  - archived `latest_trace` 现在也统一优先 `focus_character`
+- `internal/runtime/runtime_test.go` / `internal/api/server_test.go`
+  - 新增归档 compat 回归测试，证明 legacy `character` 不再主导实验归档回放
+- 文档同步：
+  - `TODO.md`
+  - `CLOSURE_AUDIT.md`
+  - `DELIVERY_TRACKING.md`
+
+### 2026-05-27 18:36:27 UTC — Runtime Audit 第一版实验归档复现
+Modified by: Codex (GPT-5)
+
+- `web/app.js`
+  - Runtime Audit 的 Archive 区现在可展开 archived experiment report
+  - 可查看 `current / compare` snapshot 摘要
+  - 可把 archived `latest_trace` 直接送入阶段回放
+- 文档同步：
+  - `TODO.md`
+  - `CLOSURE_AUDIT.md`
+  - `DELIVERY_TRACKING.md`
+
+### 2026-05-27 18:34:06 UTC — Runtime Audit 第一版按阶段回放
+Modified by: Codex (GPT-5)
+
+- `web/app.js`
+  - Runtime Audit 现在会为选中的 trace 拉取完整 `step_traces`
+  - 新增逐阶段回放视图，支持：
+    - 上一阶段 / 下一阶段
+    - 直接跳到指定 step
+    - 查看 handoff / goals / allowed actions / validator / events / narrative
+- `web/index.html`
+  - Runtime Audit 说明文案更新到“按原因筛 + 按阶段回放”
+- 文档同步：
+  - `TODO.md`
+  - `CLOSURE_AUDIT.md`
+  - `DELIVERY_TRACKING.md`
+
+### 2026-05-27 18:29:46 UTC — Runtime Audit 第一版按原因筛选
+Modified by: Codex (GPT-5)
+
+- `web/index.html` / `web/app.js`
+  - Runtime Audit 新增 `原因筛选`
+  - 当前可按 `director / pressure / faction / population / archive` 切开统一审计证据
+  - `World / Population` 审计块拆成更细的 pressure / faction / population 视图
+- 文档同步：
+  - `TODO.md`
+  - `CLOSURE_AUDIT.md`
+  - `DELIVERY_TRACKING.md`
+
+### 2026-05-27 18:26:38 UTC — RuntimeInstanceSummary 兼容语义收口
+Modified by: Codex (GPT-5)
+
+- `internal/core/types.go`
+  - 为 `RuntimeInstanceSummary`、`TurnTrace`、`TurnStepTrace` 补充 world-first / compatibility 语义注释
+- `internal/runtime/compat.go` / `internal/runtime/runtime.go`
+  - 新增 `RuntimeInstanceSummary` normalization
+  - 实例摘要显式保证：
+    - `focus_character` = viewpoint
+    - `participants` = scene truth
+    - `active_character` = compatibility mirror
+    - `loaded_characters` = loaded roster mirror
+- `internal/api/server_test.go` / `internal/runtime/instances_test.go`
+  - 新增实例摘要回归测试，证明 `participants` 不再被 `loaded_characters` 代表
+- 文档同步：
+  - `TODO.md`
+  - `CLOSURE_AUDIT.md`
+  - `DELIVERY_TRACKING.md`
+
+### 2026-05-27 18:22:29 UTC — Memory / PendingFact 兼容层继续收口
+Modified by: Codex (GPT-5)
+
+- `internal/runtime/compat.go`
+  - 新增 `MemorySnapshot` / `PendingFact` compatibility normalization
+- `internal/runtime/persistence.go` / `internal/runtime/review.go`
+  - runtime 返回 memory snapshot / pending facts 时统一优先 `focus_character`
+- `internal/api/server.go`
+  - `/api/memory` 不再从 legacy `character` 反向决定 focus
+  - `/api/pending-facts` / `/api/quarantine` 顶层 `focus_character` 回传统一显式化
+- `internal/api/server_test.go`
+  - 新增 `/api/memory` 与 `/api/pending-facts` “新字段优先、旧字段仅镜像” 回归测试
+- 文档同步：
+  - `TODO.md`
+  - `CLOSURE_AUDIT.md`
+  - `DELIVERY_TRACKING.md`
 
 ### 2026-05-26 09:05:31 UTC — 标准 data 目录重建与 PM2 启动固化
 Modified by: Codex (GPT-5)

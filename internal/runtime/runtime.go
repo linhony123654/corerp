@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,31 +33,33 @@ type CharWorld struct {
 
 // Engine orchestrates the narrative loop.
 type Engine struct {
-	mu           sync.RWMutex
-	stateMgr     *state.Manager
-	eventStore   *events.Store
-	gatekeeper   *events.Gatekeeper
-	memEngine    *memory.Engine
-	agents       *agents.EnvelopeManager
-	compiler     *context.Compiler
-	llmRouter    *llm.Router
-	executor     *actions.Executor
-	tickLoop     *simulation.Loop
-	decayEngine  *memory.DecayEngine
-	tensionEng   *narrative.TensionEngine
-	pulseEng     *simulation.PulseEngine
-	factionEng   *simulation.FactionEngine
-	stateMachine *state.StateMachine
-	compressEng  *narrative.CompressionEngine
-	planner      *agents.Planner
-	scheduler    *agents.Scheduler
-	emotionEng   *emotion.Engine
-	desireStore  *emotion.DesireStore
-	actionLogger *emotion.ActionLogger
-	actionBudget *emotion.ActionBudget
-	directorCfg  core.DirectorConfig
-	lastPlan     core.DirectorPlan
-	turnTraces   []core.TurnTrace
+	mu              sync.RWMutex
+	stateMgr        *state.Manager
+	eventStore      *events.Store
+	gatekeeper      *events.Gatekeeper
+	memEngine       *memory.Engine
+	agents          *agents.EnvelopeManager
+	compiler        *context.Compiler
+	llmRouter       *llm.Router
+	executor        *actions.Executor
+	tickLoop        *simulation.Loop
+	decayEngine     *memory.DecayEngine
+	tensionEng      *narrative.TensionEngine
+	pulseEng        *simulation.PulseEngine
+	factionEng      *simulation.FactionEngine
+	stateMachine    *state.StateMachine
+	compressEng     *narrative.CompressionEngine
+	planner         *agents.Planner
+	scheduler       *agents.Scheduler
+	emotionEng      *emotion.Engine
+	desireStore     *emotion.DesireStore
+	actionLogger    *emotion.ActionLogger
+	actionBudget    *emotion.ActionBudget
+	directorCfg     core.DirectorConfig
+	lastPlan        core.DirectorPlan
+	turnTraces      []core.TurnTrace
+	lastTickSummary []string
+	tickHistory     []core.TickSnapshot
 
 	// Config
 	instanceID       string
@@ -123,6 +126,7 @@ func New(
 		actionBudget:     emotion.DefaultBudget(),
 		directorCfg:      core.DirectorConfig{Mode: "auto_chain", MaxSpeakers: 2},
 		turnTraces:       make([]core.TurnTrace, 0, 32),
+		tickHistory:      make([]core.TickSnapshot, 0, 12),
 		npcTickExposure:  make(map[string]int),
 		factionEng:       simulation.NewFactionEngine(),
 		compiler:         context.NewCompiler("budgets.yml"),
@@ -339,11 +343,17 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 
 		trace := core.TurnTrace{
 			Turn:           turnNumber,
-			Character:      plan.Steps[0].Speaker,
 			FocusCharacter: e.GetFocusCharacter(),
 			UserInput:      userInput,
 			DirectorPlan:   plan,
-			CreatedAt:      time.Now().UTC(),
+			WorldMetrics: core.WorldMetrics{
+				Tension:              worldState.Tension,
+				PressureStates:       e.pulseEng.PressureStates(),
+				FactionTensions:      e.factionEng.Tensions(),
+				NPCExposure:          cloneNPCExposure(e.npcTickExposure),
+				PopulationHighlights: e.populationHighlightsLocked(),
+			},
+			CreatedAt: time.Now().UTC(),
 		}
 		defer func() {
 			e.mu.Lock()
@@ -392,7 +402,6 @@ func (e *Engine) ProcessTurn(userInput string) (<-chan string, error) {
 				trace.WorkingMemory = stepTrace.WorkingMemory
 				trace.ActionFrame = stepTrace.ActionFrame
 				trace.Validator = stepTrace.Validator
-				trace.Character = stepTrace.Character
 			}
 			if stepTrace.Error != "" {
 				if trace.Narrative == "" {
@@ -530,12 +539,7 @@ func (e *Engine) GetSceneParticipants() []string {
 	defer e.mu.RUnlock()
 
 	participants := dedupeSceneCharacters(append([]string(nil), e.stateMgr.Get().Scene.Characters...))
-	if len(participants) > 0 {
-		return participants
-	}
-	names := make([]string, len(e.loadedCharacters))
-	copy(names, e.loadedCharacters)
-	return names
+	return participants
 }
 
 func (e *Engine) GetSceneParticipantDetails() []core.ParticipantSummary {
@@ -583,9 +587,6 @@ func (e *Engine) participantSummaryLocked(name string, present bool) core.Partic
 func (e *Engine) sceneParticipantDetailsLocked() []core.ParticipantSummary {
 	sceneParticipants := dedupeSceneCharacters(append([]string(nil), e.stateMgr.Get().Scene.Characters...))
 	names := append([]string(nil), sceneParticipants...)
-	if len(names) == 0 {
-		names = append(names, e.loadedCharacters...)
-	}
 
 	background := map[string]bool{}
 	promoted := map[string]bool{}
@@ -662,18 +663,16 @@ func (e *Engine) GetInstanceID() string {
 func (e *Engine) InstanceSummary() core.RuntimeInstanceSummary {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return core.RuntimeInstanceSummary{
+	return normalizeRuntimeInstanceSummaryCompatibility(core.RuntimeInstanceSummary{
 		ID:                 e.instanceID,
 		Label:              e.worldName,
 		WorldName:          e.worldName,
-		ActiveCharacter:    e.GetFocusCharacter(),
 		FocusCharacter:     e.GetFocusCharacter(),
-		LoadedCharacters:   append([]string(nil), e.loadedCharacters...),
 		Participants:       dedupeSceneCharacters(append([]string(nil), e.stateMgr.Get().Scene.Characters...)),
 		ParticipantDetails: e.sceneParticipantDetailsLocked(),
 		CreatedAt:          e.instanceCreated,
 		Status:             InstanceStatusRunning,
-	}
+	})
 }
 
 // SwitchFocusCharacter changes the focus character. It saves working memory for
@@ -1035,7 +1034,130 @@ func (e *Engine) TickStatus() map[string]interface{} {
 		}
 		status["npc_tick_exposure"] = exposureCopy
 	}
+	if highlights := e.populationHighlightsLocked(); len(highlights) > 0 {
+		status["population_highlights"] = highlights
+	}
+	if len(e.lastTickSummary) > 0 {
+		status["last_tick_summary"] = append([]string(nil), e.lastTickSummary...)
+	}
+	if len(e.tickHistory) > 0 {
+		history := make([]core.TickSnapshot, 0, len(e.tickHistory))
+		for _, item := range e.tickHistory {
+			history = append(history, cloneTickSnapshot(item))
+		}
+		status["tick_history"] = history
+	}
+
+	// Authoring diagnostics: actionable insights for world operators
+	state := e.stateMgr.Get()
+	status["tension"] = state.Tension
+	diagnostics := e.buildTickDiagnosticsLocked(state)
+	if len(diagnostics) > 0 {
+		status["diagnostics"] = diagnostics
+	}
+	if summary := e.buildTrajectorySummaryLocked(state); len(summary) > 0 {
+		status["trajectory_summary"] = summary
+	}
+
 	return status
+}
+
+func (e *Engine) structureAuthoringDiagnosticsLocked(state core.WorldState) []map[string]interface{} {
+	path := strings.TrimSpace(e.currentWorldPathLocked())
+	if path == "" {
+		return nil
+	}
+	structure, err := world.LoadStructure(path)
+	if err != nil {
+		return nil
+	}
+	cfg, _, err := world.EnsureSeededPopulation(path)
+	if err != nil {
+		return nil
+	}
+
+	sceneLocation := strings.TrimSpace(state.Scene.Location)
+	var diagnostics []map[string]interface{}
+	if sceneLocation != "" {
+		for _, location := range structure.Locations {
+			if strings.TrimSpace(location.Name) != sceneLocation {
+				continue
+			}
+			controller := strings.TrimSpace(location.Controller)
+			if controller != "" {
+				diagnostics = append(diagnostics, map[string]interface{}{
+					"level":   "info",
+					"metric":  "scene_control",
+					"target":  sceneLocation,
+					"message": fmt.Sprintf("当前 scene 位于 '%s' 控制区，director / planner 会更偏向相关 faction 与 NPC", controller),
+				})
+			}
+			break
+		}
+	}
+
+	activePressureCount := 0
+	for _, pressure := range structure.Pressures {
+		target := strings.TrimSpace(pressure.Target)
+		if target == "" || pressure.Intensity < 0.5 {
+			continue
+		}
+		if target == sceneLocation || target == factionControllingScene(sceneLocation, structure) {
+			activePressureCount++
+			diagnostics = append(diagnostics, map[string]interface{}{
+				"level":   "info",
+				"metric":  "active_pressure",
+				"target":  pressure.ID,
+				"value":   pressure.Intensity,
+				"message": fmt.Sprintf("pressure '%s' 正在命中当前 scene/faction，后续 tick 与 director 可能继续放大它的影响", pressure.Name),
+			})
+		}
+	}
+
+	relevantNPCs := make([]string, 0, 3)
+	relevantNPCCount := 0
+	for _, npc := range cfg.BackgroundNPCs {
+		candidate := buildPopulationSceneCandidate(npc, state, structure, "")
+		if !populationCandidateRelevant(candidate) {
+			continue
+		}
+		relevantNPCCount++
+		if len(relevantNPCs) < 3 {
+			relevantNPCs = append(relevantNPCs, npc.Name)
+		}
+	}
+	if relevantNPCCount > 0 {
+		message := fmt.Sprintf("%d 个 background NPC 已被 scene/location/pressure 命中，可被 director 拉入候选：%s", relevantNPCCount, strings.Join(relevantNPCs, ", "))
+		diagnostics = append(diagnostics, map[string]interface{}{
+			"level":   "info",
+			"metric":  "scene_population_candidates",
+			"value":   relevantNPCCount,
+			"message": message,
+		})
+	} else if activePressureCount > 0 {
+		diagnostics = append(diagnostics, map[string]interface{}{
+			"level":   "warning",
+			"metric":  "scene_population_candidates",
+			"value":   0,
+			"message": "当前 structure 已对 scene 施加压力，但还没有命中的 background NPC，人口层可能偏空",
+		})
+	}
+
+	return diagnostics
+}
+
+func factionControllingScene(sceneLocation string, structure core.WorldStructureConfig) string {
+	sceneLocation = strings.TrimSpace(sceneLocation)
+	if sceneLocation == "" {
+		return ""
+	}
+	for _, location := range structure.Locations {
+		if strings.TrimSpace(location.Name) != sceneLocation {
+			continue
+		}
+		return strings.TrimSpace(location.Controller)
+	}
+	return ""
 }
 
 // ManualTick forces one tick cycle immediately.
@@ -1062,6 +1184,16 @@ func (e *Engine) onTick() {
 	defer e.mu.Unlock()
 
 	state := e.stateMgr.Get()
+	summary := make([]string, 0, 8)
+	beforeTension := state.Tension
+	beforePressure := map[string]float64{}
+	beforeFaction := map[string]float64{}
+	if e.pulseEng != nil {
+		beforePressure = e.pulseEng.PressureStates()
+	}
+	if e.factionEng != nil {
+		beforeFaction = e.factionEng.Tensions()
+	}
 
 	// 1. Advance world clock: 1min real = 5min world
 	state.Clock.Minute += 5
@@ -1078,6 +1210,7 @@ func (e *Engine) onTick() {
 	clockEvent := events.BuildEvent("clock_advance", "system", "",
 		map[string]interface{}{"hour": state.Clock.Hour, "minute": state.Clock.Minute, "day": state.Clock.Day})
 	e.gatekeeper.Submit(clockEvent, events.SourceTick())
+	summary = append(summary, fmt.Sprintf("world clock -> day %d %02d:%02d", state.Clock.Day, state.Clock.Hour, state.Clock.Minute))
 
 	// 3. Auto-promote quarantined events
 	if n, err := e.gatekeeper.AutoPromote(); err != nil {
@@ -1111,6 +1244,9 @@ func (e *Engine) onTick() {
 		if path := e.currentWorldPathLocked(); path != "" {
 			if structure, err := world.LoadStructure(path); err == nil {
 				pulseEvents := e.pulseEng.Tick(structure, state, int(e.tickCount.Load()))
+				if len(pulseEvents) > 0 {
+					summary = append(summary, summarizeTickEvents("pressure", pulseEvents))
+				}
 				for _, evt := range pulseEvents {
 					e.gatekeeper.Submit(evt, events.SourceTick())
 					applyTickEvent(&state, evt)
@@ -1124,6 +1260,9 @@ func (e *Engine) onTick() {
 		if path := e.currentWorldPathLocked(); path != "" {
 			if structure, err := world.LoadStructure(path); err == nil {
 				factionEvents := e.factionEng.Tick(structure, state, int(e.tickCount.Load()))
+				if len(factionEvents) > 0 {
+					summary = append(summary, summarizeTickEvents("faction", factionEvents))
+				}
 				for _, evt := range factionEvents {
 					e.gatekeeper.Submit(evt, events.SourceTick())
 					applyTickEvent(&state, evt)
@@ -1135,6 +1274,9 @@ func (e *Engine) onTick() {
 	// 7. Tension Engine check
 	if e.tensionEng != nil {
 		pressureEvents := e.tensionEng.Tick(state, e.turnCount)
+		if len(pressureEvents) > 0 {
+			summary = append(summary, summarizeTickEvents("narrative", pressureEvents))
+		}
 		for _, evt := range pressureEvents {
 			e.gatekeeper.Submit(evt, events.SourceTick())
 			applyTickEvent(&state, evt)
@@ -1148,6 +1290,11 @@ func (e *Engine) onTick() {
 
 	// 9. Update state manager with all tick changes
 	e.stateMgr.Set(state)
+
+	if added := e.syncAutonomousScenePopulationLocked(&state); len(added) > 0 {
+		summary = append(summary, fmt.Sprintf("world pulled %d background NPCs into current scene: %s", len(added), strings.Join(added, ", ")))
+		e.stateMgr.Set(state)
+	}
 
 	// 10. NPC desire-driven autonomous actions for non-focus participants
 	e.tickCount.Add(1)
@@ -1168,8 +1315,21 @@ func (e *Engine) onTick() {
 			e.npcTickExposure[name]++
 		}
 	}
+	presentNPCs := 0
+	for _, name := range e.loadedCharacters {
+		if name == e.focusCharacter {
+			continue
+		}
+		if containsString(state.Scene.Characters, name) {
+			presentNPCs++
+		}
+	}
+	if presentNPCs > 0 {
+		summary = append(summary, fmt.Sprintf("%d present NPCs accumulated exposure", presentNPCs))
+	}
 
 	// For each non-focus NPC, attempt desire-driven autonomous action
+	autonomousActions := 0
 	for _, name := range e.loadedCharacters {
 		if name == e.focusCharacter {
 			continue
@@ -1201,6 +1361,7 @@ func (e *Engine) onTick() {
 			}
 			evts, err := e.executor.Execute(frame, state)
 			if err == nil {
+				autonomousActions++
 				for _, evt := range evts {
 					evt.Actor = name
 					e.gatekeeper.Submit(evt, events.SourceTick())
@@ -1227,6 +1388,10 @@ func (e *Engine) onTick() {
 		int(e.tickCount.Load()),
 		schedulerStructure,
 	)
+	e.reprojectStateAfterTickLocked(state)
+	if autonomousActions > 0 {
+		summary = append(summary, fmt.Sprintf("%d autonomous npc actions executed", autonomousActions))
+	}
 
 	// 11. Narrative compression: every 20 ticks, check if compaction needed
 	if e.tickCount.Load()%20 == 0 {
@@ -1238,6 +1403,330 @@ func (e *Engine) onTick() {
 	}
 
 	e.reconcilePopulationLocked()
+	appendTickDeltaSummary(&summary, beforeTension, state.Tension, beforePressure, beforeFaction, e.pulseEng, e.factionEng)
+	if highlights := e.populationHighlightsLocked(); len(highlights) > 0 {
+		summary = append(summary, highlights...)
+	}
+	e.lastTickSummary = summary
+	e.appendTickHistoryLocked(state, summary)
+}
+
+func (e *Engine) reprojectStateAfterTickLocked(fallback core.WorldState) {
+	eventList, err := e.eventStore.GetCanonicalEvents()
+	if err != nil {
+		return
+	}
+	projected := events.Project(eventList)
+	projected.Clock = fallback.Clock
+	if projected.Scene.Location == "" && projected.Scene.Description == "" && len(projected.Scene.Characters) == 0 {
+		projected.Scene = fallback.Scene
+	}
+	e.stateMgr.Set(projected)
+}
+
+func summarizeTickEvents(label string, events []core.Event) string {
+	if len(events) == 0 {
+		return ""
+	}
+	typeCounts := map[string]int{}
+	for _, evt := range events {
+		typeCounts[evt.Type]++
+	}
+	parts := make([]string, 0, len(typeCounts))
+	for kind, count := range typeCounts {
+		parts = append(parts, fmt.Sprintf("%s:%d", kind, count))
+	}
+	sort.Strings(parts)
+	return fmt.Sprintf("%s events -> %s", label, strings.Join(parts, ", "))
+}
+
+func appendTickDeltaSummary(summary *[]string, beforeTension, afterTension float64, beforePressure, beforeFaction map[string]float64, pulseEng *simulation.PulseEngine, factionEng *simulation.FactionEngine) {
+	if summary == nil {
+		return
+	}
+	if beforeTension != afterTension {
+		*summary = append(*summary, fmt.Sprintf("tension %.2f -> %.2f", beforeTension, afterTension))
+	}
+	if pulseEng != nil {
+		if line := summarizeFloatMapDelta("pressure", beforePressure, pulseEng.PressureStates()); line != "" {
+			*summary = append(*summary, line)
+		}
+	}
+	if factionEng != nil {
+		if line := summarizeFloatMapDelta("faction", beforeFaction, factionEng.Tensions()); line != "" {
+			*summary = append(*summary, line)
+		}
+	}
+}
+
+func (e *Engine) appendTickHistoryLocked(state core.WorldState, summary []string) {
+	var pressureStates map[string]float64
+	if e.pulseEng != nil {
+		pressureStates = cloneFloatMap(e.pulseEng.PressureStates())
+	}
+	var factionTensions map[string]float64
+	if e.factionEng != nil {
+		factionTensions = cloneFloatMap(e.factionEng.Tensions())
+	}
+	snapshot := core.TickSnapshot{
+		Tick:                 e.tickCount.Load(),
+		Tension:              state.Tension,
+		PressureStates:       pressureStates,
+		FactionTensions:      factionTensions,
+		PopulationHighlights: append([]string(nil), e.populationHighlightsLocked()...),
+		Diagnostics:          cloneDiagnostics(e.buildTickDiagnosticsLocked(state)),
+		Summary:              append([]string(nil), summary...),
+		CreatedAt:            time.Now().UTC(),
+	}
+	e.tickHistory = append(e.tickHistory, snapshot)
+	if len(e.tickHistory) > 12 {
+		e.tickHistory = append([]core.TickSnapshot(nil), e.tickHistory[len(e.tickHistory)-12:]...)
+	}
+}
+
+func cloneTickSnapshot(snapshot core.TickSnapshot) core.TickSnapshot {
+	snapshot.PressureStates = cloneFloatMap(snapshot.PressureStates)
+	snapshot.FactionTensions = cloneFloatMap(snapshot.FactionTensions)
+	snapshot.PopulationHighlights = append([]string(nil), snapshot.PopulationHighlights...)
+	snapshot.Diagnostics = cloneDiagnostics(snapshot.Diagnostics)
+	snapshot.Summary = append([]string(nil), snapshot.Summary...)
+	return snapshot
+}
+
+func cloneDiagnostics(src []map[string]interface{}) []map[string]interface{} {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]map[string]interface{}, 0, len(src))
+	for _, item := range src {
+		copied := make(map[string]interface{}, len(item))
+		for k, v := range item {
+			copied[k] = v
+		}
+		out = append(out, copied)
+	}
+	return out
+}
+
+func (e *Engine) buildTickDiagnosticsLocked(state core.WorldState) []map[string]interface{} {
+	var diagnostics []map[string]interface{}
+	if state.Tension >= 0.8 {
+		diagnostics = append(diagnostics, map[string]interface{}{
+			"level":   "critical",
+			"metric":  "tension",
+			"value":   state.Tension,
+			"message": "世界张力极高，建议降低压力源强度或增加缓冲事件",
+		})
+	} else if state.Tension >= 0.6 {
+		diagnostics = append(diagnostics, map[string]interface{}{
+			"level":   "warning",
+			"metric":  "tension",
+			"value":   state.Tension,
+			"message": "世界张力偏高，注意监控压力演化趋势",
+		})
+	}
+	if e.factionEng != nil {
+		for facID, tension := range e.factionEng.Tensions() {
+			if tension >= 0.8 {
+				diagnostics = append(diagnostics, map[string]interface{}{
+					"level":   "critical",
+					"metric":  "faction_tension",
+					"target":  facID,
+					"value":   tension,
+					"message": fmt.Sprintf("势力 '%s' 紧张度极高，建议调整派系关系或引入调解事件", facID),
+				})
+			} else if tension >= 0.6 {
+				diagnostics = append(diagnostics, map[string]interface{}{
+					"level":   "warning",
+					"metric":  "faction_tension",
+					"target":  facID,
+					"value":   tension,
+					"message": fmt.Sprintf("势力 '%s' 紧张度上升，建议关注派系动态", facID),
+				})
+			}
+		}
+	}
+	if len(e.npcTickExposure) > 0 {
+		fastGrowing := 0
+		for _, exposure := range e.npcTickExposure {
+			if exposure >= 50 {
+				fastGrowing++
+			}
+		}
+		if fastGrowing >= 3 {
+			diagnostics = append(diagnostics, map[string]interface{}{
+				"level":   "info",
+				"metric":  "population_growth",
+				"value":   fastGrowing,
+				"message": fmt.Sprintf("%d 个背景 NPC 正在快速成长，预计很快会触发晋升", fastGrowing),
+			})
+		}
+	}
+	diagnostics = append(diagnostics, e.structureAuthoringDiagnosticsLocked(state)...)
+	return diagnostics
+}
+
+func (e *Engine) buildTrajectorySummaryLocked(state core.WorldState) []string {
+	if len(e.tickHistory) == 0 {
+		return nil
+	}
+
+	first := e.tickHistory[0]
+	last := e.tickHistory[len(e.tickHistory)-1]
+	lines := make([]string, 0, 5)
+	lines = append(lines, fmt.Sprintf("tension trend: %.2f -> %.2f (%s)", first.Tension, last.Tension, tensionTrendLabel(first.Tension, last.Tension)))
+
+	if pressureID, pressureValue := dominantFloatMapEntry(last.PressureStates); pressureID != "" {
+		lines = append(lines, fmt.Sprintf("dominant pressure: %s %.2f", pressureID, pressureValue))
+	}
+	if factionID, factionValue := dominantFloatMapEntry(last.FactionTensions); factionID != "" {
+		lines = append(lines, fmt.Sprintf("dominant faction tension: %s %.2f", factionID, factionValue))
+	}
+
+	if promotedCount, promotedLine := e.populationOutcomeSummaryLocked(); promotedCount > 0 {
+		lines = append(lines, promotedLine)
+	} else if len(last.PopulationHighlights) > 0 {
+		lines = append(lines, fmt.Sprintf("population outcome: %s", last.PopulationHighlights[0]))
+	}
+
+	if diagLine := diagnosticsSummaryLine(e.tickHistory); diagLine != "" {
+		lines = append(lines, diagLine)
+	}
+	return lines
+}
+
+func tensionTrendLabel(first, last float64) string {
+	delta := last - first
+	switch {
+	case delta > 0.08:
+		return "rising"
+	case delta < -0.08:
+		return "falling"
+	default:
+		return "stable"
+	}
+}
+
+func dominantFloatMapEntry(values map[string]float64) (string, float64) {
+	bestKey := ""
+	bestValue := 0.0
+	for key, value := range values {
+		if bestKey == "" || value > bestValue || (value == bestValue && key < bestKey) {
+			bestKey = key
+			bestValue = value
+		}
+	}
+	return bestKey, bestValue
+}
+
+func (e *Engine) populationOutcomeSummaryLocked() (int, string) {
+	path := strings.TrimSpace(e.currentWorldPathLocked())
+	if path == "" {
+		return 0, ""
+	}
+	cfg, _, err := world.EnsureSeededPopulation(path)
+	if err != nil || len(cfg.PromotedNPCs) == 0 {
+		return 0, ""
+	}
+	promoted := append([]core.PromotedNPC(nil), cfg.PromotedNPCs...)
+	sort.Slice(promoted, func(i, j int) bool {
+		if promoted[i].Attention.Score == promoted[j].Attention.Score {
+			return promoted[i].Name < promoted[j].Name
+		}
+		return promoted[i].Attention.Score > promoted[j].Attention.Score
+	})
+	top := promoted[0]
+	return len(promoted), fmt.Sprintf("population outcome: %d promoted, top %s(%.1f)", len(promoted), top.Name, top.Attention.Score)
+}
+
+func diagnosticsSummaryLine(history []core.TickSnapshot) string {
+	if len(history) == 0 {
+		return ""
+	}
+	counts := map[string]int{}
+	for _, snapshot := range history {
+		seen := map[string]bool{}
+		for _, item := range snapshot.Diagnostics {
+			metric, _ := item["metric"].(string)
+			if metric == "" || seen[metric] {
+				continue
+			}
+			seen[metric] = true
+			counts[metric]++
+		}
+	}
+	if len(counts) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if counts[keys[i]] == counts[keys[j]] {
+			return keys[i] < keys[j]
+		}
+		return counts[keys[i]] > counts[keys[j]]
+	})
+	parts := make([]string, 0, minInt(3, len(keys)))
+	for _, key := range keys[:minInt(3, len(keys))] {
+		parts = append(parts, fmt.Sprintf("%s x%d", key, counts[key]))
+	}
+	return "recent diagnostics: " + strings.Join(parts, " · ")
+}
+
+func cloneFloatMap(src map[string]float64) map[string]float64 {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]float64, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func summarizeFloatMapDelta(label string, before, after map[string]float64) string {
+	type delta struct {
+		key    string
+		before float64
+		after  float64
+		change float64
+	}
+	deltas := make([]delta, 0)
+	keys := map[string]bool{}
+	for key := range before {
+		keys[key] = true
+	}
+	for key := range after {
+		keys[key] = true
+	}
+	for key := range keys {
+		b := before[key]
+		a := after[key]
+		if b == a {
+			continue
+		}
+		change := a - b
+		if change < 0 {
+			change = -change
+		}
+		deltas = append(deltas, delta{key: key, before: b, after: a, change: change})
+	}
+	if len(deltas) == 0 {
+		return ""
+	}
+	sort.Slice(deltas, func(i, j int) bool {
+		if deltas[i].change == deltas[j].change {
+			return deltas[i].key < deltas[j].key
+		}
+		return deltas[i].change > deltas[j].change
+	})
+	parts := make([]string, 0, minInt(len(deltas), 3))
+	for _, item := range deltas[:minInt(len(deltas), 3)] {
+		parts = append(parts, fmt.Sprintf("%s %.2f->%.2f", item.key, item.before, item.after))
+	}
+	return fmt.Sprintf("%s delta -> %s", label, strings.Join(parts, ", "))
 }
 
 func applyTickEvent(state *core.WorldState, evt core.Event) {
@@ -1371,4 +1860,15 @@ func (e *Engine) SwitchLLM(name, endpoint, apiKey, model string) {
 	}
 	e.llmRouter.UpdateAdapter("default", endpoint, apiKey, model)
 	log.Printf("LLM switched to %s @ %s", model, endpoint)
+}
+
+func cloneNPCExposure(src map[string]int) map[string]int {
+	if src == nil {
+		return nil
+	}
+	out := make(map[string]int, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
 }

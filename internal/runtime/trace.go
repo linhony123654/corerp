@@ -7,6 +7,7 @@ import (
 )
 
 func (e *Engine) recordTraceLocked(trace core.TurnTrace) {
+	trace = normalizeTurnTraceCompatibility(trace)
 	if trace.CreatedAt.IsZero() {
 		trace.CreatedAt = time.Now().UTC()
 	}

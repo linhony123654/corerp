@@ -3,11 +3,13 @@ package runtime
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -240,6 +242,26 @@ func TestSwitchCharacterLoadsSceneParticipantShellWhenMissing(t *testing.T) {
 	}
 	if !containsString(engine.GetLoadedCharacters(), "街区观察者") {
 		t.Fatalf("loaded characters = %#v, want 街区观察者 present", engine.GetLoadedCharacters())
+	}
+}
+
+func TestSceneParticipantsDoNotFallbackToLoadedCharacters(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+
+	engine.mu.Lock()
+	state := engine.stateMgr.Get()
+	state.Scene.Characters = nil
+	engine.stateMgr.Set(state)
+	engine.mu.Unlock()
+
+	if participants := engine.GetSceneParticipants(); len(participants) != 0 {
+		t.Fatalf("scene participants = %#v, want empty without scene truth", participants)
+	}
+	if details := engine.GetSceneParticipantDetails(); len(details) != 0 {
+		t.Fatalf("participant details = %#v, want empty without scene truth", details)
+	}
+	if loaded := engine.GetLoadedCharacters(); len(loaded) == 0 {
+		t.Fatalf("loaded characters = %#v, want compatibility-loaded roster to remain intact", loaded)
 	}
 }
 
@@ -552,7 +574,7 @@ func TestNeonBlockWorldPresetCanBeListedAndApplied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyScenarioPreset: %v", err)
 	}
-	if applied.Character != "蓝姐" || applied.Scene.Location != "旧街夜市" {
+	if applied.FocusCharacter != "蓝姐" || applied.Scene.Location != "旧街夜市" {
 		t.Fatalf("applied preset = %#v", applied)
 	}
 	if got := engine.GetState().Scene.Description; !strings.Contains(got, "监控黑屏") {
@@ -607,7 +629,7 @@ func TestComposeTurnPromptIncludesRoleDirective(t *testing.T) {
 		BudgetMode: "full_load",
 	}
 
-	prompt := composeTurnPrompt(base, step, "玩家", nil)
+	prompt := composeTurnPrompt(base, step, "玩家", nil, nil)
 	if !strings.Contains(prompt, "当前 step: #1 | speaker=安雅 | kind=addressed_reply | budget=full_load") {
 		t.Fatalf("prompt missing step header: %s", prompt)
 	}
@@ -617,9 +639,9 @@ func TestComposeTurnPromptIncludesRoleDirective(t *testing.T) {
 }
 
 func TestStepPromptDirectivesDifferByKind(t *testing.T) {
-	lead := strings.Join(stepPromptDirectives(core.TurnStep{Kind: "lead"}, "玩家"), "\n")
-	support := strings.Join(stepPromptDirectives(core.TurnStep{Kind: "support_response"}, "玩家"), "\n")
-	tension := strings.Join(stepPromptDirectives(core.TurnStep{Kind: "tension_response"}, "玩家"), "\n")
+	lead := strings.Join(stepPromptDirectives(core.TurnStep{Kind: "lead"}, "玩家", nil), "\n")
+	support := strings.Join(stepPromptDirectives(core.TurnStep{Kind: "support_response"}, "玩家", nil), "\n")
+	tension := strings.Join(stepPromptDirectives(core.TurnStep{Kind: "tension_response"}, "玩家", nil), "\n")
 
 	if !strings.Contains(lead, "正面回应") {
 		t.Fatalf("lead directives = %s, want direct response rule", lead)
@@ -648,6 +670,26 @@ func TestFilterAllowedActionsForStep(t *testing.T) {
 	tension := filterAllowedActionsForStep(core.TurnStep{Kind: "tension_response"}, base)
 	if !containsString(tension, "threaten") || !containsString(tension, "attack") {
 		t.Fatalf("tension actions = %v, want threaten/attack present", tension)
+	}
+}
+
+func TestFilterAllowedActionsForAdaptive(t *testing.T) {
+	base := []string{"threaten", "hide", "attack", "speak", "negotiate"}
+
+	highTrust := filterAllowedActionsForAdaptive(base, map[string]float64{"trust": 8, "intimacy": 7})
+	if containsString(highTrust, "attack") || containsString(highTrust, "threaten") {
+		t.Fatalf("high trust actions = %v, want aggressive actions removed", highTrust)
+	}
+	if len(highTrust) == 0 || highTrust[0] != "speak" {
+		t.Fatalf("high trust actions = %v, want speak-first after filtering", highTrust)
+	}
+
+	highFear := filterAllowedActionsForAdaptive(base, map[string]float64{"fear": 8})
+	if containsString(highFear, "attack") {
+		t.Fatalf("high fear actions = %v, want attack removed", highFear)
+	}
+	if len(highFear) == 0 || highFear[0] != "hide" {
+		t.Fatalf("high fear actions = %v, want hide-first", highFear)
 	}
 }
 
@@ -683,7 +725,7 @@ func TestComposeTurnPromptIncludesHandoff(t *testing.T) {
 		}},
 	}
 
-	prompt := composeTurnPrompt(base, step, "玩家", handoff)
+	prompt := composeTurnPrompt(base, step, "玩家", nil, handoff)
 	if !strings.Contains(prompt, "上一步交接") {
 		t.Fatalf("prompt missing handoff section: %s", prompt)
 	}
@@ -756,7 +798,7 @@ func TestMultiCharacterHTTPFlowKeepsStateWorldAndDialogueAligned(t *testing.T) {
 
 	assertState("废弃地铁站", "夜之城 2077", "111 hello")
 
-	body := bytes.NewBufferString(`{"character":"安雅"}`)
+	body := bytes.NewBufferString(`{"focus_character":"安雅"}`)
 	switchReq := httptest.NewRequest(http.MethodPost, "/api/switch", body)
 	switchReq.Header.Set("Content-Type", "application/json")
 	switchRec := httptest.NewRecorder()
@@ -1177,6 +1219,158 @@ func TestReconcilePopulationPromotesBackgroundNPC(t *testing.T) {
 	}
 }
 
+func TestReconcilePopulationDemotesStalePromotedNPC(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "population-demotion-world")
+	writeTestWorldBundle(t, worldDir, "人口降级世界", "长期不再被世界卷入的人物应退回背景人口", core.SceneState{
+		Location:    "镇口",
+		TimeOfDay:   "午后",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "镇口茶摊曾经很热闹",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "人口降级世界",
+		CoreRules: "长期不再被世界卷入的人物应退回背景人口",
+		Scene: core.SceneState{
+			Location:    "镇口",
+			TimeOfDay:   "午后",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "镇口茶摊曾经很热闹",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+	engine.stateMgr.Set(core.WorldState{
+		Scene: core.SceneState{
+			Location:    "远郊",
+			TimeOfDay:   "深夜",
+			Weather:     "雨",
+			Characters:  []string{"111", "玩家"},
+			Description: "当前场景已经离开镇口很久",
+		},
+		Relationships: map[string]core.Relationship{},
+		Variables:     map[string]interface{}{},
+		Flags:         map[string]bool{},
+	})
+
+	if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "tea_vendor",
+			Name:     "茶摊老板",
+			Role:     "商贩",
+			Location: "镇口",
+			Traits:   []string{"健谈", "精明"},
+			Hooks:    []string{"想知道最近城里的消息"},
+			Attention: core.PopulationAttention{
+				Score: 12,
+			},
+		}},
+		PromotedNPCs: []core.PromotedNPC{{
+			ID:           "tea_vendor",
+			Name:         "茶摊老板",
+			From:         "background",
+			Status:       "promoted",
+			IdentityCore: "tea_vendor_core",
+			Attention: core.PopulationAttention{
+				Score: 12,
+			},
+			LastEventID: "old_pop_evt",
+		}},
+		IdentityCores: []core.IdentityCoreConfig{{
+			ID:          "tea_vendor_core",
+			Name:        "茶摊老板",
+			Immutable:   []string{"健谈", "精明"},
+			Adaptive:    map[string]float64{"trust": 3, "fear": 2},
+			SpeechHints: []string{"健谈"},
+			Drives:      []string{"维持茶摊消息网"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   8,
+			MajorThreshold:     20,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 4,
+			SceneWeight:        2,
+		},
+	}); err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	oldEvent := core.Event{
+		ID:        "old_pop_evt",
+		Type:      "dialogue",
+		Actor:     "茶摊老板",
+		Target:    "111",
+		Payload:   map[string]interface{}{"content": "茶摊老板曾经提供过关键消息。"},
+		SceneID:   "镇口",
+		Canonical: true,
+		CreatedAt: time.Now().UTC().Add(-populationAttentionEventWindow - time.Hour),
+	}
+	if err := engine.eventStore.Append(oldEvent); err != nil {
+		t.Fatalf("append stale population event: %v", err)
+	}
+
+	engine.reconcilePopulationLocked()
+
+	population, err := engine.GetPopulationConfig()
+	if err != nil {
+		t.Fatalf("GetPopulationConfig: %v", err)
+	}
+	if len(population.PromotedNPCs) != 0 {
+		t.Fatalf("promoted npcs = %#v, want stale promoted NPC demoted", population.PromotedNPCs)
+	}
+	if len(population.BackgroundNPCs) != 1 || population.BackgroundNPCs[0].Attention.Score >= population.Policy.PromoteThreshold/2 {
+		t.Fatalf("background attention after demotion = %#v, want below demotion threshold", population.BackgroundNPCs)
+	}
+
+	canonical, err := engine.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("GetCanonicalEvents: %v", err)
+	}
+	foundDemotionEvent := false
+	for _, evt := range canonical {
+		if evt.Type == "population_demoted" && evt.Target == "茶摊老板" {
+			foundDemotionEvent = true
+			break
+		}
+	}
+	if !foundDemotionEvent {
+		t.Fatalf("canonical events missing population_demoted: %#v", canonical)
+	}
+
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("GetPopulationInsights: %v", err)
+	}
+	if len(insights.Promoted) != 0 {
+		t.Fatalf("promoted insights = %#v, want empty after demotion", insights.Promoted)
+	}
+	var demotionInHistory bool
+	for _, npc := range insights.Background {
+		if npc.Name != "茶摊老板" {
+			continue
+		}
+		for _, item := range npc.History {
+			if item.Type == "population_demoted" {
+				demotionInHistory = true
+				break
+			}
+		}
+	}
+	if !demotionInHistory {
+		t.Fatalf("background insights = %#v, want population_demoted history after demotion", insights.Background)
+	}
+}
+
 func TestGetPopulationInsightsSeedsBackgroundPopulation(t *testing.T) {
 	engine := newMultiCharacterTestEngine(t)
 	root := t.TempDir()
@@ -1335,6 +1529,12 @@ func TestDirectorAutoSingleSwitchesSpeaker(t *testing.T) {
 	plan := engine.GetDirectorPlan()
 	if plan.Mode != "auto_single" || len(plan.Selected) == 0 || plan.Selected[0] != "安雅" {
 		t.Fatalf("director plan = %#v, want 安雅 selected", plan)
+	}
+	if len(plan.WorldSignals) == 0 {
+		t.Fatalf("director world signals missing: %#v", plan)
+	}
+	if len(plan.CandidateDetails) == 0 || len(plan.CandidateDetails[0].DominantFactors) == 0 {
+		t.Fatalf("director dominant factors missing: %#v", plan.CandidateDetails)
 	}
 }
 
@@ -1707,11 +1907,17 @@ func TestTurnTraceRecorded(t *testing.T) {
 	if !ok {
 		t.Fatal("latest trace missing")
 	}
-	if trace.UserInput == "" || trace.Character == "" {
-		t.Fatalf("trace = %#v, want user input and character", trace)
+	if trace.UserInput == "" || trace.FocusCharacter == "" {
+		t.Fatalf("trace = %#v, want user input and focus_character", trace)
 	}
 	if trace.Turn == 0 {
 		t.Fatalf("trace turn = 0")
+	}
+	if len(trace.DirectorPlan.WorldSignals) == 0 {
+		t.Fatalf("trace world signals missing: %#v", trace.DirectorPlan)
+	}
+	if engine.currentWorldPathLocked() != "" && len(trace.WorldMetrics.PopulationHighlights) == 0 {
+		t.Fatalf("trace population highlights missing: %#v", trace.WorldMetrics)
 	}
 }
 
@@ -1742,8 +1948,8 @@ func TestCreateAndLoadSaveSlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load save slot: %v", err)
 	}
-	if loaded.Character != "111" {
-		t.Fatalf("loaded character = %q, want 111", loaded.Character)
+	if loaded.Character != "" {
+		t.Fatalf("loaded character mirror = %q, want empty on canonical save output", loaded.Character)
 	}
 	if got := engine.GetState().Scene.Location; got != "废弃地铁站" {
 		t.Fatalf("loaded scene = %q, want 废弃地铁站", got)
@@ -1803,6 +2009,42 @@ func TestCreateAndLoadSaveSlotWithoutEvents(t *testing.T) {
 	}
 }
 
+func TestLoadSaveSlotPrefersFocusCharacterOverLegacyCharacter(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	engine.ConfigurePersistence(t.TempDir(), map[string]string{}, map[string]string{})
+	engine.SyncActiveWorldContext()
+
+	if err := engine.writeSaveSlots([]core.SaveSlot{{
+		Name:           "focus-wins",
+		Branch:         "main",
+		Character:      "111",
+		FocusCharacter: "安雅",
+		PlayerRole:     core.PlayerRole{Name: "玩家"},
+		WorldState: core.WorldState{
+			Scene: core.SceneState{
+				Location:    "地下安全屋",
+				TimeOfDay:   "深夜",
+				Weather:     "无风",
+				Characters:  []string{"安雅", "玩家"},
+				Description: "focus should win",
+			},
+		},
+	}}); err != nil {
+		t.Fatalf("writeSaveSlots: %v", err)
+	}
+
+	loaded, err := engine.LoadSaveSlot("focus-wins")
+	if err != nil {
+		t.Fatalf("LoadSaveSlot: %v", err)
+	}
+	if loaded.FocusCharacter != "安雅" {
+		t.Fatalf("loaded.FocusCharacter = %q, want 安雅", loaded.FocusCharacter)
+	}
+	if got := engine.GetFocusCharacter(); got != "安雅" {
+		t.Fatalf("focus character = %q, want 安雅 to win over legacy Character", got)
+	}
+}
+
 func TestScenarioPresetCreateAndApply(t *testing.T) {
 	engine := newMultiCharacterTestEngine(t)
 	engine.ConfigurePersistence(t.TempDir(), map[string]string{}, map[string]string{})
@@ -1847,8 +2089,8 @@ func TestScenarioPresetCreateAndApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyScenarioPreset: %v", err)
 	}
-	if applied.Character != "111" {
-		t.Fatalf("applied.Character = %q, want 111", applied.Character)
+	if applied.FocusCharacter != "111" {
+		t.Fatalf("applied.FocusCharacter = %q, want 111", applied.FocusCharacter)
 	}
 	if got := engine.GetState().Scene.Location; got != "作者控制台" {
 		t.Fatalf("scene.Location = %q, want 作者控制台", got)
@@ -1858,13 +2100,172 @@ func TestScenarioPresetCreateAndApply(t *testing.T) {
 	}
 }
 
+func TestApplyScenarioPresetPrefersFocusCharacterOverLegacyCharacter(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	engine.ConfigurePersistence(t.TempDir(), map[string]string{}, map[string]string{})
+	engine.SyncActiveWorldContext()
+
+	engine.mu.Lock()
+	if err := engine.writeScenarioPresetsLocked([]core.ScenarioPreset{{
+		Name:           "focus-wins",
+		Branch:         "main",
+		Character:      "111",
+		FocusCharacter: "安雅",
+		PlayerRole:     core.PlayerRole{Name: "玩家"},
+		Scene: core.SceneState{
+			Location:    "地下安全屋",
+			TimeOfDay:   "深夜",
+			Weather:     "无风",
+			Characters:  []string{"安雅", "玩家"},
+			Description: "preset focus should win",
+		},
+	}}); err != nil {
+		engine.mu.Unlock()
+		t.Fatalf("writeScenarioPresetsLocked: %v", err)
+	}
+	engine.mu.Unlock()
+
+	applied, err := engine.ApplyScenarioPreset("focus-wins")
+	if err != nil {
+		t.Fatalf("ApplyScenarioPreset: %v", err)
+	}
+	if applied.FocusCharacter != "安雅" {
+		t.Fatalf("applied.FocusCharacter = %q, want 安雅", applied.FocusCharacter)
+	}
+	if got := engine.GetFocusCharacter(); got != "安雅" {
+		t.Fatalf("focus character = %q, want 安雅 to win over legacy Character", got)
+	}
+}
+
+func TestExperimentReportCreateAndList(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	engine.ConfigurePersistence(t.TempDir(), map[string]string{}, map[string]string{})
+
+	saved, err := engine.CreateExperimentReport(core.ExperimentReport{
+		Name:              "neon-compare",
+		Note:              "guard pressure divergence",
+		BatchCount:        36,
+		SourceInstanceID:  "default",
+		CompareInstanceID: "alt-guard",
+		CurrentCheckpoint: "neon-compare-current",
+		CompareCheckpoint: "neon-compare-compare",
+		OutcomeSummary:    []string{"default vs alt-guard"},
+		Conclusion:        []string{"长期张力主导：default（gap 0.70）"},
+		Current: core.ExperimentSnapshot{
+			InstanceID:         "default",
+			FocusCharacter:     "111",
+			Participants:       []string{"111", "玩家"},
+			ParticipantDetails: []core.ParticipantSummary{{Name: "111", Kind: "persona", Source: "character_definition", Loaded: true, Switchable: true, Present: true, Focus: true}},
+			SceneLocation:      "外城",
+			SceneDescription:   "长窗口实验",
+			TickCount:          36,
+			Tension:            0.8,
+			TrajectorySummary:  []string{"trend a"},
+			DirectorPlan:       &core.DirectorPlan{Mode: "auto_chain", Selected: []string{"111"}, WorldSignals: []string{"pressure:curfew"}},
+			LatestTrace:        &core.TurnTrace{Turn: 12, FocusCharacter: "111", UserInput: "继续观察"},
+		},
+		Compare: &core.ExperimentSnapshot{
+			InstanceID:        "alt-guard",
+			FocusCharacter:    "巡夜人",
+			SceneLocation:     "外城",
+			TickCount:         36,
+			Tension:           0.1,
+			TrajectorySummary: []string{"trend b"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateExperimentReport: %v", err)
+	}
+	if saved.Name != "neon-compare" {
+		t.Fatalf("saved.Name = %q, want neon-compare", saved.Name)
+	}
+	if saved.CreatedAt.IsZero() {
+		t.Fatalf("saved.CreatedAt = zero")
+	}
+	if saved.CurrentCheckpoint != "neon-compare-current" || saved.CompareCheckpoint != "neon-compare-compare" {
+		t.Fatalf("saved checkpoints = %q / %q, want persisted checkpoint anchors", saved.CurrentCheckpoint, saved.CompareCheckpoint)
+	}
+
+	reports, err := engine.ListExperimentReports()
+	if err != nil {
+		t.Fatalf("ListExperimentReports: %v", err)
+	}
+	if len(reports) != 1 || reports[0].Name != "neon-compare" {
+		t.Fatalf("reports = %#v, want neon-compare", reports)
+	}
+	if reports[0].Compare == nil || reports[0].Compare.InstanceID != "alt-guard" {
+		t.Fatalf("compare snapshot = %#v, want alt-guard", reports[0].Compare)
+	}
+	if reports[0].Current.DirectorPlan == nil || len(reports[0].Current.DirectorPlan.Selected) != 1 {
+		t.Fatalf("current director plan = %#v, want persisted director evidence", reports[0].Current.DirectorPlan)
+	}
+	if reports[0].Current.LatestTrace == nil || reports[0].Current.LatestTrace.Turn != 12 {
+		t.Fatalf("current latest trace = %#v, want persisted trace evidence", reports[0].Current.LatestTrace)
+	}
+	if reports[0].CurrentCheckpoint != "neon-compare-current" || reports[0].CompareCheckpoint != "neon-compare-compare" {
+		t.Fatalf("listed checkpoints = %q / %q, want round-tripped checkpoint anchors", reports[0].CurrentCheckpoint, reports[0].CompareCheckpoint)
+	}
+}
+
+func TestExperimentReportNormalizesFocusCompatibility(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	engine.ConfigurePersistence(t.TempDir(), map[string]string{}, map[string]string{})
+
+	saved, err := engine.CreateExperimentReport(core.ExperimentReport{
+		Name:             "compat-report",
+		SourceInstanceID: "default",
+		Current: core.ExperimentSnapshot{
+			InstanceID: "default",
+			LatestTrace: &core.TurnTrace{
+				Turn:      3,
+				Character: "LegacyTraceFocus",
+				UserInput: "继续观察",
+			},
+		},
+		Compare: &core.ExperimentSnapshot{
+			InstanceID: "alt",
+			LatestTrace: &core.TurnTrace{
+				Turn:           2,
+				FocusCharacter: "CompareFocus",
+				Character:      "LegacyCompare",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateExperimentReport: %v", err)
+	}
+	if saved.Current.FocusCharacter != "LegacyTraceFocus" {
+		t.Fatalf("saved.Current.FocusCharacter = %q, want LegacyTraceFocus", saved.Current.FocusCharacter)
+	}
+	if saved.Current.LatestTrace == nil || saved.Current.LatestTrace.FocusCharacter != "LegacyTraceFocus" {
+		t.Fatalf("saved.Current.LatestTrace = %#v, want normalized focus", saved.Current.LatestTrace)
+	}
+	if saved.Compare == nil || saved.Compare.LatestTrace == nil || saved.Compare.LatestTrace.FocusCharacter != "CompareFocus" {
+		t.Fatalf("saved.Compare.LatestTrace = %#v, want CompareFocus to win", saved.Compare)
+	}
+
+	reports, err := engine.ListExperimentReports()
+	if err != nil {
+		t.Fatalf("ListExperimentReports: %v", err)
+	}
+	if len(reports) != 1 {
+		t.Fatalf("len(reports) = %d, want 1", len(reports))
+	}
+	if reports[0].Current.FocusCharacter != "LegacyTraceFocus" {
+		t.Fatalf("reports[0].Current.FocusCharacter = %q, want LegacyTraceFocus", reports[0].Current.FocusCharacter)
+	}
+	if reports[0].Compare == nil || reports[0].Compare.LatestTrace == nil || reports[0].Compare.LatestTrace.FocusCharacter != "CompareFocus" {
+		t.Fatalf("reports[0].Compare = %#v, want normalized compare trace focus", reports[0].Compare)
+	}
+}
+
 func TestListTurnTracesNewestFirst(t *testing.T) {
 	engine := newMultiCharacterTestEngine(t)
 
 	engine.mu.Lock()
-	engine.recordTraceLocked(core.TurnTrace{Turn: 1, Character: "111", UserInput: "first"})
-	engine.recordTraceLocked(core.TurnTrace{Turn: 2, Character: "111", UserInput: "second"})
-	engine.recordTraceLocked(core.TurnTrace{Turn: 3, Character: "安雅", UserInput: "third"})
+	engine.recordTraceLocked(core.TurnTrace{Turn: 1, FocusCharacter: "111", UserInput: "first"})
+	engine.recordTraceLocked(core.TurnTrace{Turn: 2, FocusCharacter: "111", UserInput: "second"})
+	engine.recordTraceLocked(core.TurnTrace{Turn: 3, FocusCharacter: "安雅", UserInput: "third"})
 	engine.mu.Unlock()
 
 	traces := engine.ListTurnTraces(2)
@@ -1873,6 +2274,9 @@ func TestListTurnTracesNewestFirst(t *testing.T) {
 	}
 	if traces[0].Turn != 3 || traces[1].Turn != 2 {
 		t.Fatalf("turns = [%d %d], want [3 2]", traces[0].Turn, traces[1].Turn)
+	}
+	if traces[0].FocusCharacter != "安雅" || traces[0].Character != "" {
+		t.Fatalf("trace payload = %#v, want focus only and empty legacy character mirror", traces[0])
 	}
 }
 
@@ -2108,15 +2512,15 @@ goals:
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	reqCfg := httptest.NewRequest(http.MethodPost, "/api/character-config", bytes.NewBufferString(`{"character":"安雅","card":{"identity":{"name":"安雅","immutable":["guarded"],"adaptive":{"trust":4},"forbidden":["info_dump"],"voice":{"style":"spare","rhythm":"short"},"writing_guide":"updated"},"goals":[{"id":"survive","priority":10,"type":"primary","condition":"always"}]}}`))
+	reqCfg := httptest.NewRequest(http.MethodPost, "/api/focus-definition-config", bytes.NewBufferString(`{"focus_character":"安雅","card":{"identity":{"name":"安雅","immutable":["guarded"],"adaptive":{"trust":4},"forbidden":["info_dump"],"voice":{"style":"spare","rhythm":"short"},"writing_guide":"updated"},"goals":[{"id":"survive","priority":10,"type":"primary","condition":"always"}]}}`))
 	reqCfg.Header.Set("Content-Type", "application/json")
 	recCfg := httptest.NewRecorder()
 	mux.ServeHTTP(recCfg, reqCfg)
 	if recCfg.Code != http.StatusOK {
-		t.Fatalf("POST /api/character-config = %d", recCfg.Code)
+		t.Fatalf("POST /api/focus-definition-config = %d", recCfg.Code)
 	}
 
-	switchReq := httptest.NewRequest(http.MethodPost, "/api/switch", bytes.NewBufferString(`{"character":"安雅"}`))
+	switchReq := httptest.NewRequest(http.MethodPost, "/api/switch", bytes.NewBufferString(`{"focus_character":"安雅"}`))
 	switchReq.Header.Set("Content-Type", "application/json")
 	switchRec := httptest.NewRecorder()
 	mux.ServeHTTP(switchRec, switchReq)
@@ -2130,22 +2534,25 @@ goals:
 	if memoryRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/memory = %d", memoryRec.Code)
 	}
-	var memoryResp core.MemorySnapshot
+	var memoryResp struct {
+		FocusCharacter string         `json:"focus_character"`
+		Dialogue       []core.Message `json:"dialogue"`
+	}
 	if err := json.NewDecoder(memoryRec.Body).Decode(&memoryResp); err != nil {
 		t.Fatalf("decode memory: %v", err)
 	}
-	if memoryResp.Character != "安雅" {
-		t.Fatalf("memory character = %q, want 安雅", memoryResp.Character)
+	if memoryResp.FocusCharacter != "安雅" {
+		t.Fatalf("memory focus_character = %q, want 安雅", memoryResp.FocusCharacter)
 	}
 	if len(memoryResp.Dialogue) == 0 || memoryResp.Dialogue[0].Content != "anya hello" {
 		t.Fatalf("memory dialogue = %#v, want 安雅 dialogue", memoryResp.Dialogue)
 	}
 
-	charReq := httptest.NewRequest(http.MethodGet, "/api/character", nil)
+	charReq := httptest.NewRequest(http.MethodGet, "/api/focus-definition", nil)
 	charRec := httptest.NewRecorder()
 	mux.ServeHTTP(charRec, charReq)
 	if charRec.Code != http.StatusOK {
-		t.Fatalf("GET /api/character = %d", charRec.Code)
+		t.Fatalf("GET /api/focus-definition = %d", charRec.Code)
 	}
 	var charResp core.Character
 	if err := json.NewDecoder(charRec.Body).Decode(&charResp); err != nil {
@@ -2320,6 +2727,21 @@ func TestOnTickInjectsWorldPressureEvents(t *testing.T) {
 	if state.Tension <= 0 {
 		t.Fatalf("state tension = %.2f, want positive after pulse", state.Tension)
 	}
+	status := engine.TickStatus()
+	summary, ok := status["last_tick_summary"].([]string)
+	if !ok || len(summary) == 0 {
+		t.Fatalf("tick summary missing: %#v", status)
+	}
+	foundDelta := false
+	for _, line := range summary {
+		if strings.Contains(line, "tension") || strings.Contains(line, "pressure delta") {
+			foundDelta = true
+			break
+		}
+	}
+	if !foundDelta {
+		t.Fatalf("tick summary missing state delta: %#v", summary)
+	}
 	if got := state.Variables["world.pressure.curfew.last_tick"]; got == nil {
 		t.Fatalf("pressure variable missing, state = %#v", state.Variables)
 	}
@@ -2337,6 +2759,1852 @@ func TestOnTickInjectsWorldPressureEvents(t *testing.T) {
 	}
 	if !foundPressure {
 		t.Fatalf("canonical events missing world_pressure: %#v", events)
+	}
+}
+
+func TestTickStatusIncludesStructureAuthoringDiagnostics(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "diagnostic-world")
+	writeTestWorldBundle(t, worldDir, "诊断世界", "作者需要看到结构影响", core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "外城正在收紧控制",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "诊断世界",
+		CoreRules: "作者需要看到结构影响",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城正在收紧控制",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Locations: []core.WorldLocationConfig{{
+			ID:          "outer_city",
+			Name:        "外城",
+			Kind:        "district",
+			Description: "夜间戒备森严",
+			Controller:  "guard",
+		}},
+		Pressures: []core.WorldPressureConfig{{
+			ID:          "curfew",
+			Name:        "宵禁升级",
+			Kind:        "security",
+			Description: "夜间搜查正在扩大",
+			Intensity:   0.8,
+			Target:      "guard",
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig: %v", err)
+	}
+	if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "watcher",
+			Name:     "巡夜人",
+			Role:     "巡逻",
+			Location: "外城",
+			Faction:  "guard",
+			Traits:   []string{"警觉"},
+			Hooks:    []string{"宵禁", "搜查"},
+		}},
+	}); err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	status := engine.TickStatus()
+	diagnostics, ok := status["diagnostics"].([]map[string]interface{})
+	if !ok || len(diagnostics) == 0 {
+		t.Fatalf("diagnostics missing: %#v", status["diagnostics"])
+	}
+
+	var foundSceneControl bool
+	var foundActivePressure bool
+	var foundPopulationCandidates bool
+	for _, item := range diagnostics {
+		metric, _ := item["metric"].(string)
+		message, _ := item["message"].(string)
+		switch metric {
+		case "scene_control":
+			foundSceneControl = strings.Contains(message, "控制区")
+		case "active_pressure":
+			foundActivePressure = strings.Contains(message, "pressure '宵禁升级'")
+		case "scene_population_candidates":
+			foundPopulationCandidates = strings.Contains(message, "巡夜人")
+		}
+	}
+	if !foundSceneControl || !foundActivePressure || !foundPopulationCandidates {
+		t.Fatalf("unexpected diagnostics: %#v", diagnostics)
+	}
+}
+
+func TestWorldStructureInterventionChangesRuntimeOutputs(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "structure-compare-world")
+	writeTestWorldBundle(t, worldDir, "结构对照世界", "作者干预应真实改变 runtime", core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "外城夜色紧绷",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "结构对照世界",
+		CoreRules: "作者干预应真实改变 runtime",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城夜色紧绷",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "watcher",
+			Name:     "巡夜人",
+			Role:     "巡逻",
+			Location: "岗亭",
+			Faction:  "guard",
+			Traits:   []string{"警觉"},
+			Hooks:    []string{"搜查", "宵禁"},
+		}},
+	}); err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Locations: []core.WorldLocationConfig{{
+			ID:          "outer_city",
+			Name:        "外城",
+			Kind:        "district",
+			Description: "尚未明确归属",
+			Controller:  "",
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig baseline: %v", err)
+	}
+
+	engine.onTick()
+	baselineStatus := engine.TickStatus()
+	engine.mu.Lock()
+	baselinePlan := engine.directTurnLocked("现在情况如何？", engine.stateMgr.Get())
+	engine.mu.Unlock()
+
+	if containsString(baselinePlan.Candidates, "巡夜人") {
+		t.Fatalf("baseline candidates = %#v, want no structure-driven 巡夜人", baselinePlan.Candidates)
+	}
+	if len(baselinePlan.WorldSignals) == 0 || baselinePlan.WorldSignals[0] != "当前主要由用户输入与在场状态驱动" {
+		t.Fatalf("baseline world signals = %#v", baselinePlan.WorldSignals)
+	}
+	if got := baselineStatus["tension"].(float64); got != 0 {
+		t.Fatalf("baseline tension = %.2f, want 0 without active structure pressure", got)
+	}
+	baselineDiagnostics, _ := baselineStatus["diagnostics"].([]map[string]interface{})
+	for _, item := range baselineDiagnostics {
+		if metric, _ := item["metric"].(string); metric == "scene_population_candidates" || metric == "active_pressure" || metric == "scene_control" {
+			t.Fatalf("baseline diagnostics unexpectedly structure-driven: %#v", baselineDiagnostics)
+		}
+	}
+
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Factions: []core.WorldFactionConfig{{
+			ID:            "guard",
+			Name:          "巡城司",
+			Role:          "law",
+			Description:   "负责外城宵禁",
+			Relationships: []string{"敌对 smugglers"},
+		}, {
+			ID:            "smugglers",
+			Name:          "走私帮",
+			Role:          "criminal",
+			Description:   "夜里活动频繁",
+			Relationships: []string{"敌对 guard"},
+		}},
+		Locations: []core.WorldLocationConfig{{
+			ID:          "outer_city",
+			Name:        "外城",
+			Kind:        "district",
+			Description: "巡城司控制区",
+			Controller:  "guard",
+		}},
+		Pressures: []core.WorldPressureConfig{{
+			ID:          "curfew",
+			Name:        "宵禁升级",
+			Kind:        "conflict",
+			Description: "外城正在扩大盘查",
+			Intensity:   0.9,
+			Target:      "guard",
+			Escalates:   []string{"checkpoint"},
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig intervention: %v", err)
+	}
+
+	engine.onTick()
+	intervenedStatus := engine.TickStatus()
+	engine.mu.Lock()
+	intervenedPlan := engine.directTurnLocked("现在情况如何？", engine.stateMgr.Get())
+	engine.mu.Unlock()
+
+	if !containsString(intervenedPlan.Candidates, "巡夜人") {
+		t.Fatalf("intervened candidates = %#v, want 巡夜人 after structure intervention", intervenedPlan.Candidates)
+	}
+	foundSceneSignal := false
+	for _, signal := range intervenedPlan.WorldSignals {
+		if strings.Contains(signal, "当前 scene 位置相关") || strings.Contains(signal, "命中当前 pressure") || strings.Contains(signal, "命中当前 faction") {
+			foundSceneSignal = true
+			break
+		}
+	}
+	if !foundSceneSignal {
+		t.Fatalf("intervened world signals = %#v, want structure-driven signals", intervenedPlan.WorldSignals)
+	}
+	if got := intervenedStatus["tension"].(float64); got <= 0 {
+		t.Fatalf("intervened tension = %.2f, want positive after structure pressure", got)
+	}
+	pressureStates, _ := intervenedStatus["pressure_states"].(map[string]float64)
+	if pressureStates["curfew"] <= 0 {
+		t.Fatalf("pressure states = %#v, want curfew intensity tracked", pressureStates)
+	}
+	factionTensions, _ := intervenedStatus["faction_tensions"].(map[string]float64)
+	if factionTensions["guard"] <= 0 {
+		t.Fatalf("faction tensions = %#v, want guard tension after structure pressure", factionTensions)
+	}
+	intervenedDiagnostics, _ := intervenedStatus["diagnostics"].([]map[string]interface{})
+	foundSceneControl := false
+	foundPressure := false
+	foundPopulation := false
+	for _, item := range intervenedDiagnostics {
+		metric, _ := item["metric"].(string)
+		message, _ := item["message"].(string)
+		switch metric {
+		case "scene_control":
+			foundSceneControl = strings.Contains(message, "控制区")
+		case "active_pressure":
+			foundPressure = strings.Contains(message, "宵禁升级")
+		case "scene_population_candidates":
+			foundPopulation = strings.Contains(message, "巡夜人")
+		}
+	}
+	if !foundSceneControl || !foundPressure || !foundPopulation {
+		t.Fatalf("intervened diagnostics = %#v, want structure-driven authoring evidence", intervenedDiagnostics)
+	}
+}
+
+func TestStructureDrivenSimulationSustainsEvolutionAcrossTicks(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "sustained-structure-world")
+	writeTestWorldBundle(t, worldDir, "持续演化世界", "世界应在多 tick 下持续演化", core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "夜里的外城持续承压",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "持续演化世界",
+		CoreRules: "世界应在多 tick 下持续演化",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "夜里的外城持续承压",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Factions: []core.WorldFactionConfig{{
+			ID:            "guard",
+			Name:          "巡城司",
+			Role:          "law",
+			Description:   "负责外城宵禁",
+			Relationships: []string{"敌对 smugglers"},
+		}},
+		Locations: []core.WorldLocationConfig{{
+			ID:          "outer_city",
+			Name:        "外城",
+			Kind:        "district",
+			Description: "巡城司控制区",
+			Controller:  "guard",
+		}},
+		Pressures: []core.WorldPressureConfig{{
+			ID:          "curfew",
+			Name:        "宵禁升级",
+			Kind:        "conflict",
+			Description: "夜间搜查持续扩大",
+			Intensity:   0.9,
+			Target:      "guard",
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig: %v", err)
+	}
+
+	tensionHistory := make([]float64, 0, 8)
+	factionHistory := make([]float64, 0, 8)
+	pressureHistory := make([]float64, 0, 8)
+	summaryCount := 0
+	for i := 0; i < 8; i++ {
+		engine.onTick()
+		status := engine.TickStatus()
+		tensionHistory = append(tensionHistory, status["tension"].(float64))
+		factionTensions, _ := status["faction_tensions"].(map[string]float64)
+		factionHistory = append(factionHistory, factionTensions["guard"])
+		pressureStates, _ := status["pressure_states"].(map[string]float64)
+		pressureHistory = append(pressureHistory, pressureStates["curfew"])
+		if summary, _ := status["last_tick_summary"].([]string); len(summary) > 0 {
+			summaryCount++
+		}
+	}
+
+	if summaryCount < 8 {
+		t.Fatalf("last tick summaries observed = %d, want summary every tick", summaryCount)
+	}
+	distinctTensions := map[string]bool{}
+	for _, v := range tensionHistory {
+		distinctTensions[fmt.Sprintf("%.2f", v)] = true
+	}
+	if len(distinctTensions) < 2 {
+		t.Fatalf("tension history = %#v, want multiple distinct states", tensionHistory)
+	}
+	if factionHistory[len(factionHistory)-1] <= factionHistory[0] {
+		t.Fatalf("faction history = %#v, want sustained growth from structure pressure", factionHistory)
+	}
+	if pressureHistory[len(pressureHistory)-1] <= pressureHistory[0] {
+		t.Fatalf("pressure history = %#v, want dynamic pressure state evolution", pressureHistory)
+	}
+	status := engine.TickStatus()
+	history, ok := status["tick_history"].([]core.TickSnapshot)
+	if !ok || len(history) != 8 {
+		t.Fatalf("tick history = %#v, want 8 recent snapshots", status["tick_history"])
+	}
+	trajectorySummary, ok := status["trajectory_summary"].([]string)
+	if !ok || len(trajectorySummary) == 0 {
+		t.Fatalf("trajectory summary = %#v, want author-facing long-window summary", status["trajectory_summary"])
+	}
+	if !strings.Contains(strings.Join(trajectorySummary, " | "), "tension trend:") {
+		t.Fatalf("trajectory summary = %#v, want tension trend line", trajectorySummary)
+	}
+	if history[0].Tick <= 0 || history[len(history)-1].Tick <= history[0].Tick {
+		t.Fatalf("tick history ticks = %#v, want increasing tick snapshots", history)
+	}
+	if len(history[len(history)-1].Summary) == 0 {
+		t.Fatalf("tick history latest summary = %#v, want latest snapshot summary", history[len(history)-1])
+	}
+	state := engine.GetState()
+	if state.Variables["world.pressure.curfew.last_tick"] == nil {
+		t.Fatalf("state variables = %#v, want pressure trace persisted", state.Variables)
+	}
+
+	events, err := engine.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("GetCanonicalEvents: %v", err)
+	}
+	worldPressureCount := 0
+	for _, evt := range events {
+		if evt.Type == "world_pressure" && evt.Payload["pressure_id"] == "curfew" {
+			worldPressureCount++
+		}
+	}
+	if worldPressureCount < 3 {
+		t.Fatalf("world pressure events = %d, want repeated structure-driven evolution", worldPressureCount)
+	}
+}
+
+func TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "autonomous-growth-world")
+	writeTestWorldBundle(t, worldDir, "自治成长世界", "无人输入时人口也应自然进场并成长", core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "外城在宵禁与走私冲突中持续承压",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "自治成长世界",
+		CoreRules: "无人输入时人口也应自然进场并成长",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城在宵禁与走私冲突中持续承压",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Factions: []core.WorldFactionConfig{
+			{
+				ID:            "guard",
+				Name:          "巡城司",
+				Role:          "law",
+				Description:   "负责宵禁和盘查",
+				Relationships: []string{"敌对 smugglers"},
+			},
+			{
+				ID:            "smugglers",
+				Name:          "走私帮",
+				Role:          "criminal",
+				Description:   "夜里持续活动",
+				Relationships: []string{"敌对 guard"},
+			},
+		},
+		Locations: []core.WorldLocationConfig{{
+			ID:          "outer_city",
+			Name:        "外城",
+			Kind:        "district",
+			Description: "巡城司控制区",
+			Controller:  "guard",
+		}},
+		Pressures: []core.WorldPressureConfig{{
+			ID:          "curfew",
+			Name:        "宵禁升级",
+			Kind:        "conflict",
+			Description: "外城盘查与走私冲突持续加剧",
+			Intensity:   0.9,
+			Target:      "guard",
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig: %v", err)
+	}
+
+	if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{
+			{
+				ID:       "watcher",
+				Name:     "巡夜人",
+				Role:     "guard",
+				Location: "外城",
+				Faction:  "guard",
+				Traits:   []string{"警觉", "克制"},
+				Hooks:    []string{"宵禁", "盘查"},
+			},
+			{
+				ID:       "runner",
+				Name:     "线人",
+				Role:     "informant",
+				Location: "外城",
+				Faction:  "smugglers",
+				Traits:   []string{"灵活", "谨慎"},
+				Hooks:    []string{"走私", "风声"},
+			},
+		},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   3.5,
+			MajorThreshold:     8,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 3,
+			SceneWeight:        2,
+		},
+	}); err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	for i := 0; i < 36; i++ {
+		engine.onTick()
+	}
+
+	state := engine.GetState()
+	if !containsString(state.Scene.Characters, "巡夜人") {
+		t.Fatalf("scene participants = %#v, want autonomous tick to pull 巡夜人 into scene", state.Scene.Characters)
+	}
+	if _, ok := engine.agents.GetCharacter("巡夜人"); !ok {
+		t.Fatalf("巡夜人 should be loaded by autonomous tick runtime")
+	}
+	if !containsString(engine.GetLoadedCharacters(), "巡夜人") {
+		t.Fatalf("loaded characters = %#v, want 巡夜人 loaded through autonomous tick", engine.GetLoadedCharacters())
+	}
+	if got := engine.npcTickExposure["巡夜人"]; got < 20 {
+		t.Fatalf("npc exposure = %#v, want sustained exposure for 巡夜人", engine.npcTickExposure)
+	}
+
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("GetPopulationInsights: %v", err)
+	}
+	var promoted *core.PopulationCharacterInsight
+	for i := range insights.Promoted {
+		if insights.Promoted[i].Name == "巡夜人" {
+			promoted = &insights.Promoted[i]
+			break
+		}
+	}
+	if promoted == nil {
+		t.Fatalf("promoted insights = %#v, want 巡夜人 promoted without directTurn/director", insights.Promoted)
+	}
+	if promoted.Attention.Score < 3.5 {
+		t.Fatalf("promoted attention = %#v, want score above promotion threshold", promoted.Attention)
+	}
+	if promoted.IdentityCore == "" {
+		t.Fatalf("promoted insight = %#v, want identity core persisted", promoted)
+	}
+	historyTypes := make(map[string]bool)
+	for _, evt := range promoted.History {
+		historyTypes[evt.Type] = true
+	}
+	if !historyTypes["population_promoted"] {
+		t.Fatalf("promotion history = %#v, want population_promoted event in insights history", promoted.History)
+	}
+
+	status := engine.TickStatus()
+	history, ok := status["tick_history"].([]core.TickSnapshot)
+	if !ok || len(history) != 12 {
+		t.Fatalf("tick history = %#v, want capped recent snapshots after long-window run", status["tick_history"])
+	}
+	trajectorySummary, ok := status["trajectory_summary"].([]string)
+	if !ok || len(trajectorySummary) == 0 {
+		t.Fatalf("trajectory summary = %#v, want long-window trajectory summary", status["trajectory_summary"])
+	}
+	joinedTrajectory := strings.Join(trajectorySummary, " | ")
+	if !strings.Contains(joinedTrajectory, "population outcome:") || !strings.Contains(joinedTrajectory, "recent diagnostics:") {
+		t.Fatalf("trajectory summary = %#v, want population and diagnostics summary lines", trajectorySummary)
+	}
+	diagnosticSnapshots := 0
+	sceneCandidateSnapshots := 0
+	for _, snapshot := range history {
+		if len(snapshot.Diagnostics) > 0 {
+			diagnosticSnapshots++
+		}
+		for _, item := range snapshot.Diagnostics {
+			if metric, _ := item["metric"].(string); metric == "scene_population_candidates" {
+				sceneCandidateSnapshots++
+				break
+			}
+		}
+	}
+	if diagnosticSnapshots < 12 {
+		t.Fatalf("tick history diagnostics = %#v, want diagnostics preserved across recent snapshots", history)
+	}
+	if sceneCandidateSnapshots == 0 {
+		t.Fatalf("tick history diagnostics = %#v, want scene population candidate diagnostics in history", history)
+	}
+	highlights, _ := status["population_highlights"].([]string)
+	if len(highlights) == 0 || !strings.Contains(strings.Join(highlights, " | "), "promoted:") {
+		t.Fatalf("population highlights = %#v, want promoted summary after long-window growth", highlights)
+	}
+
+	events, err := engine.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("GetCanonicalEvents: %v", err)
+	}
+	promotedCount := 0
+	worldPressureCount := 0
+	for _, evt := range events {
+		if evt.Type == "population_promoted" && evt.Target == "巡夜人" {
+			promotedCount++
+		}
+		if evt.Type == "world_pressure" && evt.Payload["pressure_id"] == "curfew" {
+			worldPressureCount++
+		}
+	}
+	if promotedCount == 0 {
+		t.Fatalf("canonical events = %#v, want promoted event for 巡夜人", events)
+	}
+	if worldPressureCount < 10 {
+		t.Fatalf("world pressure events = %d, want sustained long-window world evolution", worldPressureCount)
+	}
+}
+
+func TestWorldStructureInterventionDivergesLongWindowAutonomousOutcome(t *testing.T) {
+	buildEngine := func(t *testing.T, worldDir, worldName, rules string, structure core.WorldStructureConfig) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		writeTestWorldBundle(t, worldDir, worldName, rules, core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城在夜里持续变化",
+		})
+		engine.ConfigurePersistence(filepath.Dir(worldDir), map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: worldName,
+			CoreRules: rules,
+			Scene: core.SceneState{
+				Location:    "外城",
+				TimeOfDay:   "深夜",
+				Weather:     "阴",
+				Characters:  []string{"111", "玩家"},
+				Description: "外城在夜里持续变化",
+			},
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+
+		if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+			BackgroundNPCs: []core.BackgroundNPC{
+				{
+					ID:       "watcher",
+					Name:     "巡夜人",
+					Role:     "guard",
+					Location: "外城",
+					Faction:  "guard",
+					Traits:   []string{"警觉", "克制"},
+					Hooks:    []string{"宵禁", "盘查"},
+				},
+				{
+					ID:       "runner",
+					Name:     "线人",
+					Role:     "informant",
+					Location: "外城",
+					Faction:  "smugglers",
+					Traits:   []string{"灵活", "谨慎"},
+					Hooks:    []string{"走私", "风声"},
+				},
+			},
+			Policy: core.PromotionPolicy{
+				PromoteThreshold:   4.2,
+				MajorThreshold:     8,
+				InteractionWeight:  3,
+				MentionWeight:      1,
+				EventWeight:        2,
+				RelationshipWeight: 3,
+				SceneWeight:        2,
+			},
+		}); err != nil {
+			t.Fatalf("UpdatePopulationConfig: %v", err)
+		}
+		if _, err := engine.UpdateWorldStructureConfig(structure); err != nil {
+			t.Fatalf("UpdateWorldStructureConfig: %v", err)
+		}
+		return engine
+	}
+
+	baselineRoot := t.TempDir()
+	baseline := buildEngine(t,
+		filepath.Join(baselineRoot, "baseline-world"),
+		"低压世界",
+		"没有控制区和压力时，世界不应凭空长出主要角色",
+		core.WorldStructureConfig{
+			Locations: []core.WorldLocationConfig{{
+				ID:          "outer_city",
+				Name:        "外城",
+				Kind:        "district",
+				Description: "无人控制的普通街区",
+				Controller:  "",
+			}},
+		},
+	)
+	intervenedRoot := t.TempDir()
+	intervened := buildEngine(t,
+		filepath.Join(intervenedRoot, "intervened-world"),
+		"高压世界",
+		"控制区和压力会改变长期世界结果",
+		core.WorldStructureConfig{
+			Factions: []core.WorldFactionConfig{
+				{
+					ID:            "guard",
+					Name:          "巡城司",
+					Role:          "law",
+					Description:   "负责宵禁和盘查",
+					Relationships: []string{"敌对 smugglers"},
+				},
+				{
+					ID:            "smugglers",
+					Name:          "走私帮",
+					Role:          "criminal",
+					Description:   "夜里持续活动",
+					Relationships: []string{"敌对 guard"},
+				},
+			},
+			Locations: []core.WorldLocationConfig{{
+				ID:          "outer_city",
+				Name:        "外城",
+				Kind:        "district",
+				Description: "巡城司控制区",
+				Controller:  "guard",
+			}},
+			Pressures: []core.WorldPressureConfig{{
+				ID:          "curfew",
+				Name:        "宵禁升级",
+				Kind:        "conflict",
+				Description: "外城盘查与走私冲突持续加剧",
+				Intensity:   0.9,
+				Target:      "guard",
+			}},
+		},
+	)
+
+	for i := 0; i < 36; i++ {
+		baseline.onTick()
+		intervened.onTick()
+	}
+
+	baselineStatus := baseline.TickStatus()
+	intervenedStatus := intervened.TickStatus()
+	if !containsString(baseline.GetState().Scene.Characters, "巡夜人") || !containsString(intervened.GetState().Scene.Characters, "巡夜人") {
+		t.Fatalf("scene participants baseline=%#v intervened=%#v, want scene-local npc present in both worlds before comparing long-window outcomes", baseline.GetState().Scene.Characters, intervened.GetState().Scene.Characters)
+	}
+
+	if baselineStatus["tension"].(float64) != 0 {
+		t.Fatalf("baseline tension = %.2f, want calm world without pressures", baselineStatus["tension"].(float64))
+	}
+	if intervenedStatus["tension"].(float64) <= baselineStatus["tension"].(float64) {
+		t.Fatalf("baseline tension = %.2f intervened tension = %.2f, want higher long-window tension after structure intervention", baselineStatus["tension"].(float64), intervenedStatus["tension"].(float64))
+	}
+
+	baselineInsights, err := baseline.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("baseline GetPopulationInsights: %v", err)
+	}
+	intervenedInsights, err := intervened.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("intervened GetPopulationInsights: %v", err)
+	}
+	for _, npc := range baselineInsights.Promoted {
+		if npc.Name == "巡夜人" {
+			t.Fatalf("baseline promoted = %#v, want no 巡夜人 promotion without structure pressure/control", baselineInsights.Promoted)
+		}
+	}
+	intervenedPromoted := false
+	for _, npc := range intervenedInsights.Promoted {
+		if npc.Name == "巡夜人" {
+			intervenedPromoted = true
+			if npc.IdentityCore == "" || npc.Attention.Score < 4.2 {
+				t.Fatalf("intervened promoted npc = %#v, want persisted identity core and promotion score", npc)
+			}
+		}
+	}
+	if !intervenedPromoted {
+		t.Fatalf("intervened promoted = %#v, want 巡夜人 promoted after long-window structure intervention", intervenedInsights.Promoted)
+	}
+
+	baselineHistory, ok := baselineStatus["tick_history"].([]core.TickSnapshot)
+	if !ok || len(baselineHistory) != 12 {
+		t.Fatalf("baseline tick history = %#v, want capped recent history", baselineStatus["tick_history"])
+	}
+	intervenedHistory, ok := intervenedStatus["tick_history"].([]core.TickSnapshot)
+	if !ok || len(intervenedHistory) != 12 {
+		t.Fatalf("intervened tick history = %#v, want capped recent history", intervenedStatus["tick_history"])
+	}
+
+	baselineTrajectory, ok := baselineStatus["trajectory_summary"].([]string)
+	if !ok || len(baselineTrajectory) == 0 {
+		t.Fatalf("baseline trajectory summary = %#v, want baseline author summary", baselineStatus["trajectory_summary"])
+	}
+	intervenedTrajectory, ok := intervenedStatus["trajectory_summary"].([]string)
+	if !ok || len(intervenedTrajectory) == 0 {
+		t.Fatalf("intervened trajectory summary = %#v, want intervened author summary", intervenedStatus["trajectory_summary"])
+	}
+	if strings.Join(baselineTrajectory, " | ") == strings.Join(intervenedTrajectory, " | ") {
+		t.Fatalf("baseline trajectory = %#v intervened trajectory = %#v, want author summaries to diverge with world outcome", baselineTrajectory, intervenedTrajectory)
+	}
+
+	baselinePressureDiagHits := 0
+	baselinePopulationDiagHits := 0
+	intervenedPressureDiagHits := 0
+	intervenedPopulationDiagHits := 0
+	for _, snapshot := range baselineHistory {
+		for _, item := range snapshot.Diagnostics {
+			metric, _ := item["metric"].(string)
+			switch metric {
+			case "active_pressure", "scene_control":
+				baselinePressureDiagHits++
+			case "scene_population_candidates":
+				baselinePopulationDiagHits++
+			}
+		}
+	}
+	for _, snapshot := range intervenedHistory {
+		for _, item := range snapshot.Diagnostics {
+			metric, _ := item["metric"].(string)
+			switch metric {
+			case "active_pressure":
+				intervenedPressureDiagHits++
+			case "scene_population_candidates":
+				intervenedPopulationDiagHits++
+			}
+		}
+	}
+	if baselinePressureDiagHits != 0 {
+		t.Fatalf("baseline history diagnostics = %#v, want no pressure/control diagnostics in calm world", baselineHistory)
+	}
+	if baselinePopulationDiagHits == 0 {
+		t.Fatalf("baseline history diagnostics = %#v, want scene-local population candidates to remain diagnosable", baselineHistory)
+	}
+	if intervenedPressureDiagHits == 0 || intervenedPopulationDiagHits == 0 {
+		t.Fatalf("intervened history diagnostics = %#v, want repeated pressure/population diagnostics across long window", intervenedHistory)
+	}
+
+	baselineHighlights, _ := baselineStatus["population_highlights"].([]string)
+	intervenedHighlights, _ := intervenedStatus["population_highlights"].([]string)
+	if strings.Contains(strings.Join(baselineHighlights, " | "), "promoted:") {
+		t.Fatalf("baseline highlights = %#v, want no promoted highlights in calm world", baselineHighlights)
+	}
+	if !strings.Contains(strings.Join(intervenedHighlights, " | "), "promoted: 巡夜人") {
+		t.Fatalf("intervened highlights = %#v, want promoted highlight for 巡夜人", intervenedHighlights)
+	}
+
+	baselineEvents, err := baseline.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("baseline GetCanonicalEvents: %v", err)
+	}
+	intervenedEvents, err := intervened.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("intervened GetCanonicalEvents: %v", err)
+	}
+	baselineWorldPressure := 0
+	intervenedWorldPressure := 0
+	intervenedPromotion := 0
+	for _, evt := range baselineEvents {
+		if evt.Type == "world_pressure" {
+			baselineWorldPressure++
+		}
+	}
+	for _, evt := range intervenedEvents {
+		if evt.Type == "world_pressure" && evt.Payload["pressure_id"] == "curfew" {
+			intervenedWorldPressure++
+		}
+		if evt.Type == "population_promoted" && evt.Target == "巡夜人" {
+			intervenedPromotion++
+		}
+	}
+	if baselineWorldPressure != 0 {
+		t.Fatalf("baseline world pressure events = %d, want no pressure-driven evolution in calm world", baselineWorldPressure)
+	}
+	if intervenedWorldPressure < 10 || intervenedPromotion == 0 {
+		t.Fatalf("intervened events: world_pressure=%d promotion=%d, want sustained world pressure and promotion after intervention", intervenedWorldPressure, intervenedPromotion)
+	}
+}
+
+func TestWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
+	type sampleExpectation struct {
+		name                string
+		structure           core.WorldStructureConfig
+		expectedPressureID  string
+		expectedPromotedNPC string
+		expectTensionFloor  float64
+		expectNoPromotion   bool
+	}
+
+	buildEngine := func(t *testing.T, sample sampleExpectation) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		root := t.TempDir()
+		worldDir := filepath.Join(root, strings.ReplaceAll(strings.ToLower(sample.name), " ", "_"))
+		writeTestWorldBundle(t, worldDir, sample.name, "多样本长窗口闭环验证", core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "长窗口样本矩阵",
+		})
+		engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: sample.name,
+			CoreRules: "多样本长窗口闭环验证",
+			Scene: core.SceneState{
+				Location:    "外城",
+				TimeOfDay:   "深夜",
+				Weather:     "阴",
+				Characters:  []string{"111", "玩家"},
+				Description: "长窗口样本矩阵",
+			},
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+
+		if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+			BackgroundNPCs: []core.BackgroundNPC{
+				{
+					ID:       "watcher",
+					Name:     "巡夜人",
+					Role:     "guard",
+					Location: "外城",
+					Faction:  "guard",
+					Traits:   []string{"警觉", "克制"},
+					Hooks:    []string{"宵禁", "盘查"},
+				},
+				{
+					ID:       "runner",
+					Name:     "线人",
+					Role:     "informant",
+					Location: "外城",
+					Faction:  "smugglers",
+					Traits:   []string{"灵活", "谨慎"},
+					Hooks:    []string{"走私", "风声"},
+				},
+			},
+			Policy: core.PromotionPolicy{
+				PromoteThreshold:   7.3,
+				MajorThreshold:     10,
+				InteractionWeight:  3,
+				MentionWeight:      1,
+				EventWeight:        2,
+				RelationshipWeight: 3,
+				SceneWeight:        2,
+			},
+		}); err != nil {
+			t.Fatalf("UpdatePopulationConfig: %v", err)
+		}
+		if _, err := engine.UpdateWorldStructureConfig(sample.structure); err != nil {
+			t.Fatalf("UpdateWorldStructureConfig: %v", err)
+		}
+		return engine
+	}
+
+	samples := []sampleExpectation{
+		{
+			name: "Calm Sample",
+			structure: core.WorldStructureConfig{
+				Locations: []core.WorldLocationConfig{{
+					ID:          "outer_city",
+					Name:        "外城",
+					Kind:        "district",
+					Description: "无人控制的普通街区",
+					Controller:  "",
+				}},
+			},
+			expectNoPromotion: true,
+		},
+		{
+			name: "Guard Pressure Sample",
+			structure: core.WorldStructureConfig{
+				Factions: []core.WorldFactionConfig{
+					{ID: "guard", Name: "巡城司", Role: "law", Relationships: []string{"敌对 smugglers"}},
+					{ID: "smugglers", Name: "走私帮", Role: "criminal", Relationships: []string{"敌对 guard"}},
+				},
+				Locations: []core.WorldLocationConfig{{
+					ID:          "outer_city",
+					Name:        "外城",
+					Kind:        "district",
+					Description: "巡城司控制区",
+					Controller:  "guard",
+				}},
+				Pressures: []core.WorldPressureConfig{{
+					ID:          "curfew",
+					Name:        "宵禁升级",
+					Kind:        "conflict",
+					Description: "巡城司扩大盘查",
+					Intensity:   0.9,
+					Target:      "guard",
+				}},
+			},
+			expectedPressureID:  "curfew",
+			expectedPromotedNPC: "巡夜人",
+			expectTensionFloor:  0.4,
+		},
+		{
+			name: "Smuggler Pressure Sample",
+			structure: core.WorldStructureConfig{
+				Factions: []core.WorldFactionConfig{
+					{ID: "guard", Name: "巡城司", Role: "law", Relationships: []string{"敌对 smugglers"}},
+					{ID: "smugglers", Name: "走私帮", Role: "criminal", Relationships: []string{"敌对 guard"}},
+				},
+				Locations: []core.WorldLocationConfig{{
+					ID:          "outer_city",
+					Name:        "外城",
+					Kind:        "district",
+					Description: "走私帮暗巷控制区",
+					Controller:  "smugglers",
+				}},
+				Pressures: []core.WorldPressureConfig{{
+					ID:          "smuggling",
+					Name:        "走私潮上涨",
+					Kind:        "criminal",
+					Description: "走私帮正在快速扩张",
+					Intensity:   0.88,
+					Target:      "smugglers",
+				}},
+			},
+			expectedPressureID:  "smuggling",
+			expectedPromotedNPC: "线人",
+			expectTensionFloor:  0.35,
+		},
+	}
+
+	results := make(map[string]map[string]interface{}, len(samples))
+	for _, sample := range samples {
+		engine := buildEngine(t, sample)
+		for i := 0; i < 120; i++ {
+			engine.onTick()
+		}
+
+		status := engine.TickStatus()
+		trajectory, ok := status["trajectory_summary"].([]string)
+		if !ok || len(trajectory) == 0 {
+			t.Fatalf("%s trajectory summary = %#v, want long-window summary after 120 ticks", sample.name, status["trajectory_summary"])
+		}
+		history, ok := status["tick_history"].([]core.TickSnapshot)
+		if !ok || len(history) != 12 {
+			t.Fatalf("%s tick history = %#v, want capped recent snapshots after 120 ticks", sample.name, status["tick_history"])
+		}
+		insights, err := engine.GetPopulationInsights()
+		if err != nil {
+			t.Fatalf("%s GetPopulationInsights: %v", sample.name, err)
+		}
+		promotedNames := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promotedNames = append(promotedNames, npc.Name)
+		}
+		sort.Strings(promotedNames)
+
+		if sample.expectNoPromotion {
+			if len(promotedNames) != 0 {
+				t.Fatalf("%s promoted = %#v, want no promotion in calm 120-tick sample", sample.name, promotedNames)
+			}
+			if status["tension"].(float64) != 0 {
+				t.Fatalf("%s tension = %.2f, want calm baseline to remain stable over 120 ticks", sample.name, status["tension"].(float64))
+			}
+		} else {
+			if status["tension"].(float64) < sample.expectTensionFloor {
+				t.Fatalf("%s tension = %.2f, want >= %.2f after 120 ticks", sample.name, status["tension"].(float64), sample.expectTensionFloor)
+			}
+			if !containsString(promotedNames, sample.expectedPromotedNPC) {
+				t.Fatalf("%s promoted = %#v, want %s promoted after 120 ticks", sample.name, promotedNames, sample.expectedPromotedNPC)
+			}
+			if !strings.Contains(strings.Join(trajectory, " | "), sample.expectedPressureID) {
+				t.Fatalf("%s trajectory = %#v, want dominant pressure %s in summary", sample.name, trajectory, sample.expectedPressureID)
+			}
+		}
+
+		results[sample.name] = map[string]interface{}{
+			"trajectory": strings.Join(trajectory, " | "),
+			"promoted":   strings.Join(promotedNames, ","),
+			"tension":    status["tension"].(float64),
+		}
+	}
+
+	if results["Guard Pressure Sample"]["trajectory"] == results["Smuggler Pressure Sample"]["trajectory"] {
+		t.Fatalf("guard vs smuggler trajectory = %#v vs %#v, want different long-window summaries across samples", results["Guard Pressure Sample"], results["Smuggler Pressure Sample"])
+	}
+	if results["Guard Pressure Sample"]["promoted"] == results["Smuggler Pressure Sample"]["promoted"] {
+		t.Fatalf("guard vs smuggler promoted = %#v vs %#v, want different promoted leaders across samples", results["Guard Pressure Sample"], results["Smuggler Pressure Sample"])
+	}
+}
+
+func TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
+	type sampleExpectation struct {
+		name                string
+		structure           core.WorldStructureConfig
+		expectedPressureID  string
+		expectedPromotedNPC string
+		expectTensionFloor  float64
+		expectNoPromotion   bool
+	}
+
+	buildEngine := func(t *testing.T, sample sampleExpectation) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		root := t.TempDir()
+		worldDir := filepath.Join(root, strings.ReplaceAll(strings.ToLower(sample.name), " ", "_"))
+		writeTestWorldBundle(t, worldDir, sample.name, "200 tick 多样本长窗口闭环验证", core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "200 tick 长窗口样本矩阵",
+		})
+		engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: sample.name,
+			CoreRules: "200 tick 多样本长窗口闭环验证",
+			Scene: core.SceneState{
+				Location:    "外城",
+				TimeOfDay:   "深夜",
+				Weather:     "阴",
+				Characters:  []string{"111", "玩家"},
+				Description: "200 tick 长窗口样本矩阵",
+			},
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+
+		if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+			BackgroundNPCs: []core.BackgroundNPC{
+				{
+					ID:       "watcher",
+					Name:     "巡夜人",
+					Role:     "guard",
+					Location: "外城",
+					Faction:  "guard",
+					Traits:   []string{"警觉", "克制"},
+					Hooks:    []string{"宵禁", "盘查"},
+				},
+				{
+					ID:       "runner",
+					Name:     "线人",
+					Role:     "informant",
+					Location: "外城",
+					Faction:  "smugglers",
+					Traits:   []string{"灵活", "谨慎"},
+					Hooks:    []string{"走私", "风声"},
+				},
+				{
+					ID:       "fixer",
+					Name:     "修灯人",
+					Role:     "utility",
+					Location: "外城",
+					Faction:  "operators",
+					Traits:   []string{"耐心", "稳重"},
+					Hooks:    []string{"停电", "供电", "断路"},
+				},
+			},
+			Policy: core.PromotionPolicy{
+				PromoteThreshold:   7.3,
+				MajorThreshold:     12,
+				InteractionWeight:  3,
+				MentionWeight:      1,
+				EventWeight:        2,
+				RelationshipWeight: 3,
+				SceneWeight:        2,
+			},
+		}); err != nil {
+			t.Fatalf("UpdatePopulationConfig: %v", err)
+		}
+		if _, err := engine.UpdateWorldStructureConfig(sample.structure); err != nil {
+			t.Fatalf("UpdateWorldStructureConfig: %v", err)
+		}
+		return engine
+	}
+
+	samples := []sampleExpectation{
+		{
+			name: "Calm 200 Tick Sample",
+			structure: core.WorldStructureConfig{
+				Locations: []core.WorldLocationConfig{{
+					ID:          "outer_city",
+					Name:        "外城",
+					Kind:        "district",
+					Description: "无人控制的普通街区",
+					Controller:  "",
+				}},
+			},
+			expectNoPromotion: true,
+		},
+		{
+			name: "Guard 200 Tick Sample",
+			structure: core.WorldStructureConfig{
+				Factions: []core.WorldFactionConfig{
+					{ID: "guard", Name: "巡城司", Role: "law", Relationships: []string{"敌对 smugglers"}},
+					{ID: "smugglers", Name: "走私帮", Role: "criminal", Relationships: []string{"敌对 guard"}},
+				},
+				Locations: []core.WorldLocationConfig{{
+					ID:          "outer_city",
+					Name:        "外城",
+					Kind:        "district",
+					Description: "巡城司控制区",
+					Controller:  "guard",
+				}},
+				Pressures: []core.WorldPressureConfig{{
+					ID:          "curfew",
+					Name:        "宵禁升级",
+					Kind:        "conflict",
+					Description: "巡城司扩大盘查",
+					Intensity:   0.92,
+					Target:      "guard",
+				}},
+			},
+			expectedPressureID:  "curfew",
+			expectedPromotedNPC: "巡夜人",
+			expectTensionFloor:  0.7,
+		},
+		{
+			name: "Smuggler 200 Tick Sample",
+			structure: core.WorldStructureConfig{
+				Factions: []core.WorldFactionConfig{
+					{ID: "guard", Name: "巡城司", Role: "law", Relationships: []string{"敌对 smugglers"}},
+					{ID: "smugglers", Name: "走私帮", Role: "criminal", Relationships: []string{"敌对 guard"}},
+				},
+				Locations: []core.WorldLocationConfig{{
+					ID:          "outer_city",
+					Name:        "外城",
+					Kind:        "district",
+					Description: "走私帮暗巷控制区",
+					Controller:  "smugglers",
+				}},
+				Pressures: []core.WorldPressureConfig{{
+					ID:          "smuggling",
+					Name:        "走私潮上涨",
+					Kind:        "criminal",
+					Description: "走私帮正在快速扩张",
+					Intensity:   0.9,
+					Target:      "smugglers",
+				}},
+			},
+			expectedPressureID:  "smuggling",
+			expectedPromotedNPC: "线人",
+			expectTensionFloor:  0.65,
+		},
+		{
+			name: "Infrastructure 200 Tick Sample",
+			structure: core.WorldStructureConfig{
+				Factions: []core.WorldFactionConfig{
+					{ID: "operators", Name: "电网维护队", Role: "utility", Relationships: []string{"紧张 guard"}},
+					{ID: "guard", Name: "巡城司", Role: "law", Relationships: []string{"依赖 operators"}},
+				},
+				Locations: []core.WorldLocationConfig{{
+					ID:          "outer_city",
+					Name:        "外城",
+					Kind:        "district",
+					Description: "断电频发的维护区",
+					Controller:  "operators",
+				}},
+				Pressures: []core.WorldPressureConfig{{
+					ID:          "blackout",
+					Name:        "电网失稳",
+					Kind:        "infrastructure",
+					Description: "外城频繁断电，维护队持续抢修",
+					Intensity:   0.87,
+					Target:      "operators",
+				}},
+			},
+			expectedPressureID:  "blackout",
+			expectedPromotedNPC: "修灯人",
+			expectTensionFloor:  0.55,
+		},
+	}
+
+	results := make(map[string]map[string]interface{}, len(samples))
+	for _, sample := range samples {
+		engine := buildEngine(t, sample)
+		for i := 0; i < 200; i++ {
+			engine.onTick()
+		}
+
+		status := engine.TickStatus()
+		if tickCount, ok := status["tick_count"].(int); !ok || tickCount != 0 {
+			t.Fatalf("%s tick_count = %#v, want idle manual-tick status to remain 0 without loop", sample.name, status["tick_count"])
+		}
+		trajectory, ok := status["trajectory_summary"].([]string)
+		if !ok || len(trajectory) == 0 {
+			t.Fatalf("%s trajectory summary = %#v, want long-window summary after 200 ticks", sample.name, status["trajectory_summary"])
+		}
+		history, ok := status["tick_history"].([]core.TickSnapshot)
+		if !ok || len(history) != 12 {
+			t.Fatalf("%s tick history = %#v, want capped recent snapshots after 200 ticks", sample.name, status["tick_history"])
+		}
+		insights, err := engine.GetPopulationInsights()
+		if err != nil {
+			t.Fatalf("%s GetPopulationInsights: %v", sample.name, err)
+		}
+		promotedNames := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promotedNames = append(promotedNames, npc.Name)
+		}
+		sort.Strings(promotedNames)
+
+		if sample.expectNoPromotion {
+			if len(promotedNames) != 0 {
+				t.Fatalf("%s promoted = %#v, want no promotion in calm 200-tick sample", sample.name, promotedNames)
+			}
+			if status["tension"].(float64) != 0 {
+				t.Fatalf("%s tension = %.2f, want calm baseline to remain stable over 200 ticks", sample.name, status["tension"].(float64))
+			}
+		} else {
+			if status["tension"].(float64) < sample.expectTensionFloor {
+				t.Fatalf("%s tension = %.2f, want >= %.2f after 200 ticks", sample.name, status["tension"].(float64), sample.expectTensionFloor)
+			}
+			if !containsString(promotedNames, sample.expectedPromotedNPC) {
+				t.Fatalf("%s promoted = %#v, want %s promoted after 200 ticks", sample.name, promotedNames, sample.expectedPromotedNPC)
+			}
+			if !strings.Contains(strings.Join(trajectory, " | "), sample.expectedPressureID) {
+				t.Fatalf("%s trajectory = %#v, want dominant pressure %s in 200-tick summary", sample.name, trajectory, sample.expectedPressureID)
+			}
+		}
+
+		results[sample.name] = map[string]interface{}{
+			"trajectory": strings.Join(trajectory, " | "),
+			"promoted":   strings.Join(promotedNames, ","),
+			"tension":    status["tension"].(float64),
+		}
+	}
+
+	if results["Guard 200 Tick Sample"]["trajectory"] == results["Smuggler 200 Tick Sample"]["trajectory"] {
+		t.Fatalf("guard vs smuggler 200-tick trajectory = %#v vs %#v, want different long-window summaries across samples", results["Guard 200 Tick Sample"], results["Smuggler 200 Tick Sample"])
+	}
+	if results["Guard 200 Tick Sample"]["promoted"] == results["Smuggler 200 Tick Sample"]["promoted"] {
+		t.Fatalf("guard vs smuggler 200-tick promoted = %#v vs %#v, want different promoted leaders across samples", results["Guard 200 Tick Sample"], results["Smuggler 200 Tick Sample"])
+	}
+	if results["Infrastructure 200 Tick Sample"]["trajectory"] == results["Guard 200 Tick Sample"]["trajectory"] {
+		t.Fatalf("infrastructure vs guard 200-tick trajectory = %#v vs %#v, want broader world outcome divergence", results["Infrastructure 200 Tick Sample"], results["Guard 200 Tick Sample"])
+	}
+}
+
+func TestRealWorldDirectorySampleMatrixAcrossHundredTwentyTicks(t *testing.T) {
+	type sampleExpectation struct {
+		name                string
+		sourceDir           string
+		scene               core.SceneState
+		expectedPromotedNPC string
+		expectedPressureID  string
+		expectNoPromotion   bool
+		expectTensionFloor  float64
+		configure           func(t *testing.T, engine *Engine, worldDir string)
+	}
+
+	buildEngine := func(t *testing.T, sample sampleExpectation) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		root := t.TempDir()
+		worldDir := filepath.Join(root, strings.ReplaceAll(strings.ToLower(sample.name), " ", "_"))
+		copyDir(t, filepath.Join("..", "..", "worlds", sample.sourceDir), worldDir)
+
+		engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: sample.name,
+			CoreRules: "真实世界目录长窗口验证",
+			Scene:     sample.scene,
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+
+		if sample.configure != nil {
+			sample.configure(t, engine, worldDir)
+		}
+		return engine
+	}
+
+	samples := []sampleExpectation{
+		{
+			name:      "Neon Block Real World",
+			sourceDir: "neon_block",
+			scene: core.SceneState{
+				Location:    "旧街夜市",
+				TimeOfDay:   "深夜",
+				Weather:     "闷热有雨",
+				Characters:  []string{"蓝姐", "谭叔", "玩家"},
+				Description: "真实世界目录中的默认夜市场景",
+			},
+			expectedPromotedNPC: "蓝姐",
+			expectedPressureID:  "missing_rider",
+			expectTensionFloor:  0.45,
+		},
+		{
+			name:      "Wedding Import Real World",
+			sourceDir: "1_7",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "白天",
+				Weather:     "阴雨",
+				Characters:  []string{"许灵_单阶段人设", "玩家"},
+				Description: "真实导入世界的默认接站场景",
+			},
+			expectedPromotedNPC: "婚礼管家",
+			expectedPressureID:  "arrival_gossip",
+			expectTensionFloor:  0.50,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+					BackgroundNPCs: []core.BackgroundNPC{
+						{
+							ID:       "steward",
+							Name:     "婚礼管家",
+							Role:     "steward",
+							Location: "未知地点",
+							Faction:  "wedding_hosts",
+							Traits:   []string{"周到", "急切"},
+							Hooks:    []string{"要把迟到接站压下去", "不想婚礼前出乱子"},
+						},
+						{
+							ID:       "driver",
+							Name:     "代驾老周",
+							Role:     "driver",
+							Location: "车站外",
+							Faction:  "station_runners",
+							Traits:   []string{"疲惫", "圆滑"},
+							Hooks:    []string{"谁临时改了接站安排", "想把责任甩出去"},
+						},
+						{
+							ID:       "guard",
+							Name:     "站台保安",
+							Role:     "guard",
+							Location: "候车厅",
+							Faction:  "station_runners",
+							Traits:   []string{"谨慎", "怕麻烦"},
+							Hooks:    []string{"担心现场起争执", "不想事情闹大"},
+						},
+					},
+					Policy: core.PromotionPolicy{
+						PromoteThreshold:   6.8,
+						MajorThreshold:     11,
+						InteractionWeight:  3,
+						MentionWeight:      1,
+						EventWeight:        2,
+						RelationshipWeight: 3,
+						SceneWeight:        2,
+					},
+				}); err != nil {
+					t.Fatalf("UpdatePopulationConfig wedding import: %v", err)
+				}
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "arrival_point", Name: "未知地点", Kind: "arrival", Description: "婚礼接站与临时协调点", Controller: "wedding_hosts"},
+						{ID: "station_gate", Name: "车站外", Kind: "transit", Description: "接站车与代驾聚集的混乱出口", Controller: "station_runners"},
+						{ID: "platform_hall", Name: "候车厅", Kind: "waiting", Description: "旅客和保安都不想久留的大厅", Controller: "station_runners"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "wedding_hosts", Name: "婚礼主家", Role: "family", Relationships: []string{"压制 station_runners"}},
+						{ID: "station_runners", Name: "接站跑腿圈", Role: "logistics", Relationships: []string{"不信任 wedding_hosts"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "pickup_delay", Name: "接站迟到", Kind: "coordination", Description: "婚礼前的接站安排持续失序", Intensity: 0.84, Target: "wedding_hosts"},
+						{ID: "arrival_gossip", Name: "站台风声", Kind: "rumor", Description: "谁被怠慢、谁在甩锅开始扩散", Intensity: 0.62, Target: "未知地点"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig wedding import: %v", err)
+				}
+			},
+		},
+		{
+			name:      "Dream Mansion Real World",
+			sourceDir: "《红楼梦》完整版、-角色卡-202604190812",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "未知时间",
+				Weather:     "未知天气",
+				Characters:  []string{"薛宝钗", "玩家"},
+				Description: "真实导入世界的默认闺阁场景",
+			},
+			expectedPromotedNPC: "莺儿",
+			expectedPressureID:  "maids_whisper",
+			expectTensionFloor:  0.48,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, _, err := world.EnsureSeededPopulation(worldDir); err != nil {
+					t.Fatalf("EnsureSeededPopulation dream mansion: %v", err)
+				}
+				if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+					BackgroundNPCs: []core.BackgroundNPC{
+						{
+							ID:       "yinger",
+							Name:     "莺儿",
+							Role:     "侍女",
+							Location: "未知地点",
+							Faction:  "xue_house",
+							Traits:   []string{"机灵", "知分寸"},
+							Hooks:    []string{"替宝姑娘探听风声", "不想让诗社话头失控"},
+						},
+						{
+							ID:       "housemaid",
+							Name:     "婆子",
+							Role:     "杂役",
+							Location: "回廊",
+							Faction:  "rong_house",
+							Traits:   []string{"谨慎", "嘴碎"},
+							Hooks:    []string{"最怕传错话", "担心被责罚"},
+						},
+						{
+							ID:       "page",
+							Name:     "小厮",
+							Role:     "跑腿",
+							Location: "书房外",
+							Faction:  "poetry_circle",
+							Traits:   []string{"轻快", "爱看热闹"},
+							Hooks:    []string{"去回话", "把诗社消息带错边"},
+						},
+					},
+					Policy: core.PromotionPolicy{
+						PromoteThreshold:   6.8,
+						MajorThreshold:     11,
+						InteractionWeight:  3,
+						MentionWeight:      1,
+						EventWeight:        2,
+						RelationshipWeight: 3,
+						SceneWeight:        2,
+					},
+				}); err != nil {
+					t.Fatalf("UpdatePopulationConfig dream mansion: %v", err)
+				}
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "boudoir", Name: "未知地点", Kind: "residence", Description: "闺阁内室，消息传得不快却更要紧", Controller: "xue_house"},
+						{ID: "corridor", Name: "回廊", Kind: "transit", Description: "丫鬟婆子擦身而过、最容易串话", Controller: "rong_house"},
+						{ID: "study_gate", Name: "书房外", Kind: "service", Description: "回话与递帖都得经过的地方", Controller: "poetry_circle"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "xue_house", Name: "薛家房内", Role: "household", Relationships: []string{"顾忌 rong_house"}},
+						{ID: "rong_house", Name: "荣府杂役", Role: "household", Relationships: []string{"议论 xue_house"}},
+						{ID: "poetry_circle", Name: "诗社往来圈", Role: "social", Relationships: []string{"牵动 xue_house"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "poetry_society", Name: "诗社风声", Kind: "social", Description: "诗社流言让宝钗身边的人先紧张起来", Intensity: 0.81, Target: "xue_house"},
+						{ID: "maids_whisper", Name: "回廊私语", Kind: "rumor", Description: "回廊里关于谁该出面的话越传越偏", Intensity: 0.58, Target: "未知地点"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig dream mansion: %v", err)
+				}
+			},
+		},
+	}
+
+	results := make(map[string]map[string]interface{}, len(samples))
+	for _, sample := range samples {
+		engine := buildEngine(t, sample)
+		for i := 0; i < 120; i++ {
+			engine.onTick()
+		}
+
+		status := engine.TickStatus()
+		trajectory, ok := status["trajectory_summary"].([]string)
+		if !ok || len(trajectory) == 0 {
+			t.Fatalf("%s trajectory summary = %#v, want long-window summary from real world directory", sample.name, status["trajectory_summary"])
+		}
+		joinedTrajectory := strings.Join(trajectory, " | ")
+		history, ok := status["tick_history"].([]core.TickSnapshot)
+		if !ok || len(history) != 12 {
+			t.Fatalf("%s tick history = %#v, want capped recent snapshots after 120 ticks", sample.name, status["tick_history"])
+		}
+		insights, err := engine.GetPopulationInsights()
+		if err != nil {
+			t.Fatalf("%s GetPopulationInsights: %v", sample.name, err)
+		}
+		promotedNames := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promotedNames = append(promotedNames, npc.Name)
+		}
+		sort.Strings(promotedNames)
+
+		if sample.expectNoPromotion {
+			if len(promotedNames) != 0 {
+				t.Fatalf("%s promoted = %#v, want no promotion from real world sample", sample.name, promotedNames)
+			}
+		} else {
+			if tension, _ := status["tension"].(float64); tension < sample.expectTensionFloor {
+				t.Fatalf("%s tension = %#v, want >= %.2f from real world sample", sample.name, status["tension"], sample.expectTensionFloor)
+			}
+			if !containsString(promotedNames, sample.expectedPromotedNPC) {
+				t.Fatalf("%s promoted = %#v, want %s promoted from real world sample", sample.name, promotedNames, sample.expectedPromotedNPC)
+			}
+			if !strings.Contains(joinedTrajectory, sample.expectedPressureID) {
+				t.Fatalf("%s trajectory = %q, want dominant pressure %s from real world sample", sample.name, joinedTrajectory, sample.expectedPressureID)
+			}
+		}
+
+		results[sample.name] = map[string]interface{}{
+			"trajectory": joinedTrajectory,
+			"promoted":   strings.Join(promotedNames, ","),
+			"tension":    status["tension"].(float64),
+		}
+	}
+
+	if results["Neon Block Real World"]["trajectory"] == results["Wedding Import Real World"]["trajectory"] {
+		t.Fatalf("neon vs wedding real-world trajectory = %#v vs %#v, want divergent long-window summaries across real world families", results["Neon Block Real World"], results["Wedding Import Real World"])
+	}
+	if results["Wedding Import Real World"]["promoted"] == results["Dream Mansion Real World"]["promoted"] {
+		t.Fatalf("wedding vs dream real-world promoted = %#v vs %#v, want different promoted leaders across imported world families", results["Wedding Import Real World"], results["Dream Mansion Real World"])
+	}
+}
+
+func TestRealWorldDirectorySampleMatrixAcrossTwoHundredTicks(t *testing.T) {
+	type sampleExpectation struct {
+		name                string
+		sourceDir           string
+		scene               core.SceneState
+		expectedPromotedNPC string
+		expectedPressureID  string
+		expectNoPromotion   bool
+		expectTensionFloor  float64
+		configure           func(t *testing.T, engine *Engine, worldDir string)
+	}
+
+	buildEngine := func(t *testing.T, sample sampleExpectation) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		root := t.TempDir()
+		worldDir := filepath.Join(root, strings.ReplaceAll(strings.ToLower(sample.name), " ", "_"))
+		copyDir(t, filepath.Join("..", "..", "worlds", sample.sourceDir), worldDir)
+
+		engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: sample.name,
+			CoreRules: "真实世界目录长窗口验证",
+			Scene:     sample.scene,
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+
+		if sample.configure != nil {
+			sample.configure(t, engine, worldDir)
+		}
+		return engine
+	}
+
+	samples := []sampleExpectation{
+		{
+			name:      "Neon Block Real World 200",
+			sourceDir: "neon_block",
+			scene: core.SceneState{
+				Location:    "旧街夜市",
+				TimeOfDay:   "深夜",
+				Weather:     "闷热有雨",
+				Characters:  []string{"蓝姐", "谭叔", "玩家"},
+				Description: "真实世界目录中的默认夜市场景",
+			},
+			expectedPromotedNPC: "蓝姐",
+			expectedPressureID:  "missing_rider",
+			expectTensionFloor:  0.45,
+		},
+		{
+			name:      "Wedding Import Real World 200",
+			sourceDir: "1_7",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "白天",
+				Weather:     "阴雨",
+				Characters:  []string{"许灵_单阶段人设", "玩家"},
+				Description: "真实导入世界的默认接站场景",
+			},
+			expectedPromotedNPC: "婚礼管家",
+			expectedPressureID:  "arrival_gossip",
+			expectTensionFloor:  0.50,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+					BackgroundNPCs: []core.BackgroundNPC{
+						{
+							ID:       "steward",
+							Name:     "婚礼管家",
+							Role:     "steward",
+							Location: "未知地点",
+							Faction:  "wedding_hosts",
+							Traits:   []string{"周到", "急切"},
+							Hooks:    []string{"要把迟到接站压下去", "不想婚礼前出乱子"},
+						},
+						{
+							ID:       "driver",
+							Name:     "代驾老周",
+							Role:     "driver",
+							Location: "车站外",
+							Faction:  "station_runners",
+							Traits:   []string{"疲惫", "圆滑"},
+							Hooks:    []string{"谁临时改了接站安排", "想把责任甩出去"},
+						},
+						{
+							ID:       "guard",
+							Name:     "站台保安",
+							Role:     "guard",
+							Location: "候车厅",
+							Faction:  "station_runners",
+							Traits:   []string{"谨慎", "怕麻烦"},
+							Hooks:    []string{"担心现场起争执", "不想事情闹大"},
+						},
+					},
+					Policy: core.PromotionPolicy{
+						PromoteThreshold:   6.8,
+						MajorThreshold:     11,
+						InteractionWeight:  3,
+						MentionWeight:      1,
+						EventWeight:        2,
+						RelationshipWeight: 3,
+						SceneWeight:        2,
+					},
+				}); err != nil {
+					t.Fatalf("UpdatePopulationConfig wedding import: %v", err)
+				}
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "arrival_point", Name: "未知地点", Kind: "arrival", Description: "婚礼接站与临时协调点", Controller: "wedding_hosts"},
+						{ID: "station_gate", Name: "车站外", Kind: "transit", Description: "接站车与代驾聚集的混乱出口", Controller: "station_runners"},
+						{ID: "platform_hall", Name: "候车厅", Kind: "waiting", Description: "旅客和保安都不想久留的大厅", Controller: "station_runners"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "wedding_hosts", Name: "婚礼主家", Role: "family", Relationships: []string{"压制 station_runners"}},
+						{ID: "station_runners", Name: "接站跑腿圈", Role: "logistics", Relationships: []string{"不信任 wedding_hosts"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "pickup_delay", Name: "接站迟到", Kind: "coordination", Description: "婚礼前的接站安排持续失序", Intensity: 0.84, Target: "wedding_hosts"},
+						{ID: "arrival_gossip", Name: "站台风声", Kind: "rumor", Description: "谁被怠慢、谁在甩锅开始扩散", Intensity: 0.62, Target: "未知地点"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig wedding import: %v", err)
+				}
+			},
+		},
+		{
+			name:      "Dream Mansion Real World 200",
+			sourceDir: "《红楼梦》完整版、-角色卡-202604190812",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "未知时间",
+				Weather:     "未知天气",
+				Characters:  []string{"薛宝钗", "玩家"},
+				Description: "真实导入世界的默认闺阁场景",
+			},
+			expectedPromotedNPC: "莺儿",
+			expectedPressureID:  "maids_whisper",
+			expectTensionFloor:  0.48,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, _, err := world.EnsureSeededPopulation(worldDir); err != nil {
+					t.Fatalf("EnsureSeededPopulation dream mansion: %v", err)
+				}
+				if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+					BackgroundNPCs: []core.BackgroundNPC{
+						{
+							ID:       "yinger",
+							Name:     "莺儿",
+							Role:     "侍女",
+							Location: "未知地点",
+							Faction:  "xue_house",
+							Traits:   []string{"机灵", "知分寸"},
+							Hooks:    []string{"替宝姑娘探听风声", "不想让诗社话头失控"},
+						},
+						{
+							ID:       "housemaid",
+							Name:     "婆子",
+							Role:     "杂役",
+							Location: "回廊",
+							Faction:  "rong_house",
+							Traits:   []string{"谨慎", "嘴碎"},
+							Hooks:    []string{"最怕传错话", "担心被责罚"},
+						},
+						{
+							ID:       "page",
+							Name:     "小厮",
+							Role:     "跑腿",
+							Location: "书房外",
+							Faction:  "poetry_circle",
+							Traits:   []string{"轻快", "爱看热闹"},
+							Hooks:    []string{"去回话", "把诗社消息带错边"},
+						},
+					},
+					Policy: core.PromotionPolicy{
+						PromoteThreshold:   6.8,
+						MajorThreshold:     11,
+						InteractionWeight:  3,
+						MentionWeight:      1,
+						EventWeight:        2,
+						RelationshipWeight: 3,
+						SceneWeight:        2,
+					},
+				}); err != nil {
+					t.Fatalf("UpdatePopulationConfig dream mansion: %v", err)
+				}
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "boudoir", Name: "未知地点", Kind: "residence", Description: "闺阁内室，消息传得不快却更要紧", Controller: "xue_house"},
+						{ID: "corridor", Name: "回廊", Kind: "transit", Description: "丫鬟婆子擦身而过、最容易串话", Controller: "rong_house"},
+						{ID: "study_gate", Name: "书房外", Kind: "service", Description: "回话与递帖都得经过的地方", Controller: "poetry_circle"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "xue_house", Name: "薛家房内", Role: "household", Relationships: []string{"顾忌 rong_house"}},
+						{ID: "rong_house", Name: "荣府杂役", Role: "household", Relationships: []string{"议论 xue_house"}},
+						{ID: "poetry_circle", Name: "诗社往来圈", Role: "social", Relationships: []string{"牵动 xue_house"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "poetry_society", Name: "诗社风声", Kind: "social", Description: "诗社流言让宝钗身边的人先紧张起来", Intensity: 0.81, Target: "xue_house"},
+						{ID: "maids_whisper", Name: "回廊私语", Kind: "rumor", Description: "回廊里关于谁该出面的话越传越偏", Intensity: 0.58, Target: "未知地点"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig dream mansion: %v", err)
+				}
+			},
+		},
+	}
+
+	results := make(map[string]map[string]interface{}, len(samples))
+	for _, sample := range samples {
+		engine := buildEngine(t, sample)
+		for i := 0; i < 200; i++ {
+			engine.onTick()
+		}
+
+		status := engine.TickStatus()
+		trajectory, ok := status["trajectory_summary"].([]string)
+		if !ok || len(trajectory) == 0 {
+			t.Fatalf("%s trajectory summary = %#v, want long-window summary from real world directory", sample.name, status["trajectory_summary"])
+		}
+		joinedTrajectory := strings.Join(trajectory, " | ")
+		history, ok := status["tick_history"].([]core.TickSnapshot)
+		if !ok || len(history) != 12 {
+			t.Fatalf("%s tick history = %#v, want capped recent snapshots after 200 ticks", sample.name, status["tick_history"])
+		}
+		insights, err := engine.GetPopulationInsights()
+		if err != nil {
+			t.Fatalf("%s GetPopulationInsights: %v", sample.name, err)
+		}
+		promotedNames := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promotedNames = append(promotedNames, npc.Name)
+		}
+		sort.Strings(promotedNames)
+
+		if sample.expectNoPromotion {
+			if len(promotedNames) != 0 {
+				t.Fatalf("%s promoted = %#v, want no promotion from real world sample", sample.name, promotedNames)
+			}
+		} else {
+			if tension, _ := status["tension"].(float64); tension < sample.expectTensionFloor {
+				t.Fatalf("%s tension = %#v, want >= %.2f from real world sample", sample.name, status["tension"], sample.expectTensionFloor)
+			}
+			if !containsString(promotedNames, sample.expectedPromotedNPC) {
+				t.Fatalf("%s promoted = %#v, want %s promoted from real world sample", sample.name, promotedNames, sample.expectedPromotedNPC)
+			}
+			if !strings.Contains(joinedTrajectory, sample.expectedPressureID) {
+				t.Fatalf("%s trajectory = %q, want dominant pressure %s from real world sample", sample.name, joinedTrajectory, sample.expectedPressureID)
+			}
+		}
+
+		results[sample.name] = map[string]interface{}{
+			"trajectory": joinedTrajectory,
+			"promoted":   strings.Join(promotedNames, ","),
+			"tension":    status["tension"].(float64),
+		}
+	}
+
+	if results["Neon Block Real World 200"]["trajectory"] == results["Wedding Import Real World 200"]["trajectory"] {
+		t.Fatalf("neon vs wedding real-world 200-tick trajectory = %#v vs %#v, want divergent long-window summaries across real world families", results["Neon Block Real World 200"], results["Wedding Import Real World 200"])
+	}
+	if results["Wedding Import Real World 200"]["promoted"] == results["Dream Mansion Real World 200"]["promoted"] {
+		t.Fatalf("wedding vs dream real-world 200-tick promoted = %#v vs %#v, want different promoted leaders across imported world families", results["Wedding Import Real World 200"], results["Dream Mansion Real World 200"])
 	}
 }
 
@@ -2498,6 +4766,780 @@ func TestPopulationIdentityShiftAccumulates(t *testing.T) {
 	}
 	if char.Identity.Adaptive["trust"] != core.Adaptive["trust"] {
 		t.Fatalf("runtime character trust = %.2f, want %.2f (synced with identity core)", char.Identity.Adaptive["trust"], core.Adaptive["trust"])
+	}
+}
+
+func TestPopulationIdentityShiftChangesFutureAllowedActions(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "shift-behavior-world")
+	writeTestWorldBundle(t, worldDir, "行为漂移世界", "成长后应改变未来行为", core.SceneState{
+		Location:    "酒馆",
+		TimeOfDay:   "夜晚",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "酒馆里消息很多",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "行为漂移世界",
+		CoreRules: "成长后应改变未来行为",
+		Scene: core.SceneState{
+			Location:    "酒馆",
+			TimeOfDay:   "夜晚",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "酒馆里消息很多",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	_, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "bartender",
+			Name:     "酒保",
+			Role:     "服务生",
+			Location: "酒馆",
+			Traits:   []string{"沉默寡言"},
+			Hooks:    []string{"见过太多秘密"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   4,
+			MajorThreshold:     12,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 3,
+			SceneWeight:        1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	initialEvents := []core.Event{
+		{ID: "behavior_1", Type: "dialogue", Actor: "酒保", Target: "111", Payload: map[string]interface{}{"content": "酒保低声提醒你今晚别惹事"}, SceneID: "酒馆", Canonical: true, CreatedAt: now},
+		{ID: "behavior_2", Type: "user_message", Actor: "user", Target: "111", Payload: map[string]interface{}{"content": "我先听酒保怎么说"}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(time.Second)},
+	}
+	for _, evt := range initialEvents {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append initial event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+
+	beforeChar, ok := engine.agents.GetCharacter("酒保")
+	if !ok {
+		t.Fatalf("promoted runtime character not loaded after first reconcile")
+	}
+	beforeTrust := beforeChar.Identity.Adaptive["trust"]
+	baseAllowed := filterAllowedActionsForStep(core.TurnStep{Kind: "tension_response"}, []string{"speak", "trust", "negotiate", "hide", "move", "threaten", "attack"})
+	beforeActions := filterAllowedActionsForAdaptive(baseAllowed, beforeChar.Identity.Adaptive)
+	if !containsString(beforeActions, "attack") || !containsString(beforeActions, "threaten") {
+		t.Fatalf("before actions = %v, want aggressive options still available before growth", beforeActions)
+	}
+
+	shiftEvents := []core.Event{
+		{ID: "behavior_3", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(2 * time.Second)},
+		{ID: "behavior_4", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(3 * time.Second)},
+		{ID: "behavior_5", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(4 * time.Second)},
+		{ID: "behavior_6", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(5 * time.Second)},
+		{ID: "behavior_7", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(6 * time.Second)},
+	}
+	for _, evt := range shiftEvents {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append shift event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+
+	afterChar, ok := engine.agents.GetCharacter("酒保")
+	if !ok {
+		t.Fatalf("runtime character missing after identity shift")
+	}
+	if afterChar.Identity.Adaptive["trust"] <= beforeTrust || afterChar.Identity.Adaptive["trust"] < 7 {
+		t.Fatalf("after trust = %.2f, want > %.2f and >= 7", afterChar.Identity.Adaptive["trust"], beforeTrust)
+	}
+	afterActions := filterAllowedActionsForAdaptive(baseAllowed, afterChar.Identity.Adaptive)
+	if containsString(afterActions, "attack") || containsString(afterActions, "threaten") {
+		t.Fatalf("after actions = %v, want aggressive actions removed after high-trust growth", afterActions)
+	}
+
+	insights, err := engine.GetPopulationInsights()
+	if err != nil {
+		t.Fatalf("GetPopulationInsights: %v", err)
+	}
+	foundShiftHistory := false
+	for _, npc := range insights.Promoted {
+		if npc.Name != "酒保" {
+			continue
+		}
+		for _, item := range npc.History {
+			if item.Type == "population_identity_shift" && len(item.Adaptive) > 0 {
+				foundShiftHistory = true
+				break
+			}
+		}
+	}
+	if !foundShiftHistory {
+		t.Fatalf("promoted insights = %#v, want identity shift history for 酒保", insights.Promoted)
+	}
+}
+
+func TestPopulationIdentityShiftChangesDirectorWinner(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "shift-director-world")
+	writeTestWorldBundle(t, worldDir, "选人漂移世界", "成长后应改变谁来上场", core.SceneState{
+		Location:    "酒馆",
+		TimeOfDay:   "夜晚",
+		Weather:     "晴",
+		Characters:  []string{"安雅", "玩家"},
+		Description: "酒馆里每个人都在观察彼此",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+		"安雅":  worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.worldPaths["安雅"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "选人漂移世界",
+		CoreRules: "成长后应改变谁来上场",
+		Scene: core.SceneState{
+			Location:    "酒馆",
+			TimeOfDay:   "夜晚",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "111 的个人场景",
+		},
+	}
+	engine.charWorlds["安雅"] = CharWorld{
+		WorldName: "选人漂移世界",
+		CoreRules: "成长后应改变谁来上场",
+		Scene: core.SceneState{
+			Location:    "酒馆",
+			TimeOfDay:   "夜晚",
+			Weather:     "晴",
+			Characters:  []string{"安雅", "玩家"},
+			Description: "安雅暂时主视角",
+		},
+	}
+	engine.focusCharacter = "安雅"
+	engine.SyncActiveWorldContext()
+
+	_, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "bartender",
+			Name:     "酒保",
+			Role:     "服务生",
+			Location: "后厨",
+			Traits:   []string{"沉默寡言"},
+			Hooks:    []string{"知道很多秘密"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   4,
+			MajorThreshold:     12,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 3,
+			SceneWeight:        1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	for _, evt := range []core.Event{
+		{ID: "winner_1", Type: "dialogue", Actor: "酒保", Target: "安雅", Payload: map[string]interface{}{"content": "酒保只是简短应了一声"}, SceneID: "酒馆", Canonical: true, CreatedAt: now},
+		{ID: "winner_2", Type: "user_message", Actor: "user", Target: "安雅", Payload: map[string]interface{}{"content": "先听听周围人怎么想"}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(time.Second)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append seed event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+	engine.UpdateDirectorConfig(core.DirectorConfig{
+		Mode:        "auto_single",
+		MaxSpeakers: 1,
+		Weights: map[string]float64{
+			"trust":             10,
+			"continuity":        0.01,
+			"present":           0.01,
+			"kind_persona":      0.01,
+			"kind_npc":          0.01,
+			"source_promoted":   4,
+			"source_definition": 0.01,
+			"loaded":            0.01,
+			"location_match":    0.01,
+			"faction_match":     0.01,
+			"pressure_match":    0.01,
+			"hook_match":        0.01,
+			"mentioned":         0.01,
+			"mention_order":     0.01,
+			"opened_by_user":    0.01,
+			"tension_switch":    0.01,
+			"silence_cap":       0.01,
+			"silence_divisor":   9999,
+			"intimacy":          0.01,
+			"fear":              0.01,
+		},
+	})
+
+	engine.mu.Lock()
+	beforePlan := engine.directTurnLocked("", engine.stateMgr.Get())
+	engine.mu.Unlock()
+	if len(beforePlan.Selected) == 0 || beforePlan.Selected[0] != "111" {
+		t.Fatalf("before selected = %#v, want 111 to win before bartender growth", beforePlan.Selected)
+	}
+	var beforeBartender *core.DirectorCandidate
+	for i := range beforePlan.CandidateDetails {
+		if beforePlan.CandidateDetails[i].Name == "酒保" {
+			beforeBartender = &beforePlan.CandidateDetails[i]
+			break
+		}
+	}
+	if beforeBartender == nil {
+		t.Fatalf("before candidate details = %#v, want 酒保 present", beforePlan.CandidateDetails)
+	}
+
+	for _, evt := range []core.Event{
+		{ID: "winner_3", Type: "trust_change", Actor: "安雅", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(2 * time.Second)},
+		{ID: "winner_4", Type: "trust_change", Actor: "安雅", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(3 * time.Second)},
+		{ID: "winner_5", Type: "trust_change", Actor: "安雅", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(4 * time.Second)},
+		{ID: "winner_6", Type: "trust_change", Actor: "安雅", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(5 * time.Second)},
+		{ID: "winner_7", Type: "trust_change", Actor: "安雅", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(6 * time.Second)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append trust event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+	engine.mu.Lock()
+	afterPlan := engine.directTurnLocked("", engine.stateMgr.Get())
+	engine.mu.Unlock()
+	if len(afterPlan.Selected) == 0 || afterPlan.Selected[0] != "酒保" {
+		t.Fatalf("after selected = %#v, want 酒保 to win after trust growth", afterPlan.Selected)
+	}
+	var afterBartender *core.DirectorCandidate
+	for i := range afterPlan.CandidateDetails {
+		if afterPlan.CandidateDetails[i].Name == "酒保" {
+			afterBartender = &afterPlan.CandidateDetails[i]
+			break
+		}
+	}
+	if afterBartender == nil {
+		t.Fatalf("after candidate details = %#v, want 酒保 present", afterPlan.CandidateDetails)
+	}
+	if afterBartender.Score <= beforeBartender.Score {
+		t.Fatalf("bartender score before/after = %.2f/%.2f, want growth to raise director score", beforeBartender.Score, afterBartender.Score)
+	}
+	if afterBartender.ScoreBreakdown["trust"] <= beforeBartender.ScoreBreakdown["trust"] {
+		t.Fatalf("bartender trust breakdown before/after = %.2f/%.2f, want trust to drive director shift", beforeBartender.ScoreBreakdown["trust"], afterBartender.ScoreBreakdown["trust"])
+	}
+	if !containsString(afterBartender.DominantFactors, "信任倾向") {
+		t.Fatalf("after dominant factors = %#v, want 信任倾向 included", afterBartender.DominantFactors)
+	}
+}
+
+func TestPopulationIdentityShiftRefreshesDesiresAndAutonomousIntent(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "shift-desire-world")
+	writeTestWorldBundle(t, worldDir, "欲望漂移世界", "成长后欲望和自治意图应改变", core.SceneState{
+		Location:    "酒馆",
+		TimeOfDay:   "夜晚",
+		Weather:     "晴",
+		Characters:  []string{"111", "玩家"},
+		Description: "酒馆里每个人都在观察彼此",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "欲望漂移世界",
+		CoreRules: "成长后欲望和自治意图应改变",
+		Scene: core.SceneState{
+			Location:    "酒馆",
+			TimeOfDay:   "夜晚",
+			Weather:     "晴",
+			Characters:  []string{"111", "玩家"},
+			Description: "酒馆里每个人都在观察彼此",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+
+	_, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "bartender",
+			Name:     "酒保",
+			Role:     "服务生",
+			Location: "酒馆",
+			Traits:   []string{"冷静", "独立"},
+			Hooks:    []string{"知道很多秘密"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   4,
+			MajorThreshold:     12,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 3,
+			SceneWeight:        1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	for _, evt := range []core.Event{
+		{ID: "desire_1", Type: "dialogue", Actor: "酒保", Target: "111", Payload: map[string]interface{}{"content": "酒保只是淡淡看了你一眼"}, SceneID: "酒馆", Canonical: true, CreatedAt: now},
+		{ID: "desire_2", Type: "user_message", Actor: "user", Target: "111", Payload: map[string]interface{}{"content": "让酒保先说说"}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(time.Second)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append seed event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+
+	beforeChar, ok := engine.agents.GetCharacter("酒保")
+	if !ok {
+		t.Fatalf("promoted runtime character not loaded")
+	}
+	beforeDesires, err := engine.desireStore.GetByCharacter("酒保")
+	if err != nil {
+		t.Fatalf("GetByCharacter before: %v", err)
+	}
+	if len(beforeDesires) == 0 || beforeDesires[0].Type != emotion.DesireAutonomy {
+		t.Fatalf("before desires = %#v, want autonomy-dominant baseline", beforeDesires)
+	}
+	beforeAction := emotion.GenerateAutonomousAction(
+		"酒保",
+		emotion.EmotionalPressure{Total: 0.9},
+		beforeDesires,
+		emotionVectorFromAdaptive(beforeChar.Identity.Adaptive),
+		nil,
+		0,
+	)
+	if beforeAction == nil || beforeAction.ActionType != "withdraw" {
+		t.Fatalf("before autonomous action = %#v, want withdraw from autonomy baseline", beforeAction)
+	}
+
+	for _, evt := range []core.Event{
+		{ID: "desire_3", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(2 * time.Second)},
+		{ID: "desire_4", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(3 * time.Second)},
+		{ID: "desire_5", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(4 * time.Second)},
+		{ID: "desire_6", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(5 * time.Second)},
+		{ID: "desire_7", Type: "trust_change", Actor: "111", Target: "酒保", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "酒馆", Canonical: true, CreatedAt: now.Add(6 * time.Second)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append trust event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+
+	afterChar, ok := engine.agents.GetCharacter("酒保")
+	if !ok {
+		t.Fatalf("runtime character missing after trust growth")
+	}
+	if afterChar.Identity.Adaptive["trust"] < 7 {
+		t.Fatalf("after trust = %.2f, want >= 7", afterChar.Identity.Adaptive["trust"])
+	}
+	afterDesires, err := engine.desireStore.GetByCharacter("酒保")
+	if err != nil {
+		t.Fatalf("GetByCharacter after: %v", err)
+	}
+	if len(afterDesires) == 0 {
+		t.Fatalf("after desires = %#v, want refreshed desires", afterDesires)
+	}
+	foundAffection := false
+	for _, desire := range afterDesires {
+		if desire.Type == emotion.DesireAffection {
+			foundAffection = true
+			break
+		}
+	}
+	if !foundAffection {
+		t.Fatalf("after desires = %#v, want affection desire after trust growth", afterDesires)
+	}
+	afterAction := emotion.GenerateAutonomousAction(
+		"酒保",
+		emotion.EmotionalPressure{Total: 0.9},
+		afterDesires,
+		emotionVectorFromAdaptive(afterChar.Identity.Adaptive),
+		nil,
+		0,
+	)
+	if afterAction == nil || afterAction.ActionType != "approach" {
+		t.Fatalf("after autonomous action = %#v, want approach after affection refresh", afterAction)
+	}
+}
+
+func TestIdentityShiftChangesSchedulerActionAndRelationshipOutcome(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "shift-relationship-world")
+	writeTestWorldBundle(t, worldDir, "关系漂移世界", "成长后应改变关系走向", core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "外城对峙一触即发",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "关系漂移世界",
+		CoreRules: "成长后应改变关系走向",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城对峙一触即发",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+	engine.scheduler.SetActionInterval(0)
+	engine.scheduler.SetRandomStepChance(0)
+
+	engine.agents.LoadCharacter("smugglers", core.Character{
+		WorldPath: worldDir,
+		Identity: core.IdentityEnvelope{
+			Name:      "smugglers",
+			Adaptive:  map[string]float64{"trust": 3},
+			Immutable: []string{"wary"},
+		},
+	})
+	if !containsString(engine.loadedCharacters, "smugglers") {
+		engine.loadedCharacters = append(engine.loadedCharacters, "smugglers")
+	}
+	engine.worldPaths["smugglers"] = worldDir
+	engine.charWorlds["smugglers"] = CharWorld{
+		WorldName: "关系漂移世界",
+		CoreRules: "成长后应改变关系走向",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"guard", "smugglers"},
+			Description: "走私帮在外城活动",
+		},
+	}
+
+	if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "guard",
+			Name:     "guard",
+			Role:     "guard",
+			Location: "外城",
+			Faction:  "guard",
+			Traits:   []string{"固执", "独立"},
+			Hooks:    []string{"守住防线"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   4,
+			MajorThreshold:     12,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 3,
+			SceneWeight:        1,
+		},
+	}); err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Factions: []core.WorldFactionConfig{
+			{ID: "guard", Name: "guard"},
+			{ID: "smugglers", Name: "smugglers"},
+		},
+		Locations: []core.WorldLocationConfig{
+			{ID: "outer_city", Name: "外城", Controller: "guard"},
+		},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	for _, evt := range []core.Event{
+		{ID: "rel_1", Type: "dialogue", Actor: "guard", Target: "111", Payload: map[string]interface{}{"content": "守卫正盯着街口"}, SceneID: "外城", Canonical: true, CreatedAt: now},
+		{ID: "rel_2", Type: "user_message", Actor: "user", Target: "111", Payload: map[string]interface{}{"content": "先看守卫怎么反应"}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(time.Second)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append seed event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+	engine.agents.LoadCharacter("guard", core.Character{
+		WorldPath: worldDir,
+		Identity: core.IdentityEnvelope{
+			Name:      "guard",
+			Adaptive:  map[string]float64{"trust": 2, "aggression": 6, "fear": 2},
+			Immutable: []string{"固执", "独立"},
+		},
+	})
+	engine.charWorlds["guard"] = CharWorld{
+		WorldName: "轨迹分叉世界",
+		CoreRules: "成长后应持续改变关系轨迹",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"guard", "smugglers"},
+			Description: "守卫与走私帮持续对峙",
+		},
+	}
+	engine.stateMgr.Set(core.WorldState{
+		Scene: core.SceneState{
+			Location:   "外城",
+			Characters: []string{"111", "guard", "smugglers"},
+		},
+		Relationships: map[string]core.Relationship{},
+		Variables:     map[string]interface{}{},
+		Flags:         map[string]bool{},
+	})
+
+	engine.onTick()
+	beforeLogs := engine.scheduler.RecentActionsForCharacter("guard", 0)
+	if len(beforeLogs) == 0 || beforeLogs[len(beforeLogs)-1].Action == "trust" {
+		t.Fatalf("before logs = %#v, want pre-shift action to remain non-trust", beforeLogs)
+	}
+
+	for _, evt := range []core.Event{
+		{ID: "rel_3", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(2 * time.Second)},
+		{ID: "rel_4", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(3 * time.Second)},
+		{ID: "rel_5", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(4 * time.Second)},
+		{ID: "rel_6", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(5 * time.Second)},
+		{ID: "rel_7", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(6 * time.Second)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append growth event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+	engine.stateMgr.Set(core.WorldState{
+		Scene: core.SceneState{
+			Location:   "外城",
+			Characters: []string{"111", "guard", "smugglers"},
+		},
+		Relationships: map[string]core.Relationship{
+			"guard_smugglers": {Trust: -1},
+		},
+		Variables: map[string]interface{}{},
+		Flags:     map[string]bool{},
+	})
+
+	engine.onTick()
+	afterLogs := engine.scheduler.RecentActionsForCharacter("guard", 0)
+	if len(afterLogs) < 2 || afterLogs[len(afterLogs)-1].Action != "trust" {
+		t.Fatalf("after logs = %#v, want trust after identity shift", afterLogs)
+	}
+	afterState := engine.GetState()
+	if got := afterState.Relationships["guard_smugglers"].Trust; got <= -1 {
+		t.Fatalf("relationship trust = %.2f, want immediate improvement after trust action", got)
+	}
+}
+
+func TestIdentityShiftSustainsDivergentRelationshipTrajectoryAcrossTicks(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "trajectory-world")
+	writeTestWorldBundle(t, worldDir, "轨迹分叉世界", "成长后应持续改变关系轨迹", core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "外城对峙持续升级",
+	})
+
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "轨迹分叉世界",
+		CoreRules: "成长后应持续改变关系轨迹",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城对峙持续升级",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+	engine.scheduler.SetActionInterval(0)
+	engine.scheduler.SetRandomStepChance(0)
+
+	engine.agents.LoadCharacter("smugglers", core.Character{
+		WorldPath: worldDir,
+		Identity: core.IdentityEnvelope{
+			Name:      "smugglers",
+			Adaptive:  map[string]float64{"trust": 3},
+			Immutable: []string{"wary"},
+		},
+	})
+	if !containsString(engine.loadedCharacters, "smugglers") {
+		engine.loadedCharacters = append(engine.loadedCharacters, "smugglers")
+	}
+	engine.worldPaths["smugglers"] = worldDir
+	engine.charWorlds["smugglers"] = CharWorld{
+		WorldName: "轨迹分叉世界",
+		CoreRules: "成长后应持续改变关系轨迹",
+		Scene: core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"guard", "smugglers"},
+			Description: "走私帮在外城活动",
+		},
+	}
+
+	if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "guard",
+			Name:     "guard",
+			Role:     "guard",
+			Location: "外城",
+			Faction:  "guard",
+			Traits:   []string{"固执", "独立"},
+			Hooks:    []string{"守住防线"},
+		}},
+		Policy: core.PromotionPolicy{
+			PromoteThreshold:   4,
+			MajorThreshold:     12,
+			InteractionWeight:  3,
+			MentionWeight:      1,
+			EventWeight:        2,
+			RelationshipWeight: 3,
+			SceneWeight:        1,
+		},
+	}); err != nil {
+		t.Fatalf("UpdatePopulationConfig: %v", err)
+	}
+	if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+		Factions: []core.WorldFactionConfig{
+			{ID: "guard", Name: "guard"},
+			{ID: "smugglers", Name: "smugglers"},
+		},
+		Locations: []core.WorldLocationConfig{
+			{ID: "outer_city", Name: "外城", Controller: "guard"},
+		},
+	}); err != nil {
+		t.Fatalf("UpdateWorldStructureConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	for _, evt := range []core.Event{
+		{ID: "traj_1", Type: "dialogue", Actor: "guard", Target: "111", Payload: map[string]interface{}{"content": "守卫在街口来回巡查"}, SceneID: "外城", Canonical: true, CreatedAt: now},
+		{ID: "traj_2", Type: "user_message", Actor: "user", Target: "111", Payload: map[string]interface{}{"content": "继续观察守卫的行动"}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(time.Second)},
+		{ID: "traj_rel_0", Type: "trust_change", Actor: "guard", Target: "smugglers", Payload: map[string]interface{}{"delta": -1.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(1500 * time.Millisecond)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append seed event %s: %v", evt.ID, err)
+		}
+	}
+
+	engine.reconcilePopulationLocked()
+	engine.agents.LoadCharacter("guard", core.Character{
+		WorldPath: worldDir,
+		Identity: core.IdentityEnvelope{
+			Name:      "guard",
+			Adaptive:  map[string]float64{"trust": 2, "aggression": 6, "fear": 2},
+			Immutable: []string{"固执", "独立"},
+		},
+	})
+	engine.stateMgr.Set(core.WorldState{
+		Scene: core.SceneState{
+			Location:   "外城",
+			Characters: []string{"111", "guard", "smugglers"},
+		},
+		Relationships: map[string]core.Relationship{
+			"guard_smugglers": {Trust: -1},
+		},
+		Variables: map[string]interface{}{},
+		Flags:     map[string]bool{},
+	})
+
+	preShiftTrust := make([]float64, 0, 2)
+	for i := 0; i < 2; i++ {
+		engine.onTick()
+		preShiftTrust = append(preShiftTrust, engine.GetState().Relationships["guard_smugglers"].Trust)
+	}
+	preShiftLogs := engine.scheduler.RecentActionsForCharacter("guard", 0)
+	preShiftTrustActions := 0
+	for _, log := range preShiftLogs {
+		if log.Action == "trust" {
+			preShiftTrustActions++
+		}
+	}
+
+	for _, evt := range []core.Event{
+		{ID: "traj_3", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(2 * time.Second)},
+		{ID: "traj_4", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(3 * time.Second)},
+		{ID: "traj_5", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(4 * time.Second)},
+		{ID: "traj_6", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(5 * time.Second)},
+		{ID: "traj_7", Type: "trust_change", Actor: "111", Target: "guard", Payload: map[string]interface{}{"delta": 3.0}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(6 * time.Second)},
+	} {
+		if err := engine.eventStore.Append(evt); err != nil {
+			t.Fatalf("append growth event %s: %v", evt.ID, err)
+		}
+	}
+	engine.reconcilePopulationLocked()
+	engine.stateMgr.Set(core.WorldState{
+		Scene: core.SceneState{
+			Location:   "外城",
+			Characters: []string{"111", "guard", "smugglers"},
+		},
+		Relationships: map[string]core.Relationship{
+			"guard_smugglers": {Trust: preShiftTrust[len(preShiftTrust)-1]},
+		},
+		Variables: map[string]interface{}{},
+		Flags:     map[string]bool{},
+	})
+
+	postShiftTrust := make([]float64, 0, 3)
+	for i := 0; i < 3; i++ {
+		engine.onTick()
+		postShiftTrust = append(postShiftTrust, engine.GetState().Relationships["guard_smugglers"].Trust)
+	}
+	postShiftLogs := engine.scheduler.RecentActionsForCharacter("guard", 0)
+	postShiftTrustActions := 0
+	for _, log := range postShiftLogs {
+		if log.Action == "trust" {
+			postShiftTrustActions++
+		}
+	}
+
+	if postShiftTrustActions <= preShiftTrustActions {
+		t.Fatalf("pre-shift trust = %#v post-shift trust = %#v pre logs = %#v post logs = %#v, want identity shift to produce more sustained trust actions across ticks", preShiftTrust, postShiftTrust, preShiftLogs, postShiftLogs)
 	}
 }
 

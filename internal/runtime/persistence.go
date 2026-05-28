@@ -57,14 +57,13 @@ func (e *Engine) GetFocusMemorySnapshot(characterName string, factLimit, episodi
 	if factLimit > 0 && len(facts) > factLimit {
 		facts = facts[:factLimit]
 	}
-	return core.MemorySnapshot{
-		Character:      name,
+	return normalizeMemorySnapshotCompatibility(core.MemorySnapshot{
 		FocusCharacter: name,
 		WorkingMemory:  working,
 		Facts:          facts,
 		Episodic:       episodic,
 		Dialogue:       dialogue,
-	}, nil
+	}), nil
 }
 
 // GetMemorySnapshot is a compatibility alias for older character-centric callers.
@@ -85,7 +84,6 @@ func (e *Engine) GetFocusDefinitionConfig(characterName string) (core.CharacterC
 		return core.CharacterConfig{}, fmt.Errorf("character '%s' not loaded", name)
 	}
 	return core.CharacterConfig{
-		Character:      name,
 		FocusCharacter: name,
 		Path:           e.charPaths[name],
 		WorldPath:      e.worldPaths[name],
@@ -123,7 +121,6 @@ func (e *Engine) UpdateFocusDefinitionConfig(characterName string, card core.Cha
 
 	e.agents.LoadCharacter(name, card)
 	return core.CharacterConfig{
-		Character:      name,
 		FocusCharacter: name,
 		Path:           path,
 		WorldPath:      e.worldPaths[name],
@@ -169,7 +166,6 @@ func (e *Engine) CreateSaveSlot(name, branch, note string) (core.SaveSlot, error
 		Name:           name,
 		Branch:         branch,
 		EventID:        eventID,
-		Character:      e.GetFocusCharacter(),
 		FocusCharacter: e.GetFocusCharacter(),
 		PlayerRole:     e.playerRole,
 		Note:           note,
@@ -177,6 +173,7 @@ func (e *Engine) CreateSaveSlot(name, branch, note string) (core.SaveSlot, error
 		CreatedAt:      time.Now().UTC(),
 		WorldState:     e.stateMgr.Get(),
 	}
+	slot = normalizeSaveSlotCompatibility(slot)
 
 	slots, err := e.readSaveSlots()
 	if err != nil {
@@ -212,9 +209,7 @@ func (e *Engine) LoadSaveSlot(name string) (core.SaveSlot, error) {
 		if slot.Name != name {
 			continue
 		}
-		if strings.TrimSpace(slot.FocusCharacter) == "" {
-			slot.FocusCharacter = strings.TrimSpace(slot.Character)
-		}
+		slot = normalizeSaveSlotCompatibility(slot)
 		state := slot.WorldState
 		if strings.TrimSpace(slot.EventID) != "" {
 			replayed, err := e.gatekeeper.Replay().ReplayTo(slot.EventID, slot.Branch)
@@ -224,9 +219,6 @@ func (e *Engine) LoadSaveSlot(name string) (core.SaveSlot, error) {
 			state = replayed
 		}
 		focusCharacter := strings.TrimSpace(slot.FocusCharacter)
-		if focusCharacter == "" {
-			focusCharacter = strings.TrimSpace(slot.Character)
-		}
 		if err := e.switchCharacterLocked(focusCharacter, false); err != nil {
 			return core.SaveSlot{}, err
 		}
@@ -334,14 +326,15 @@ func (e *Engine) readSaveSlots() ([]core.SaveSlot, error) {
 		return nil, err
 	}
 	for i := range slots {
-		if strings.TrimSpace(slots[i].FocusCharacter) == "" {
-			slots[i].FocusCharacter = strings.TrimSpace(slots[i].Character)
-		}
+		slots[i] = normalizeSaveSlotCompatibility(slots[i])
 	}
 	return slots, nil
 }
 
 func (e *Engine) writeSaveSlots(slots []core.SaveSlot) error {
+	for i := range slots {
+		slots[i] = normalizeSaveSlotCompatibility(slots[i])
+	}
 	path, err := e.saveSlotsPath()
 	if err != nil {
 		return err
@@ -362,6 +355,72 @@ func (e *Engine) saveSlotsPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "save_slots.json"), nil
+}
+
+func (e *Engine) experimentReportsPathLocked() (string, error) {
+	dir, err := e.instanceDataDirLocked()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "experiment_reports.json"), nil
+}
+
+func (e *Engine) legacyExperimentReportsPathLocked() (string, error) {
+	if e.dataDir == "" {
+		return "", fmt.Errorf("data directory is not configured")
+	}
+	return filepath.Join(e.dataDir, "experiment_reports.json"), nil
+}
+
+func (e *Engine) readExperimentReportsLocked() ([]core.ExperimentReport, error) {
+	path, err := e.experimentReportsPathLocked()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		if !e.shouldReadLegacyRootLocked() {
+			return []core.ExperimentReport{}, nil
+		}
+		legacyPath, legacyErr := e.legacyExperimentReportsPathLocked()
+		if legacyErr != nil {
+			return []core.ExperimentReport{}, nil
+		}
+		data, err = os.ReadFile(legacyPath)
+		if os.IsNotExist(err) {
+			return []core.ExperimentReport{}, nil
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	var reports []core.ExperimentReport
+	if err := json.Unmarshal(data, &reports); err != nil {
+		return nil, err
+	}
+	for i := range reports {
+		if reports[i].CreatedAt.IsZero() {
+			reports[i].CreatedAt = time.Now().UTC()
+		} else {
+			reports[i].CreatedAt = reports[i].CreatedAt.UTC()
+		}
+	}
+	return reports, nil
+}
+
+func (e *Engine) writeExperimentReportsLocked(reports []core.ExperimentReport) error {
+	path, err := e.experimentReportsPathLocked()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(reports, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
 }
 
 func (e *Engine) legacySaveSlotsPath() (string, error) {

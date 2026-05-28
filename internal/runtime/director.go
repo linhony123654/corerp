@@ -145,6 +145,7 @@ func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) 
 			Selected:   true,
 		}}
 		plan.Reason = "director manual mode"
+		plan.WorldSignals = buildWorldSignals(worldState, nil)
 		plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, false, worldState, userInput, nil)
 		e.lastPlan = plan
 		return plan
@@ -167,6 +168,7 @@ func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) 
 			Selected:   true,
 		}}
 		plan.Reason = "no alternate candidates"
+		plan.WorldSignals = buildWorldSignals(worldState, nil)
 		plan.Steps = buildTurnSteps(plan.Selected, plan.PreviousSpeaker, false, worldState, userInput, nil)
 		e.lastPlan = plan
 		return plan
@@ -332,6 +334,7 @@ func (e *Engine) directTurnLocked(userInput string, worldState core.WorldState) 
 		selectedSet[name] = true
 	}
 	plan.CandidateDetails = buildDirectorCandidateDetails(scoredList, selectedSet)
+	plan.WorldSignals = buildWorldSignals(worldState, scoredList)
 	plan.Reason = buildPlanReason(scoredList, plan.Selected, cfg.Mode == "auto_chain")
 	if lead := plan.Selected[0]; lead != "" && lead != focusCharacter {
 		plan.Switched = true
@@ -446,10 +449,101 @@ func buildDirectorCandidateDetails(scoredList []directorCandidateScore, selected
 			PressureMatch:  candidate.pressureMatch,
 			HookMatch:      candidate.hookMatch,
 			ScoreBreakdown: cloneScoreBreakdown(candidate.breakdown),
+			DominantFactors: dominantDirectorFactors(candidate.breakdown),
 			Selected:       selectedSet[candidate.name],
 		})
 	}
 	return out
+}
+
+func dominantDirectorFactors(breakdown map[string]float64) []string {
+	if len(breakdown) == 0 {
+		return nil
+	}
+	labels := map[string]string{
+		"mentioned":       "用户点名",
+		"mention_order":   "点名顺位",
+		"continuity":      "连续发言",
+		"present":         "当前在场",
+		"location_match":  "地点命中",
+		"faction_match":   "势力命中",
+		"pressure_match":  "压力命中",
+		"hook_match":      "hook 命中",
+		"silence_boost":   "静默补偿",
+		"trust":           "信任倾向",
+		"intimacy":        "亲密倾向",
+		"fear":            "恐惧倾向",
+		"opened_by_user":  "用户开场",
+		"tension_switch":  "高张力切换",
+		"kind_persona":    "persona 身份",
+		"kind_npc":        "npc 身份",
+		"source_promoted": "晋升人口来源",
+		"source_definition":"人物定义来源",
+		"source_background":"背景人口来源",
+		"loaded":          "已加载",
+	}
+	type item struct {
+		key   string
+		value float64
+	}
+	items := make([]item, 0, len(breakdown))
+	for key, value := range breakdown {
+		if value <= 0.01 {
+			continue
+		}
+		items = append(items, item{key: key, value: value})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].value == items[j].value {
+			return items[i].key < items[j].key
+		}
+		return items[i].value > items[j].value
+	})
+	out := make([]string, 0, minInt(len(items), 3))
+	for _, it := range items[:minInt(len(items), 3)] {
+		label := labels[it.key]
+		if label == "" {
+			label = it.key
+		}
+		out = append(out, label)
+	}
+	return out
+}
+
+func buildWorldSignals(worldState core.WorldState, scoredList []directorCandidateScore) []string {
+	signals := make([]string, 0, 4)
+	if worldState.Tension >= 0.8 {
+		signals = append(signals, "世界高张力")
+	} else if worldState.Tension >= 0.6 {
+		signals = append(signals, "世界张力上升")
+	}
+	pressureHits := 0
+	factionHits := 0
+	locationHits := 0
+	for _, candidate := range scoredList {
+		if candidate.pressureMatch {
+			pressureHits++
+		}
+		if candidate.factionMatch {
+			factionHits++
+		}
+		if candidate.locationMatch {
+			locationHits++
+		}
+	}
+	if pressureHits > 0 {
+		signals = append(signals, fmt.Sprintf("%d 个候选命中当前 pressure", pressureHits))
+	}
+	if factionHits > 0 {
+		signals = append(signals, fmt.Sprintf("%d 个候选命中当前 faction", factionHits))
+	}
+	if locationHits > 0 {
+		signals = append(signals, fmt.Sprintf("%d 个候选在当前 scene 位置相关", locationHits))
+	}
+	if len(signals) == 0 {
+		signals = append(signals, "当前主要由用户输入与在场状态驱动")
+	}
+	return signals
 }
 
 func cloneScoreBreakdown(src map[string]float64) map[string]float64 {
@@ -522,7 +616,7 @@ func relationshipWeight(worldState core.WorldState, a, b string) float64 {
 	keys := []string{fmt.Sprintf("%s_%s", a, b), fmt.Sprintf("%s_%s", b, a)}
 	for _, key := range keys {
 		if rel, ok := worldState.Relationships[key]; ok {
-			return rel.Trust + rel.Intimacy + rel.Fear + rel.Respect + rel.Debt
+			return (rel.Trust + rel.Intimacy + rel.Fear + rel.Respect + rel.Debt) / 50.0
 		}
 	}
 	return 0

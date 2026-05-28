@@ -3,28 +3,117 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"corerp/internal/agents"
 	"corerp/internal/auth"
 	"corerp/internal/core"
 	"corerp/internal/events"
 	"corerp/internal/llm"
+	"corerp/internal/memory"
 	"corerp/internal/narrative"
 	"corerp/internal/runtime"
 )
 
 var _ RuntimeEngine = (*runtime.Engine)(nil)
 
+func TestAPIContractCanonicalSchemasExcludeLegacyFocusMirrors(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "api-contract.yaml"))
+	if err != nil {
+		t.Fatalf("read api contract: %v", err)
+	}
+	contract := string(data)
+	schemas := []string{
+		"MemorySnapshot",
+		"SaveSlot",
+		"ScenarioPreset",
+		"CharacterConfig",
+		"RuntimeInstancePayload",
+		"ExperimentSnapshot",
+		"ExperimentReplayPayload",
+		"ExperimentReplayEvidencePayload",
+		"TurnTrace",
+	}
+	for _, schema := range schemas {
+		block := apiContractSchemaBlock(t, contract, schema)
+		for _, legacy := range []string{"character:", "active_character:", "loaded_characters:"} {
+			if strings.Contains(block, legacy) {
+				t.Fatalf("schema %s unexpectedly exposes legacy focus mirror %q:\n%s", schema, legacy, block)
+			}
+		}
+	}
+}
+
+func apiContractSchemaBlock(t *testing.T, contract, schema string) string {
+	t.Helper()
+	marker := "\n    " + schema + ":\n"
+	start := strings.Index(contract, marker)
+	if start < 0 {
+		t.Fatalf("schema %s not found", schema)
+	}
+	start += 1
+	rest := contract[start+len("    "+schema+":\n"):]
+	next := strings.Index(rest, "\n    ")
+	if next < 0 {
+		return contract[start:]
+	}
+	return contract[start : start+len("    "+schema+":\n")+next]
+}
+
 type mockResolver struct {
-	defaultID string
-	engines   map[string]RuntimeEngine
-	stopped   map[string]bool
+	defaultID  string
+	engines    map[string]RuntimeEngine
+	stopped    map[string]bool
+	lastCreate struct {
+		sourceID       string
+		id             string
+		label          string
+		focusCharacter string
+	}
+}
+
+type realRuntimeResolver struct {
+	manager *runtime.Manager
+}
+
+func (r realRuntimeResolver) DefaultInstanceID() string {
+	return r.manager.DefaultID()
+}
+
+func (r realRuntimeResolver) ResolveInstance(id string) (RuntimeEngine, error) {
+	return r.manager.Resolve(id)
+}
+
+func (r realRuntimeResolver) ListInstances() []core.RuntimeInstanceSummary {
+	return r.manager.List()
+}
+
+func (r realRuntimeResolver) InstanceStatus(id string) (core.RuntimeInstanceSummary, error) {
+	return r.manager.Status(id)
+}
+
+func (r realRuntimeResolver) SetDefaultInstance(id string) error {
+	return r.manager.SetDefault(id)
+}
+
+func (r realRuntimeResolver) StopInstance(id string) (core.RuntimeInstanceSummary, error) {
+	return r.manager.Stop(id)
+}
+
+func (r realRuntimeResolver) DeleteInstance(id string) error {
+	return r.manager.Delete(id)
+}
+
+func (r realRuntimeResolver) CreateInstance(sourceID, id, label, focusCharacter string) (core.RuntimeInstanceSummary, error) {
+	return r.manager.CreateFrom(sourceID, id, label, focusCharacter)
 }
 
 func (r *mockResolver) DefaultInstanceID() string { return r.defaultID }
@@ -108,6 +197,10 @@ func (r *mockResolver) CreateInstance(sourceID, id, label, focusCharacter string
 	if id == "" {
 		return core.RuntimeInstanceSummary{}, fmt.Errorf("instance id required")
 	}
+	r.lastCreate.sourceID = sourceID
+	r.lastCreate.id = id
+	r.lastCreate.label = label
+	r.lastCreate.focusCharacter = focusCharacter
 	name := focusCharacter
 	if name == "" {
 		name = "Anya"
@@ -122,6 +215,7 @@ type mockEngine struct {
 	name                    string
 	instanceID              string
 	state                   core.WorldState
+	tickCount               int
 	dialogue                []core.Message
 	player                  core.PlayerRole
 	world                   core.WorldConfig
@@ -134,6 +228,8 @@ type mockEngine struct {
 	plan                    core.DirectorPlan
 	trace                   core.TurnTrace
 	traces                  []core.TurnTrace
+	memorySnapshot          *core.MemorySnapshot
+	experimentReports       []core.ExperimentReport
 	quarantine              []core.Event
 	pending                 []core.PendingFact
 	causalityChain          interface{}
@@ -141,6 +237,9 @@ type mockEngine struct {
 	causalitySummary        string
 	causalityNarrativeSum   string
 	participantDetails      []core.ParticipantSummary
+	sceneParticipants       []string
+	loadedCharacters        []string
+	loadedCheckpoints       []string
 }
 
 func (m *mockEngine) ProcessTurn(input string) (<-chan string, error) {
@@ -157,14 +256,13 @@ func (m *mockEngine) GetInstanceID() string {
 }
 func (m *mockEngine) InstanceSummary() core.RuntimeInstanceSummary {
 	details := m.GetSceneParticipantDetails()
+	participants := m.GetSceneParticipants()
 	return core.RuntimeInstanceSummary{
 		ID:                 m.GetInstanceID(),
 		Label:              "test",
 		WorldName:          "test-world",
-		ActiveCharacter:    m.name,
 		FocusCharacter:     m.name,
-		LoadedCharacters:   []string{m.name},
-		Participants:       []string{m.name},
+		Participants:       participants,
 		ParticipantDetails: details,
 		Status:             "running",
 	}
@@ -186,7 +284,6 @@ func (m *mockEngine) UpdatePlayerRole(role core.PlayerRole) (core.PlayerRole, er
 }
 func (m *mockEngine) GetFocusDefinitionConfig(name string) (core.CharacterConfig, error) {
 	return core.CharacterConfig{
-		Character:      m.name,
 		FocusCharacter: m.name,
 		Path:           "characters/test.yml",
 		WorldPath:      "worlds/test.yml",
@@ -199,7 +296,6 @@ func (m *mockEngine) GetCharacterConfig(name string) (core.CharacterConfig, erro
 func (m *mockEngine) UpdateFocusDefinitionConfig(name string, card core.Character) (core.CharacterConfig, error) {
 	m.name = card.Identity.Name
 	return core.CharacterConfig{
-		Character:      m.name,
 		FocusCharacter: m.name,
 		Path:           "characters/test.yml",
 		WorldPath:      "worlds/test.yml",
@@ -361,15 +457,15 @@ func (m *mockEngine) GetDirectorPlan() core.DirectorPlan {
 }
 func (m *mockEngine) GetLatestTrace() (core.TurnTrace, bool) {
 	if m.trace.Turn == 0 {
-		m.trace = core.TurnTrace{Turn: 1, Character: m.name, UserInput: "test", Narrative: "mock narrative"}
+		m.trace = core.TurnTrace{Turn: 1, FocusCharacter: m.name, UserInput: "test", Narrative: "mock narrative"}
 	}
 	return m.trace, true
 }
 func (m *mockEngine) ListTurnTraces(limit int) []core.TurnTrace {
 	if len(m.traces) == 0 {
 		m.traces = []core.TurnTrace{
-			{Turn: 2, Character: m.name, UserInput: "later"},
-			{Turn: 1, Character: m.name, UserInput: "earlier"},
+			{Turn: 2, FocusCharacter: m.name, UserInput: "later"},
+			{Turn: 1, FocusCharacter: m.name, UserInput: "earlier"},
 		}
 	}
 	if limit <= 0 || limit >= len(m.traces) {
@@ -392,7 +488,7 @@ func (m *mockEngine) PromoteQuarantineEvent(eventID string) error { return nil }
 func (m *mockEngine) RejectQuarantineEvent(eventID string) error  { return nil }
 func (m *mockEngine) ListPendingFacts(character string, limit int) ([]core.PendingFact, map[string]interface{}, error) {
 	if len(m.pending) == 0 {
-		m.pending = []core.PendingFact{{ID: "p1", Character: "Anya", Subject: "V", Predicate: "身份", Object: "佣兵", Source: "llm_extracted", Confidence: 0.4}}
+		m.pending = []core.PendingFact{{ID: "p1", FocusCharacter: "Anya", Subject: "V", Predicate: "身份", Object: "佣兵", Source: "llm_extracted", Confidence: 0.4}}
 	}
 	return m.pending, map[string]interface{}{"pending_total": len(m.pending)}, nil
 }
@@ -401,8 +497,18 @@ func (m *mockEngine) DeletePendingFact(eventID string) error  { return nil }
 func (m *mockEngine) PromotePendingFact(eventID string) error { return nil }
 func (m *mockEngine) GetCharacterName() string                { return m.name }
 func (m *mockEngine) GetFocusCharacter() string               { return m.name }
-func (m *mockEngine) GetLoadedCharacters() []string           { return []string{m.name} }
-func (m *mockEngine) GetSceneParticipants() []string          { return []string{m.name} }
+func (m *mockEngine) GetLoadedCharacters() []string {
+	if len(m.loadedCharacters) > 0 {
+		return append([]string(nil), m.loadedCharacters...)
+	}
+	return []string{m.name}
+}
+func (m *mockEngine) GetSceneParticipants() []string {
+	if m.sceneParticipants != nil {
+		return append([]string(nil), m.sceneParticipants...)
+	}
+	return []string{m.name}
+}
 func (m *mockEngine) GetSceneParticipantDetails() []core.ParticipantSummary {
 	if len(m.participantDetails) > 0 {
 		return m.participantDetails
@@ -414,7 +520,7 @@ func (m *mockEngine) EnterWorld(path string) (core.ScenarioPreset, error) {
 	m.name = "entered-character"
 	m.world.Path = path
 	m.world.Name = "entered-world"
-	return core.ScenarioPreset{Name: "opening", Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
+	return core.ScenarioPreset{Name: "opening", FocusCharacter: m.name, Branch: "main"}, nil
 }
 func (m *mockEngine) GetWorldName() string { return "test-world" }
 func (m *mockEngine) GetWorldPaths() map[string]string {
@@ -425,42 +531,57 @@ func (m *mockEngine) GetFocusMemorySnapshot(character string, factLimit, episodi
 	return m.GetMemorySnapshot(character, factLimit, episodicLimit, dialogueLimit)
 }
 func (m *mockEngine) GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
+	if m.memorySnapshot != nil {
+		return *m.memorySnapshot, nil
+	}
 	return core.MemorySnapshot{
-		Character:      m.name,
 		FocusCharacter: m.name,
 		WorkingMemory:  "working",
 		Dialogue:       m.dialogue,
 	}, nil
 }
 func (m *mockEngine) ListSaveSlots() ([]core.SaveSlot, error) {
-	return []core.SaveSlot{{Name: "slot-1", Character: m.name, FocusCharacter: m.name, Branch: "main"}}, nil
+	return []core.SaveSlot{{Name: "slot-1", FocusCharacter: m.name, Branch: "main"}}, nil
 }
 func (m *mockEngine) CreateSaveSlot(name, branch, note string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
+	return core.SaveSlot{Name: name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
 }
 func (m *mockEngine) LoadSaveSlot(name string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
+	return core.SaveSlot{Name: name, FocusCharacter: m.name, Branch: "main"}, nil
 }
 func (m *mockEngine) CompareSaveSlots(saveA, saveB string) (core.WorldStateDiff, error) {
 	return core.WorldStateDiff{SaveA: saveA, SaveB: saveB, Tension: &core.StateDiffEntry{A: 0.1, B: 0.2}}, nil
 }
 func (m *mockEngine) ListCheckpoints() ([]core.SaveSlot, error) {
-	return []core.SaveSlot{{Name: "cp-1", Character: m.name, FocusCharacter: m.name, Branch: "main"}}, nil
+	return []core.SaveSlot{{Name: "cp-1", FocusCharacter: m.name, Branch: "main"}}, nil
 }
 func (m *mockEngine) CreateCheckpoint(name, branch, note string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
+	return core.SaveSlot{Name: name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
 }
 func (m *mockEngine) LoadCheckpoint(name string) (core.SaveSlot, error) {
-	return core.SaveSlot{Name: name, Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
+	m.loadedCheckpoints = append(m.loadedCheckpoints, name)
+	return core.SaveSlot{Name: name, FocusCharacter: m.name, Branch: "main"}, nil
 }
 func (m *mockEngine) ListScenarioPresets() ([]core.ScenarioPreset, error) {
-	return []core.ScenarioPreset{{Name: "preset-1", Character: m.name, FocusCharacter: m.name, Branch: "main"}}, nil
+	return []core.ScenarioPreset{{Name: "preset-1", FocusCharacter: m.name, Branch: "main"}}, nil
 }
 func (m *mockEngine) CreateScenarioPreset(name, branch, note string) (core.ScenarioPreset, error) {
-	return core.ScenarioPreset{Name: name, Character: m.name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
+	return core.ScenarioPreset{Name: name, FocusCharacter: m.name, Branch: branch, Note: note}, nil
 }
 func (m *mockEngine) ApplyScenarioPreset(name string) (core.ScenarioPreset, error) {
-	return core.ScenarioPreset{Name: name, Character: m.name, FocusCharacter: m.name, Branch: "main"}, nil
+	return core.ScenarioPreset{Name: name, FocusCharacter: m.name, Branch: "main"}, nil
+}
+func (m *mockEngine) ListExperimentReports() ([]core.ExperimentReport, error) {
+	out := append([]core.ExperimentReport(nil), m.experimentReports...)
+	for i := range out {
+		out[i] = normalizeExperimentReportCompatibility(out[i])
+	}
+	return out, nil
+}
+func (m *mockEngine) CreateExperimentReport(report core.ExperimentReport) (core.ExperimentReport, error) {
+	report = normalizeExperimentReportCompatibility(report)
+	m.experimentReports = append(m.experimentReports, report)
+	return report, nil
 }
 func (m *mockEngine) GetNPCActions(name string, since int) []agents.NPCActionLog { return nil }
 func (m *mockEngine) GetCausalityChain(id string, d int) (interface{}, error) {
@@ -517,9 +638,9 @@ func (m *mockEngine) ActionLogStats() map[string]interface{} {
 	return map[string]interface{}{"total_entries": 0}
 }
 func (m *mockEngine) TickStatus() map[string]interface{} {
-	return map[string]interface{}{"running": true, "tick_count": 0}
+	return map[string]interface{}{"running": true, "tick_count": m.tickCount}
 }
-func (m *mockEngine) ManualTick() {}
+func (m *mockEngine) ManualTick() { m.tickCount++ }
 func (m *mockEngine) PauseTick()  {}
 func (m *mockEngine) ResumeTick() {}
 
@@ -530,6 +651,193 @@ func newTestServer() *Server {
 		Variables:     make(map[string]interface{}),
 		Flags:         make(map[string]bool),
 	}, player: core.PlayerRole{Name: "玩家"}})
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func newRealRuntimeEngineForAPITest(t *testing.T, dbPath, dataDir, worldDir, instanceID, worldName, rules string) *runtime.Engine {
+	t.Helper()
+
+	store, err := events.New(dbPath)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	memEngine, err := memory.New(dbPath)
+	if err != nil {
+		t.Fatalf("new memory engine: %v", err)
+	}
+	t.Cleanup(func() { memEngine.Close() })
+
+	gatekeeper := events.NewGatekeeper(store)
+	agentsMgr := agents.NewEnvelopeManager()
+	agentsMgr.LoadCharacter("111", core.Character{
+		Identity: core.IdentityEnvelope{
+			Name:      "111",
+			Adaptive:  map[string]float64{"trust": 6},
+			Immutable: []string{"cold"},
+		},
+	})
+
+	charWorlds := map[string]runtime.CharWorld{
+		"111": {
+			WorldName: worldName,
+			CoreRules: rules,
+			Scene: core.SceneState{
+				Location:    "外城",
+				TimeOfDay:   "深夜",
+				Weather:     "阴",
+				Characters:  []string{"111", "玩家"},
+				Description: "API 长窗口验证场景",
+			},
+		},
+	}
+
+	engine, err := runtime.New(
+		store,
+		gatekeeper,
+		memEngine,
+		memory.NewDecayEngine(memEngine.DB()),
+		agentsMgr,
+		llm.NewRouter(llm.NewAdapter("http://127.0.0.1:1/v1", "", "test-model")),
+		"111",
+		[]string{"111"},
+		charWorlds,
+	)
+	if err != nil {
+		t.Fatalf("new runtime engine: %v", err)
+	}
+	engine.ConfigurePersistence(dataDir, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.SyncActiveWorldContext()
+	return engine
+}
+
+func newRealWorldRuntimeEngineForAPITest(t *testing.T, dbPath, dataDir, worldDir, instanceID, worldName, rules string, scene core.SceneState) *runtime.Engine {
+	t.Helper()
+
+	store, err := events.New(dbPath)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	memEngine, err := memory.New(dbPath)
+	if err != nil {
+		t.Fatalf("new memory engine: %v", err)
+	}
+	t.Cleanup(func() { memEngine.Close() })
+
+	gatekeeper := events.NewGatekeeper(store)
+	agentsMgr := agents.NewEnvelopeManager()
+	agentsMgr.LoadCharacter("111", core.Character{
+		Identity: core.IdentityEnvelope{
+			Name:      "111",
+			Adaptive:  map[string]float64{"trust": 6},
+			Immutable: []string{"cold"},
+		},
+	})
+
+	charWorlds := map[string]runtime.CharWorld{
+		"111": {
+			WorldName: worldName,
+			CoreRules: rules,
+			Scene:     scene,
+		},
+	}
+
+	engine, err := runtime.New(
+		store,
+		gatekeeper,
+		memEngine,
+		memory.NewDecayEngine(memEngine.DB()),
+		agentsMgr,
+		llm.NewRouter(llm.NewAdapter("http://127.0.0.1:1/v1", "", "test-model")),
+		"111",
+		[]string{"111"},
+		charWorlds,
+	)
+	if err != nil {
+		t.Fatalf("new runtime engine: %v", err)
+	}
+	engine.ConfigurePersistence(dataDir, map[string]string{}, map[string]string{
+		"111": worldDir,
+	})
+	engine.SyncActiveWorldContext()
+	return engine
+}
+
+func writeAPITestWorldBundle(t *testing.T, worldDir, name, rules string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(worldDir, "canon"), 0755); err != nil {
+		t.Fatalf("mkdir canon: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(worldDir, "scenes"), 0755); err != nil {
+		t.Fatalf("mkdir scenes: %v", err)
+	}
+	worldYAML := "meta:\n  name: " + name + "\ncore_rules: |\n  " + rules + "\n"
+	sceneYAML := "scene:\n" +
+		"  location: 外城\n" +
+		"  time_of_day: 深夜\n" +
+		"  weather: 阴\n" +
+		"  present_chars:\n" +
+		"    - 111\n" +
+		"    - 玩家\n" +
+		"  atmosphere: API 长窗口验证场景\n"
+	if err := os.WriteFile(filepath.Join(worldDir, "world.yml"), []byte(worldYAML), 0644); err != nil {
+		t.Fatalf("write world.yml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worldDir, "scenes", "default.yml"), []byte(sceneYAML), 0644); err != nil {
+		t.Fatalf("write default scene: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worldDir, "canon", "facts.yml"), []byte("facts: []\n"), 0644); err != nil {
+		t.Fatalf("write facts.yml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worldDir, "canon", "ontology.yml"), []byte("ontology:\n  characters: []\n  locations: []\n  factions: []\n  items: []\n  lore: []\n  events: []\n  timelines: []\n  settings: []\n"), 0644); err != nil {
+		t.Fatalf("write ontology.yml: %v", err)
+	}
+}
+
+func copyTestDir(t *testing.T, src, dst string) {
+	t.Helper()
+	if err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.Create(target)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		if _, err := io.Copy(out, in); err != nil {
+			return err
+		}
+		return out.Chmod(info.Mode())
+	}); err != nil {
+		t.Fatalf("copy dir %s -> %s: %v", src, dst, err)
+	}
 }
 
 func initTestLLMStore(t *testing.T) {
@@ -628,10 +936,12 @@ func TestRouteWrongMethod(t *testing.T) {
 		{"/api/ready", "POST", http.StatusMethodNotAllowed},
 		{"/api/version", "POST", http.StatusMethodNotAllowed},
 		{"/api/state", "DELETE", http.StatusMethodNotAllowed},
+		{"/api/focus-definition", "POST", http.StatusMethodNotAllowed},
 		{"/api/character", "POST", http.StatusMethodNotAllowed},
 		{"/api/player-role", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/instances", "POST", http.StatusMethodNotAllowed},
 		{"/api/instances/status", "POST", http.StatusMethodNotAllowed},
+		{"/api/focus-definition-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/character-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/characters", "POST", http.StatusMethodNotAllowed},
 		{"/api/world", "POST", http.StatusMethodNotAllowed},
@@ -658,8 +968,13 @@ func TestRouteWrongMethod(t *testing.T) {
 		{"/api/saves/diff", "POST", http.StatusMethodNotAllowed},
 		{"/api/checkpoints/load", "GET", http.StatusMethodNotAllowed},
 		{"/api/presets/apply", "GET", http.StatusMethodNotAllowed},
+		{"/api/experiment-reports/replay", "GET", http.StatusMethodNotAllowed},
+		{"/api/experiment-reports/replay-batch", "GET", http.StatusMethodNotAllowed},
+		{"/api/experiment-reports/replay-advance", "GET", http.StatusMethodNotAllowed},
+		{"/api/proof-audits", "POST", http.StatusMethodNotAllowed},
 		{"/api/memory", "POST", http.StatusMethodNotAllowed},
 		{"/api/export", "POST", http.StatusMethodNotAllowed},
+		{"/api/runtime-audit", "POST", http.StatusMethodNotAllowed},
 		{"/api/saves/load", "GET", http.StatusMethodNotAllowed},
 		{"/api/npc-actions", "POST", http.StatusMethodNotAllowed},
 		{"/api/npc-action-log", "POST", http.StatusMethodNotAllowed},
@@ -697,10 +1012,12 @@ func TestRouteValidMethod2xx(t *testing.T) {
 		{"/api/health", "GET"},
 		{"/api/ready", "GET"},
 		{"/api/version", "GET"},
+		{"/api/focus-definition", "GET"},
 		{"/api/character", "GET"},
 		{"/api/player-role", "GET"},
 		{"/api/instances", "GET"},
 		{"/api/instances/status", "GET"},
+		{"/api/focus-definition-config", "GET"},
 		{"/api/character-config", "GET"},
 		{"/api/characters", "GET"},
 		{"/api/world", "GET"},
@@ -722,6 +1039,8 @@ func TestRouteValidMethod2xx(t *testing.T) {
 		{"/api/saves", "GET"},
 		{"/api/checkpoints", "GET"},
 		{"/api/presets", "GET"},
+		{"/api/runtime-audit", "GET"},
+		{"/api/experiment-reports", "GET"},
 		{"/api/saves/diff?a=slot-1&b=slot-2", "GET"},
 		{"/api/npc-actions", "GET"},
 		{"/api/npc-action-log", "GET"},
@@ -759,12 +1078,21 @@ func TestStateIncludesInstanceMetadata(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/state → %d, want 200", rec.Code)
 	}
+	body := append([]byte(nil), rec.Body.Bytes()...)
 
 	var payload struct {
-		InstanceID string                      `json:"instance_id"`
-		Instance   core.RuntimeInstanceSummary `json:"instance"`
+		InstanceID string `json:"instance_id"`
+		Instance   struct {
+			ID                 string                    `json:"id"`
+			FocusCharacter     string                    `json:"focus_character"`
+			Participants       []string                  `json:"participants"`
+			ParticipantDetails []core.ParticipantSummary `json:"participant_details"`
+		} `json:"instance"`
+		FocusCharacter     string                    `json:"focus_character"`
+		Participants       []string                  `json:"participants"`
+		ParticipantDetails []core.ParticipantSummary `json:"participant_details"`
 	}
-	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode state: %v", err)
 	}
 	if payload.InstanceID != "default" {
@@ -772,6 +1100,154 @@ func TestStateIncludesInstanceMetadata(t *testing.T) {
 	}
 	if payload.Instance.ID != "default" {
 		t.Fatalf("instance.id = %q, want default", payload.Instance.ID)
+	}
+	if payload.Instance.FocusCharacter != "Anya" {
+		t.Fatalf("instance.focus_character = %q, want Anya", payload.Instance.FocusCharacter)
+	}
+	if payload.FocusCharacter != "Anya" {
+		t.Fatalf("focus_character = %q, want Anya", payload.FocusCharacter)
+	}
+	if len(payload.Participants) != 1 || payload.Participants[0] != "Anya" {
+		t.Fatalf("participants = %#v, want [Anya]", payload.Participants)
+	}
+	if len(payload.Instance.Participants) != 1 || payload.Instance.Participants[0] != "Anya" {
+		t.Fatalf("instance.participants = %#v, want [Anya]", payload.Instance.Participants)
+	}
+	if len(payload.ParticipantDetails) != 1 || payload.ParticipantDetails[0].Name != "Anya" {
+		t.Fatalf("participant_details = %#v, want Anya detail", payload.ParticipantDetails)
+	}
+	if len(payload.Instance.ParticipantDetails) != 1 || payload.Instance.ParticipantDetails[0].Name != "Anya" {
+		t.Fatalf("instance.participant_details = %#v, want Anya detail", payload.Instance.ParticipantDetails)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw state: %v", err)
+	}
+	instanceRaw, _ := raw["instance"].(map[string]interface{})
+	if _, ok := instanceRaw["active_character"]; ok {
+		t.Fatalf("state.instance unexpectedly exposes active_character: %#v", instanceRaw)
+	}
+	if _, ok := instanceRaw["loaded_characters"]; ok {
+		t.Fatalf("state.instance unexpectedly exposes loaded_characters: %#v", instanceRaw)
+	}
+}
+
+func TestRuntimeAuditAggregatesAuthoringEvidence(t *testing.T) {
+	engine := &mockEngine{
+		instanceID: "audit-instance",
+		name:       "Anya",
+		state: core.WorldState{
+			Scene:   core.SceneState{Location: "旧街夜市", Description: "审计场景"},
+			Tension: 0.73,
+		},
+		plan: core.DirectorPlan{
+			Mode:         "auto_chain",
+			Selected:     []string{"蓝姐", "谭叔"},
+			WorldSignals: []string{"pressure: missing_rider", "faction: property_union"},
+		},
+		trace: core.TurnTrace{
+			Turn:           7,
+			FocusCharacter: "Anya",
+			UserInput:      "先说现在为什么乱了",
+		},
+		traces: []core.TurnTrace{
+			{Turn: 7, FocusCharacter: "Anya", UserInput: "先说现在为什么乱了"},
+			{Turn: 6, FocusCharacter: "Anya", UserInput: "上一轮"},
+		},
+		experimentReports: []core.ExperimentReport{{
+			Name:              "neon-guard-120t",
+			SourceInstanceID:  "audit-instance",
+			CompareInstanceID: "audit-compare",
+			CurrentCheckpoint: "neon-guard-120t-current",
+			CompareCheckpoint: "neon-guard-120t-compare",
+			CreatedAt:         time.Date(2026, 5, 27, 18, 0, 0, 0, time.UTC),
+		}},
+	}
+	s := NewServer(engine)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime-audit?trace_limit=1&checkpoint_limit=1&preset_limit=1&report_limit=1&population_limit=1", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/runtime-audit = %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := append([]byte(nil), rec.Body.Bytes()...)
+
+	var payload struct {
+		InstanceID string `json:"instance_id"`
+		Instance   struct {
+			ID                 string                    `json:"id"`
+			FocusCharacter     string                    `json:"focus_character"`
+			Participants       []string                  `json:"participants"`
+			ParticipantDetails []core.ParticipantSummary `json:"participant_details"`
+		} `json:"instance"`
+		State             core.WorldState         `json:"state"`
+		FocusCharacter    string                  `json:"focus_character"`
+		RecentTraces      []core.TurnTrace        `json:"recent_traces"`
+		LatestTrace       *core.TurnTrace         `json:"latest_trace"`
+		Checkpoints       []core.SaveSlot         `json:"checkpoints"`
+		Presets           []core.ScenarioPreset   `json:"presets"`
+		ExperimentReports []core.ExperimentReport `json:"experiment_reports"`
+		Population        core.PopulationInsights `json:"population"`
+		AuditSummary      []string                `json:"audit_summary"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode runtime audit: %v", err)
+	}
+	if payload.InstanceID != "audit-instance" {
+		t.Fatalf("instance_id = %q, want audit-instance", payload.InstanceID)
+	}
+	if payload.Instance.ID != "audit-instance" {
+		t.Fatalf("instance.id = %q, want audit-instance", payload.Instance.ID)
+	}
+	if payload.Instance.FocusCharacter != "Anya" {
+		t.Fatalf("instance.focus_character = %q, want Anya", payload.Instance.FocusCharacter)
+	}
+	if payload.FocusCharacter != "Anya" {
+		t.Fatalf("focus_character = %q, want Anya", payload.FocusCharacter)
+	}
+	if payload.State.Scene.Location != "旧街夜市" {
+		t.Fatalf("state.scene.location = %q, want 旧街夜市", payload.State.Scene.Location)
+	}
+	if len(payload.RecentTraces) != 1 || payload.RecentTraces[0].Turn != 7 {
+		t.Fatalf("recent_traces = %#v, want top trace only", payload.RecentTraces)
+	}
+	if payload.LatestTrace == nil || payload.LatestTrace.Turn != 7 {
+		t.Fatalf("latest_trace = %#v, want turn 7", payload.LatestTrace)
+	}
+	if len(payload.Checkpoints) != 1 || payload.Checkpoints[0].Name != "cp-1" {
+		t.Fatalf("checkpoints = %#v, want capped checkpoint list", payload.Checkpoints)
+	}
+	if len(payload.Presets) != 1 || payload.Presets[0].Name != "preset-1" {
+		t.Fatalf("presets = %#v, want capped preset list", payload.Presets)
+	}
+	if len(payload.ExperimentReports) != 1 || payload.ExperimentReports[0].Name != "neon-guard-120t" {
+		t.Fatalf("experiment_reports = %#v, want capped report list", payload.ExperimentReports)
+	}
+	if payload.ExperimentReports[0].CurrentCheckpoint != "neon-guard-120t-current" || payload.ExperimentReports[0].CompareCheckpoint != "neon-guard-120t-compare" {
+		t.Fatalf("experiment report checkpoints = %q / %q, want runtime audit to expose archived replay anchors", payload.ExperimentReports[0].CurrentCheckpoint, payload.ExperimentReports[0].CompareCheckpoint)
+	}
+	if len(payload.Population.Promoted) != 1 || payload.Population.Promoted[0].Name != "茶摊老板" {
+		t.Fatalf("population.promoted = %#v, want capped promoted insights", payload.Population.Promoted)
+	}
+	if len(payload.AuditSummary) == 0 {
+		t.Fatalf("audit_summary = %#v, want consolidated summary lines", payload.AuditSummary)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw runtime audit: %v", err)
+	}
+	instanceRaw, _ := raw["instance"].(map[string]interface{})
+	if _, ok := instanceRaw["active_character"]; ok {
+		t.Fatalf("runtime audit instance unexpectedly exposes active_character: %#v", instanceRaw)
+	}
+	if _, ok := instanceRaw["loaded_characters"]; ok {
+		t.Fatalf("runtime audit instance unexpectedly exposes loaded_characters: %#v", instanceRaw)
+	}
+	if etag := rec.Header().Get("ETag"); etag == "" {
+		t.Fatalf("ETag header empty, want cacheable audit response")
 	}
 }
 
@@ -896,8 +1372,10 @@ func TestInstancesEndpoint(t *testing.T) {
 	}
 
 	var payload struct {
-		Default   string                        `json:"default"`
-		Instances []core.RuntimeInstanceSummary `json:"instances"`
+		Default   string `json:"default"`
+		Instances []struct {
+			ID string `json:"id"`
+		} `json:"instances"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode instances: %v", err)
@@ -907,6 +1385,68 @@ func TestInstancesEndpoint(t *testing.T) {
 	}
 	if len(payload.Instances) != 1 || payload.Instances[0].ID != "default" {
 		t.Fatalf("instances = %#v, want single default instance", payload.Instances)
+	}
+}
+
+func TestInstancesEndpointUsesParticipantsAsSceneTruth(t *testing.T) {
+	engine := &mockEngine{
+		instanceID:        "default",
+		name:              "Anya",
+		state:             core.WorldState{},
+		sceneParticipants: []string{"蓝姐", "谭叔"},
+		participantDetails: []core.ParticipantSummary{
+			{Name: "蓝姐", Present: true, Loaded: false, Switchable: true},
+			{Name: "谭叔", Present: true, Loaded: true, Switchable: true},
+		},
+		loadedCharacters: []string{"Anya", "远处旁观者"},
+	}
+	s := NewServer(engine)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest("GET", "/api/instances", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/instances = %d", rec.Code)
+	}
+	body := append([]byte(nil), rec.Body.Bytes()...)
+
+	var payload struct {
+		Instances []struct {
+			ID                 string                    `json:"id"`
+			FocusCharacter     string                    `json:"focus_character"`
+			Participants       []string                  `json:"participants"`
+			ParticipantDetails []core.ParticipantSummary `json:"participant_details"`
+		} `json:"instances"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode instances: %v", err)
+	}
+	if len(payload.Instances) != 1 {
+		t.Fatalf("instances = %#v, want 1 item", payload.Instances)
+	}
+	got := payload.Instances[0]
+	if len(got.Participants) != 2 || got.Participants[0] != "蓝姐" || got.Participants[1] != "谭叔" {
+		t.Fatalf("participants = %#v, want [蓝姐 谭叔]", got.Participants)
+	}
+	if got.FocusCharacter != "Anya" {
+		t.Fatalf("focus_character = %#v, want Anya", got.FocusCharacter)
+	}
+	if len(got.ParticipantDetails) != 2 || got.ParticipantDetails[0].Name != "蓝姐" || got.ParticipantDetails[1].Name != "谭叔" {
+		t.Fatalf("participant_details = %#v, want scene details", got.ParticipantDetails)
+	}
+	var raw struct {
+		Instances []map[string]interface{} `json:"instances"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw instances: %v", err)
+	}
+	if _, ok := raw.Instances[0]["active_character"]; ok {
+		t.Fatalf("/api/instances unexpectedly exposes active_character: %#v", raw.Instances[0])
+	}
+	if _, ok := raw.Instances[0]["loaded_characters"]; ok {
+		t.Fatalf("/api/instances unexpectedly exposes loaded_characters: %#v", raw.Instances[0])
 	}
 }
 
@@ -953,15 +1493,75 @@ func TestInstanceCreateEndpoint(t *testing.T) {
 	if _, ok := resolver.engines["alt"]; !ok {
 		t.Fatal("resolver missing created instance")
 	}
-	var payload core.RuntimeInstanceSummary
-	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+	body := append([]byte(nil), rec.Body.Bytes()...)
+	var payload struct {
+		ID             string `json:"id"`
+		FocusCharacter string `json:"focus_character"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode create payload: %v", err)
 	}
 	if payload.FocusCharacter != "V" {
 		t.Fatalf("payload focus_character = %#v, want V", payload.FocusCharacter)
 	}
-	if payload.ActiveCharacter != "V" {
-		t.Fatalf("payload active_character compatibility = %#v, want V", payload.ActiveCharacter)
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw create payload: %v", err)
+	}
+	if _, ok := raw["active_character"]; ok {
+		t.Fatalf("create payload unexpectedly exposes active_character: %#v", raw)
+	}
+	if _, ok := raw["loaded_characters"]; ok {
+		t.Fatalf("create payload unexpectedly exposes loaded_characters: %#v", raw)
+	}
+}
+
+func TestInstanceCreateEndpointAcceptsSourceID(t *testing.T) {
+	defaultEngine := &mockEngine{instanceID: "default", name: "Anya", state: core.WorldState{}}
+	resolver := &mockResolver{
+		defaultID: "default",
+		engines:   map[string]RuntimeEngine{"default": defaultEngine},
+	}
+	s := NewServer(defaultEngine, resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest("POST", "/api/instances/create", strings.NewReader(`{"source_id":"default","id":"exp-a","label":"Experiment A"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/instances/create source_id → %d, want 200", rec.Code)
+	}
+	if resolver.lastCreate.sourceID != "default" {
+		t.Fatalf("resolver.lastCreate = %#v, want sourceID default", resolver.lastCreate)
+	}
+	if resolver.lastCreate.id != "exp-a" {
+		t.Fatalf("resolver.lastCreate = %#v, want id exp-a", resolver.lastCreate)
+	}
+}
+
+func TestInstanceCreateEndpointIgnoresActiveCharacterFallback(t *testing.T) {
+	defaultEngine := &mockEngine{instanceID: "default", name: "Anya", state: core.WorldState{}}
+	resolver := &mockResolver{
+		defaultID: "default",
+		engines:   map[string]RuntimeEngine{"default": defaultEngine},
+	}
+	s := NewServer(defaultEngine, resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest("POST", "/api/instances/create", strings.NewReader(`{"id":"alt-compat","label":"Compat","active_character":"V"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/instances/create active_character-only → %d, want 200", rec.Code)
+	}
+	if resolver.lastCreate.focusCharacter != "" {
+		t.Fatalf("resolver.lastCreate = %#v, want empty focusCharacter when focus_character omitted", resolver.lastCreate)
 	}
 }
 
@@ -1014,12 +1614,27 @@ func TestInstanceStatusEndpoint(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/instances/status?id=alt → %d, want 200", rec.Code)
 	}
-	var payload core.RuntimeInstanceSummary
-	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+	body := append([]byte(nil), rec.Body.Bytes()...)
+	var payload struct {
+		ID             string `json:"id"`
+		Status         string `json:"status"`
+		FocusCharacter string `json:"focus_character"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
 	if payload.ID != "alt" || payload.Status != "stopped" {
 		t.Fatalf("payload = %#v, want alt/stopped", payload)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw status: %v", err)
+	}
+	if _, ok := raw["active_character"]; ok {
+		t.Fatalf("status payload unexpectedly exposes active_character: %#v", raw)
+	}
+	if _, ok := raw["loaded_characters"]; ok {
+		t.Fatalf("status payload unexpectedly exposes loaded_characters: %#v", raw)
 	}
 }
 
@@ -1164,7 +1779,7 @@ func TestSwitchRoutePost(t *testing.T) {
 	mux := http.NewServeMux()
 	s.Register(mux)
 
-	body := `{"character":"V"}`
+	body := `{"focus_character":"V"}`
 	req := httptest.NewRequest("POST", "/api/switch", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1186,7 +1801,7 @@ func TestSwitchRouteRejectsNonSwitchableParticipant(t *testing.T) {
 	mux := http.NewServeMux()
 	s.Register(mux)
 
-	req := httptest.NewRequest("POST", "/api/switch", strings.NewReader(`{"character":"玩家"}`))
+	req := httptest.NewRequest("POST", "/api/switch", strings.NewReader(`{"focus_character":"玩家"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -1212,8 +1827,79 @@ func TestWorldsRoutePostEntersWorld(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["character"] != "entered-character" {
+	if payload["focus_character"] != "entered-character" {
 		t.Fatalf("payload = %#v, want entered character", payload)
+	}
+	if _, ok := payload["character"]; ok {
+		t.Fatalf("character compatibility mirror should be absent on /api/worlds POST payload = %#v", payload)
+	}
+	if _, ok := payload["participants"].([]interface{}); !ok {
+		t.Fatalf("participants = %#v, want array", payload["participants"])
+	}
+	if _, ok := payload["participant_details"].([]interface{}); !ok {
+		t.Fatalf("participant_details = %#v, want array", payload["participant_details"])
+	}
+}
+
+func TestExportRouteReturnsFocusDefinitionAsPrimary(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/export?format=json&limit=5", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/export = %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/export: %v", err)
+	}
+	if payload["focus_character"] != "Anya" {
+		t.Fatalf("focus_character = %#v, want Anya", payload["focus_character"])
+	}
+	if _, ok := payload["focus_definition"].(map[string]interface{}); !ok {
+		t.Fatalf("focus_definition = %#v, want object", payload["focus_definition"])
+	}
+	if _, ok := payload["character"]; ok {
+		t.Fatalf("top-level character compatibility mirror should be absent on /api/export payload = %#v", payload)
+	}
+	if _, ok := payload["participants"].([]interface{}); !ok {
+		t.Fatalf("participants = %#v, want array", payload["participants"])
+	}
+	if _, ok := payload["participant_details"].([]interface{}); !ok {
+		t.Fatalf("participant_details = %#v, want array", payload["participant_details"])
+	}
+}
+
+func TestLegacyFocusDefinitionRoutesAdvertiseSuccessor(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	tests := []struct {
+		path        string
+		wantLinkRef string
+	}{
+		{path: "/api/character", wantLinkRef: "/api/focus-definition"},
+		{path: "/api/character-config", wantLinkRef: "/api/focus-definition-config"},
+	}
+
+	for _, tc := range tests {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d", tc.path, rec.Code)
+		}
+		if got := rec.Header().Get("Deprecation"); got != "true" {
+			t.Fatalf("GET %s Deprecation = %q, want true", tc.path, got)
+		}
+		if got := rec.Header().Get("Link"); !strings.Contains(got, tc.wantLinkRef) {
+			t.Fatalf("GET %s Link = %q, want successor %q", tc.path, got, tc.wantLinkRef)
+		}
 	}
 }
 
@@ -1304,14 +1990,48 @@ func TestCharacterConfigRoutePost(t *testing.T) {
 	mux := http.NewServeMux()
 	s.Register(mux)
 
-	body := `{"character":"Anya","card":{"identity":{"name":"Anya","immutable":["cold"],"adaptive":{"trust":3},"forbidden":["info_dump"],"voice":{"style":"brief","rhythm":"short"},"writing_guide":"stay sharp"},"goals":[{"id":"survive","priority":10,"type":"primary","condition":"always"}]}}`
-	req := httptest.NewRequest("POST", "/api/character-config", strings.NewReader(body))
+	body := `{"focus_character":"Anya","card":{"identity":{"name":"Anya","immutable":["cold"],"adaptive":{"trust":3},"forbidden":["info_dump"],"voice":{"style":"brief","rhythm":"short"},"writing_guide":"stay sharp"},"goals":[{"id":"survive","priority":10,"type":"primary","condition":"always"}]}}`
+	req := httptest.NewRequest("POST", "/api/focus-definition-config", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Errorf("POST /api/character-config → %d, want 200", rec.Code)
+		t.Errorf("POST /api/focus-definition-config → %d, want 200", rec.Code)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode /api/focus-definition-config POST: %v", err)
+	}
+	if payload["focus_character"] != "Anya" {
+		t.Fatalf("focus_character = %#v, want Anya", payload["focus_character"])
+	}
+	if _, ok := payload["character"]; ok {
+		t.Fatalf("canonical /api/focus-definition-config payload should not expose character mirror: %#v", payload)
+	}
+}
+
+func TestCharacterConfigRouteGetUsesCanonicalFocusCharacter(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/focus-definition-config?focus_character=Anya", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/focus-definition-config → %d, want 200", rec.Code)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode /api/focus-definition-config GET: %v", err)
+	}
+	if payload["focus_character"] != "Anya" {
+		t.Fatalf("focus_character = %#v, want Anya", payload["focus_character"])
+	}
+	if _, ok := payload["character"]; ok {
+		t.Fatalf("canonical /api/focus-definition-config GET should not expose character mirror: %#v", payload)
 	}
 }
 
@@ -1320,13 +2040,13 @@ func TestCharacterConfigRouteRejectsInvalidGoalCondition(t *testing.T) {
 	mux := http.NewServeMux()
 	s.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/character-config", strings.NewReader(`{"character":"Anya","card":{"identity":{"name":"Anya"},"goals":[{"id":"secret","priority":8,"type":"hidden","condition":"trust >","reveal_condition":"scene == safehouse"}]}}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/focus-definition-config", strings.NewReader(`{"focus_character":"Anya","card":{"identity":{"name":"Anya"},"goals":[{"id":"secret","priority":8,"type":"hidden","condition":"trust >","reveal_condition":"scene == safehouse"}]}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /api/character-config invalid condition = %d, want %d", rec.Code, http.StatusBadRequest)
+		t.Fatalf("POST /api/focus-definition-config invalid condition = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 	if !strings.Contains(rec.Body.String(), "condition invalid") {
 		t.Fatalf("body = %q, want condition validation error", rec.Body.String())
@@ -1441,6 +2161,1028 @@ func TestPopulationInsightsRoute(t *testing.T) {
 	}
 }
 
+func TestSimTickRouteSupportsBatchCount(t *testing.T) {
+	engine := &mockEngine{instanceID: "default", name: "Anya", state: core.WorldState{}}
+	s := NewServer(engine)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sim/tick", strings.NewReader(`{"count":4}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/sim/tick batch = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode sim tick payload: %v", err)
+	}
+	if payload["count"].(float64) != 4 {
+		t.Fatalf("count = %#v, want 4", payload["count"])
+	}
+	status, _ := payload["tick_status"].(map[string]interface{})
+	if status["tick_count"].(float64) != 4 {
+		t.Fatalf("tick_status = %#v, want tick_count 4", status)
+	}
+}
+
+func TestAPIStructureInterventionDivergesLongWindowOutcomeAcrossInstances(t *testing.T) {
+	baseDir := t.TempDir()
+	baselineWorldDir := filepath.Join(baseDir, "baseline-world")
+	intervenedWorldDir := filepath.Join(baseDir, "intervened-world")
+	writeAPITestWorldBundle(t, baselineWorldDir, "低压世界", "没有控制区和压力时，世界不应自然长出主要角色")
+	writeAPITestWorldBundle(t, intervenedWorldDir, "高压世界", "控制区和压力会改变长期世界结果")
+
+	baselineEngine := newRealRuntimeEngineForAPITest(
+		t,
+		filepath.Join(t.TempDir(), "baseline.db"),
+		filepath.Join(baseDir, "baseline-data"),
+		baselineWorldDir,
+		"baseline",
+		"低压世界",
+		"没有控制区和压力时，世界不应自然长出主要角色",
+	)
+	intervenedEngine := newRealRuntimeEngineForAPITest(
+		t,
+		filepath.Join(t.TempDir(), "intervened.db"),
+		filepath.Join(baseDir, "intervened-data"),
+		intervenedWorldDir,
+		"intervened",
+		"高压世界",
+		"控制区和压力会改变长期世界结果",
+	)
+
+	resolver := &mockResolver{
+		defaultID: "baseline",
+		engines: map[string]RuntimeEngine{
+			"baseline":   baselineEngine,
+			"intervened": intervenedEngine,
+		},
+	}
+	s := NewServer(baselineEngine, resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	populationBody := `{
+		"background_npcs":[
+			{"id":"watcher","name":"巡夜人","role":"guard","location":"外城","faction":"guard","traits":["警觉","克制"],"hooks":["宵禁","盘查"]},
+			{"id":"runner","name":"线人","role":"informant","location":"外城","faction":"smugglers","traits":["灵活","谨慎"],"hooks":["走私","风声"]}
+		],
+		"policy":{"promote_threshold":4.2,"major_threshold":8,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+	}`
+	for _, instanceID := range []string{"baseline", "intervened"} {
+		rec := postJSON("/api/population?instance_id="+instanceID, populationBody)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", instanceID, rec.Code, rec.Body.String())
+		}
+	}
+
+	baselineStructure := `{
+		"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"无人控制的普通街区","controller":""}]
+	}`
+	rec := postJSON("/api/world-structure?instance_id=baseline", baselineStructure)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/world-structure baseline = %d body=%s", rec.Code, rec.Body.String())
+	}
+	intervenedStructure := `{
+		"factions":[
+			{"id":"guard","name":"巡城司","role":"law","description":"负责宵禁和盘查","relationships":["敌对 smugglers"]},
+			{"id":"smugglers","name":"走私帮","role":"criminal","description":"夜里持续活动","relationships":["敌对 guard"]}
+		],
+		"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"巡城司控制区","controller":"guard"}],
+		"pressures":[{"id":"curfew","name":"宵禁升级","kind":"conflict","description":"外城盘查与走私冲突持续加剧","intensity":0.9,"target":"guard"}]
+	}`
+	rec = postJSON("/api/world-structure?instance_id=intervened", intervenedStructure)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/world-structure intervened = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	for _, instanceID := range []string{"baseline", "intervened"} {
+		rec := postJSON("/api/sim/tick?instance_id="+instanceID, `{"count":36}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/sim/tick?instance_id=%s batch = %d body=%s", instanceID, rec.Code, rec.Body.String())
+		}
+	}
+
+	var baselineStatus map[string]interface{}
+	rec = getJSON("/api/sim/status?instance_id=baseline")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/sim/status baseline = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&baselineStatus); err != nil {
+		t.Fatalf("decode baseline sim/status: %v", err)
+	}
+	var intervenedStatus map[string]interface{}
+	rec = getJSON("/api/sim/status?instance_id=intervened")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/sim/status intervened = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&intervenedStatus); err != nil {
+		t.Fatalf("decode intervened sim/status: %v", err)
+	}
+
+	if baselineStatus["tension"].(float64) != 0 {
+		t.Fatalf("baseline tension = %#v, want calm long-window baseline", baselineStatus["tension"])
+	}
+	if intervenedStatus["tension"].(float64) <= baselineStatus["tension"].(float64) {
+		t.Fatalf("baseline tension=%v intervened tension=%v, want higher intervened tension", baselineStatus["tension"], intervenedStatus["tension"])
+	}
+	baselineTickHistory, ok := baselineStatus["tick_history"].([]interface{})
+	if !ok || len(baselineTickHistory) != 12 {
+		t.Fatalf("baseline tick_history = %#v, want 12 recent snapshots", baselineStatus["tick_history"])
+	}
+	intervenedTickHistory, ok := intervenedStatus["tick_history"].([]interface{})
+	if !ok || len(intervenedTickHistory) != 12 {
+		t.Fatalf("intervened tick_history = %#v, want 12 recent snapshots", intervenedStatus["tick_history"])
+	}
+	baselineTrajectory, ok := baselineStatus["trajectory_summary"].([]interface{})
+	if !ok || len(baselineTrajectory) == 0 {
+		t.Fatalf("baseline trajectory_summary = %#v, want API long-window summary", baselineStatus["trajectory_summary"])
+	}
+	intervenedTrajectory, ok := intervenedStatus["trajectory_summary"].([]interface{})
+	if !ok || len(intervenedTrajectory) == 0 {
+		t.Fatalf("intervened trajectory_summary = %#v, want API long-window summary", intervenedStatus["trajectory_summary"])
+	}
+	if fmt.Sprintf("%v", baselineTrajectory) == fmt.Sprintf("%v", intervenedTrajectory) {
+		t.Fatalf("baseline trajectory=%#v intervened trajectory=%#v, want API summaries to diverge", baselineTrajectory, intervenedTrajectory)
+	}
+
+	intervenedPressureDiagHits := 0
+	baselinePressureDiagHits := 0
+	for _, raw := range baselineTickHistory {
+		snapshot, _ := raw.(map[string]interface{})
+		diagnostics, _ := snapshot["diagnostics"].([]interface{})
+		for _, diagRaw := range diagnostics {
+			diag, _ := diagRaw.(map[string]interface{})
+			if metric, _ := diag["metric"].(string); metric == "active_pressure" || metric == "scene_control" {
+				baselinePressureDiagHits++
+			}
+		}
+	}
+	for _, raw := range intervenedTickHistory {
+		snapshot, _ := raw.(map[string]interface{})
+		diagnostics, _ := snapshot["diagnostics"].([]interface{})
+		for _, diagRaw := range diagnostics {
+			diag, _ := diagRaw.(map[string]interface{})
+			if metric, _ := diag["metric"].(string); metric == "active_pressure" || metric == "scene_control" {
+				intervenedPressureDiagHits++
+			}
+		}
+	}
+	if baselinePressureDiagHits != 0 {
+		t.Fatalf("baseline diagnostics = %#v, want no pressure/control diagnostics in calm world", baselineStatus["tick_history"])
+	}
+	if intervenedPressureDiagHits == 0 {
+		t.Fatalf("intervened diagnostics = %#v, want pressure/control diagnostics across recent history", intervenedStatus["tick_history"])
+	}
+
+	var baselineInsights core.PopulationInsights
+	rec = getJSON("/api/population-insights?instance_id=baseline")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/population-insights baseline = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&baselineInsights); err != nil {
+		t.Fatalf("decode baseline population-insights: %v", err)
+	}
+	var intervenedInsights core.PopulationInsights
+	rec = getJSON("/api/population-insights?instance_id=intervened")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/population-insights intervened = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&intervenedInsights); err != nil {
+		t.Fatalf("decode intervened population-insights: %v", err)
+	}
+
+	for _, npc := range baselineInsights.Promoted {
+		if npc.Name == "巡夜人" {
+			t.Fatalf("baseline promoted = %#v, want no 巡夜人 promotion through API path", baselineInsights.Promoted)
+		}
+	}
+	foundPromoted := false
+	for _, npc := range intervenedInsights.Promoted {
+		if npc.Name == "巡夜人" {
+			foundPromoted = true
+			if npc.IdentityCore == "" || npc.Attention.Score < 4.2 {
+				t.Fatalf("intervened promoted npc = %#v, want persisted identity core and score through API path", npc)
+			}
+		}
+	}
+	if !foundPromoted {
+		t.Fatalf("intervened promoted = %#v, want 巡夜人 promoted through API path", intervenedInsights.Promoted)
+	}
+}
+
+func TestAPIWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
+	type sample struct {
+		id                 string
+		worldName          string
+		structureBody      string
+		expectedLeader     string
+		expectedPressureID string
+		expectNoPromotion  bool
+	}
+
+	baseDir := t.TempDir()
+	samples := []sample{
+		{
+			id:        "calm",
+			worldName: "低压世界",
+			structureBody: `{
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"无人控制的普通街区","controller":""}]
+			}`,
+			expectNoPromotion: true,
+		},
+		{
+			id:                 "guard",
+			worldName:          "巡城司样本",
+			expectedLeader:     "巡夜人",
+			expectedPressureID: "curfew",
+			structureBody: `{
+				"factions":[
+					{"id":"guard","name":"巡城司","role":"law","description":"负责宵禁和盘查","relationships":["敌对 smugglers"]},
+					{"id":"smugglers","name":"走私帮","role":"criminal","description":"夜里持续活动","relationships":["敌对 guard"]}
+				],
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"巡城司控制区","controller":"guard"}],
+				"pressures":[{"id":"curfew","name":"宵禁升级","kind":"conflict","description":"巡城司扩大盘查","intensity":0.9,"target":"guard"}]
+			}`,
+		},
+		{
+			id:                 "smuggler",
+			worldName:          "走私样本",
+			expectedLeader:     "线人",
+			expectedPressureID: "smuggling",
+			structureBody: `{
+				"factions":[
+					{"id":"guard","name":"巡城司","role":"law","description":"负责宵禁和盘查","relationships":["敌对 smugglers"]},
+					{"id":"smugglers","name":"走私帮","role":"criminal","description":"夜里持续活动","relationships":["敌对 guard"]}
+				],
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"走私帮暗巷控制区","controller":"smugglers"}],
+				"pressures":[{"id":"smuggling","name":"走私潮上涨","kind":"criminal","description":"走私帮快速扩张","intensity":0.88,"target":"smugglers"}]
+			}`,
+		},
+	}
+
+	resolver := &mockResolver{defaultID: "calm", engines: map[string]RuntimeEngine{}}
+	for _, sample := range samples {
+		worldDir := filepath.Join(baseDir, sample.id+"-world")
+		writeAPITestWorldBundle(t, worldDir, sample.worldName, "API 多样本 120 tick 验证")
+		engine := newRealRuntimeEngineForAPITest(
+			t,
+			filepath.Join(t.TempDir(), sample.id+".db"),
+			filepath.Join(baseDir, sample.id+"-data"),
+			worldDir,
+			sample.id,
+			sample.worldName,
+			"API 多样本 120 tick 验证",
+		)
+		resolver.engines[sample.id] = engine
+	}
+
+	s := NewServer(resolver.engines["calm"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	populationBody := `{
+		"background_npcs":[
+			{"id":"watcher","name":"巡夜人","role":"guard","location":"外城","faction":"guard","traits":["警觉","克制"],"hooks":["宵禁","盘查"]},
+			{"id":"runner","name":"线人","role":"informant","location":"外城","faction":"smugglers","traits":["灵活","谨慎"],"hooks":["走私","风声"]}
+		],
+		"policy":{"promote_threshold":7.3,"major_threshold":10,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+	}`
+
+	for _, sample := range samples {
+		rec := postJSON("/api/population?instance_id="+sample.id, populationBody)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		rec = postJSON("/api/world-structure?instance_id="+sample.id, sample.structureBody)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/world-structure?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		rec = postJSON("/api/sim/tick?instance_id="+sample.id, `{"count":120}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/sim/tick?instance_id=%s count=120 = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+	}
+
+	results := map[string]map[string]string{}
+	for _, sample := range samples {
+		rec := getJSON("/api/sim/status?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/sim/status?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var status map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+			t.Fatalf("decode sim/status %s: %v", sample.id, err)
+		}
+		rec = getJSON("/api/population-insights?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/population-insights?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var insights core.PopulationInsights
+		if err := json.NewDecoder(rec.Body).Decode(&insights); err != nil {
+			t.Fatalf("decode population-insights %s: %v", sample.id, err)
+		}
+		promoted := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promoted = append(promoted, npc.Name)
+		}
+		sort.Strings(promoted)
+		trajectory, _ := status["trajectory_summary"].([]interface{})
+		trajectoryText := fmt.Sprintf("%v", trajectory)
+
+		if sample.expectNoPromotion {
+			if len(promoted) != 0 {
+				t.Fatalf("%s promoted = %#v, want no promotion in calm API sample", sample.id, promoted)
+			}
+			if status["tension"].(float64) != 0 {
+				t.Fatalf("%s tension = %#v, want calm API sample to remain stable", sample.id, status["tension"])
+			}
+		} else {
+			if !containsString(promoted, sample.expectedLeader) {
+				t.Fatalf("%s promoted = %#v, want %s promoted through API sample", sample.id, promoted, sample.expectedLeader)
+			}
+			if !strings.Contains(trajectoryText, sample.expectedPressureID) {
+				t.Fatalf("%s trajectory = %s, want pressure %s in API summary", sample.id, trajectoryText, sample.expectedPressureID)
+			}
+		}
+
+		results[sample.id] = map[string]string{
+			"trajectory": trajectoryText,
+			"promoted":   strings.Join(promoted, ","),
+		}
+	}
+
+	if results["guard"]["trajectory"] == results["smuggler"]["trajectory"] {
+		t.Fatalf("guard vs smuggler trajectory = %#v vs %#v, want API sample matrix divergence", results["guard"], results["smuggler"])
+	}
+	if results["guard"]["promoted"] == results["smuggler"]["promoted"] {
+		t.Fatalf("guard vs smuggler promoted = %#v vs %#v, want different API promoted leaders", results["guard"], results["smuggler"])
+	}
+}
+
+func TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
+	type sample struct {
+		id                 string
+		worldName          string
+		structureBody      string
+		expectedLeader     string
+		expectedPressureID string
+		expectNoPromotion  bool
+		expectTensionFloor float64
+	}
+
+	baseDir := t.TempDir()
+	samples := []sample{
+		{
+			id:        "calm200",
+			worldName: "低压世界 200",
+			structureBody: `{
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"无人控制的普通街区","controller":""}]
+			}`,
+			expectNoPromotion: true,
+		},
+		{
+			id:                 "guard200",
+			worldName:          "巡城司样本 200",
+			expectedLeader:     "巡夜人",
+			expectedPressureID: "curfew",
+			expectTensionFloor: 0.7,
+			structureBody: `{
+				"factions":[
+					{"id":"guard","name":"巡城司","role":"law","description":"负责宵禁和盘查","relationships":["敌对 smugglers"]},
+					{"id":"smugglers","name":"走私帮","role":"criminal","description":"夜里持续活动","relationships":["敌对 guard"]}
+				],
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"巡城司控制区","controller":"guard"}],
+				"pressures":[{"id":"curfew","name":"宵禁升级","kind":"conflict","description":"巡城司扩大盘查","intensity":0.92,"target":"guard"}]
+			}`,
+		},
+		{
+			id:                 "smuggler200",
+			worldName:          "走私样本 200",
+			expectedLeader:     "线人",
+			expectedPressureID: "smuggling",
+			expectTensionFloor: 0.65,
+			structureBody: `{
+				"factions":[
+					{"id":"guard","name":"巡城司","role":"law","description":"负责宵禁和盘查","relationships":["敌对 smugglers"]},
+					{"id":"smugglers","name":"走私帮","role":"criminal","description":"夜里持续活动","relationships":["敌对 guard"]}
+				],
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"走私帮暗巷控制区","controller":"smugglers"}],
+				"pressures":[{"id":"smuggling","name":"走私潮上涨","kind":"criminal","description":"走私帮快速扩张","intensity":0.9,"target":"smugglers"}]
+			}`,
+		},
+		{
+			id:                 "infra200",
+			worldName:          "电网样本 200",
+			expectedLeader:     "修灯人",
+			expectedPressureID: "blackout",
+			expectTensionFloor: 0.55,
+			structureBody: `{
+				"factions":[
+					{"id":"operators","name":"电网维护队","role":"utility","description":"负责夜间抢修","relationships":["紧张 guard"]},
+					{"id":"guard","name":"巡城司","role":"law","description":"需要电网维持秩序","relationships":["依赖 operators"]}
+				],
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"断电频发的维护区","controller":"operators"}],
+				"pressures":[{"id":"blackout","name":"电网失稳","kind":"infrastructure","description":"外城频繁断电，维护队持续抢修","intensity":0.87,"target":"operators"}]
+			}`,
+		},
+	}
+
+	resolver := &mockResolver{defaultID: "calm200", engines: map[string]RuntimeEngine{}}
+	for _, sample := range samples {
+		worldDir := filepath.Join(baseDir, sample.id+"-world")
+		writeAPITestWorldBundle(t, worldDir, sample.worldName, "API 多样本 200 tick 验证")
+		engine := newRealRuntimeEngineForAPITest(
+			t,
+			filepath.Join(t.TempDir(), sample.id+".db"),
+			filepath.Join(baseDir, sample.id+"-data"),
+			worldDir,
+			sample.id,
+			sample.worldName,
+			"API 多样本 200 tick 验证",
+		)
+		resolver.engines[sample.id] = engine
+	}
+
+	s := NewServer(resolver.engines["calm200"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	populationBody := `{
+		"background_npcs":[
+			{"id":"watcher","name":"巡夜人","role":"guard","location":"外城","faction":"guard","traits":["警觉","克制"],"hooks":["宵禁","盘查"]},
+			{"id":"runner","name":"线人","role":"informant","location":"外城","faction":"smugglers","traits":["灵活","谨慎"],"hooks":["走私","风声"]},
+			{"id":"fixer","name":"修灯人","role":"utility","location":"外城","faction":"operators","traits":["耐心","稳重"],"hooks":["停电","供电","断路"]}
+		],
+		"policy":{"promote_threshold":7.3,"major_threshold":12,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+	}`
+
+	for _, sample := range samples {
+		rec := postJSON("/api/population?instance_id="+sample.id, populationBody)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		rec = postJSON("/api/world-structure?instance_id="+sample.id, sample.structureBody)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/world-structure?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		rec = postJSON("/api/sim/tick?instance_id="+sample.id, `{"count":200}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/sim/tick?instance_id=%s count=200 = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+	}
+
+	results := map[string]map[string]string{}
+	for _, sample := range samples {
+		rec := getJSON("/api/sim/status?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/sim/status?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var status map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+			t.Fatalf("decode sim/status %s: %v", sample.id, err)
+		}
+		rec = getJSON("/api/population-insights?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/population-insights?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var insights core.PopulationInsights
+		if err := json.NewDecoder(rec.Body).Decode(&insights); err != nil {
+			t.Fatalf("decode population-insights %s: %v", sample.id, err)
+		}
+		promoted := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promoted = append(promoted, npc.Name)
+		}
+		sort.Strings(promoted)
+		trajectory, _ := status["trajectory_summary"].([]interface{})
+		trajectoryText := fmt.Sprintf("%v", trajectory)
+
+		if sample.expectNoPromotion {
+			if len(promoted) != 0 {
+				t.Fatalf("%s promoted = %#v, want no promotion in calm 200-tick API sample", sample.id, promoted)
+			}
+			if status["tension"].(float64) != 0 {
+				t.Fatalf("%s tension = %#v, want calm 200-tick API sample to remain stable", sample.id, status["tension"])
+			}
+		} else {
+			if status["tension"].(float64) < sample.expectTensionFloor {
+				t.Fatalf("%s tension = %#v, want >= %.2f in 200-tick API sample", sample.id, status["tension"], sample.expectTensionFloor)
+			}
+			if !containsString(promoted, sample.expectedLeader) {
+				t.Fatalf("%s promoted = %#v, want %s promoted through 200-tick API sample", sample.id, promoted, sample.expectedLeader)
+			}
+			if !strings.Contains(trajectoryText, sample.expectedPressureID) {
+				t.Fatalf("%s trajectory = %s, want pressure %s in 200-tick API summary", sample.id, trajectoryText, sample.expectedPressureID)
+			}
+		}
+
+		results[sample.id] = map[string]string{
+			"trajectory": trajectoryText,
+			"promoted":   strings.Join(promoted, ","),
+		}
+	}
+
+	if results["guard200"]["trajectory"] == results["smuggler200"]["trajectory"] {
+		t.Fatalf("guard vs smuggler 200-tick trajectory = %#v vs %#v, want API sample matrix divergence", results["guard200"], results["smuggler200"])
+	}
+	if results["guard200"]["promoted"] == results["smuggler200"]["promoted"] {
+		t.Fatalf("guard vs smuggler 200-tick promoted = %#v vs %#v, want different API promoted leaders", results["guard200"], results["smuggler200"])
+	}
+	if results["infra200"]["trajectory"] == results["guard200"]["trajectory"] {
+		t.Fatalf("infra vs guard 200-tick trajectory = %#v vs %#v, want broader API world outcome divergence", results["infra200"], results["guard200"])
+	}
+}
+
+func TestAPIRealWorldDirectorySampleMatrixAcrossHundredTwentyTicks(t *testing.T) {
+	type sample struct {
+		id                 string
+		worldName          string
+		sourceDir          string
+		scene              core.SceneState
+		populationBody     string
+		structureBody      string
+		expectedLeader     string
+		expectedPressureID string
+		expectTensionFloor float64
+	}
+
+	baseDir := t.TempDir()
+	samples := []sample{
+		{
+			id:        "neon-real",
+			worldName: "霓虹里街区",
+			sourceDir: "neon_block",
+			scene: core.SceneState{
+				Location:    "旧街夜市",
+				TimeOfDay:   "深夜",
+				Weather:     "闷热有雨",
+				Characters:  []string{"蓝姐", "谭叔", "玩家"},
+				Description: "真实世界目录中的默认夜市场景",
+			},
+			expectedLeader:     "蓝姐",
+			expectedPressureID: "missing_rider",
+			expectTensionFloor: 0.45,
+		},
+		{
+			id:        "wedding-real",
+			worldName: "新婚",
+			sourceDir: "1_7",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "白天",
+				Weather:     "阴雨",
+				Characters:  []string{"许灵_单阶段人设", "玩家"},
+				Description: "真实导入世界的默认接站场景",
+			},
+			populationBody: `{
+				"background_npcs":[
+					{"id":"steward","name":"婚礼管家","role":"steward","location":"未知地点","faction":"wedding_hosts","traits":["周到","急切"],"hooks":["要把迟到接站压下去","不想婚礼前出乱子"]},
+					{"id":"driver","name":"代驾老周","role":"driver","location":"车站外","faction":"station_runners","traits":["疲惫","圆滑"],"hooks":["谁临时改了接站安排","想把责任甩出去"]},
+					{"id":"guard","name":"站台保安","role":"guard","location":"候车厅","faction":"station_runners","traits":["谨慎","怕麻烦"],"hooks":["担心现场起争执","不想事情闹大"]}
+				],
+				"policy":{"promote_threshold":6.8,"major_threshold":11,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			structureBody: `{
+				"locations":[
+					{"id":"arrival_point","name":"未知地点","kind":"arrival","description":"婚礼接站与临时协调点","controller":"wedding_hosts"},
+					{"id":"station_gate","name":"车站外","kind":"transit","description":"接站车与代驾聚集的混乱出口","controller":"station_runners"},
+					{"id":"platform_hall","name":"候车厅","kind":"waiting","description":"旅客和保安都不想久留的大厅","controller":"station_runners"}
+				],
+				"factions":[
+					{"id":"wedding_hosts","name":"婚礼主家","role":"family","relationships":["压制 station_runners"]},
+					{"id":"station_runners","name":"接站跑腿圈","role":"logistics","relationships":["不信任 wedding_hosts"]}
+				],
+				"pressures":[
+					{"id":"pickup_delay","name":"接站迟到","kind":"coordination","description":"婚礼前的接站安排持续失序","intensity":0.84,"target":"wedding_hosts"},
+					{"id":"arrival_gossip","name":"站台风声","kind":"rumor","description":"谁被怠慢、谁在甩锅开始扩散","intensity":0.62,"target":"未知地点"}
+				]
+			}`,
+			expectedLeader:     "婚礼管家",
+			expectedPressureID: "arrival_gossip",
+			expectTensionFloor: 0.50,
+		},
+		{
+			id:        "dream-real",
+			worldName: "《红楼梦》完整版、",
+			sourceDir: "《红楼梦》完整版、-角色卡-202604190812",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "未知时间",
+				Weather:     "未知天气",
+				Characters:  []string{"薛宝钗", "玩家"},
+				Description: "真实导入世界的默认闺阁场景",
+			},
+			populationBody: `{
+				"background_npcs":[
+					{"id":"yinger","name":"莺儿","role":"侍女","location":"未知地点","faction":"xue_house","traits":["机灵","知分寸"],"hooks":["替宝姑娘探听风声","不想让诗社话头失控"]},
+					{"id":"housemaid","name":"婆子","role":"杂役","location":"回廊","faction":"rong_house","traits":["谨慎","嘴碎"],"hooks":["最怕传错话","担心被责罚"]},
+					{"id":"page","name":"小厮","role":"跑腿","location":"书房外","faction":"poetry_circle","traits":["轻快","爱看热闹"],"hooks":["去回话","把诗社消息带错边"]}
+				],
+				"policy":{"promote_threshold":6.8,"major_threshold":11,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			structureBody: `{
+				"locations":[
+					{"id":"boudoir","name":"未知地点","kind":"residence","description":"闺阁内室，消息传得不快却更要紧","controller":"xue_house"},
+					{"id":"corridor","name":"回廊","kind":"transit","description":"丫鬟婆子擦身而过、最容易串话","controller":"rong_house"},
+					{"id":"study_gate","name":"书房外","kind":"service","description":"回话与递帖都得经过的地方","controller":"poetry_circle"}
+				],
+				"factions":[
+					{"id":"xue_house","name":"薛家房内","role":"household","relationships":["顾忌 rong_house"]},
+					{"id":"rong_house","name":"荣府杂役","role":"household","relationships":["议论 xue_house"]},
+					{"id":"poetry_circle","name":"诗社往来圈","role":"social","relationships":["牵动 xue_house"]}
+				],
+				"pressures":[
+					{"id":"poetry_society","name":"诗社风声","kind":"social","description":"诗社流言让宝钗身边的人先紧张起来","intensity":0.81,"target":"xue_house"},
+					{"id":"maids_whisper","name":"回廊私语","kind":"rumor","description":"回廊里关于谁该出面的话越传越偏","intensity":0.58,"target":"未知地点"}
+				]
+			}`,
+			expectedLeader:     "莺儿",
+			expectedPressureID: "maids_whisper",
+			expectTensionFloor: 0.48,
+		},
+	}
+
+	resolver := &mockResolver{defaultID: "neon-real", engines: map[string]RuntimeEngine{}}
+	for _, sample := range samples {
+		worldDir := filepath.Join(baseDir, sample.id+"-world")
+		copyTestDir(t, filepath.Join("..", "..", "worlds", sample.sourceDir), worldDir)
+		engine := newRealWorldRuntimeEngineForAPITest(
+			t,
+			filepath.Join(t.TempDir(), sample.id+".db"),
+			filepath.Join(baseDir, sample.id+"-data"),
+			worldDir,
+			sample.id,
+			sample.worldName,
+			"API 真实世界目录长窗口验证",
+			sample.scene,
+		)
+		resolver.engines[sample.id] = engine
+	}
+
+	s := NewServer(resolver.engines["neon-real"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for _, sample := range samples {
+		if sample.populationBody != "" {
+			rec := postJSON("/api/population?instance_id="+sample.id, sample.populationBody)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+			}
+		}
+		if sample.structureBody != "" {
+			rec := postJSON("/api/world-structure?instance_id="+sample.id, sample.structureBody)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/world-structure?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+			}
+		}
+		rec := postJSON("/api/sim/tick?instance_id="+sample.id, `{"count":120}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/sim/tick?instance_id=%s count=120 = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+	}
+
+	results := map[string]map[string]string{}
+	for _, sample := range samples {
+		rec := getJSON("/api/sim/status?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/sim/status?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var status map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+			t.Fatalf("decode sim/status %s: %v", sample.id, err)
+		}
+		rec = getJSON("/api/population-insights?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/population-insights?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var insights core.PopulationInsights
+		if err := json.NewDecoder(rec.Body).Decode(&insights); err != nil {
+			t.Fatalf("decode population-insights %s: %v", sample.id, err)
+		}
+		promoted := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promoted = append(promoted, npc.Name)
+		}
+		sort.Strings(promoted)
+		trajectory, _ := status["trajectory_summary"].([]interface{})
+		trajectoryText := fmt.Sprintf("%v", trajectory)
+
+		if status["tension"].(float64) < sample.expectTensionFloor {
+			t.Fatalf("%s tension = %#v, want >= %.2f in real-world API sample", sample.id, status["tension"], sample.expectTensionFloor)
+		}
+		if !containsString(promoted, sample.expectedLeader) {
+			t.Fatalf("%s promoted = %#v, want %s promoted through real-world API sample", sample.id, promoted, sample.expectedLeader)
+		}
+		if !strings.Contains(trajectoryText, sample.expectedPressureID) {
+			t.Fatalf("%s trajectory = %s, want pressure %s in real-world API summary", sample.id, trajectoryText, sample.expectedPressureID)
+		}
+
+		results[sample.id] = map[string]string{
+			"trajectory": trajectoryText,
+			"promoted":   strings.Join(promoted, ","),
+		}
+	}
+
+	if results["neon-real"]["trajectory"] == results["wedding-real"]["trajectory"] {
+		t.Fatalf("neon vs wedding real-world API trajectory = %#v vs %#v, want divergent summaries across world families", results["neon-real"], results["wedding-real"])
+	}
+	if results["wedding-real"]["promoted"] == results["dream-real"]["promoted"] {
+		t.Fatalf("wedding vs dream real-world API promoted = %#v vs %#v, want different promoted leaders across imported world families", results["wedding-real"], results["dream-real"])
+	}
+}
+
+func TestAPIRealWorldDirectorySampleMatrixAcrossTwoHundredTicks(t *testing.T) {
+	type sample struct {
+		id                 string
+		worldName          string
+		sourceDir          string
+		scene              core.SceneState
+		populationBody     string
+		structureBody      string
+		expectedLeader     string
+		expectedPressureID string
+		expectTensionFloor float64
+	}
+
+	baseDir := t.TempDir()
+	samples := []sample{
+		{
+			id:        "neon-real-200",
+			worldName: "霓虹里街区",
+			sourceDir: "neon_block",
+			scene: core.SceneState{
+				Location:    "旧街夜市",
+				TimeOfDay:   "深夜",
+				Weather:     "闷热有雨",
+				Characters:  []string{"蓝姐", "谭叔", "玩家"},
+				Description: "真实世界目录中的默认夜市场景",
+			},
+			expectedLeader:     "蓝姐",
+			expectedPressureID: "missing_rider",
+			expectTensionFloor: 0.45,
+		},
+		{
+			id:        "wedding-real-200",
+			worldName: "新婚",
+			sourceDir: "1_7",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "白天",
+				Weather:     "阴雨",
+				Characters:  []string{"许灵_单阶段人设", "玩家"},
+				Description: "真实导入世界的默认接站场景",
+			},
+			populationBody: `{
+				"background_npcs":[
+					{"id":"steward","name":"婚礼管家","role":"steward","location":"未知地点","faction":"wedding_hosts","traits":["周到","急切"],"hooks":["要把迟到接站压下去","不想婚礼前出乱子"]},
+					{"id":"driver","name":"代驾老周","role":"driver","location":"车站外","faction":"station_runners","traits":["疲惫","圆滑"],"hooks":["谁临时改了接站安排","想把责任甩出去"]},
+					{"id":"guard","name":"站台保安","role":"guard","location":"候车厅","faction":"station_runners","traits":["谨慎","怕麻烦"],"hooks":["担心现场起争执","不想事情闹大"]}
+				],
+				"policy":{"promote_threshold":6.8,"major_threshold":11,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			structureBody: `{
+				"locations":[
+					{"id":"arrival_point","name":"未知地点","kind":"arrival","description":"婚礼接站与临时协调点","controller":"wedding_hosts"},
+					{"id":"station_gate","name":"车站外","kind":"transit","description":"接站车与代驾聚集的混乱出口","controller":"station_runners"},
+					{"id":"platform_hall","name":"候车厅","kind":"waiting","description":"旅客和保安都不想久留的大厅","controller":"station_runners"}
+				],
+				"factions":[
+					{"id":"wedding_hosts","name":"婚礼主家","role":"family","relationships":["压制 station_runners"]},
+					{"id":"station_runners","name":"接站跑腿圈","role":"logistics","relationships":["不信任 wedding_hosts"]}
+				],
+				"pressures":[
+					{"id":"pickup_delay","name":"接站迟到","kind":"coordination","description":"婚礼前的接站安排持续失序","intensity":0.84,"target":"wedding_hosts"},
+					{"id":"arrival_gossip","name":"站台风声","kind":"rumor","description":"谁被怠慢、谁在甩锅开始扩散","intensity":0.62,"target":"未知地点"}
+				]
+			}`,
+			expectedLeader:     "婚礼管家",
+			expectedPressureID: "arrival_gossip",
+			expectTensionFloor: 0.50,
+		},
+		{
+			id:        "dream-real-200",
+			worldName: "《红楼梦》完整版、",
+			sourceDir: "《红楼梦》完整版、-角色卡-202604190812",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "未知时间",
+				Weather:     "未知天气",
+				Characters:  []string{"薛宝钗", "玩家"},
+				Description: "真实导入世界的默认闺阁场景",
+			},
+			populationBody: `{
+				"background_npcs":[
+					{"id":"yinger","name":"莺儿","role":"侍女","location":"未知地点","faction":"xue_house","traits":["机灵","知分寸"],"hooks":["替宝姑娘探听风声","不想让诗社话头失控"]},
+					{"id":"housemaid","name":"婆子","role":"杂役","location":"回廊","faction":"rong_house","traits":["谨慎","嘴碎"],"hooks":["最怕传错话","担心被责罚"]},
+					{"id":"page","name":"小厮","role":"跑腿","location":"书房外","faction":"poetry_circle","traits":["轻快","爱看热闹"],"hooks":["去回话","把诗社消息带错边"]}
+				],
+				"policy":{"promote_threshold":6.8,"major_threshold":11,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			structureBody: `{
+				"locations":[
+					{"id":"boudoir","name":"未知地点","kind":"residence","description":"闺阁内室，消息传得不快却更要紧","controller":"xue_house"},
+					{"id":"corridor","name":"回廊","kind":"transit","description":"丫鬟婆子擦身而过、最容易串话","controller":"rong_house"},
+					{"id":"study_gate","name":"书房外","kind":"service","description":"回话与递帖都得经过的地方","controller":"poetry_circle"}
+				],
+				"factions":[
+					{"id":"xue_house","name":"薛家房内","role":"household","relationships":["顾忌 rong_house"]},
+					{"id":"rong_house","name":"荣府杂役","role":"household","relationships":["议论 xue_house"]},
+					{"id":"poetry_circle","name":"诗社往来圈","role":"social","relationships":["牵动 xue_house"]}
+				],
+				"pressures":[
+					{"id":"poetry_society","name":"诗社风声","kind":"social","description":"诗社流言让宝钗身边的人先紧张起来","intensity":0.81,"target":"xue_house"},
+					{"id":"maids_whisper","name":"回廊私语","kind":"rumor","description":"回廊里关于谁该出面的话越传越偏","intensity":0.58,"target":"未知地点"}
+				]
+			}`,
+			expectedLeader:     "莺儿",
+			expectedPressureID: "maids_whisper",
+			expectTensionFloor: 0.48,
+		},
+	}
+
+	resolver := &mockResolver{defaultID: "neon-real-200", engines: map[string]RuntimeEngine{}}
+	for _, sample := range samples {
+		worldDir := filepath.Join(baseDir, sample.id+"-world")
+		copyTestDir(t, filepath.Join("..", "..", "worlds", sample.sourceDir), worldDir)
+		engine := newRealWorldRuntimeEngineForAPITest(
+			t,
+			filepath.Join(t.TempDir(), sample.id+".db"),
+			filepath.Join(baseDir, sample.id+"-data"),
+			worldDir,
+			sample.id,
+			sample.worldName,
+			"API 真实世界目录 200 tick 长窗口验证",
+			sample.scene,
+		)
+		resolver.engines[sample.id] = engine
+	}
+
+	s := NewServer(resolver.engines["neon-real-200"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for _, sample := range samples {
+		if sample.populationBody != "" {
+			rec := postJSON("/api/population?instance_id="+sample.id, sample.populationBody)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+			}
+		}
+		if sample.structureBody != "" {
+			rec := postJSON("/api/world-structure?instance_id="+sample.id, sample.structureBody)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/world-structure?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+			}
+		}
+		rec := postJSON("/api/sim/tick?instance_id="+sample.id, `{"count":200}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/sim/tick?instance_id=%s count=200 = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+	}
+
+	results := map[string]map[string]string{}
+	for _, sample := range samples {
+		rec := getJSON("/api/sim/status?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/sim/status?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var status map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+			t.Fatalf("decode sim/status %s: %v", sample.id, err)
+		}
+		trajectory, ok := status["trajectory_summary"].([]interface{})
+		if !ok || len(trajectory) == 0 {
+			t.Fatalf("%s trajectory_summary = %#v, want API long-window summary after 200 ticks", sample.id, status["trajectory_summary"])
+		}
+		tickHistory, ok := status["tick_history"].([]interface{})
+		if !ok || len(tickHistory) != 12 {
+			t.Fatalf("%s tick_history = %#v, want capped API recent snapshots after 200 ticks", sample.id, status["tick_history"])
+		}
+
+		rec = getJSON("/api/population-insights?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/population-insights?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var insights core.PopulationInsights
+		if err := json.NewDecoder(rec.Body).Decode(&insights); err != nil {
+			t.Fatalf("decode population-insights %s: %v", sample.id, err)
+		}
+		promoted := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promoted = append(promoted, npc.Name)
+		}
+		sort.Strings(promoted)
+		trajectoryText := fmt.Sprintf("%v", trajectory)
+
+		if status["tension"].(float64) < sample.expectTensionFloor {
+			t.Fatalf("%s tension = %#v, want >= %.2f in real-world 200-tick API sample", sample.id, status["tension"], sample.expectTensionFloor)
+		}
+		if !containsString(promoted, sample.expectedLeader) {
+			t.Fatalf("%s promoted = %#v, want %s promoted through real-world 200-tick API sample", sample.id, promoted, sample.expectedLeader)
+		}
+		if !strings.Contains(trajectoryText, sample.expectedPressureID) {
+			t.Fatalf("%s trajectory = %s, want pressure %s in real-world 200-tick API summary", sample.id, trajectoryText, sample.expectedPressureID)
+		}
+
+		results[sample.id] = map[string]string{
+			"trajectory": trajectoryText,
+			"promoted":   strings.Join(promoted, ","),
+		}
+	}
+
+	if results["neon-real-200"]["trajectory"] == results["wedding-real-200"]["trajectory"] {
+		t.Fatalf("neon vs wedding real-world 200-tick API trajectory = %#v vs %#v, want divergent summaries across world families", results["neon-real-200"], results["wedding-real-200"])
+	}
+	if results["wedding-real-200"]["promoted"] == results["dream-real-200"]["promoted"] {
+		t.Fatalf("wedding vs dream real-world 200-tick API promoted = %#v vs %#v, want different promoted leaders across imported world families", results["wedding-real-200"], results["dream-real-200"])
+	}
+}
+
 func TestCharactersRouteUsesParticipantsView(t *testing.T) {
 	s := newTestServer()
 	mux := http.NewServeMux()
@@ -1457,11 +3199,11 @@ func TestCharactersRouteUsesParticipantsView(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode /api/characters: %v", err)
 	}
-	if payload["active"] != "Anya" {
-		t.Fatalf("active = %#v, want Anya", payload["active"])
-	}
 	if payload["focus_character"] != "Anya" {
 		t.Fatalf("focus_character = %#v, want Anya", payload["focus_character"])
+	}
+	if _, ok := payload["active"]; ok {
+		t.Fatalf("active compatibility mirror should be absent on /api/characters payload = %#v", payload)
 	}
 	participants, ok := payload["participants"].([]interface{})
 	if !ok || len(participants) != 1 || participants[0] != "Anya" {
@@ -1475,9 +3217,119 @@ func TestCharactersRouteUsesParticipantsView(t *testing.T) {
 	if !ok || detail["name"] != "Anya" {
 		t.Fatalf("participant_details[0] = %#v, want name=Anya", details[0])
 	}
-	characters, ok := payload["characters"].([]interface{})
-	if !ok || len(characters) != 1 || characters[0] != "Anya" {
-		t.Fatalf("characters = %#v, want [Anya]", payload["characters"])
+	if _, ok := payload["characters"]; ok {
+		t.Fatalf("characters compatibility mirror should be absent on /api/characters payload = %#v", payload)
+	}
+}
+
+func TestMemoryRoutePrefersFocusCharacterOverLegacyCharacter(t *testing.T) {
+	s := newTestServer()
+	engine := s.engine.(*mockEngine)
+	engine.memorySnapshot = &core.MemorySnapshot{
+		Character:      "LegacyName",
+		FocusCharacter: "FocusName",
+		WorkingMemory:  "working",
+	}
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/memory?focus_character=FocusName", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/memory = %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/memory: %v", err)
+	}
+	if payload["focus_character"] != "FocusName" {
+		t.Fatalf("focus_character = %#v, want FocusName", payload["focus_character"])
+	}
+	if _, ok := payload["character"]; ok {
+		t.Fatalf("top-level character compatibility mirror should be absent on /api/memory payload = %#v", payload)
+	}
+}
+
+func TestPendingFactsRoutePrefersFocusCharacterOverLegacyCharacter(t *testing.T) {
+	s := newTestServer()
+	engine := s.engine.(*mockEngine)
+	engine.pending = []core.PendingFact{{
+		ID:             "p1",
+		Character:      "LegacyName",
+		FocusCharacter: "FocusName",
+		Subject:        "V",
+		Predicate:      "身份",
+		Object:         "佣兵",
+		Source:         "llm_extracted",
+		Confidence:     0.4,
+	}}
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pending-facts?focus_character=FocusName", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/pending-facts = %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/pending-facts: %v", err)
+	}
+	if payload["focus_character"] != "FocusName" {
+		t.Fatalf("focus_character = %#v, want FocusName", payload["focus_character"])
+	}
+	if _, ok := payload["character"]; ok {
+		t.Fatalf("top-level character compatibility mirror should be absent on /api/pending-facts payload = %#v", payload)
+	}
+	facts, ok := payload["facts"].([]interface{})
+	if !ok || len(facts) != 1 {
+		t.Fatalf("facts = %#v, want 1 item", payload["facts"])
+	}
+	fact, ok := facts[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("facts[0] = %#v, want object", facts[0])
+	}
+	if fact["focus_character"] != "FocusName" {
+		t.Fatalf("facts[0].focus_character = %#v, want FocusName", fact["focus_character"])
+	}
+	if _, ok := fact["character"]; ok {
+		t.Fatalf("facts[0].character mirror should be absent on /api/pending-facts payload = %#v", fact)
+	}
+}
+
+func TestCharactersRouteDoesNotFallbackToLoadedCharacters(t *testing.T) {
+	engine := &mockEngine{
+		instanceID:         "default",
+		name:               "Anya",
+		state:              core.WorldState{},
+		participantDetails: nil,
+		sceneParticipants:  []string{},
+		loadedCharacters:   []string{"Anya"},
+	}
+	s := NewServer(engine)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/characters", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/characters = %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/characters: %v", err)
+	}
+	if participants, ok := payload["participants"].([]interface{}); ok && len(participants) != 0 {
+		t.Fatalf("participants = %#v, want empty without scene participants", payload["participants"])
+	}
+	if _, ok := payload["characters"]; ok {
+		t.Fatalf("characters compatibility mirror should be absent on /api/characters payload = %#v", payload)
 	}
 }
 
@@ -1513,6 +3365,22 @@ func TestTraceRoute(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/trace/latest = %d", rec.Code)
 	}
+	var latest struct {
+		FocusCharacter string `json:"focus_character"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &latest); err != nil {
+		t.Fatalf("decode /api/trace/latest: %v", err)
+	}
+	if latest.FocusCharacter != "Anya" {
+		t.Fatalf("latest focus_character = %#v, want Anya", latest.FocusCharacter)
+	}
+	var latestRaw map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &latestRaw); err != nil {
+		t.Fatalf("decode raw /api/trace/latest: %v", err)
+	}
+	if _, ok := latestRaw["character"]; ok {
+		t.Fatalf("/api/trace/latest should not expose empty legacy character mirror: %#v", latestRaw)
+	}
 
 	reqByTurn := httptest.NewRequest(http.MethodGet, "/api/trace?turn=3", nil)
 	recByTurn := httptest.NewRecorder()
@@ -1527,18 +3395,122 @@ func TestTraceRoute(t *testing.T) {
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/traces?limit=2 = %d", listRec.Code)
 	}
+	var listed struct {
+		Traces []struct {
+			FocusCharacter string `json:"focus_character"`
+		} `json:"traces"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode /api/traces: %v", err)
+	}
+	if len(listed.Traces) == 0 {
+		t.Fatalf("traces = %#v, want items", listed.Traces)
+	}
+	if listed.Traces[0].FocusCharacter != "Anya" {
+		t.Fatalf("trace focus_character = %#v, want Anya", listed.Traces[0].FocusCharacter)
+	}
+	var listedRaw struct {
+		Traces []map[string]interface{} `json:"traces"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listedRaw); err != nil {
+		t.Fatalf("decode raw /api/traces: %v", err)
+	}
+	if _, ok := listedRaw.Traces[0]["character"]; ok {
+		t.Fatalf("/api/traces should not expose empty legacy character mirror: %#v", listedRaw.Traces[0])
+	}
+}
+
+func TestTraceRoutesNormalizeLegacyCharacterFields(t *testing.T) {
+	s := newTestServer()
+	engine := s.engine.(*mockEngine)
+	engine.trace = core.TurnTrace{
+		Turn:      4,
+		Character: "LegacyFocus",
+		UserInput: "legacy",
+		StepTraces: []core.TurnStepTrace{{
+			Character: "LegacySpeaker",
+		}},
+	}
+	engine.traces = []core.TurnTrace{engine.trace}
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trace/latest", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/trace/latest legacy = %d", rec.Code)
+	}
+	var latestRaw map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &latestRaw); err != nil {
+		t.Fatalf("decode legacy trace: %v", err)
+	}
+	if latestRaw["focus_character"] != "LegacyFocus" {
+		t.Fatalf("legacy trace focus_character = %#v, want LegacyFocus", latestRaw["focus_character"])
+	}
+	if _, ok := latestRaw["character"]; ok {
+		t.Fatalf("legacy trace should not expose character mirror: %#v", latestRaw)
+	}
+	steps, ok := latestRaw["step_traces"].([]interface{})
+	if !ok || len(steps) != 1 {
+		t.Fatalf("legacy trace step_traces = %#v, want 1", latestRaw["step_traces"])
+	}
+	step, ok := steps[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("legacy trace step = %#v, want object", steps[0])
+	}
+	if _, ok := step["character"]; ok {
+		t.Fatalf("legacy step trace should not expose character mirror: %#v", step)
+	}
+	stepMeta, ok := step["step"].(map[string]interface{})
+	if !ok || stepMeta["speaker"] != "LegacySpeaker" {
+		t.Fatalf("legacy step speaker = %#v, want LegacySpeaker", step["step"])
+	}
 }
 
 func TestCheckpointAndPresetRoutes(t *testing.T) {
 	s := newTestServer()
 	mux := http.NewServeMux()
 	s.Register(mux)
+	assertNoLegacyCharacter := func(label string, body []byte) {
+		t.Helper()
+		var raw map[string]interface{}
+		if err := json.Unmarshal(body, &raw); err != nil {
+			t.Fatalf("decode raw %s: %v", label, err)
+		}
+		if _, ok := raw["character"]; ok {
+			t.Fatalf("%s unexpectedly exposes legacy character mirror: %#v", label, raw)
+		}
+	}
 
 	getCheckpoints := httptest.NewRequest(http.MethodGet, "/api/checkpoints", nil)
 	getCheckpointsRec := httptest.NewRecorder()
 	mux.ServeHTTP(getCheckpointsRec, getCheckpoints)
 	if getCheckpointsRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/checkpoints = %d", getCheckpointsRec.Code)
+	}
+	var checkpointsPayload struct {
+		Checkpoints []struct {
+			FocusCharacter string `json:"focus_character"`
+		} `json:"checkpoints"`
+	}
+	if err := json.Unmarshal(getCheckpointsRec.Body.Bytes(), &checkpointsPayload); err != nil {
+		t.Fatalf("decode /api/checkpoints: %v", err)
+	}
+	if len(checkpointsPayload.Checkpoints) != 1 {
+		t.Fatalf("checkpoints = %#v, want 1 item", checkpointsPayload.Checkpoints)
+	}
+	if checkpointsPayload.Checkpoints[0].FocusCharacter != "Anya" {
+		t.Fatalf("checkpoint focus_character = %#v, want Anya", checkpointsPayload.Checkpoints[0].FocusCharacter)
+	}
+	var checkpointsRaw struct {
+		Checkpoints []map[string]interface{} `json:"checkpoints"`
+	}
+	if err := json.Unmarshal(getCheckpointsRec.Body.Bytes(), &checkpointsRaw); err != nil {
+		t.Fatalf("decode raw /api/checkpoints: %v", err)
+	}
+	if _, ok := checkpointsRaw.Checkpoints[0]["character"]; ok {
+		t.Fatalf("/api/checkpoints unexpectedly exposes legacy character mirror: %#v", checkpointsRaw.Checkpoints[0])
 	}
 
 	postCheckpoint := httptest.NewRequest(http.MethodPost, "/api/checkpoints", strings.NewReader(`{"name":"cp-a","branch":"main","note":"before risk"}`))
@@ -1548,6 +3520,16 @@ func TestCheckpointAndPresetRoutes(t *testing.T) {
 	if postCheckpointRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/checkpoints = %d", postCheckpointRec.Code)
 	}
+	var checkpointCreated struct {
+		FocusCharacter string `json:"focus_character"`
+	}
+	if err := json.Unmarshal(postCheckpointRec.Body.Bytes(), &checkpointCreated); err != nil {
+		t.Fatalf("decode POST /api/checkpoints: %v", err)
+	}
+	if checkpointCreated.FocusCharacter != "Anya" {
+		t.Fatalf("checkpoint focus_character = %#v, want Anya", checkpointCreated.FocusCharacter)
+	}
+	assertNoLegacyCharacter("POST /api/checkpoints", postCheckpointRec.Body.Bytes())
 
 	loadCheckpoint := httptest.NewRequest(http.MethodPost, "/api/checkpoints/load", strings.NewReader(`{"name":"cp-a"}`))
 	loadCheckpoint.Header.Set("Content-Type", "application/json")
@@ -1556,12 +3538,45 @@ func TestCheckpointAndPresetRoutes(t *testing.T) {
 	if loadCheckpointRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/checkpoints/load = %d", loadCheckpointRec.Code)
 	}
+	var checkpointLoaded struct {
+		FocusCharacter string `json:"focus_character"`
+	}
+	if err := json.Unmarshal(loadCheckpointRec.Body.Bytes(), &checkpointLoaded); err != nil {
+		t.Fatalf("decode POST /api/checkpoints/load: %v", err)
+	}
+	if checkpointLoaded.FocusCharacter != "Anya" {
+		t.Fatalf("checkpoint load focus_character = %#v, want Anya", checkpointLoaded.FocusCharacter)
+	}
+	assertNoLegacyCharacter("POST /api/checkpoints/load", loadCheckpointRec.Body.Bytes())
 
 	getPresets := httptest.NewRequest(http.MethodGet, "/api/presets", nil)
 	getPresetsRec := httptest.NewRecorder()
 	mux.ServeHTTP(getPresetsRec, getPresets)
 	if getPresetsRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/presets = %d", getPresetsRec.Code)
+	}
+	var presetsPayload struct {
+		Presets []struct {
+			FocusCharacter string `json:"focus_character"`
+		} `json:"presets"`
+	}
+	if err := json.Unmarshal(getPresetsRec.Body.Bytes(), &presetsPayload); err != nil {
+		t.Fatalf("decode /api/presets: %v", err)
+	}
+	if len(presetsPayload.Presets) != 1 {
+		t.Fatalf("presets = %#v, want 1 item", presetsPayload.Presets)
+	}
+	if presetsPayload.Presets[0].FocusCharacter != "Anya" {
+		t.Fatalf("preset focus_character = %#v, want Anya", presetsPayload.Presets[0].FocusCharacter)
+	}
+	var presetsRaw struct {
+		Presets []map[string]interface{} `json:"presets"`
+	}
+	if err := json.Unmarshal(getPresetsRec.Body.Bytes(), &presetsRaw); err != nil {
+		t.Fatalf("decode raw /api/presets: %v", err)
+	}
+	if _, ok := presetsRaw.Presets[0]["character"]; ok {
+		t.Fatalf("/api/presets unexpectedly exposes legacy character mirror: %#v", presetsRaw.Presets[0])
 	}
 
 	postPreset := httptest.NewRequest(http.MethodPost, "/api/presets", strings.NewReader(`{"name":"opening","branch":"main","note":"intro"}`))
@@ -1571,6 +3586,16 @@ func TestCheckpointAndPresetRoutes(t *testing.T) {
 	if postPresetRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/presets = %d", postPresetRec.Code)
 	}
+	var presetCreated struct {
+		FocusCharacter string `json:"focus_character"`
+	}
+	if err := json.Unmarshal(postPresetRec.Body.Bytes(), &presetCreated); err != nil {
+		t.Fatalf("decode POST /api/presets: %v", err)
+	}
+	if presetCreated.FocusCharacter != "Anya" {
+		t.Fatalf("preset focus_character = %#v, want Anya", presetCreated.FocusCharacter)
+	}
+	assertNoLegacyCharacter("POST /api/presets", postPresetRec.Body.Bytes())
 
 	applyPreset := httptest.NewRequest(http.MethodPost, "/api/presets/apply", strings.NewReader(`{"name":"opening"}`))
 	applyPreset.Header.Set("Content-Type", "application/json")
@@ -1578,6 +3603,710 @@ func TestCheckpointAndPresetRoutes(t *testing.T) {
 	mux.ServeHTTP(applyPresetRec, applyPreset)
 	if applyPresetRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/presets/apply = %d", applyPresetRec.Code)
+	}
+	var presetApplied struct {
+		FocusCharacter string `json:"focus_character"`
+	}
+	if err := json.Unmarshal(applyPresetRec.Body.Bytes(), &presetApplied); err != nil {
+		t.Fatalf("decode POST /api/presets/apply: %v", err)
+	}
+	if presetApplied.FocusCharacter != "Anya" {
+		t.Fatalf("preset apply focus_character = %#v, want Anya", presetApplied.FocusCharacter)
+	}
+	assertNoLegacyCharacter("POST /api/presets/apply", applyPresetRec.Body.Bytes())
+}
+
+func TestExperimentReportRoutes(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/experiment-reports", nil)
+	getRec := httptest.NewRecorder()
+	mux.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/experiment-reports = %d", getRec.Code)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/experiment-reports", strings.NewReader(`{
+	  "name":"lab-001",
+	  "note":"pressure divergence",
+	  "batch_count":36,
+	  "source_instance_id":"default",
+	  "compare_instance_id":"alt-a",
+	  "current_checkpoint":"lab-001-current",
+	  "compare_checkpoint":"lab-001-compare",
+	  "outcome_summary":["default vs alt-a","tension gap: 0.80 vs 0.10"],
+	  "conclusion":["长期张力主导：default（gap 0.70）"],
+	  "current":{
+	    "instance_id":"default",
+	    "focus_character":"Anya",
+	    "participants":["Anya","玩家"],
+	    "participant_details":[{"name":"Anya","kind":"persona","source":"character_definition","loaded":true,"switchable":true,"present":true,"focus":true}],
+	    "scene_location":"外城",
+	    "scene_description":"长窗口实验",
+	    "tick_count":36,
+	    "tension":0.8,
+	    "trajectory_summary":["trend a"],
+	    "director_plan":{"mode":"auto_chain","selected":["Anya"],"world_signals":["pressure:curfew"]},
+	    "latest_trace":{"turn":12,"focus_character":"Anya","user_input":"继续观察","director_plan":{"mode":"auto_chain"}}
+	  },
+	  "compare":{"instance_id":"alt-a","tick_count":36,"tension":0.1,"trajectory_summary":["trend b"]}
+	}`))
+	postReq.Header.Set("Content-Type", "application/json")
+	postRec := httptest.NewRecorder()
+	mux.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports = %d", postRec.Code)
+	}
+
+	var saved core.ExperimentReport
+	if err := json.Unmarshal(postRec.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode report: %v", err)
+	}
+	if saved.Name != "lab-001" {
+		t.Fatalf("saved.Name = %q, want lab-001", saved.Name)
+	}
+	if saved.Current.InstanceID != "default" || saved.Compare == nil || saved.Compare.InstanceID != "alt-a" {
+		t.Fatalf("saved report snapshots = %#v", saved)
+	}
+	if saved.CurrentCheckpoint != "lab-001-current" || saved.CompareCheckpoint != "lab-001-compare" {
+		t.Fatalf("saved checkpoints = %q / %q, want API to preserve checkpoint anchors", saved.CurrentCheckpoint, saved.CompareCheckpoint)
+	}
+	if saved.Current.DirectorPlan == nil || saved.Current.LatestTrace == nil {
+		t.Fatalf("saved report authoring evidence = %#v, want director plan and latest trace", saved.Current)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/experiment-reports", nil)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/experiment-reports after save = %d", listRec.Code)
+	}
+
+	var listed struct {
+		Reports []core.ExperimentReport `json:"reports"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode report list: %v", err)
+	}
+	if len(listed.Reports) != 1 {
+		t.Fatalf("listed reports = %d, want 1", len(listed.Reports))
+	}
+	if listed.Reports[0].CurrentCheckpoint != "lab-001-current" || listed.Reports[0].CompareCheckpoint != "lab-001-compare" {
+		t.Fatalf("listed checkpoints = %q / %q, want GET to preserve checkpoint anchors", listed.Reports[0].CurrentCheckpoint, listed.Reports[0].CompareCheckpoint)
+	}
+}
+
+func TestExperimentReportRoutesNormalizeLegacyTraceFocus(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/experiment-reports", strings.NewReader(`{
+	  "name":"compat-report",
+	  "source_instance_id":"default",
+	  "current":{
+	    "instance_id":"default",
+	    "latest_trace":{"turn":12,"character":"LegacyFocus","user_input":"继续观察"}
+	  },
+	  "compare":{
+	    "instance_id":"alt-a",
+	    "latest_trace":{"turn":8,"focus_character":"CompareFocus","character":"LegacyCompare"}
+	  }
+	}`))
+	postReq.Header.Set("Content-Type", "application/json")
+	postRec := httptest.NewRecorder()
+	mux.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports compat = %d", postRec.Code)
+	}
+
+	var saved core.ExperimentReport
+	if err := json.Unmarshal(postRec.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode compat report: %v", err)
+	}
+	if saved.Current.FocusCharacter != "LegacyFocus" {
+		t.Fatalf("saved.Current.FocusCharacter = %q, want LegacyFocus", saved.Current.FocusCharacter)
+	}
+	if saved.Current.LatestTrace == nil || saved.Current.LatestTrace.FocusCharacter != "LegacyFocus" {
+		t.Fatalf("saved.Current.LatestTrace = %#v, want normalized focus", saved.Current.LatestTrace)
+	}
+	if saved.Compare == nil || saved.Compare.LatestTrace == nil || saved.Compare.LatestTrace.FocusCharacter != "CompareFocus" {
+		t.Fatalf("saved.Compare.LatestTrace = %#v, want CompareFocus", saved.Compare)
+	}
+}
+
+func TestExperimentReportReplayCreatesReplayBranches(t *testing.T) {
+	resolver := &mockResolver{
+		defaultID: "default",
+		engines: map[string]RuntimeEngine{
+			"default": &mockEngine{
+				instanceID: "default",
+				name:       "Anya",
+				experimentReports: []core.ExperimentReport{{
+					Name:              "lab-001",
+					SourceInstanceID:  "default",
+					CompareInstanceID: "alt-a",
+					CurrentCheckpoint: "lab-001-current",
+					CompareCheckpoint: "lab-001-compare",
+					Current: core.ExperimentSnapshot{
+						InstanceID:     "default",
+						FocusCharacter: "Anya",
+					},
+					Compare: &core.ExperimentSnapshot{
+						InstanceID:     "alt-a",
+						FocusCharacter: "V",
+					},
+				}},
+			},
+			"alt-a": &mockEngine{instanceID: "alt-a", name: "V"},
+		},
+	}
+	s := NewServer(resolver.engines["default"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/experiment-reports/replay", strings.NewReader(`{"name":"lab-001"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay = %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := append([]byte(nil), rec.Body.Bytes()...)
+
+	var payload struct {
+		ReportName      string `json:"report_name"`
+		CurrentInstance *struct {
+			ID             string `json:"id"`
+			FocusCharacter string `json:"focus_character"`
+		} `json:"current_instance"`
+		CompareInstance *struct {
+			ID             string `json:"id"`
+			FocusCharacter string `json:"focus_character"`
+		} `json:"compare_instance"`
+		CurrentEvidence *struct {
+			SimStatus    map[string]interface{} `json:"sim_status"`
+			AuditSummary []string               `json:"audit_summary"`
+		} `json:"current_evidence"`
+		CompareEvidence *struct {
+			SimStatus    map[string]interface{} `json:"sim_status"`
+			AuditSummary []string               `json:"audit_summary"`
+		} `json:"compare_evidence"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode replay result: %v", err)
+	}
+	if payload.ReportName != "lab-001" {
+		t.Fatalf("payload.ReportName = %q, want lab-001", payload.ReportName)
+	}
+	if payload.CurrentInstance == nil || payload.CompareInstance == nil {
+		t.Fatalf("payload instances = %#v, want current+compare replay branches", payload)
+	}
+	if !strings.Contains(payload.CurrentInstance.ID, "lab-001-current-") {
+		t.Fatalf("current replay id = %q, want lab-001-current-*", payload.CurrentInstance.ID)
+	}
+	if !strings.Contains(payload.CompareInstance.ID, "lab-001-compare-") {
+		t.Fatalf("compare replay id = %q, want lab-001-compare-*", payload.CompareInstance.ID)
+	}
+	if payload.CurrentInstance.FocusCharacter != "Anya" || payload.CompareInstance.FocusCharacter != "V" {
+		t.Fatalf("replay focus characters = %#v / %#v, want Anya / V", payload.CurrentInstance, payload.CompareInstance)
+	}
+	if payload.CurrentEvidence == nil || len(payload.CurrentEvidence.AuditSummary) == 0 {
+		t.Fatalf("current replay evidence = %#v, want embedded audit summary", payload.CurrentEvidence)
+	}
+	if payload.CompareEvidence == nil || len(payload.CompareEvidence.AuditSummary) == 0 {
+		t.Fatalf("compare replay evidence = %#v, want embedded audit summary", payload.CompareEvidence)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw replay result: %v", err)
+	}
+	currentRaw, _ := raw["current_instance"].(map[string]interface{})
+	compareRaw, _ := raw["compare_instance"].(map[string]interface{})
+	if _, ok := currentRaw["active_character"]; ok {
+		t.Fatalf("replay current_instance unexpectedly exposes active_character: %#v", currentRaw)
+	}
+	if _, ok := currentRaw["loaded_characters"]; ok {
+		t.Fatalf("replay current_instance unexpectedly exposes loaded_characters: %#v", currentRaw)
+	}
+	if _, ok := compareRaw["active_character"]; ok {
+		t.Fatalf("replay compare_instance unexpectedly exposes active_character: %#v", compareRaw)
+	}
+	if _, ok := compareRaw["loaded_characters"]; ok {
+		t.Fatalf("replay compare_instance unexpectedly exposes loaded_characters: %#v", compareRaw)
+	}
+
+	currentEngine, ok := resolver.engines[payload.CurrentInstance.ID].(*mockEngine)
+	if !ok {
+		t.Fatalf("current replay engine missing for %q", payload.CurrentInstance.ID)
+	}
+	compareEngine, ok := resolver.engines[payload.CompareInstance.ID].(*mockEngine)
+	if !ok {
+		t.Fatalf("compare replay engine missing for %q", payload.CompareInstance.ID)
+	}
+	if len(currentEngine.loadedCheckpoints) != 1 || currentEngine.loadedCheckpoints[0] != "lab-001-current" {
+		t.Fatalf("current loaded checkpoints = %#v, want [lab-001-current]", currentEngine.loadedCheckpoints)
+	}
+	if len(compareEngine.loadedCheckpoints) != 1 || compareEngine.loadedCheckpoints[0] != "lab-001-compare" {
+		t.Fatalf("compare loaded checkpoints = %#v, want [lab-001-compare]", compareEngine.loadedCheckpoints)
+	}
+}
+
+func TestExperimentReportReplayBatchFiltersByWorld(t *testing.T) {
+	resolver := &mockResolver{
+		defaultID: "default",
+		engines: map[string]RuntimeEngine{
+			"default": &mockEngine{
+				instanceID: "default",
+				name:       "Anya",
+				experimentReports: []core.ExperimentReport{
+					{
+						Name:              "neon-a",
+						SourceInstanceID:  "default",
+						CompareInstanceID: "alt-a",
+						CurrentCheckpoint: "neon-a-current",
+						CompareCheckpoint: "neon-a-compare",
+						Current: core.ExperimentSnapshot{
+							InstanceID:     "default",
+							WorldName:      "neon_block",
+							FocusCharacter: "Anya",
+						},
+						Compare: &core.ExperimentSnapshot{
+							InstanceID:     "alt-a",
+							WorldName:      "neon_block",
+							FocusCharacter: "V",
+						},
+					},
+					{
+						Name:              "garden-a",
+						SourceInstanceID:  "default",
+						CompareInstanceID: "alt-b",
+						CurrentCheckpoint: "garden-a-current",
+						CompareCheckpoint: "garden-a-compare",
+						Current: core.ExperimentSnapshot{
+							InstanceID:     "default",
+							WorldName:      "garden",
+							FocusCharacter: "Anya",
+						},
+						Compare: &core.ExperimentSnapshot{
+							InstanceID:     "alt-b",
+							WorldName:      "garden",
+							FocusCharacter: "Mina",
+						},
+					},
+					{
+						Name:              "neon-no-checkpoint",
+						SourceInstanceID:  "default",
+						CompareInstanceID: "alt-a",
+						Current: core.ExperimentSnapshot{
+							InstanceID:     "default",
+							WorldName:      "neon_block",
+							FocusCharacter: "Anya",
+						},
+					},
+				},
+			},
+			"alt-a": &mockEngine{instanceID: "alt-a", name: "V"},
+			"alt-b": &mockEngine{instanceID: "alt-b", name: "Mina"},
+		},
+	}
+	s := NewServer(resolver.engines["default"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/experiment-reports/replay-batch", strings.NewReader(`{"world_name":"neon_block"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay-batch = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Mode      string   `json:"mode"`
+		WorldName string   `json:"world_name"`
+		Total     int      `json:"total"`
+		Successes []string `json:"successes"`
+		Results   []struct {
+			ReportName string `json:"report_name"`
+			WorldName  string `json:"world_name"`
+			Replay     *struct {
+				ReportName string `json:"report_name"`
+				WorldName  string `json:"world_name"`
+			} `json:"replay"`
+			Error string `json:"error"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode replay batch result: %v", err)
+	}
+	if payload.Mode != "replay" {
+		t.Fatalf("payload.Mode = %q, want replay", payload.Mode)
+	}
+	if payload.WorldName != "neon_block" {
+		t.Fatalf("payload.WorldName = %q, want neon_block", payload.WorldName)
+	}
+	if payload.Total != 1 {
+		t.Fatalf("payload.Total = %d, want 1 eligible neon_block report", payload.Total)
+	}
+	if len(payload.Successes) != 1 || payload.Successes[0] != "neon-a" {
+		t.Fatalf("payload.Successes = %#v, want [neon-a]", payload.Successes)
+	}
+	if len(payload.Results) != 1 {
+		t.Fatalf("payload.Results = %#v, want 1 result", payload.Results)
+	}
+	if payload.Results[0].ReportName != "neon-a" || payload.Results[0].WorldName != "neon_block" {
+		t.Fatalf("payload.Results[0] = %#v, want neon-a/neon_block", payload.Results[0])
+	}
+	if payload.Results[0].Replay == nil || payload.Results[0].Replay.ReportName != "neon-a" || payload.Results[0].Replay.WorldName != "neon_block" {
+		t.Fatalf("payload.Results[0].Replay = %#v, want replay metadata", payload.Results[0].Replay)
+	}
+
+	matched := 0
+	for id, engine := range resolver.engines {
+		if !strings.Contains(id, "neon-a-") {
+			continue
+		}
+		if replayEngine, ok := engine.(*mockEngine); ok && len(replayEngine.loadedCheckpoints) == 1 {
+			matched++
+		}
+	}
+	if matched != 2 {
+		t.Fatalf("matched replay engines = %d, want 2 current/compare branches for neon-a", matched)
+	}
+}
+
+func TestExperimentReportReplayBatchRealRuntimeRoundTrip(t *testing.T) {
+	baseDir := t.TempDir()
+	worldDir := filepath.Join(baseDir, "world")
+	writeAPITestWorldBundle(t, worldDir, "Replay Real Runtime", "真实 runtime replay round-trip")
+	dataDir := filepath.Join(baseDir, "data")
+
+	current := newRealRuntimeEngineForAPITest(t, filepath.Join(baseDir, "runtime.db"), dataDir, worldDir, "current", "Replay Real Runtime", "真实 runtime replay round-trip")
+	current.SetInstanceMetadata("current", time.Now().UTC())
+	current.SeedScene(core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "阴",
+		Characters:  []string{"111", "玩家"},
+		Description: "replay current baseline",
+	})
+	compare := newRealRuntimeEngineForAPITest(t, filepath.Join(baseDir, "runtime.db"), dataDir, worldDir, "compare", "Replay Real Runtime", "真实 runtime replay round-trip")
+	compare.SetInstanceMetadata("compare", time.Now().UTC())
+	compare.SeedScene(core.SceneState{
+		Location:    "外城",
+		TimeOfDay:   "深夜",
+		Weather:     "雨",
+		Characters:  []string{"111", "玩家"},
+		Description: "replay compare baseline",
+	})
+
+	currentCheckpoint, err := current.CreateCheckpoint("real-replay-current", "main", "current baseline")
+	if err != nil {
+		t.Fatalf("CreateCheckpoint current: %v", err)
+	}
+	compareCheckpoint, err := compare.CreateCheckpoint("real-replay-compare", "main", "compare baseline")
+	if err != nil {
+		t.Fatalf("CreateCheckpoint compare: %v", err)
+	}
+	_, err = current.CreateExperimentReport(core.ExperimentReport{
+		Name:              "real-replay",
+		SourceInstanceID:  "current",
+		CompareInstanceID: "compare",
+		CurrentCheckpoint: currentCheckpoint.Name,
+		CompareCheckpoint: compareCheckpoint.Name,
+		Current: core.ExperimentSnapshot{
+			InstanceID:     "current",
+			WorldName:      "Replay Real Runtime",
+			FocusCharacter: "111",
+		},
+		Compare: &core.ExperimentSnapshot{
+			InstanceID:     "compare",
+			WorldName:      "Replay Real Runtime",
+			FocusCharacter: "111",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateExperimentReport: %v", err)
+	}
+
+	manager := runtime.NewManager()
+	if err := manager.Register("current", "Current", current, true); err != nil {
+		t.Fatalf("register current: %v", err)
+	}
+	if err := manager.Register("compare", "Compare", compare, false); err != nil {
+		t.Fatalf("register compare: %v", err)
+	}
+	t.Cleanup(func() {
+		for _, summary := range manager.List() {
+			if engine, err := manager.Resolve(summary.ID); err == nil {
+				engine.Stop()
+			}
+		}
+	})
+
+	s := NewServer(current, realRuntimeResolver{manager: manager})
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	replayReq := httptest.NewRequest(http.MethodPost, "/api/experiment-reports/replay-batch", strings.NewReader(`{"world_name":"Replay Real Runtime"}`))
+	replayReq.Header.Set("Content-Type", "application/json")
+	replayRec := httptest.NewRecorder()
+	mux.ServeHTTP(replayRec, replayReq)
+	if replayRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay-batch = %d body=%s", replayRec.Code, replayRec.Body.String())
+	}
+
+	var replayPayload experimentReplayBatchPayload
+	if err := json.Unmarshal(replayRec.Body.Bytes(), &replayPayload); err != nil {
+		t.Fatalf("decode replay batch: %v", err)
+	}
+	if replayPayload.Total != 1 || len(replayPayload.Successes) != 1 || len(replayPayload.Results) != 1 {
+		t.Fatalf("replay batch payload = %#v, want one successful real runtime replay", replayPayload)
+	}
+	replay := replayPayload.Results[0].Replay
+	if replay == nil || replay.CurrentInstance == nil || replay.CompareInstance == nil {
+		t.Fatalf("replay result = %#v, want current and compare replay branches", replayPayload.Results[0])
+	}
+	if replay.CurrentEvidence == nil || len(replay.CurrentEvidence.AuditSummary) == 0 {
+		t.Fatalf("current replay evidence = %#v, want audit summary from real runtime", replay.CurrentEvidence)
+	}
+	if replay.CompareEvidence == nil || len(replay.CompareEvidence.AuditSummary) == 0 {
+		t.Fatalf("compare replay evidence = %#v, want audit summary from real runtime", replay.CompareEvidence)
+	}
+
+	advanceBody := fmt.Sprintf(`{
+		"world_name":"Replay Real Runtime",
+		"count":3,
+		"replays":[{
+			"report_name":"real-replay",
+			"world_name":"Replay Real Runtime",
+			"current_instance_id":%q,
+			"compare_instance_id":%q
+		}]
+	}`, replay.CurrentInstance.ID, replay.CompareInstance.ID)
+	advanceReq := httptest.NewRequest(http.MethodPost, "/api/experiment-reports/replay-advance", strings.NewReader(advanceBody))
+	advanceReq.Header.Set("Content-Type", "application/json")
+	advanceRec := httptest.NewRecorder()
+	mux.ServeHTTP(advanceRec, advanceReq)
+	if advanceRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay-advance = %d body=%s", advanceRec.Code, advanceRec.Body.String())
+	}
+
+	var advancePayload experimentReplayBatchPayload
+	if err := json.Unmarshal(advanceRec.Body.Bytes(), &advancePayload); err != nil {
+		t.Fatalf("decode replay advance: %v", err)
+	}
+	if advancePayload.Mode != "tick" || advancePayload.Count != 3 || len(advancePayload.Successes) != 1 {
+		t.Fatalf("advance payload = %#v, want one successful 3 tick replay advance", advancePayload)
+	}
+	advanced := advancePayload.Results[0].Replay
+	if advanced == nil || advanced.CurrentEvidence == nil || advanced.CompareEvidence == nil {
+		t.Fatalf("advanced replay = %#v, want refreshed evidence for both branches", advancePayload.Results[0])
+	}
+	currentTickCount, _ := advanced.CurrentEvidence.SimStatus["tick_count"].(float64)
+	compareTickCount, _ := advanced.CompareEvidence.SimStatus["tick_count"].(float64)
+	if currentTickCount != 0 || compareTickCount != 0 {
+		t.Fatalf("manual replay tick loop counts = %.0f / %.0f, want loop counters unchanged when using manual ticks", currentTickCount, compareTickCount)
+	}
+	currentSummary := fmt.Sprint(advanced.CurrentEvidence.SimStatus["last_tick_summary"])
+	compareSummary := fmt.Sprint(advanced.CompareEvidence.SimStatus["last_tick_summary"])
+	if !strings.Contains(currentSummary, "world clock") || !strings.Contains(compareSummary, "world clock") {
+		t.Fatalf("replay summaries = %q / %q, want real ManualTick evidence after advance", currentSummary, compareSummary)
+	}
+}
+
+func TestExperimentReportReplayAdvanceTicksReplayBranches(t *testing.T) {
+	resolver := &mockResolver{
+		defaultID: "default",
+		engines: map[string]RuntimeEngine{
+			"default":                 &mockEngine{instanceID: "default", name: "Anya"},
+			"neon-a-current-replay":   &mockEngine{instanceID: "neon-a-current-replay", name: "Anya"},
+			"neon-a-compare-replay":   &mockEngine{instanceID: "neon-a-compare-replay", name: "V"},
+			"garden-a-current-replay": &mockEngine{instanceID: "garden-a-current-replay", name: "Mina"},
+		},
+	}
+	s := NewServer(resolver.engines["default"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/experiment-reports/replay-advance", strings.NewReader(`{
+		"world_name":"neon_block",
+		"count":4,
+		"replays":[
+			{"report_name":"neon-a","world_name":"neon_block","current_instance_id":"neon-a-current-replay","compare_instance_id":"neon-a-compare-replay"},
+			{"report_name":"garden-a","world_name":"garden","current_instance_id":"garden-a-current-replay"}
+		]
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay-advance = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Mode      string   `json:"mode"`
+		WorldName string   `json:"world_name"`
+		Count     int      `json:"count"`
+		Total     int      `json:"total"`
+		Successes []string `json:"successes"`
+		Results   []struct {
+			ReportName string `json:"report_name"`
+			WorldName  string `json:"world_name"`
+			Replay     *struct {
+				ReportName      string `json:"report_name"`
+				WorldName       string `json:"world_name"`
+				CurrentInstance *struct {
+					ID string `json:"id"`
+				} `json:"current_instance"`
+				CompareInstance *struct {
+					ID string `json:"id"`
+				} `json:"compare_instance"`
+				CurrentEvidence *struct {
+					SimStatus    map[string]interface{} `json:"sim_status"`
+					LatestTrace  *core.TurnTrace        `json:"latest_trace"`
+					AuditSummary []string               `json:"audit_summary"`
+				} `json:"current_evidence"`
+				CompareEvidence *struct {
+					SimStatus    map[string]interface{} `json:"sim_status"`
+					LatestTrace  *core.TurnTrace        `json:"latest_trace"`
+					AuditSummary []string               `json:"audit_summary"`
+				} `json:"compare_evidence"`
+			} `json:"replay"`
+			Error string `json:"error"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode replay advance result: %v", err)
+	}
+	if payload.Mode != "tick" {
+		t.Fatalf("payload.Mode = %q, want tick", payload.Mode)
+	}
+	if payload.WorldName != "neon_block" {
+		t.Fatalf("payload.WorldName = %q, want neon_block", payload.WorldName)
+	}
+	if payload.Count != 4 {
+		t.Fatalf("payload.Count = %d, want 4", payload.Count)
+	}
+	if payload.Total != 1 {
+		t.Fatalf("payload.Total = %d, want 1 filtered replay entry", payload.Total)
+	}
+	if len(payload.Successes) != 1 || payload.Successes[0] != "neon-a" {
+		t.Fatalf("payload.Successes = %#v, want [neon-a]", payload.Successes)
+	}
+	if len(payload.Results) != 1 || payload.Results[0].Replay == nil {
+		t.Fatalf("payload.Results = %#v, want 1 replay result", payload.Results)
+	}
+	if payload.Results[0].Replay.CurrentInstance == nil || payload.Results[0].Replay.CurrentInstance.ID != "neon-a-current-replay" {
+		t.Fatalf("current replay payload = %#v, want neon-a-current-replay", payload.Results[0].Replay)
+	}
+	if payload.Results[0].Replay.CompareInstance == nil || payload.Results[0].Replay.CompareInstance.ID != "neon-a-compare-replay" {
+		t.Fatalf("compare replay payload = %#v, want neon-a-compare-replay", payload.Results[0].Replay)
+	}
+	if payload.Results[0].Replay.CurrentEvidence == nil || payload.Results[0].Replay.CurrentEvidence.SimStatus["tick_count"] == nil {
+		t.Fatalf("current replay evidence = %#v, want sim status", payload.Results[0].Replay.CurrentEvidence)
+	}
+	if got := int(payload.Results[0].Replay.CurrentEvidence.SimStatus["tick_count"].(float64)); got != 4 {
+		t.Fatalf("current evidence tick_count = %d, want 4", got)
+	}
+	if payload.Results[0].Replay.CompareEvidence == nil || payload.Results[0].Replay.CompareEvidence.SimStatus["tick_count"] == nil {
+		t.Fatalf("compare replay evidence = %#v, want sim status", payload.Results[0].Replay.CompareEvidence)
+	}
+	if got := int(payload.Results[0].Replay.CompareEvidence.SimStatus["tick_count"].(float64)); got != 4 {
+		t.Fatalf("compare evidence tick_count = %d, want 4", got)
+	}
+	if payload.Results[0].Replay.CurrentEvidence.LatestTrace == nil || payload.Results[0].Replay.CompareEvidence.LatestTrace == nil {
+		t.Fatalf("replay evidence traces = %#v / %#v, want latest trace for both branches", payload.Results[0].Replay.CurrentEvidence, payload.Results[0].Replay.CompareEvidence)
+	}
+	if len(payload.Results[0].Replay.CurrentEvidence.AuditSummary) == 0 || len(payload.Results[0].Replay.CompareEvidence.AuditSummary) == 0 {
+		t.Fatalf("replay evidence summaries = %#v / %#v, want audit summary for both branches", payload.Results[0].Replay.CurrentEvidence, payload.Results[0].Replay.CompareEvidence)
+	}
+
+	currentEngine := resolver.engines["neon-a-current-replay"].(*mockEngine)
+	compareEngine := resolver.engines["neon-a-compare-replay"].(*mockEngine)
+	gardenEngine := resolver.engines["garden-a-current-replay"].(*mockEngine)
+	if currentEngine.tickCount != 4 {
+		t.Fatalf("currentEngine.tickCount = %d, want 4", currentEngine.tickCount)
+	}
+	if compareEngine.tickCount != 4 {
+		t.Fatalf("compareEngine.tickCount = %d, want 4", compareEngine.tickCount)
+	}
+	if gardenEngine.tickCount != 0 {
+		t.Fatalf("gardenEngine.tickCount = %d, want 0 after world filter", gardenEngine.tickCount)
+	}
+}
+
+func TestProofAuditsRouteListsLatestAuditArtifacts(t *testing.T) {
+	root := t.TempDir()
+	auditRoot := filepath.Join(root, "proof-audits")
+	if err := os.MkdirAll(filepath.Join(auditRoot, "20260527T223320Z"), 0o755); err != nil {
+		t.Fatalf("mkdir proof audit root: %v", err)
+	}
+	summary := `# World Proof Audit
+
+- Created At (UTC): 20260527T223320Z
+
+## Final
+
+- Overall: PASS
+- Output Directory: data/proof-audits/20260527T223320Z
+`
+	if err := os.WriteFile(filepath.Join(auditRoot, "20260527T223320Z", "SUMMARY.md"), []byte(summary), 0o644); err != nil {
+		t.Fatalf("write summary: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(auditRoot, "20260527T223320Z", "runtime.log"), []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write runtime log: %v", err)
+	}
+
+	s := newTestServer()
+	s.SetProofAuditRoot(auditRoot)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/proof-audits?limit=3", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/proof-audits = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Root        string `json:"root"`
+		Count       int    `json:"count"`
+		ProofAudits []struct {
+			Name           string `json:"name"`
+			Overall        string `json:"overall"`
+			SummaryPath    string `json:"summary_path"`
+			SummaryPreview string `json:"summary_preview"`
+			Files          []struct {
+				Name string `json:"name"`
+				Size int64  `json:"size"`
+			} `json:"files"`
+		} `json:"proof_audits"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode proof audits payload: %v", err)
+	}
+	if payload.Root != filepath.ToSlash(auditRoot) {
+		t.Fatalf("payload.Root = %q, want %q", payload.Root, filepath.ToSlash(auditRoot))
+	}
+	if payload.Count != 1 || len(payload.ProofAudits) != 1 {
+		t.Fatalf("payload.Count/proof_audits = %d/%d, want 1/1", payload.Count, len(payload.ProofAudits))
+	}
+	if payload.ProofAudits[0].Name != "20260527T223320Z" {
+		t.Fatalf("payload.ProofAudits[0].Name = %q, want 20260527T223320Z", payload.ProofAudits[0].Name)
+	}
+	if payload.ProofAudits[0].Overall != "PASS" {
+		t.Fatalf("payload.ProofAudits[0].Overall = %q, want PASS", payload.ProofAudits[0].Overall)
+	}
+	if !strings.Contains(payload.ProofAudits[0].SummaryPreview, "World Proof Audit") {
+		t.Fatalf("payload.ProofAudits[0].SummaryPreview = %q, want heading preview", payload.ProofAudits[0].SummaryPreview)
+	}
+	if len(payload.ProofAudits[0].Files) != 2 {
+		t.Fatalf("payload.ProofAudits[0].Files = %#v, want summary + runtime log", payload.ProofAudits[0].Files)
 	}
 }
 
@@ -1614,6 +4343,16 @@ func TestQuarantineAndPendingFactRoutes(t *testing.T) {
 	if qRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/quarantine = %d", qRec.Code)
 	}
+	var quarantinePayload map[string]interface{}
+	if err := json.NewDecoder(qRec.Body).Decode(&quarantinePayload); err != nil {
+		t.Fatalf("decode /api/quarantine: %v", err)
+	}
+	if quarantinePayload["focus_character"] != "Anya" {
+		t.Fatalf("quarantine focus_character = %#v, want Anya", quarantinePayload["focus_character"])
+	}
+	if _, ok := quarantinePayload["character"]; ok {
+		t.Fatalf("quarantine top-level character compatibility mirror should be absent: %#v", quarantinePayload)
+	}
 
 	qPromoteReq := httptest.NewRequest(http.MethodPost, "/api/quarantine/promote", strings.NewReader(`{"id":"q1"}`))
 	qPromoteReq.Header.Set("Content-Type", "application/json")
@@ -1629,6 +4368,30 @@ func TestQuarantineAndPendingFactRoutes(t *testing.T) {
 	if pRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/pending-facts = %d", pRec.Code)
 	}
+	var pendingPayload map[string]interface{}
+	if err := json.NewDecoder(pRec.Body).Decode(&pendingPayload); err != nil {
+		t.Fatalf("decode /api/pending-facts: %v", err)
+	}
+	if pendingPayload["focus_character"] != "Anya" {
+		t.Fatalf("pending focus_character = %#v, want Anya", pendingPayload["focus_character"])
+	}
+	if _, ok := pendingPayload["character"]; ok {
+		t.Fatalf("pending top-level character compatibility mirror should be absent: %#v", pendingPayload)
+	}
+	facts, ok := pendingPayload["facts"].([]interface{})
+	if !ok || len(facts) != 1 {
+		t.Fatalf("pending facts = %#v, want 1 item", pendingPayload["facts"])
+	}
+	fact, ok := facts[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("pending fact[0] = %#v, want object", facts[0])
+	}
+	if fact["focus_character"] != "Anya" {
+		t.Fatalf("pending fact focus_character = %#v, want Anya", fact["focus_character"])
+	}
+	if _, ok := fact["character"]; ok {
+		t.Fatalf("pending fact character mirror should be absent on canonical path: %#v", fact)
+	}
 
 	pConfirmReq := httptest.NewRequest(http.MethodPost, "/api/pending-facts/confirm", strings.NewReader(`{"id":"p1"}`))
 	pConfirmReq.Header.Set("Content-Type", "application/json")
@@ -1636,6 +4399,30 @@ func TestQuarantineAndPendingFactRoutes(t *testing.T) {
 	mux.ServeHTTP(pConfirmRec, pConfirmReq)
 	if pConfirmRec.Code != http.StatusOK {
 		t.Fatalf("POST /api/pending-facts/confirm = %d", pConfirmRec.Code)
+	}
+}
+
+func TestNPCActionsRouteUsesFocusCharacterWithoutTopLevelCharacterMirror(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/npc-actions", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/npc-actions = %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/npc-actions: %v", err)
+	}
+	if payload["focus_character"] != "Anya" {
+		t.Fatalf("npc-actions focus_character = %#v, want Anya", payload["focus_character"])
+	}
+	if _, ok := payload["character"]; ok {
+		t.Fatalf("npc-actions top-level character compatibility mirror should be absent: %#v", payload)
 	}
 }
 

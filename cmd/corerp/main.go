@@ -543,6 +543,7 @@ func runServe(args []string) {
 		log.Fatalf("Failed to register runtime instance: %v", err)
 	}
 	server := api.NewServer(engine, apiInstanceResolver{manager: instanceManager})
+	server.SetProofAuditRoot(filepath.Join(*dataDir, "proof-audits"))
 	server.Register(mux)
 
 	if err := http.ListenAndServe(":"+*port, mux); err != nil {

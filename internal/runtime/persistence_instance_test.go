@@ -28,12 +28,19 @@ func TestInstanceScopedPersistencePaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("saveSlotsPath: %v", err)
 	}
+	reportPath, err := engine.experimentReportsPathLocked()
+	if err != nil {
+		t.Fatalf("experimentReportsPathLocked: %v", err)
+	}
 	wantDir := filepath.Join(engine.dataDir, "instances", "alpha")
 	if rolePath != filepath.Join(wantDir, "player_role.json") {
 		t.Fatalf("role path = %q, want %q", rolePath, filepath.Join(wantDir, "player_role.json"))
 	}
 	if savePath != filepath.Join(wantDir, "save_slots.json") {
 		t.Fatalf("save path = %q, want %q", savePath, filepath.Join(wantDir, "save_slots.json"))
+	}
+	if reportPath != filepath.Join(wantDir, "experiment_reports.json") {
+		t.Fatalf("report path = %q, want %q", reportPath, filepath.Join(wantDir, "experiment_reports.json"))
 	}
 }
 
@@ -76,6 +83,27 @@ func TestDefaultInstanceReadSaveSlotsFallsBackToLegacyRootPath(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "legacy" {
 		t.Fatalf("slots = %#v, want legacy slot", got)
+	}
+}
+
+func TestDefaultInstanceReadExperimentReportsFallsBackToLegacyRootPath(t *testing.T) {
+	root := t.TempDir()
+	reports := []core.ExperimentReport{{Name: "legacy-report", SourceInstanceID: "default"}}
+	data, err := json.Marshal(reports)
+	if err != nil {
+		t.Fatalf("marshal reports: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "experiment_reports.json"), data, 0644); err != nil {
+		t.Fatalf("write legacy reports: %v", err)
+	}
+
+	engine := &Engine{dataDir: root, instanceID: "default"}
+	got, err := engine.readExperimentReportsLocked()
+	if err != nil {
+		t.Fatalf("readExperimentReportsLocked: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "legacy-report" {
+		t.Fatalf("reports = %#v, want legacy-report", got)
 	}
 }
 
@@ -130,5 +158,13 @@ func TestNamedInstanceDoesNotReadLegacyRootFiles(t *testing.T) {
 	}
 	if len(gotSlots) != 1 || gotSlots[0].Name != "legacy-default" {
 		t.Fatalf("default slots = %#v, want legacy-default", gotSlots)
+	}
+
+	alphaReports, err := alphaEngine.readExperimentReportsLocked()
+	if err != nil {
+		t.Fatalf("alpha readExperimentReportsLocked: %v", err)
+	}
+	if len(alphaReports) != 0 {
+		t.Fatalf("alpha reports = %#v, want empty", alphaReports)
 	}
 }

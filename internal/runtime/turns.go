@@ -27,9 +27,8 @@ func uniqueTurnSpeakers(steps []core.TurnStep) []string {
 
 func (e *Engine) executeTurnStep(step core.TurnStep, userInput string, turnNumber int, handoff *core.StepHandoff) core.TurnStepTrace {
 	trace := core.TurnStepTrace{
-		Step:      step,
-		Character: step.Speaker,
-		Handoff:   cloneStepHandoff(handoff),
+		Step:    step,
+		Handoff: cloneStepHandoff(handoff),
 	}
 
 	e.mu.Lock()
@@ -44,7 +43,8 @@ func (e *Engine) executeTurnStep(step core.TurnStep, userInput string, turnNumbe
 	e.mu.Unlock()
 
 	worldState := e.stateMgr.Get()
-	if _, ok := e.agents.GetCharacter(step.Speaker); !ok {
+	char, ok := e.agents.GetCharacter(step.Speaker)
+	if !ok {
 		trace.Error = fmt.Sprintf("character '%s' not loaded", step.Speaker)
 		return trace
 	}
@@ -77,6 +77,7 @@ func (e *Engine) executeTurnStep(step core.TurnStep, userInput string, turnNumbe
 	baseActions := actions.AllowedActionsFor(worldState, goals)
 	allowedActions := e.stateMachine.AllowedActions(baseActions)
 	allowedActions = filterAllowedActionsForStep(step, allowedActions)
+	allowedActions = filterAllowedActionsForAdaptive(allowedActions, char.Identity.Adaptive)
 	trace.AllowedActions = append([]string(nil), allowedActions...)
 
 	personaFrame := e.agents.GetPersonaFrame(step.Speaker)
@@ -108,7 +109,7 @@ func (e *Engine) executeTurnStep(step core.TurnStep, userInput string, turnNumbe
 	trace.SemanticFacts = traceFactsFromFrames(snapshot.SemanticFacts)
 	trace.EpisodicEvents = append(trace.EpisodicEvents, snapshot.EpisodicEvents...)
 
-	prompt := composeTurnPrompt(e.compiler.RenderSnapshot(snapshot), step, playerRole.Name, handoff)
+	prompt := composeTurnPrompt(e.compiler.RenderSnapshot(snapshot), step, playerRole.Name, char.Identity.Adaptive, handoff)
 	var llmOutput strings.Builder
 	err = e.llmRouter.Generate(llm.TaskNarrative, prompt, func(chunk core.LLMStreamChunk) {
 		if chunk.Done {
@@ -237,7 +238,7 @@ func traceFactsFromFrames(facts []core.FactFrame) []core.TraceFact {
 	return out
 }
 
-func composeTurnPrompt(basePrompt string, step core.TurnStep, playerName string, handoff *core.StepHandoff) string {
+func composeTurnPrompt(basePrompt string, step core.TurnStep, playerName string, adaptive map[string]float64, handoff *core.StepHandoff) string {
 	var b strings.Builder
 	b.WriteString(basePrompt)
 	if !strings.HasSuffix(basePrompt, "\n") {
@@ -245,7 +246,7 @@ func composeTurnPrompt(basePrompt string, step core.TurnStep, playerName string,
 	}
 	b.WriteString("\n=== 回合职责 ===\n")
 	b.WriteString(fmt.Sprintf("当前 step: #%d | speaker=%s | kind=%s | budget=%s\n", step.Index+1, step.Speaker, step.Kind, step.BudgetMode))
-	for _, line := range stepPromptDirectives(step, playerName) {
+	for _, line := range stepPromptDirectives(step, playerName, adaptive) {
 		b.WriteString("- ")
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -281,7 +282,7 @@ func composeTurnPrompt(basePrompt string, step core.TurnStep, playerName string,
 	return b.String()
 }
 
-func stepPromptDirectives(step core.TurnStep, playerName string) []string {
+func stepPromptDirectives(step core.TurnStep, playerName string, adaptive map[string]float64) []string {
 	if strings.TrimSpace(playerName) == "" {
 		playerName = "用户"
 	}
@@ -318,6 +319,7 @@ func stepPromptDirectives(step core.TurnStep, playerName string) []string {
 		base = append(base, "按当前场景自然回应，但保持 step 职责边界。")
 	}
 	allowed := filterAllowedActionsForStep(step, []string{"speak", "trust", "negotiate", "move", "hide", "threaten", "attack"})
+	allowed = filterAllowedActionsForAdaptive(allowed, adaptive)
 	if len(allowed) > 0 {
 		base = append(base, fmt.Sprintf("这一拍优先使用这些动作：%s。", strings.Join(allowed, ", ")))
 	}
@@ -343,6 +345,71 @@ func filterAllowedActionsForStep(step core.TurnStep, allowed []string) []string 
 		return filtered
 	}
 	return append([]string(nil), allowed...)
+}
+
+func filterAllowedActionsForAdaptive(allowed []string, adaptive map[string]float64) []string {
+	if len(allowed) == 0 || len(adaptive) == 0 {
+		return append([]string(nil), allowed...)
+	}
+	filtered := append([]string(nil), allowed...)
+	trust := adaptive["trust"]
+	intimacy := adaptive["intimacy"]
+	fear := adaptive["fear"]
+	aggression := adaptive["aggression"]
+
+	if trust >= 7 || intimacy >= 7 {
+		filtered = filterActions(filtered, func(action string) bool {
+			return action != "attack" && action != "threaten"
+		})
+		filtered = prioritizeActions(filtered, []string{"trust", "speak", "negotiate", "move", "hide"})
+	}
+	if fear >= 6.5 {
+		filtered = filterActions(filtered, func(action string) bool {
+			return action != "attack"
+		})
+		filtered = prioritizeActions(filtered, []string{"hide", "move", "speak", "negotiate", "trust", "threaten"})
+	}
+	if aggression >= 6 && trust <= 4 && fear <= 6 {
+		filtered = prioritizeActions(filtered, []string{"threaten", "attack", "speak", "move", "hide", "negotiate", "trust"})
+	}
+	if len(filtered) == 0 {
+		return append([]string(nil), allowed...)
+	}
+	return filtered
+}
+
+func filterActions(actions []string, keep func(string) bool) []string {
+	filtered := make([]string, 0, len(actions))
+	for _, action := range actions {
+		if keep(action) {
+			filtered = append(filtered, action)
+		}
+	}
+	return filtered
+}
+
+func prioritizeActions(actions []string, priority []string) []string {
+	if len(actions) == 0 || len(priority) == 0 {
+		return append([]string(nil), actions...)
+	}
+	actionSet := make(map[string]bool, len(actions))
+	for _, action := range actions {
+		actionSet[action] = true
+	}
+	ordered := make([]string, 0, len(actions))
+	for _, action := range priority {
+		if actionSet[action] {
+			ordered = append(ordered, action)
+			delete(actionSet, action)
+		}
+	}
+	for _, action := range actions {
+		if actionSet[action] {
+			ordered = append(ordered, action)
+			delete(actionSet, action)
+		}
+	}
+	return ordered
 }
 
 func stepPreferredActions(step core.TurnStep) []string {
@@ -390,11 +457,12 @@ func normalizeActionForStep(step core.TurnStep, frame core.ActionFrame, allowed 
 }
 
 func buildStepHandoff(trace core.TurnStepTrace) *core.StepHandoff {
-	if trace.Character == "" {
+	trace = normalizeTurnStepTraceCompatibility(trace)
+	if trace.Step.Speaker == "" {
 		return nil
 	}
 	return &core.StepHandoff{
-		FromSpeaker:    trace.Character,
+		FromSpeaker:    trace.Step.Speaker,
 		StepIndex:      trace.Step.Index,
 		Kind:           trace.Step.Kind,
 		Action:         trace.ActionFrame.Action,

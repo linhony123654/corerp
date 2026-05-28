@@ -32,6 +32,63 @@ func (e *Engine) ListCheckpoints() ([]core.SaveSlot, error) {
 	return e.ListSaveSlots()
 }
 
+func (e *Engine) ListExperimentReports() ([]core.ExperimentReport, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	reports, err := e.readExperimentReportsLocked()
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].CreatedAt.After(reports[j].CreatedAt)
+	})
+	for i := range reports {
+		reports[i] = normalizeExperimentReportCompatibility(reports[i])
+	}
+	return reports, nil
+}
+
+func (e *Engine) CreateExperimentReport(report core.ExperimentReport) (core.ExperimentReport, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	report = normalizeExperimentReportCompatibility(report)
+	report.Name = strings.TrimSpace(report.Name)
+	if report.Name == "" {
+		return core.ExperimentReport{}, fmt.Errorf("experiment report name is required")
+	}
+	report.Note = strings.TrimSpace(report.Note)
+	if report.BatchCount < 0 {
+		report.BatchCount = 0
+	}
+	if report.CreatedAt.IsZero() {
+		report.CreatedAt = time.Now().UTC()
+	} else {
+		report.CreatedAt = report.CreatedAt.UTC()
+	}
+
+	reports, err := e.readExperimentReportsLocked()
+	if err != nil {
+		return core.ExperimentReport{}, err
+	}
+	replaced := false
+	for i := range reports {
+		if reports[i].Name == report.Name {
+			reports[i] = report
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		reports = append(reports, report)
+	}
+	if err := e.writeExperimentReportsLocked(reports); err != nil {
+		return core.ExperimentReport{}, err
+	}
+	return report, nil
+}
+
 func (e *Engine) CreateCheckpoint(name, branch, note string) (core.SaveSlot, error) {
 	return e.CreateSaveSlot(name, branch, note)
 }
@@ -57,30 +114,28 @@ func (e *Engine) EnterWorld(path string) (core.ScenarioPreset, error) {
 	preset := core.ScenarioPreset{
 		Name:           "world_default",
 		Branch:         "main",
-		Character:      firstSceneCharacter(scene),
 		FocusCharacter: firstSceneCharacter(scene),
 		PlayerRole:     normalizePlayerRole(e.playerRole),
 		Preview:        scene.Description,
 		CreatedAt:      time.Now().UTC(),
 		Scene:          scene,
 	}
+	preset = normalizeScenarioPresetCompatibility(preset)
 	if presets, err := world.LoadScenarioPresets(path); err == nil && len(presets) > 0 {
-		preset = presets[0]
+		preset = normalizeScenarioPresetCompatibility(presets[0])
 		if preset.Scene.Location != "" || len(preset.Scene.Characters) > 0 || preset.Scene.Description != "" {
 			scene = preset.Scene
 		}
 	}
-	if preset.Character == "" {
-		preset.Character = firstSceneCharacter(scene)
+	if preset.FocusCharacter == "" {
+		preset.FocusCharacter = firstSceneCharacter(scene)
+		preset = normalizeScenarioPresetCompatibility(preset)
+	}
+	if preset.FocusCharacter == "" && len(bundle.Population.BackgroundNPCs) > 0 {
+		preset.FocusCharacter = bundle.Population.BackgroundNPCs[0].Name
+		preset = normalizeScenarioPresetCompatibility(preset)
 	}
 	if preset.FocusCharacter == "" {
-		preset.FocusCharacter = strings.TrimSpace(preset.Character)
-	}
-	if preset.Character == "" && len(bundle.Population.BackgroundNPCs) > 0 {
-		preset.Character = bundle.Population.BackgroundNPCs[0].Name
-		preset.FocusCharacter = preset.Character
-	}
-	if preset.Character == "" {
 		return core.ScenarioPreset{}, fmt.Errorf("world '%s' has no playable character or population candidate", bundle.Config.Name)
 	}
 
@@ -172,7 +227,6 @@ func (e *Engine) CreateScenarioPreset(name, branch, note string) (core.ScenarioP
 	preset := core.ScenarioPreset{
 		Name:           name,
 		Branch:         branch,
-		Character:      e.GetFocusCharacter(),
 		FocusCharacter: e.GetFocusCharacter(),
 		PlayerRole:     normalizePlayerRole(e.playerRole),
 		Note:           strings.TrimSpace(note),
@@ -180,6 +234,7 @@ func (e *Engine) CreateScenarioPreset(name, branch, note string) (core.ScenarioP
 		CreatedAt:      time.Now().UTC(),
 		Scene:          state.Scene,
 	}
+	preset = normalizeScenarioPresetCompatibility(preset)
 
 	presets, err := e.readScenarioPresetsLocked()
 	if err != nil {
@@ -214,9 +269,7 @@ func (e *Engine) ApplyScenarioPreset(name string) (core.ScenarioPreset, error) {
 		if preset.Name != name {
 			continue
 		}
-		if strings.TrimSpace(preset.FocusCharacter) == "" {
-			preset.FocusCharacter = strings.TrimSpace(preset.Character)
-		}
+		preset = normalizeScenarioPresetCompatibility(preset)
 		if _, ok := e.agents.GetCharacter(preset.FocusCharacter); !ok {
 			if err := e.ensureWorldCharacterLocked(preset.FocusCharacter, preset.Scene); err != nil {
 				return core.ScenarioPreset{}, err
@@ -306,9 +359,7 @@ func (e *Engine) readScenarioPresetsLocked() ([]core.ScenarioPreset, error) {
 			if preset.Name == "" {
 				continue
 			}
-			if strings.TrimSpace(preset.FocusCharacter) == "" {
-				preset.FocusCharacter = strings.TrimSpace(preset.Character)
-			}
+			preset = normalizeScenarioPresetCompatibility(preset)
 			presetsByName[preset.Name] = preset
 		}
 	}
@@ -332,15 +383,16 @@ func (e *Engine) readScenarioPresetsLocked() ([]core.ScenarioPreset, error) {
 		if preset.Name == "" {
 			continue
 		}
-		if strings.TrimSpace(preset.FocusCharacter) == "" {
-			preset.FocusCharacter = strings.TrimSpace(preset.Character)
-		}
+		preset = normalizeScenarioPresetCompatibility(preset)
 		presetsByName[preset.Name] = preset
 	}
 	return mapScenarioPresetsToSlice(presetsByName), nil
 }
 
 func (e *Engine) writeScenarioPresetsLocked(presets []core.ScenarioPreset) error {
+	for i := range presets {
+		presets[i] = normalizeScenarioPresetCompatibility(presets[i])
+	}
 	path, err := e.scenarioPresetsPathLocked()
 	if err != nil {
 		return err
