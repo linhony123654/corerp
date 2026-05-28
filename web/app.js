@@ -384,7 +384,7 @@ function buildAPIURL(url) {
   if (!current.pathname.startsWith('/api/')) {
     return current.pathname + current.search + current.hash;
   }
-  if (current.pathname.startsWith('/api/instances')) {
+  if (current.pathname.startsWith('/api/instances') || current.pathname.startsWith('/api/dcl')) {
     return current.pathname + current.search + current.hash;
   }
   if (current.pathname.startsWith('/api/llm-') || current.pathname.startsWith('/api/llm-configs') || current.pathname === '/api/change-password') {
