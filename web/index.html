@@ -2081,6 +2081,25 @@ select { cursor: pointer; }
 
         <section class="panel-card panel-span-2 panel-group-item" data-panel-group="world">
           <div class="panel-card-header">
+            <div class="panel-title">DCL Mods</div>
+            <div class="panel-actions">
+              <button class="mini-button" id="dcl-reload-btn">刷新</button>
+              <button class="mini-button" id="dcl-upload-btn">上传 ZIP</button>
+            </div>
+          </div>
+          <div class="input-stack">
+            <input id="dcl-upload-file" type="file" accept=".zip,application/zip" style="display:none">
+            <label class="field"><span class="field-label">上传策略</span><select id="dcl-overwrite">
+              <option value="false">不覆盖已有 DCL / World</option>
+              <option value="true">允许覆盖已有 DCL / World</option>
+            </select></label>
+            <div class="workflow-subtitle">DCL 只安装声明式 world/population/scenes/presets patches 与 hooks，不执行 Lua 或脚本。</div>
+            <div class="list-stack" id="dcl-list"><div class="note-box">暂无 DCL mods</div></div>
+          </div>
+        </section>
+
+        <section class="panel-card panel-span-2 panel-group-item" data-panel-group="world">
+          <div class="panel-card-header">
             <div class="panel-title">Canonical Facts</div>
             <div class="panel-actions">
               <button class="mini-button" id="facts-reload-btn">重载</button>

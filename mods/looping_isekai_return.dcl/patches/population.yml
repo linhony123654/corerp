@@ -1,0 +1,56 @@
+background_npcs:
+  - id: silver_heir
+    name: "Silver Heir"
+    role: "protected_candidate"
+    location: "Mansion Hall"
+    faction: "mansion_household"
+    traits: ["kind", "guarded", "politically_exposed"]
+    hooks: ["contract", "suspicion", "rescue"]
+  - id: blue_maid
+    name: "Blue Maid"
+    role: "household_guardian"
+    location: "Mansion Hall"
+    faction: "mansion_household"
+    traits: ["loyal", "observant", "dangerous_when_afraid"]
+    hooks: ["scent", "interrogation", "protect_sister"]
+  - id: archive_spirit
+    name: "Archive Spirit"
+    role: "forbidden_knowledge_keeper"
+    location: "Forbidden Library"
+    faction: "mansion_household"
+    traits: ["ancient", "contract_bound", "lonely"]
+    hooks: ["library", "loop_memory", "contract"]
+  - id: village_runner
+    name: "Village Runner"
+    role: "rumor_carrier"
+    location: "Village Edge"
+    faction: "royal_watch"
+    traits: ["nervous", "fast", "practical"]
+    hooks: ["curse", "missing_children", "supplies"]
+identity_cores:
+  - id: silver_heir_core
+    name: "Silver Heir"
+    immutable: ["protects vulnerable people", "hides political fear"]
+    adaptive:
+      trust: 3
+      fear: 2
+      suspicion: 2
+    speech_hints: ["formal warmth", "measured concern"]
+    drives: ["protect the mansion", "understand the outsider"]
+  - id: blue_maid_core
+    name: "Blue Maid"
+    immutable: ["protects her household", "responds sharply to witch scent"]
+    adaptive:
+      trust: 2
+      fear: 3
+      aggression: 2
+    speech_hints: ["polite edge", "quiet threat"]
+    drives: ["test the outsider", "protect her sister"]
+policy:
+  promote_threshold: 6.5
+  major_threshold: 10
+  interaction_weight: 3
+  mention_weight: 1
+  event_weight: 2
+  relationship_weight: 3
+  scene_weight: 2

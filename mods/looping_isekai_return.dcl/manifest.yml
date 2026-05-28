@@ -1,0 +1,11 @@
+id: looping_isekai_return
+name: Looping Isekai Return
+version: 0.1.0
+target_core: ">=0.1.0"
+entry_world: looping_isekai_return
+description: "Original return-by-death inspired mansion loop scenario for CoreRP."
+author: "CoreRP sample"
+tags:
+  - isekai
+  - checkpoint-loop
+  - survival-mystery

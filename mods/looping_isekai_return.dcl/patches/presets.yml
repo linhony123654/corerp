@@ -1,0 +1,29 @@
+presets:
+  - name: "first_loop"
+    branch: "default"
+    focus_character: "Outsider"
+    player_role:
+      name: "Player"
+      description: "Author viewpoint controlling choices, experiments, checkpoints, and replay branches."
+    note: "Start before the first fatal route."
+    preview: "Mansion opening with low witch_scent and a hidden curse timer."
+    scene:
+      location: "Mansion Hall"
+      time_of_day: "midnight"
+      weather: "cold rain"
+      characters: ["Outsider", "Player"]
+      description: "The first safe room before the loop breaks."
+  - name: "scent_escalation"
+    branch: "compare"
+    focus_character: "Outsider"
+    player_role:
+      name: "Player"
+      description: "Author viewpoint testing whether world-level intervention can reduce suspicion."
+    note: "Use as compare branch after a failed loop."
+    preview: "Same mansion, higher suspicion, different director candidates."
+    scene:
+      location: "Mansion Hall"
+      time_of_day: "pre-dawn"
+      weather: "cold rain"
+      characters: ["Outsider", "Player"]
+      description: "The loop has restarted, but social pressure has changed."

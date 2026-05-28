@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"corerp/internal/agents"
 	"corerp/internal/auth"
 	"corerp/internal/core"
+	dclpkg "corerp/internal/dcl"
 	"corerp/internal/events"
 	"corerp/internal/goalexpr"
 	"corerp/internal/llm"
@@ -35,6 +37,7 @@ var (
 )
 
 var WorldCatalogRoot = "worlds"
+var DCLRoot = "mods"
 
 type runtimeInstancePayload struct {
 	ID                 string                    `json:"id"`
@@ -373,6 +376,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/switch", a(s.handleFocusSwitch))
 	mux.HandleFunc("/api/world", a(s.handleWorld))
 	mux.HandleFunc("/api/worlds", a(s.handleWorlds))
+	mux.HandleFunc("/api/dcl", a(s.handleDCL))
+	mux.HandleFunc("/api/dcl/install", a(s.handleDCLInstall))
+	mux.HandleFunc("/api/dcl/upload", a(s.handleDCLUpload))
+	mux.HandleFunc("/api/dcl/remove", a(s.handleDCLRemove))
 	mux.HandleFunc("/api/world-config", a(s.handleWorldConfig))
 	mux.HandleFunc("/api/world-structure", a(s.handleWorldStructure))
 	mux.HandleFunc("/api/scenes", a(s.handleScenes))
@@ -1005,6 +1012,120 @@ func (s *Server) handleWorlds(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleDCL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	mods, err := dclpkg.List(DCLRoot)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSONWithETag(w, r, map[string]interface{}{"mods": mods})
+}
+
+func (s *Server) handleDCLInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		ID        string `json:"id"`
+		Overwrite bool   `json:"overwrite"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result, err := dclpkg.Install(DCLRoot, req.ID, WorldCatalogRoot, dclpkg.InstallOptions{Overwrite: req.Overwrite})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "result": result})
+}
+
+func (s *Server) handleDCLUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	tmp, err := os.CreateTemp("", "dcl-upload-*.zip")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := io.Copy(tmp, file); err != nil {
+		tmp.Close()
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	overwrite := strings.EqualFold(strings.TrimSpace(r.FormValue("overwrite")), "true")
+	result, err := dclpkg.UploadZip(DCLRoot, tmp.Name(), overwrite)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "result": result})
+}
+
+func (s *Server) handleDCLRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		ID            string `json:"id"`
+		DeleteWorld   bool   `json:"delete_world"`
+		DeletePackage bool   `json:"delete_package"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	removed, err := dclpkg.Remove(DCLRoot, req.ID, req.DeleteWorld)
+	if err != nil {
+		if !req.DeletePackage {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		deletedPath, deleteErr := dclpkg.DeletePackage(DCLRoot, req.ID)
+		if deleteErr != nil {
+			http.Error(w, deleteErr.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "deleted_package": deletedPath})
+		return
+	}
+	result := map[string]interface{}{"ok": true, "removed": removed}
+	if req.DeletePackage {
+		deletedPath, deleteErr := dclpkg.DeletePackage(DCLRoot, req.ID)
+		if deleteErr != nil {
+			http.Error(w, deleteErr.Error(), http.StatusBadRequest)
+			return
+		}
+		result["deleted_package"] = deletedPath
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func activeWorldPath(engine RuntimeEngine) string {

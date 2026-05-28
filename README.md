@@ -329,6 +329,38 @@ pm2 show corerp
 
 服务启动日志现在会打印 `version / commit / build_time / data / port`，便于排查 PM2 启动与部署漂移。
 
+## DCL Mods
+
+CoreRP 支持第一版声明式 DCL world pack。DCL 不执行脚本，只安装 YAML
+patch 和 hook 声明，避免把 mod 变成不受控代码入口。
+
+```text
+mods/
+└── looping_isekai_return.dcl/
+    ├── manifest.yml
+    ├── patches/
+    │   ├── world.yml
+    │   ├── population.yml
+    │   ├── scenes.yml
+    │   └── presets.yml
+    └── logic/
+        └── hooks.yml
+```
+
+API：
+
+```text
+GET  /api/dcl
+POST /api/dcl/install   {"id":"looping_isekai_return","overwrite":false}
+POST /api/dcl/upload    multipart file=<zip>, overwrite=false
+POST /api/dcl/remove    {"id":"looping_isekai_return","delete_world":false,"delete_package":false}
+```
+
+安装后会生成一个普通 world 目录，后续仍走 world-first runtime、checkpoint、
+experiment report 和 replay workflow。
+作者控制台的 World 分组提供 DCL 面板，可上传 ZIP、启用、关闭、删除安装出的
+world，或删除本地 `.dcl` 包目录。
+
 ## 目录概览
 
 ```text
@@ -342,7 +374,9 @@ corerp/
 ├── internal/memory/            # short-term / semantic / episodic
 ├── internal/emotion/           # pressure / residue / unresolved threads
 ├── internal/api/               # HTTP + SSE routes
+├── internal/dcl/               # declarative DCL loader
 ├── web/                        # single-page runtime console
+├── mods/                       # installable DCL world packs
 ├── characters/                 # imported/authored content
 └── data/                       # SQLite and runtime data
 ```

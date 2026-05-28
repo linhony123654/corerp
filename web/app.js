@@ -162,6 +162,11 @@ const els = {
   popcfgSceneWeight: $('popcfg-scene-weight'),
   popcfgPromotedList: $('popcfg-promoted-list'),
   popcfgIdentityList: $('popcfg-identity-list'),
+  dclReloadBtn: $('dcl-reload-btn'),
+  dclUploadBtn: $('dcl-upload-btn'),
+  dclUploadFile: $('dcl-upload-file'),
+  dclOverwrite: $('dcl-overwrite'),
+  dclList: $('dcl-list'),
   worldCreateBtn: $('world-create-btn'),
   worldCreateModal: $('world-create-modal'),
   worldCreateClose: $('world-create-close'),
@@ -245,6 +250,7 @@ const state = {
   saves: [],
   presets: [],
   worlds: [],
+  dclMods: [],
   traceHistoryItems: [],
   instances: [],
   defaultInstanceID: '',
@@ -5936,6 +5942,147 @@ function updateWorldConvertButton() {
   }
 }
 
+function htmlText(value, fallback = '--') {
+  return safeText(value, fallback)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function loadDCLMods() {
+  if (!els.dclList) {
+    return;
+  }
+  try {
+    const data = await fetchJSON('/api/dcl');
+    state.dclMods = Array.isArray(data.mods) ? data.mods : [];
+    renderDCLMods();
+  } catch (err) {
+    console.error('dcl load error:', err);
+    renderInfoList('dcl-list', [], `读取失败：${err.message}`);
+  }
+}
+
+function renderDCLMods() {
+  if (!els.dclList) {
+    return;
+  }
+  const items = state.dclMods.map(mod => {
+    const id = safeText(mod.id, '');
+    const encodedID = encodeURIComponent(id);
+    const tags = Array.isArray(mod.tags) && mod.tags.length
+      ? mod.tags.map(tag => `<span class="tag">${htmlText(tag)}</span>`).join('')
+      : '';
+    const status = mod.installed
+      ? `<span class="pill">已启用</span>`
+      : `<span class="tag">未启用</span>`;
+    const installAction = mod.installed
+      ? `<button type="button" class="ghost-button" data-dcl-remove="${encodedID}">关闭</button>`
+      : `<button type="button" class="ghost-button" data-dcl-install="${encodedID}">启用</button>`;
+    const deleteWorldAction = mod.installed
+      ? `<button type="button" class="ghost-button danger-button" data-dcl-delete-world="${encodedID}">关闭并删除 World</button>`
+      : '';
+    return `
+      <div class="interactive-row">
+        <div class="row-main">
+          <div class="row-title">${htmlText(mod.name || mod.id)} · ${htmlText(mod.version || '0.1.0')}</div>
+          <div class="row-subtitle">${htmlText(mod.description || '声明式 world pack')}</div>
+          <div class="row-subtitle">entry: ${htmlText(mod.entry_world || mod.id)} · path: ${htmlText(mod.path || '--')}${mod.world_path ? ` · world: ${htmlText(mod.world_path)}` : ''}</div>
+          ${tags ? `<div class="row-subtitle" style="display:flex;gap:4px;flex-wrap:wrap;">${tags}</div>` : ''}
+        </div>
+        <div class="row-actions">
+          ${status}
+          ${installAction}
+          ${deleteWorldAction}
+          <button type="button" class="ghost-button danger-button" data-dcl-delete-package="${encodedID}">删除包</button>
+        </div>
+      </div>
+    `;
+  });
+  renderInfoList('dcl-list', items, '暂无 DCL mods');
+}
+
+async function installDCLMod(id) {
+  if (!id) {
+    return;
+  }
+  const overwrite = els.dclOverwrite?.value === 'true';
+  const resp = await apiFetch('/api/dcl/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, overwrite }),
+  });
+  if (!resp.ok) {
+    const message = await resp.text();
+    alert(`DCL 启用失败：${message || resp.status}`);
+    return;
+  }
+  const data = await resp.json();
+  renderSceneDivider(`已启用 DCL ${safeText(data.result?.name || id)}`);
+  await Promise.all([loadDCLMods(), loadWorlds()]);
+}
+
+async function removeDCLMod(id, options = {}) {
+  if (!id) {
+    return;
+  }
+  const deleteWorld = Boolean(options.deleteWorld);
+  const deletePackage = Boolean(options.deletePackage);
+  const action = deletePackage
+    ? (deleteWorld ? '关闭、删除安装出的 World，并删除 DCL 包？' : '删除 DCL 包？已启用时会先关闭。')
+    : (deleteWorld ? '关闭并删除安装出的 World？' : '关闭该 DCL？');
+  if (!confirm(`${action}\n\n${id}`)) {
+    return;
+  }
+  const resp = await apiFetch('/api/dcl/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, delete_world: deleteWorld, delete_package: deletePackage }),
+  });
+  if (!resp.ok) {
+    const message = await resp.text();
+    alert(`DCL 操作失败：${message || resp.status}`);
+    return;
+  }
+  renderSceneDivider(deletePackage ? `已删除 DCL 包 ${safeText(id)}` : `已关闭 DCL ${safeText(id)}`);
+  await Promise.all([loadDCLMods(), loadWorlds()]);
+}
+
+async function uploadDCLZip() {
+  const file = els.dclUploadFile?.files?.[0];
+  if (!file) {
+    return;
+  }
+  const form = new FormData();
+  form.append('file', file);
+  form.append('overwrite', els.dclOverwrite?.value === 'true' ? 'true' : 'false');
+  if (els.dclUploadBtn) {
+    els.dclUploadBtn.disabled = true;
+    els.dclUploadBtn.textContent = '上传中...';
+  }
+  try {
+    const resp = await apiFetch('/api/dcl/upload', { method: 'POST', body: form });
+    if (!resp.ok) {
+      const message = await resp.text();
+      alert(`DCL 上传失败：${message || resp.status}`);
+      return;
+    }
+    const data = await resp.json();
+    renderSceneDivider(`已上传 DCL ${safeText(data.result?.name || file.name)}`);
+    await loadDCLMods();
+  } finally {
+    if (els.dclUploadFile) {
+      els.dclUploadFile.value = '';
+    }
+    if (els.dclUploadBtn) {
+      els.dclUploadBtn.disabled = false;
+      els.dclUploadBtn.textContent = '上传 ZIP';
+    }
+  }
+}
+
 function normalizePath(path) {
   return String(path || '').replace(/\\/g, '/').replace(/\/+$/, '');
 }
@@ -6657,6 +6804,30 @@ function bindEvents() {
   if (els.worldConvertBtn) {
     els.worldConvertBtn.addEventListener('click', convertWorld);
   }
+  if (els.dclReloadBtn) {
+    els.dclReloadBtn.addEventListener('click', loadDCLMods);
+  }
+  if (els.dclUploadBtn && els.dclUploadFile) {
+    els.dclUploadBtn.addEventListener('click', () => els.dclUploadFile.click());
+    els.dclUploadFile.addEventListener('change', uploadDCLZip);
+  }
+  if (els.dclList) {
+    els.dclList.addEventListener('click', event => {
+      const node = event.target.closest('button');
+      if (!node) {
+        return;
+      }
+      if (node.dataset.dclInstall) {
+        installDCLMod(decodeURIComponent(node.dataset.dclInstall));
+      } else if (node.dataset.dclRemove) {
+        removeDCLMod(decodeURIComponent(node.dataset.dclRemove));
+      } else if (node.dataset.dclDeleteWorld) {
+        removeDCLMod(decodeURIComponent(node.dataset.dclDeleteWorld), { deleteWorld: true });
+      } else if (node.dataset.dclDeletePackage) {
+        removeDCLMod(decodeURIComponent(node.dataset.dclDeletePackage), { deletePackage: true });
+      }
+    });
+  }
   if (els.worldCreateModal) {
     els.worldCreateModal.addEventListener('click', event => {
       if (event.target === els.worldCreateModal) hideWorldCreateModal();
@@ -6794,6 +6965,7 @@ async function init() {
     refreshPanel(),
     loadInstancesView(),
     loadWorlds(),
+    loadDCLMods(),
     loadLLMConfigs(),
     loadTimeline(),
     loadMemoryView(),

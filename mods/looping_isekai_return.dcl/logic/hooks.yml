@@ -1,0 +1,24 @@
+hooks:
+  - id: return_by_death
+    trigger: focus_death
+    description: "Restore the last safe checkpoint and raise suspicion pressure. Declarative only; no script execution."
+    effect:
+      restore_checkpoint: "last_safe_checkpoint"
+      increment_variable:
+        loop_count: 1
+      add_pressure:
+        id: "witch_scent"
+        intensity: 0.15
+      add_memory_flag:
+        target: "focus"
+        key: "loop_memory"
+  - id: scent_pressure_tick
+    trigger: tick
+    description: "If witch_scent dominates, suspicion should affect director and population attention."
+    effect:
+      when_pressure_above:
+        id: "witch_scent"
+        threshold: 0.5
+      boost_population_attention:
+        faction: "mansion_household"
+        reason: "scent suspicion"

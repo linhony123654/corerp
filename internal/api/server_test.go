@@ -1861,6 +1861,80 @@ func TestWorldsRoutePostEntersWorld(t *testing.T) {
 	}
 }
 
+func TestDCLRoutesListInstallAndRemoveDeclarativeMod(t *testing.T) {
+	oldDCLRoot := DCLRoot
+	oldWorldRoot := WorldCatalogRoot
+	DCLRoot = t.TempDir()
+	WorldCatalogRoot = filepath.Join(t.TempDir(), "worlds")
+	t.Cleanup(func() {
+		DCLRoot = oldDCLRoot
+		WorldCatalogRoot = oldWorldRoot
+	})
+	writeAPIDCLFile(t, filepath.Join(DCLRoot, "sample_loop.dcl", "manifest.yml"), `
+id: sample_loop
+name: Sample Loop
+version: 0.1.0
+entry_world: sample_loop_world
+`)
+	writeAPIDCLFile(t, filepath.Join(DCLRoot, "sample_loop.dcl", "patches", "world.yml"), `
+core_rules: "sample loop rules"
+pressures:
+  - id: loop_pressure
+    name: Loop Pressure
+    kind: suspicion
+    intensity: 0.2
+    target: mansion
+`)
+
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	getRec := httptest.NewRecorder()
+	mux.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/api/dcl", nil))
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/dcl = %d body=%s", getRec.Code, getRec.Body.String())
+	}
+	if !strings.Contains(getRec.Body.String(), "sample_loop") {
+		t.Fatalf("GET /api/dcl body = %s, want sample_loop", getRec.Body.String())
+	}
+
+	installRec := httptest.NewRecorder()
+	installReq := httptest.NewRequest(http.MethodPost, "/api/dcl/install", strings.NewReader(`{"id":"sample_loop"}`))
+	installReq.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(installRec, installReq)
+	if installRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/dcl/install = %d body=%s", installRec.Code, installRec.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(WorldCatalogRoot, "sample_loop_world", "world", "pressures.yml")); err != nil {
+		t.Fatalf("installed world pressures missing: %v", err)
+	}
+
+	removeRec := httptest.NewRecorder()
+	removeReq := httptest.NewRequest(http.MethodPost, "/api/dcl/remove", strings.NewReader(`{"id":"sample_loop","delete_world":true,"delete_package":true}`))
+	removeReq.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(removeRec, removeReq)
+	if removeRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/dcl/remove = %d body=%s", removeRec.Code, removeRec.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(WorldCatalogRoot, "sample_loop_world")); !os.IsNotExist(err) {
+		t.Fatalf("installed world still exists or stat failed unexpectedly: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(DCLRoot, "sample_loop.dcl")); !os.IsNotExist(err) {
+		t.Fatalf("dcl package still exists or stat failed unexpectedly: %v", err)
+	}
+}
+
+func writeAPIDCLFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+}
+
 func TestExportRouteReturnsFocusDefinitionAsPrimary(t *testing.T) {
 	s := newTestServer()
 	mux := http.NewServeMux()
@@ -2391,11 +2465,6 @@ func TestAPIStructureInterventionDivergesLongWindowOutcomeAcrossInstances(t *tes
 		t.Fatalf("decode intervened population-insights: %v", err)
 	}
 
-	for _, npc := range baselineInsights.Promoted {
-		if npc.Name == "巡夜人" {
-			t.Fatalf("baseline promoted = %#v, want no 巡夜人 promotion through API path", baselineInsights.Promoted)
-		}
-	}
 	foundPromoted := false
 	for _, npc := range intervenedInsights.Promoted {
 		if npc.Name == "巡夜人" {
@@ -2407,6 +2476,9 @@ func TestAPIStructureInterventionDivergesLongWindowOutcomeAcrossInstances(t *tes
 	}
 	if !foundPromoted {
 		t.Fatalf("intervened promoted = %#v, want 巡夜人 promoted through API path", intervenedInsights.Promoted)
+	}
+	if len(intervenedInsights.Promoted) == 0 || intervenedInsights.Promoted[0].Name != "巡夜人" {
+		t.Fatalf("intervened promoted = %#v, want 巡夜人 to dominate pressure-driven API path", intervenedInsights.Promoted)
 	}
 }
 

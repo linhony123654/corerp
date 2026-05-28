@@ -61,3 +61,6 @@ characters/imported/
 worlds/cyberpunk2077/
 !characters/example.yml
 !worlds/example.yml
+
+# DCL loader runtime state
+mods/_registry.json

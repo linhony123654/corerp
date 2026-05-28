@@ -94,6 +94,7 @@
 - [x] `/api/worlds` 与 `/api/export` 已明确以 `focus_character` / `focus_definition` 为主语义，并显式返回 `participants / participant_details`
 - [x] `PUT /api/worlds` 与 `PATCH /api/worlds` 已实现
 - [x] `README.md` 当前与 world-first 主路线基本一致
+- [x] DCL mod 第一版已落地：`internal/dcl` 支持声明式 `manifest.yml`、world/population/scenes/presets patches、声明式 hooks、安装 registry；API 已新增 `GET /api/dcl`、`POST /api/dcl/install`、`POST /api/dcl/upload`、`POST /api/dcl/remove`；作者控制台 World 分组已提供 DCL 面板，可上传 ZIP、启用、关闭、删除安装出的 world 或删除本地 `.dcl` 包目录；样板包 `mods/looping_isekai_return.dcl/` 展示 checkpoint-loop / return-by-death inspired world pack，且不执行 Lua/脚本代码
 
 ## 已完成验收
 

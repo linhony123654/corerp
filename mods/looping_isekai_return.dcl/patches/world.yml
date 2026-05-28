@@ -1,0 +1,92 @@
+core_rules: |
+  This is an original checkpoint-loop survival mystery.
+  The protagonist can return to the last safe checkpoint after death, but the world keeps pressure traces through suspicion, fear, and relationship drift.
+  The author should operate the world through structure, population, scenes, presets, checkpoints, and replay branches rather than editing character cards.
+seed:
+  premise: "A stranded outsider repeats a mansion crisis while hidden pressures rise around them."
+  current_situation: "The first loop begins in the mansion hall after a failed arrival in a hostile capital."
+  starting_scene: "mansion_hall"
+  time_anchor: "first night"
+  stability: "fragile"
+  variables:
+    loop_count: 0
+    scent_level: 0.15
+rules:
+  - id: return_loop
+    title: "Return Loop"
+    summary: "Death restores the last safe checkpoint but increases suspicion pressure."
+    constraints:
+      - "Only the focus viewpoint remembers complete loop context by default."
+      - "Other participants react through pressure, relationship changes, and observable behavior."
+    effects:
+      - "checkpoint replay becomes the main authoring workflow"
+      - "witch_scent pressure should rise after failed loops"
+factions:
+  - id: mansion_household
+    name: "Mansion Household"
+    role: "sanctuary"
+    description: "A guarded household offering safety while hiding internal distrust."
+    goals:
+      - "protect the heir"
+      - "identify threats inside the mansion"
+    relationships:
+      - "wary outsider"
+  - id: royal_watch
+    name: "Royal Watch"
+    role: "authority"
+    description: "Capital-aligned observers who treat unexplained loops as possible witchcraft."
+    goals:
+      - "contain suspicious magic"
+      - "avoid public panic"
+    relationships:
+      - "supervises mansion_household"
+  - id: shadow_cult
+    name: "Shadow Cult"
+    role: "hidden_threat"
+    description: "A covert cult exploiting loop instability and fear."
+    goals:
+      - "amplify scent pressure"
+      - "force the mansion into isolation"
+    relationships:
+      - "hunts outsider"
+locations:
+  - id: mansion_hall
+    name: "Mansion Hall"
+    kind: "mansion"
+    description: "A safe-looking hall where every repeated night feels slightly less safe."
+    controller: "mansion_household"
+    tags: ["checkpoint", "social", "safe_room"]
+  - id: forbidden_library
+    name: "Forbidden Library"
+    kind: "archive"
+    description: "A locked archive that reacts to repeated timelines."
+    controller: "mansion_household"
+    tags: ["memory", "contract", "secret"]
+  - id: village_edge
+    name: "Village Edge"
+    kind: "settlement"
+    description: "A border settlement where rumors spread faster after every failed loop."
+    controller: "royal_watch"
+    tags: ["rumor", "supply", "danger"]
+pressures:
+  - id: witch_scent
+    name: "Witch Scent"
+    kind: "suspicion"
+    description: "A scent-like suspicion signal that rises after failed loops and changes how others treat the focus."
+    intensity: 0.35
+    target: "mansion_household"
+    escalates: ["interrogation", "isolation", "betrayal"]
+  - id: curse_timer
+    name: "Curse Timer"
+    kind: "countdown"
+    description: "A hidden countdown toward a fatal event unless the author finds a stable intervention route."
+    intensity: 0.42
+    target: "village_edge"
+    escalates: ["night_attack", "panic", "death_return"]
+  - id: cult_probe
+    name: "Cult Probe"
+    kind: "hidden_threat"
+    description: "The hidden cult tests whether the outsider remembers previous failed routes."
+    intensity: 0.3
+    target: "shadow_cult"
+    escalates: ["ambush", "kidnap", "ritual"]

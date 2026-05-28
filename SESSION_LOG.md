@@ -4,6 +4,23 @@
 
 ## 2026-05-28
 
+### 2026-05-28 10:05:00 UTC — DCL 声明式 mod loader 第一版
+
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - 新增 `internal/dcl`：加载 `mods/*.dcl/manifest.yml`，合并 world/population/scenes/presets patches，读取声明式 hooks，安装到普通 world 目录，并维护 `mods/_registry.json`
+  - 新增 API：`GET /api/dcl`、`POST /api/dcl/install`、`POST /api/dcl/upload`、`POST /api/dcl/remove`
+  - 作者控制台 World 分组新增 DCL 面板：支持上传 ZIP、启用、关闭、关闭并删除安装出的 world，以及删除本地 `.dcl` 包目录
+  - 新增原创样板包 `mods/looping_isekai_return.dcl/`，用于 checkpoint-loop / return-by-death inspired 世界，不使用官方 IP 名称，不执行 Lua/脚本
+  - `.gitignore` 忽略 loader 运行态 registry：`mods/_registry.json`
+  - `README.md` 与 `TODO.md` 同步 DCL 使用方式
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/dcl ./internal/api -run '^(TestLoadAndInstallDeclarativeDCL|TestListShowsInstalledDCL|TestDeletePackageRemovesDCLDirectory|TestUploadZipRejectsScriptsAndInstallsSingleDCLRoot|TestUploadZipOverwriteRejectPreservesExistingPackage|TestDCLRoutesListInstallAndRemoveDeclarativeMod|TestAPIStructureInterventionDivergesLongWindowOutcomeAcrossInstances)$'` ✅
+  - `/usr/local/go/bin/go build -o /home/kelebituo/corerp/corerp ./cmd/corerp` ✅
+  - `node --check web/app.js` ✅
+  - `git diff --check` ✅
+
 ### 2026-05-28 09:18:00 UTC — 终态闭环验收完成与 11 gate proof audit 落盘
 
 Modified by: Codex (GPT-5)

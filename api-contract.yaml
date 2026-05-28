@@ -946,8 +946,112 @@ paths:
                   ok: { type: boolean }
                   paused: { type: boolean }
 
+  /api/dcl:
+    get:
+      summary: 列出可安装的声明式 DCL mods
+      responses:
+        "200":
+          description: DCL mod 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mods:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DCLModSummary"
+
+  /api/dcl/install:
+    post:
+      summary: 安装声明式 DCL mod 到 worlds 目录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                overwrite: { type: boolean }
+              required: [id]
+      responses:
+        "200":
+          description: 安装结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  result:
+                    $ref: "#/components/schemas/DCLInstallResult"
+
+  /api/dcl/remove:
+    post:
+      summary: 从 DCL registry 移除 mod，可选删除安装出的 world 或本地 DCL 包
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                delete_world: { type: boolean }
+                delete_package: { type: boolean }
+              required: [id]
+      responses:
+        "200":
+          description: 移除结果
+
+  /api/dcl/upload:
+    post:
+      summary: 上传声明式 DCL zip 包
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                overwrite:
+                  type: boolean
+              required: [file]
+      responses:
+        "200":
+          description: 上传结果
+
 components:
   schemas:
+    DCLModSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        description: { type: string }
+        entry_world: { type: string }
+        path: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        installed: { type: boolean }
+        world_path: { type: string }
+
+    DCLInstallResult:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        world_path: { type: string }
+        installed_at: { type: string, format: date-time }
+        hook_count: { type: integer }
+
     WorldState:
       type: object
       properties:

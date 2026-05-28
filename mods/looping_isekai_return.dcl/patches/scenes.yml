@@ -1,0 +1,15 @@
+scenes:
+  - name: default
+    scene:
+      location: "Mansion Hall"
+      time_of_day: "midnight"
+      weather: "cold rain"
+      characters: ["Outsider", "Player"]
+      description: "The first safe room before the loop breaks; everyone is polite, but the pressure is already rising."
+  - name: library_probe
+    scene:
+      location: "Forbidden Library"
+      time_of_day: "late night"
+      weather: "silent indoors"
+      characters: ["Outsider", "Player"]
+      description: "A forbidden archive where loop traces feel easier to notice and harder to explain."
