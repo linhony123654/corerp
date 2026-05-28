@@ -152,7 +152,7 @@ func (e *Engine) executeTurnStep(step core.TurnStep, userInput string, turnNumbe
 				if err := e.gatekeeper.Submit(evt, events.SourceActionResult()); err != nil {
 					continue
 				}
-				for _, result := range e.applyDCLRulesForEvent(evt) {
+				for _, result := range e.handleCanonicalRuntimeEvent(evt, actionFrame, narrative) {
 					trace.Events = append(trace.Events, core.TraceEvent{
 						ID:        "dcl:" + result.ModID + ":" + result.RuleID,
 						Type:      "dcl_rule_applied",

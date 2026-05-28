@@ -2104,6 +2104,90 @@ rules:
 	}
 }
 
+func TestDCLRuleEngineAutoTriggersFocusDeathFromFatalAttack(t *testing.T) {
+	engine := newMultiCharacterTestEngine(t)
+	root := t.TempDir()
+	worldDir := filepath.Join(root, "auto-loop-world")
+	writeTestWorldBundle(t, worldDir, "自动循环世界", "fatal event triggers dcl", core.SceneState{
+		Location:    "安全屋",
+		TimeOfDay:   "夜晚",
+		Weather:     "雨",
+		Characters:  []string{"111", "玩家"},
+		Description: "safe checkpoint",
+	})
+	if err := os.MkdirAll(filepath.Join(worldDir, "mods", "looping_isekai_return"), 0755); err != nil {
+		t.Fatalf("mkdir dcl hooks: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worldDir, "mods", "looping_isekai_return", "hooks.yml"), []byte(`
+rules:
+  - id: return_by_death
+    when:
+      event_type: focus_death
+    do:
+      - restore_checkpoint:
+          name: last_safe_checkpoint
+      - increment_variable:
+          key: loop_count
+          by: 1
+      - emit_event:
+          type: loop_returned
+`), 0644); err != nil {
+		t.Fatalf("write dcl hooks: %v", err)
+	}
+	engine.ConfigurePersistence(root, map[string]string{}, map[string]string{"111": worldDir})
+	engine.worldPaths["111"] = worldDir
+	engine.charWorlds["111"] = CharWorld{
+		WorldName: "自动循环世界",
+		CoreRules: "fatal event triggers dcl",
+		Scene: core.SceneState{
+			Location:    "安全屋",
+			TimeOfDay:   "夜晚",
+			Weather:     "雨",
+			Characters:  []string{"111", "玩家"},
+			Description: "safe checkpoint",
+		},
+	}
+	engine.focusCharacter = "111"
+	engine.SyncActiveWorldContext()
+	if _, err := engine.CreateSaveSlot("safe-start", "main", "last safe checkpoint"); err != nil {
+		t.Fatalf("CreateSaveSlot: %v", err)
+	}
+
+	mutated := engine.GetState()
+	mutated.Scene.Location = "致命现场"
+	mutated.Scene.Description = "fatal route"
+	engine.stateMgr.Set(mutated)
+
+	attack := events.BuildEvent("attack", "shadow", "111", map[string]interface{}{"intensity": float64(10)})
+	attack.ID = "fatal-attack-1"
+	attack.SessionID = engine.sessionID
+	attack.SceneID = "致命现场"
+	if err := engine.gatekeeper.Submit(attack, events.SourceActionResult()); err != nil {
+		t.Fatalf("Submit attack: %v", err)
+	}
+	results := engine.handleCanonicalRuntimeEvent(attack, core.ActionFrame{Actor: "shadow", Action: "attack", Target: "111", Intensity: 10}, "影子刺穿了111，111当场死亡。")
+	if len(results) != 1 || results[0].RuleID != "return_by_death" {
+		t.Fatalf("results = %#v, want return_by_death auto-triggered", results)
+	}
+	if got := engine.GetState().Scene.Location; got != "安全屋" {
+		t.Fatalf("scene location = %q, want automatic checkpoint restore", got)
+	}
+	if got := numberValue(engine.GetState().Variables["loop_count"]); got != 1 {
+		t.Fatalf("loop_count = %v, want 1", got)
+	}
+	eventsList, err := engine.eventStore.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("GetCanonicalEvents: %v", err)
+	}
+	types := map[string]bool{}
+	for _, evt := range eventsList {
+		types[evt.Type] = true
+	}
+	if !types["focus_death"] || !types["loop_returned"] {
+		t.Fatalf("canonical event types = %#v, want focus_death and loop_returned", types)
+	}
+}
+
 func TestLoadSaveSlotPrefersFocusCharacterOverLegacyCharacter(t *testing.T) {
 	engine := newMultiCharacterTestEngine(t)
 	engine.ConfigurePersistence(t.TempDir(), map[string]string{}, map[string]string{})

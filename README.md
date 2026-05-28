@@ -368,6 +368,8 @@ DCL 逻辑采用声明式 Rule Engine，不执行 Lua/JS。DCL 可以在 `logic/
 `restore_checkpoint`、`set_variable`、`increment_variable`、`add_pressure`、
 `add_memory_flag`、`emit_event`。例如死亡回归不是专用代码，而是
 `event_type: focus_death` 触发恢复最近 checkpoint、增加变量和 pressure。
+runtime 会从主视角相关的致命事件自动派生 `focus_death`：例如命中 focus 的
+fatal/death 事件、强度 10+ 的 attack，或叙事里明确出现死亡语义。
 
 ## 目录概览
 

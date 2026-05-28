@@ -10,12 +10,13 @@ Modified by: Codex (GPT-5)
 
 - 变更：
   - 新增 runtime DCL Rule Engine：从当前 world 的 `mods/*/hooks.yml` 加载 `rules`，在 canonical event 匹配 `when.event_type` 后执行白名单 action
+  - 新增通用 `focus_death` 自动派生：主视角相关的 fatal/death 事件、强度 10+ attack，或叙事明确死亡语义，会自动生成 canonical `focus_death` 并触发 DCL rules
   - 白名单 action v1：`restore_checkpoint`、`set_variable`、`increment_variable`、`add_pressure`、`add_memory_flag`、`emit_event`
   - `checkpoint_restore` 进入 event projection，确保 DCL 恢复 checkpoint 后后续 reproject 不会丢失回滚状态
   - DCL loader 现在保留 `rules` 与兼容旧 `hooks`，安装后的 world 能直接运行声明式规则
   - 样板 `looping_isekai_return.dcl` 改为 `rules:`，死亡回归由 `focus_death` 事件触发，不执行任意脚本
 - 验证：
-  - `/usr/local/go/bin/go test -count=1 ./internal/dcl ./internal/runtime ./internal/events ./internal/api -run '^(TestDCLRuleEngineRestoresCheckpointFromDeclarativeRule|TestDCLRoutesListInstallAndRemoveDeclarativeMod|TestLoadAndInstallDeclarativeDCL|TestListShowsInstalledDCL|TestUploadZipRejectsScriptsAndInstallsSingleDCLRoot|TestCheckpointAndPresetRoutes)$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/dcl ./internal/runtime ./internal/events ./internal/api -run '^(TestDCLRuleEngineRestoresCheckpointFromDeclarativeRule|TestDCLRuleEngineAutoTriggersFocusDeathFromFatalAttack|TestDCLRoutesListInstallAndRemoveDeclarativeMod|TestLoadAndInstallDeclarativeDCL|TestListShowsInstalledDCL|TestUploadZipRejectsScriptsAndInstallsSingleDCLRoot|TestCheckpointAndPresetRoutes)$'` ✅
   - `/usr/local/go/bin/go build -o /home/kelebituo/corerp/corerp ./cmd/corerp` ✅
   - `node --check web/app.js` ✅
   - `git diff --check` ✅
