@@ -14,31 +14,40 @@ TEST_LABELS=(
   "api-world-first-contract"
   "api-author-replay-contract"
   "api-proof-archive-contract"
+  "events-npc-scheduler-canonical-contract"
   "runtime-population-lifecycle-contract"
   "runtime-200-sample-matrix"
   "runtime-200-real-world-matrix"
   "api-200-sample-matrix"
   "api-200-real-world-matrix"
+  "runtime-500-real-world-stability"
+  "api-500-real-world-stability"
 )
 TEST_PACKAGES=(
   "./internal/api"
   "./internal/api"
   "./internal/api"
+  "./internal/events"
   "./internal/runtime"
   "./internal/runtime"
   "./internal/runtime"
   "./internal/api"
+  "./internal/api"
+  "./internal/runtime"
   "./internal/api"
 )
 TEST_PATTERNS=(
   "^(TestAPIContractCanonicalSchemasExcludeLegacyFocusMirrors|TestStateIncludesInstanceMetadata|TestRuntimeAuditAggregatesAuthoringEvidence|TestInstancesEndpointUsesParticipantsAsSceneTruth|TestInstanceCreateEndpoint|TestInstanceCreateEndpointIgnoresActiveCharacterFallback|TestInstanceStatusEndpoint|TestCharactersRouteUsesParticipantsView|TestCharactersRouteDoesNotFallbackToLoadedCharacters|TestMemoryRoutePrefersFocusCharacterOverLegacyCharacter|TestPendingFactsRoutePrefersFocusCharacterOverLegacyCharacter|TestTraceRoute|TestTraceRoutesNormalizeLegacyCharacterFields|TestCheckpointAndPresetRoutes|TestNPCActionsRouteUsesFocusCharacterWithoutTopLevelCharacterMirror)$"
-  "^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayBatchRealRuntimeRoundTrip|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence)$"
+  "^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayBatchRealRuntimeRoundTrip|TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig|TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence)$"
   "^TestProofAuditsRouteListsLatestAuditArtifacts$"
-  "^(TestReconcilePopulationPromotesBackgroundNPC|TestReconcilePopulationDemotesStalePromotedNPC|TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow|TestPopulationInsightsIncludesPromotionReason)$"
+  "^TestGatekeeperTreatsNPCSchedulerAsCanonicalTickEvent$"
+  "^(TestReconcilePopulationPromotesBackgroundNPC|TestReconcilePopulationDemotesStalePromotedNPC|TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow|TestPopulationInsightsIncludesPromotionReason|TestIdentityShiftShapesLongWindowWorldOutcome|TestIdentityShiftShapesWorldOutcomeAcrossWorldFamilies)$"
   "^TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks$"
   "^TestRealWorldDirectorySampleMatrixAcrossTwoHundredTicks$"
   "^TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks$"
   "^TestAPIRealWorldDirectorySampleMatrixAcrossTwoHundredTicks$"
+  "^TestRealWorldDirectoryStabilityAcrossFiveHundredTicks$"
+  "^TestAPIRealWorldDirectoryStabilityAcrossFiveHundredTicks$"
 )
 
 {
@@ -55,11 +64,14 @@ TEST_PATTERNS=(
   echo "- api world-first contract checks"
   echo "- api author replay contract checks"
   echo "- api proof archive contract checks"
+  echo "- events npc scheduler canonical contract checks"
   echo "- runtime population lifecycle contract checks"
   echo "- runtime 200 tick sample matrix"
   echo "- runtime 200 tick real world matrix"
   echo "- api 200 tick sample matrix"
   echo "- api 200 tick real world matrix"
+  echo "- runtime 500 tick real world stability"
+  echo "- api 500 tick real world stability"
   echo
   echo "## Results"
   echo
@@ -76,9 +88,17 @@ for i in "${!TEST_LABELS[@]}"; do
   start_epoch="$(date +%s)"
 
   echo "==> ${label}"
+  test_timeout="10m"
+  if [[ "${label}" == *"-500-"* ]]; then
+    test_timeout="20m"
+  fi
   if (
     cd "${ROOT_DIR}" &&
-    "${GO_BIN}" test -count=1 -run "${pattern}" "${pkg}"
+    if [[ "${label}" == *"-500-"* ]]; then
+      CORERP_RUN_SLOW_PROOF_TESTS=1 "${GO_BIN}" test -count=1 -timeout "${test_timeout}" -run "${pattern}" "${pkg}"
+    else
+      "${GO_BIN}" test -count=1 -timeout "${test_timeout}" -run "${pattern}" "${pkg}"
+    fi
   ) > "${log_file}" 2>&1; then
     status="PASS"
   else

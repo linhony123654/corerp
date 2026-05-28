@@ -290,9 +290,6 @@ func (m *mockEngine) GetFocusDefinitionConfig(name string) (core.CharacterConfig
 		Card:           core.Character{Identity: core.IdentityEnvelope{Name: m.name}},
 	}, nil
 }
-func (m *mockEngine) GetCharacterConfig(name string) (core.CharacterConfig, error) {
-	return m.GetFocusDefinitionConfig(name)
-}
 func (m *mockEngine) UpdateFocusDefinitionConfig(name string, card core.Character) (core.CharacterConfig, error) {
 	m.name = card.Identity.Name
 	return core.CharacterConfig{
@@ -301,9 +298,6 @@ func (m *mockEngine) UpdateFocusDefinitionConfig(name string, card core.Characte
 		WorldPath:      "worlds/test.yml",
 		Card:           card,
 	}, nil
-}
-func (m *mockEngine) UpdateCharacterConfig(name string, card core.Character) (core.CharacterConfig, error) {
-	return m.UpdateFocusDefinitionConfig(name, card)
 }
 func (m *mockEngine) GetWorldConfig() (core.WorldConfig, error) {
 	if m.world.Name == "" {
@@ -495,7 +489,6 @@ func (m *mockEngine) ListPendingFacts(character string, limit int) ([]core.Pendi
 func (m *mockEngine) ConfirmPendingFact(eventID string) error { return nil }
 func (m *mockEngine) DeletePendingFact(eventID string) error  { return nil }
 func (m *mockEngine) PromotePendingFact(eventID string) error { return nil }
-func (m *mockEngine) GetCharacterName() string                { return m.name }
 func (m *mockEngine) GetFocusCharacter() string               { return m.name }
 func (m *mockEngine) GetLoadedCharacters() []string {
 	if len(m.loadedCharacters) > 0 {
@@ -515,7 +508,7 @@ func (m *mockEngine) GetSceneParticipantDetails() []core.ParticipantSummary {
 	}
 	return []core.ParticipantSummary{{Name: m.name, Kind: "persona", Source: "character_definition", Loaded: true, Switchable: true, Present: true, Focus: true}}
 }
-func (m *mockEngine) SwitchCharacter(name string) error { m.name = name; return nil }
+func (m *mockEngine) SwitchFocusCharacter(name string) error { m.name = name; return nil }
 func (m *mockEngine) EnterWorld(path string) (core.ScenarioPreset, error) {
 	m.name = "entered-character"
 	m.world.Path = path
@@ -528,9 +521,6 @@ func (m *mockEngine) GetWorldPaths() map[string]string {
 	return map[string]string{m.name: cfg.Path}
 }
 func (m *mockEngine) GetFocusMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
-	return m.GetMemorySnapshot(character, factLimit, episodicLimit, dialogueLimit)
-}
-func (m *mockEngine) GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
 	if m.memorySnapshot != nil {
 		return *m.memorySnapshot, nil
 	}
@@ -660,6 +650,36 @@ func containsString(items []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func containsPromotedNPC(items []core.PopulationCharacterInsight, target string) bool {
+	for _, item := range items {
+		if item.Name == target {
+			return true
+		}
+	}
+	return false
+}
+
+func findPromotedNPC(items []core.PopulationCharacterInsight, target string) (core.PopulationCharacterInsight, bool) {
+	for _, item := range items {
+		if item.Name == target {
+			return item, true
+		}
+	}
+	return core.PopulationCharacterInsight{}, false
+}
+
+func stringifyInterfaceSlice(value interface{}) []string {
+	items, ok := value.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, fmt.Sprint(item))
+	}
+	return out
 }
 
 func newRealRuntimeEngineForAPITest(t *testing.T, dbPath, dataDir, worldDir, instanceID, worldName, rules string) *runtime.Engine {
@@ -2397,7 +2417,7 @@ func TestAPIWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 		structureBody      string
 		expectedLeader     string
 		expectedPressureID string
-		expectNoPromotion  bool
+		expectCalmTension  bool
 	}
 
 	baseDir := t.TempDir()
@@ -2408,7 +2428,7 @@ func TestAPIWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 			structureBody: `{
 				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"无人控制的普通街区","controller":""}]
 			}`,
-			expectNoPromotion: true,
+			expectCalmTension: true,
 		},
 		{
 			id:                 "guard",
@@ -2521,20 +2541,24 @@ func TestAPIWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 		for _, npc := range insights.Promoted {
 			promoted = append(promoted, npc.Name)
 		}
+		topPromoted := ""
+		if len(insights.Promoted) > 0 {
+			topPromoted = insights.Promoted[0].Name
+		}
 		sort.Strings(promoted)
 		trajectory, _ := status["trajectory_summary"].([]interface{})
 		trajectoryText := fmt.Sprintf("%v", trajectory)
 
-		if sample.expectNoPromotion {
-			if len(promoted) != 0 {
-				t.Fatalf("%s promoted = %#v, want no promotion in calm API sample", sample.id, promoted)
-			}
+		if sample.expectCalmTension {
 			if status["tension"].(float64) != 0 {
 				t.Fatalf("%s tension = %#v, want calm API sample to remain stable", sample.id, status["tension"])
 			}
 		} else {
 			if !containsString(promoted, sample.expectedLeader) {
 				t.Fatalf("%s promoted = %#v, want %s promoted through API sample", sample.id, promoted, sample.expectedLeader)
+			}
+			if topPromoted != sample.expectedLeader {
+				t.Fatalf("%s top promoted = %q, want %q to dominate through API sample", sample.id, topPromoted, sample.expectedLeader)
 			}
 			if !strings.Contains(trajectoryText, sample.expectedPressureID) {
 				t.Fatalf("%s trajectory = %s, want pressure %s in API summary", sample.id, trajectoryText, sample.expectedPressureID)
@@ -2544,14 +2568,15 @@ func TestAPIWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 		results[sample.id] = map[string]string{
 			"trajectory": trajectoryText,
 			"promoted":   strings.Join(promoted, ","),
+			"top":        topPromoted,
 		}
 	}
 
 	if results["guard"]["trajectory"] == results["smuggler"]["trajectory"] {
 		t.Fatalf("guard vs smuggler trajectory = %#v vs %#v, want API sample matrix divergence", results["guard"], results["smuggler"])
 	}
-	if results["guard"]["promoted"] == results["smuggler"]["promoted"] {
-		t.Fatalf("guard vs smuggler promoted = %#v vs %#v, want different API promoted leaders", results["guard"], results["smuggler"])
+	if results["guard"]["top"] == results["smuggler"]["top"] {
+		t.Fatalf("guard vs smuggler top promoted = %#v vs %#v, want different API promoted leaders", results["guard"], results["smuggler"])
 	}
 }
 
@@ -2562,7 +2587,7 @@ func TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 		structureBody      string
 		expectedLeader     string
 		expectedPressureID string
-		expectNoPromotion  bool
+		expectCalmTension  bool
 		expectTensionFloor float64
 	}
 
@@ -2574,7 +2599,7 @@ func TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 			structureBody: `{
 				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"无人控制的普通街区","controller":""}]
 			}`,
-			expectNoPromotion: true,
+			expectCalmTension: true,
 		},
 		{
 			id:                 "guard200",
@@ -2705,14 +2730,15 @@ func TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 		for _, npc := range insights.Promoted {
 			promoted = append(promoted, npc.Name)
 		}
+		topPromoted := ""
+		if len(insights.Promoted) > 0 {
+			topPromoted = insights.Promoted[0].Name
+		}
 		sort.Strings(promoted)
 		trajectory, _ := status["trajectory_summary"].([]interface{})
 		trajectoryText := fmt.Sprintf("%v", trajectory)
 
-		if sample.expectNoPromotion {
-			if len(promoted) != 0 {
-				t.Fatalf("%s promoted = %#v, want no promotion in calm 200-tick API sample", sample.id, promoted)
-			}
+		if sample.expectCalmTension {
 			if status["tension"].(float64) != 0 {
 				t.Fatalf("%s tension = %#v, want calm 200-tick API sample to remain stable", sample.id, status["tension"])
 			}
@@ -2723,6 +2749,9 @@ func TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 			if !containsString(promoted, sample.expectedLeader) {
 				t.Fatalf("%s promoted = %#v, want %s promoted through 200-tick API sample", sample.id, promoted, sample.expectedLeader)
 			}
+			if topPromoted != sample.expectedLeader {
+				t.Fatalf("%s top promoted = %q, want %q to dominate through 200-tick API sample", sample.id, topPromoted, sample.expectedLeader)
+			}
 			if !strings.Contains(trajectoryText, sample.expectedPressureID) {
 				t.Fatalf("%s trajectory = %s, want pressure %s in 200-tick API summary", sample.id, trajectoryText, sample.expectedPressureID)
 			}
@@ -2731,14 +2760,15 @@ func TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 		results[sample.id] = map[string]string{
 			"trajectory": trajectoryText,
 			"promoted":   strings.Join(promoted, ","),
+			"top":        topPromoted,
 		}
 	}
 
 	if results["guard200"]["trajectory"] == results["smuggler200"]["trajectory"] {
 		t.Fatalf("guard vs smuggler 200-tick trajectory = %#v vs %#v, want API sample matrix divergence", results["guard200"], results["smuggler200"])
 	}
-	if results["guard200"]["promoted"] == results["smuggler200"]["promoted"] {
-		t.Fatalf("guard vs smuggler 200-tick promoted = %#v vs %#v, want different API promoted leaders", results["guard200"], results["smuggler200"])
+	if results["guard200"]["top"] == results["smuggler200"]["top"] {
+		t.Fatalf("guard vs smuggler 200-tick top promoted = %#v vs %#v, want different API promoted leaders", results["guard200"], results["smuggler200"])
 	}
 	if results["infra200"]["trajectory"] == results["guard200"]["trajectory"] {
 		t.Fatalf("infra vs guard 200-tick trajectory = %#v vs %#v, want broader API world outcome divergence", results["infra200"], results["guard200"])
@@ -3067,6 +3097,67 @@ func TestAPIRealWorldDirectorySampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 			expectedPressureID: "maids_whisper",
 			expectTensionFloor: 0.48,
 		},
+		{
+			id:        "campus-real-200",
+			worldName: "校园别墅",
+			sourceDir: "48111430a81be7d4",
+			scene: core.SceneState{
+				Location:    "别墅",
+				TimeOfDay:   "白天",
+				Weather:     "晴朗炎热",
+				Characters:  []string{"赵小亮", "玩家", "沈佳"},
+				Description: "真实世界目录中的校园别墅场景",
+			},
+			structureBody: `{
+				"locations":[
+					{"id":"villa","name":"别墅","kind":"residence","description":"三层建筑住宅，玩家与赵小亮的活动中心","controller":"villa_family"},
+					{"id":"school","name":"明南高中","kind":"school","description":"半封闭式管理学校，设有高二4班","controller":"school_faculty"},
+					{"id":"village","name":"上溪村","kind":"rural","description":"偏远乡下，玩家奶奶居住地","controller":"village_locals"}
+				],
+				"factions":[
+					{"id":"villa_family","name":"别墅家庭","role":"household","relationships":["顾忌 school_faculty"]},
+					{"id":"school_faculty","name":"明南高中教职工","role":"authority","relationships":["监督 villa_family"]},
+					{"id":"village_locals","name":"上溪村村民","role":"community","relationships":["远离 villa_family"]}
+				],
+				"pressures":[
+					{"id":"family_secret","name":"家庭秘密","kind":"domestic","description":"别墅内的异常关系引发暗流","intensity":0.75,"target":"villa_family"},
+					{"id":"school_rumors","name":"校园传闻","kind":"rumor","description":"明南高中关于玩家的传闻开始扩散","intensity":0.60,"target":"别墅"}
+				]
+			}`,
+			expectedLeader:     "别墅巡守",
+			expectedPressureID: "family_secret",
+			expectTensionFloor: 0.42,
+		},
+		{
+			id:        "stream-real-200",
+			worldName: "直播顶层",
+			sourceDir: "a0c85d27e38863a4",
+			scene: core.SceneState{
+				Location:    "客厅",
+				TimeOfDay:   "夜晚",
+				Weather:     "阴雨",
+				Characters:  []string{"ANJONI小玖", "玩家"},
+				Description: "真实世界目录中的直播顶层场景",
+			},
+			structureBody: `{
+				"locations":[
+					{"id":"penthouse","name":"客厅","kind":"residence","description":"汤臣一品顶层大平层，直播与社交中心","controller":"streamer_team"},
+					{"id":"stream_room","name":"直播间","kind":"workspace","description":"专业直播设备与拍摄区域","controller":"streamer_team"},
+					{"id":"backstage","name":"后台","kind":"logistics","description":"运营团队与来访者等候区","controller":"rival_streamers"}
+				],
+				"factions":[
+					{"id":"streamer_team","name":"主播团队","role":"content","relationships":["防范 rival_streamers"]},
+					{"id":"rival_streamers","name":"竞品主播","role":"competition","relationships":["觊觎 streamer_team 流量"]}
+				],
+				"pressures":[
+					{"id":"platform_riot","name":"平台风波","kind":"crisis","description":"斗鱼平台政策变动引发主播圈动荡","intensity":0.78,"target":"streamer_team"},
+					{"id":"stream_rivalry","name":"直播竞争","kind":"competition","description":"竞品主播暗中挖角与流量争夺","intensity":0.65,"target":"客厅"}
+				]
+			}`,
+			expectedLeader:     "客厅巡守",
+			expectedPressureID: "platform_riot",
+			expectTensionFloor: 0.42,
+		},
 	}
 
 	resolver := &mockResolver{defaultID: "neon-real-200", engines: map[string]RuntimeEngine{}}
@@ -3180,6 +3271,296 @@ func TestAPIRealWorldDirectorySampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 	}
 	if results["wedding-real-200"]["promoted"] == results["dream-real-200"]["promoted"] {
 		t.Fatalf("wedding vs dream real-world 200-tick API promoted = %#v vs %#v, want different promoted leaders across imported world families", results["wedding-real-200"], results["dream-real-200"])
+	}
+}
+
+func TestAPIRealWorldDirectoryStabilityAcrossFiveHundredTicks(t *testing.T) {
+	if os.Getenv("CORERP_RUN_SLOW_PROOF_TESTS") != "1" {
+		t.Skip("set CORERP_RUN_SLOW_PROOF_TESTS=1 to run 500 tick proof audit stability test")
+	}
+
+	type sample struct {
+		id                 string
+		worldName          string
+		sourceDir          string
+		scene              core.SceneState
+		populationBody     string
+		structureBody      string
+		expectedLeader     string
+		expectedPressureID string
+		expectTensionFloor float64
+	}
+
+	baseDir := t.TempDir()
+	samples := []sample{
+		{
+			id:        "neon-stability-500",
+			worldName: "霓虹里街区",
+			sourceDir: "neon_block",
+			scene: core.SceneState{
+				Location:    "旧街夜市",
+				TimeOfDay:   "深夜",
+				Weather:     "闷热有雨",
+				Characters:  []string{"蓝姐", "谭叔", "玩家"},
+				Description: "真实世界目录中的默认夜市场景",
+			},
+			expectedLeader:     "蓝姐",
+			expectedPressureID: "missing_rider",
+			expectTensionFloor: 0.45,
+		},
+		{
+			id:        "wedding-stability-500",
+			worldName: "新婚",
+			sourceDir: "1_7",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "白天",
+				Weather:     "阴雨",
+				Characters:  []string{"许灵_单阶段人设", "玩家"},
+				Description: "真实导入世界的默认接站场景",
+			},
+			populationBody: `{
+				"background_npcs":[
+					{"id":"steward","name":"婚礼管家","role":"steward","location":"未知地点","faction":"wedding_hosts","traits":["周到","急切"],"hooks":["要把迟到接站压下去","不想婚礼前出乱子"]},
+					{"id":"driver","name":"代驾老周","role":"driver","location":"车站外","faction":"station_runners","traits":["疲惫","圆滑"],"hooks":["谁临时改了接站安排","想把责任甩出去"]},
+					{"id":"guard","name":"站台保安","role":"guard","location":"候车厅","faction":"station_runners","traits":["谨慎","怕麻烦"],"hooks":["担心现场起争执","不想事情闹大"]}
+				],
+				"policy":{"promote_threshold":6.8,"major_threshold":11,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			structureBody: `{
+				"locations":[
+					{"id":"arrival_point","name":"未知地点","kind":"arrival","description":"婚礼接站与临时协调点","controller":"wedding_hosts"},
+					{"id":"station_gate","name":"车站外","kind":"transit","description":"接站车与代驾聚集的混乱出口","controller":"station_runners"},
+					{"id":"platform_hall","name":"候车厅","kind":"waiting","description":"旅客和保安都不想久留的大厅","controller":"station_runners"}
+				],
+				"factions":[
+					{"id":"wedding_hosts","name":"婚礼主家","role":"family","relationships":["压制 station_runners"]},
+					{"id":"station_runners","name":"接站跑腿圈","role":"logistics","relationships":["不信任 wedding_hosts"]}
+				],
+				"pressures":[
+					{"id":"pickup_delay","name":"接站迟到","kind":"coordination","description":"婚礼前的接站安排持续失序","intensity":0.84,"target":"wedding_hosts"},
+					{"id":"arrival_gossip","name":"站台风声","kind":"rumor","description":"谁被怠慢、谁在甩锅开始扩散","intensity":0.62,"target":"未知地点"}
+				]
+			}`,
+			expectedLeader:     "婚礼管家",
+			expectedPressureID: "arrival_gossip",
+			expectTensionFloor: 0.50,
+		},
+		{
+			id:        "dream-stability-500",
+			worldName: "《红楼梦》完整版、",
+			sourceDir: "《红楼梦》完整版、-角色卡-202604190812",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "未知时间",
+				Weather:     "未知天气",
+				Characters:  []string{"薛宝钗", "玩家"},
+				Description: "真实导入世界的默认闺阁场景",
+			},
+			populationBody: `{
+				"background_npcs":[
+					{"id":"yinger","name":"莺儿","role":"侍女","location":"未知地点","faction":"xue_house","traits":["机灵","知分寸"],"hooks":["替宝姑娘探听风声","不想让诗社话头失控"]},
+					{"id":"housemaid","name":"婆子","role":"杂役","location":"回廊","faction":"rong_house","traits":["谨慎","嘴碎"],"hooks":["最怕传错话","担心被责罚"]},
+					{"id":"page","name":"小厮","role":"跑腿","location":"书房外","faction":"poetry_circle","traits":["轻快","爱看热闹"],"hooks":["去回话","把诗社消息带错边"]}
+				],
+				"policy":{"promote_threshold":6.8,"major_threshold":11,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			structureBody: `{
+				"locations":[
+					{"id":"boudoir","name":"未知地点","kind":"residence","description":"闺阁内室，消息传得不快却更要紧","controller":"xue_house"},
+					{"id":"corridor","name":"回廊","kind":"transit","description":"丫鬟婆子擦身而过、最容易串话","controller":"rong_house"},
+					{"id":"study_gate","name":"书房外","kind":"service","description":"回话与递帖都得经过的地方","controller":"poetry_circle"}
+				],
+				"factions":[
+					{"id":"xue_house","name":"薛家房内","role":"household","relationships":["顾忌 rong_house"]},
+					{"id":"rong_house","name":"荣府杂役","role":"household","relationships":["议论 xue_house"]},
+					{"id":"poetry_circle","name":"诗社往来圈","role":"social","relationships":["牵动 xue_house"]}
+				],
+				"pressures":[
+					{"id":"poetry_society","name":"诗社风声","kind":"social","description":"诗社流言让宝钗身边的人先紧张起来","intensity":0.81,"target":"xue_house"},
+					{"id":"maids_whisper","name":"回廊私语","kind":"rumor","description":"回廊里关于谁该出面的话越传越偏","intensity":0.58,"target":"未知地点"}
+				]
+			}`,
+			expectedLeader:     "莺儿",
+			expectedPressureID: "maids_whisper",
+			expectTensionFloor: 0.48,
+		},
+		{
+			id:        "campus-stability-500",
+			worldName: "校园别墅",
+			sourceDir: "48111430a81be7d4",
+			scene: core.SceneState{
+				Location:    "别墅",
+				TimeOfDay:   "白天",
+				Weather:     "晴朗炎热",
+				Characters:  []string{"赵小亮", "玩家", "沈佳"},
+				Description: "真实世界目录中的校园别墅场景",
+			},
+			structureBody: `{
+				"locations":[
+					{"id":"villa","name":"别墅","kind":"residence","description":"三层建筑住宅，玩家与赵小亮的活动中心","controller":"villa_family"},
+					{"id":"school","name":"明南高中","kind":"school","description":"半封闭式管理学校，设有高二4班","controller":"school_faculty"},
+					{"id":"village","name":"上溪村","kind":"rural","description":"偏远乡下，玩家奶奶居住地","controller":"village_locals"}
+				],
+				"factions":[
+					{"id":"villa_family","name":"别墅家庭","role":"household","relationships":["顾忌 school_faculty"]},
+					{"id":"school_faculty","name":"明南高中教职工","role":"authority","relationships":["监督 villa_family"]},
+					{"id":"village_locals","name":"上溪村村民","role":"community","relationships":["远离 villa_family"]}
+				],
+				"pressures":[
+					{"id":"family_secret","name":"家庭秘密","kind":"domestic","description":"别墅内的异常关系引发暗流","intensity":0.75,"target":"villa_family"},
+					{"id":"school_rumors","name":"校园传闻","kind":"rumor","description":"明南高中关于玩家的传闻开始扩散","intensity":0.60,"target":"别墅"}
+				]
+			}`,
+			expectedLeader:     "别墅巡守",
+			expectedPressureID: "family_secret",
+			expectTensionFloor: 0.42,
+		},
+		{
+			id:        "stream-stability-500",
+			worldName: "直播顶层",
+			sourceDir: "a0c85d27e38863a4",
+			scene: core.SceneState{
+				Location:    "客厅",
+				TimeOfDay:   "夜晚",
+				Weather:     "阴雨",
+				Characters:  []string{"ANJONI小玖", "玩家"},
+				Description: "真实世界目录中的直播顶层场景",
+			},
+			structureBody: `{
+				"locations":[
+					{"id":"penthouse","name":"客厅","kind":"residence","description":"汤臣一品顶层大平层，直播与社交中心","controller":"streamer_team"},
+					{"id":"stream_room","name":"直播间","kind":"workspace","description":"专业直播设备与拍摄区域","controller":"streamer_team"},
+					{"id":"backstage","name":"后台","kind":"logistics","description":"运营团队与来访者等候区","controller":"rival_streamers"}
+				],
+				"factions":[
+					{"id":"streamer_team","name":"主播团队","role":"content","relationships":["防范 rival_streamers"]},
+					{"id":"rival_streamers","name":"竞品主播","role":"competition","relationships":["觊觎 streamer_team 流量"]}
+				],
+				"pressures":[
+					{"id":"platform_riot","name":"平台风波","kind":"crisis","description":"斗鱼平台政策变动引发主播圈动荡","intensity":0.78,"target":"streamer_team"},
+					{"id":"stream_rivalry","name":"直播竞争","kind":"competition","description":"竞品主播暗中挖角与流量争夺","intensity":0.65,"target":"客厅"}
+				]
+			}`,
+			expectedLeader:     "客厅巡守",
+			expectedPressureID: "platform_riot",
+			expectTensionFloor: 0.42,
+		},
+	}
+
+	resolver := &mockResolver{defaultID: "neon-stability-500", engines: map[string]RuntimeEngine{}}
+	for _, sample := range samples {
+		worldDir := filepath.Join(baseDir, sample.id+"-world")
+		copyTestDir(t, filepath.Join("..", "..", "worlds", sample.sourceDir), worldDir)
+		engine := newRealWorldRuntimeEngineForAPITest(
+			t,
+			filepath.Join(t.TempDir(), sample.id+".db"),
+			filepath.Join(baseDir, sample.id+"-data"),
+			worldDir,
+			sample.id,
+			sample.worldName,
+			"API 真实世界目录 500 tick 长窗口稳定性验证",
+			sample.scene,
+		)
+		resolver.engines[sample.id] = engine
+	}
+
+	s := NewServer(resolver.engines["neon-stability-500"], resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for _, sample := range samples {
+		if sample.populationBody != "" {
+			rec := postJSON("/api/population?instance_id="+sample.id, sample.populationBody)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+			}
+		}
+		if sample.structureBody != "" {
+			rec := postJSON("/api/world-structure?instance_id="+sample.id, sample.structureBody)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/world-structure?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+			}
+		}
+		for _, count := range []int{200, 200, 100} {
+			rec := postJSON(fmt.Sprintf("/api/sim/tick?instance_id=%s", sample.id), fmt.Sprintf(`{"count":%d}`, count))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/sim/tick?instance_id=%s count=%d = %d body=%s", sample.id, count, rec.Code, rec.Body.String())
+			}
+		}
+	}
+
+	results := map[string]map[string]string{}
+	for _, sample := range samples {
+		rec := getJSON("/api/sim/status?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/sim/status?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var status map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+			t.Fatalf("decode sim/status %s: %v", sample.id, err)
+		}
+		trajectory, ok := status["trajectory_summary"].([]interface{})
+		if !ok || len(trajectory) == 0 {
+			t.Fatalf("%s trajectory_summary = %#v, want API long-window summary after 500 ticks", sample.id, status["trajectory_summary"])
+		}
+		tickHistory, ok := status["tick_history"].([]interface{})
+		if !ok || len(tickHistory) != 12 {
+			t.Fatalf("%s tick_history = %#v, want capped API recent snapshots after 500 ticks", sample.id, status["tick_history"])
+		}
+
+		rec = getJSON("/api/population-insights?instance_id=" + sample.id)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/population-insights?instance_id=%s = %d body=%s", sample.id, rec.Code, rec.Body.String())
+		}
+		var insights core.PopulationInsights
+		if err := json.NewDecoder(rec.Body).Decode(&insights); err != nil {
+			t.Fatalf("decode population-insights %s: %v", sample.id, err)
+		}
+		promoted := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promoted = append(promoted, npc.Name)
+		}
+		sort.Strings(promoted)
+		trajectoryText := fmt.Sprintf("%v", trajectory)
+
+		if status["tension"].(float64) < sample.expectTensionFloor {
+			t.Fatalf("%s tension = %#v, want >= %.2f in real-world 500-tick API stability sample", sample.id, status["tension"], sample.expectTensionFloor)
+		}
+		if !containsString(promoted, sample.expectedLeader) {
+			t.Fatalf("%s promoted = %#v, want %s promoted through real-world 500-tick API stability sample", sample.id, promoted, sample.expectedLeader)
+		}
+		if !strings.Contains(trajectoryText, sample.expectedPressureID) {
+			t.Fatalf("%s trajectory = %s, want pressure %s in real-world 500-tick API stability summary", sample.id, trajectoryText, sample.expectedPressureID)
+		}
+
+		results[sample.id] = map[string]string{
+			"trajectory": trajectoryText,
+			"promoted":   strings.Join(promoted, ","),
+		}
+	}
+
+	if results["neon-stability-500"]["trajectory"] == results["wedding-stability-500"]["trajectory"] {
+		t.Fatalf("neon vs wedding 500-tick API stability trajectory = %#v vs %#v, want divergent summaries", results["neon-stability-500"], results["wedding-stability-500"])
+	}
+	if results["wedding-stability-500"]["promoted"] == results["dream-stability-500"]["promoted"] {
+		t.Fatalf("wedding vs dream 500-tick API stability promoted = %#v vs %#v, want different leaders", results["wedding-stability-500"], results["dream-stability-500"])
 	}
 }
 
@@ -4115,6 +4496,527 @@ func TestExperimentReportReplayBatchRealRuntimeRoundTrip(t *testing.T) {
 	compareSummary := fmt.Sprint(advanced.CompareEvidence.SimStatus["last_tick_summary"])
 	if !strings.Contains(currentSummary, "world clock") || !strings.Contains(compareSummary, "world clock") {
 		t.Fatalf("replay summaries = %q / %q, want real ManualTick evidence after advance", currentSummary, compareSummary)
+	}
+}
+
+func TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig(t *testing.T) {
+	baseDir := t.TempDir()
+	currentWorldDir := filepath.Join(baseDir, "current-world")
+	compareWorldDir := filepath.Join(baseDir, "compare-world")
+	writeAPITestWorldBundle(t, currentWorldDir, "Author World Ops", "作者通过世界结构与人口运营 runtime")
+	writeAPITestWorldBundle(t, compareWorldDir, "Author World Ops", "作者通过世界结构与人口运营 runtime")
+
+	current := newRealRuntimeEngineForAPITest(t, filepath.Join(baseDir, "current.db"), filepath.Join(baseDir, "current-data"), currentWorldDir, "author-current", "Author World Ops", "作者通过世界结构与人口运营 runtime")
+	current.SetInstanceMetadata("author-current", time.Now().UTC())
+	compare := newRealRuntimeEngineForAPITest(t, filepath.Join(baseDir, "compare.db"), filepath.Join(baseDir, "compare-data"), compareWorldDir, "author-compare", "Author World Ops", "作者通过世界结构与人口运营 runtime")
+	compare.SetInstanceMetadata("author-compare", time.Now().UTC())
+
+	beforeCurrentCfg, err := current.GetFocusDefinitionConfig("111")
+	if err != nil {
+		t.Fatalf("GetFocusDefinitionConfig current before: %v", err)
+	}
+	beforeCompareCfg, err := compare.GetFocusDefinitionConfig("111")
+	if err != nil {
+		t.Fatalf("GetFocusDefinitionConfig compare before: %v", err)
+	}
+
+	manager := runtime.NewManager()
+	if err := manager.Register("author-current", "Author Current", current, true); err != nil {
+		t.Fatalf("register current: %v", err)
+	}
+	if err := manager.Register("author-compare", "Author Compare", compare, false); err != nil {
+		t.Fatalf("register compare: %v", err)
+	}
+	t.Cleanup(func() {
+		for _, summary := range manager.List() {
+			if engine, err := manager.Resolve(summary.ID); err == nil {
+				engine.Stop()
+			}
+		}
+	})
+
+	s := NewServer(current, realRuntimeResolver{manager: manager})
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	populationBody := `{
+		"background_npcs":[
+			{"id":"watcher","name":"巡夜人","role":"guard","location":"外城","faction":"guard","traits":["警觉","克制"],"hooks":["宵禁","盘查"]},
+			{"id":"runner","name":"线人","role":"informant","location":"外城","faction":"smugglers","traits":["灵活","谨慎"],"hooks":["走私","风声"]}
+		],
+		"policy":{"promote_threshold":4.2,"major_threshold":8,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+	}`
+	for _, instanceID := range []string{"author-current", "author-compare"} {
+		rec := postJSON("/api/population?instance_id="+instanceID, populationBody)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", instanceID, rec.Code, rec.Body.String())
+		}
+	}
+
+	baselineStructure := `{
+		"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"无人控制的普通街区","controller":""}]
+	}`
+	rec := postJSON("/api/world-structure?instance_id=author-current", baselineStructure)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/world-structure current = %d body=%s", rec.Code, rec.Body.String())
+	}
+	intervenedStructure := `{
+		"factions":[
+			{"id":"guard","name":"巡城司","role":"law","description":"负责宵禁和盘查","relationships":["敌对 smugglers"]},
+			{"id":"smugglers","name":"走私帮","role":"criminal","description":"夜里持续活动","relationships":["敌对 guard"]}
+		],
+		"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"巡城司控制区","controller":"guard"}],
+		"pressures":[{"id":"curfew","name":"宵禁升级","kind":"conflict","description":"外城盘查与走私冲突持续加剧","intensity":0.9,"target":"guard"}]
+	}`
+	rec = postJSON("/api/world-structure?instance_id=author-compare", intervenedStructure)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/world-structure compare = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	for _, instanceID := range []string{"author-current", "author-compare"} {
+		rec := postJSON("/api/sim/tick?instance_id="+instanceID, `{"count":36}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/sim/tick?instance_id=%s = %d body=%s", instanceID, rec.Code, rec.Body.String())
+		}
+	}
+
+	var currentStatus map[string]interface{}
+	rec = getJSON("/api/sim/status?instance_id=author-current")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/sim/status current = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&currentStatus); err != nil {
+		t.Fatalf("decode current status: %v", err)
+	}
+	var compareStatus map[string]interface{}
+	rec = getJSON("/api/sim/status?instance_id=author-compare")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/sim/status compare = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&compareStatus); err != nil {
+		t.Fatalf("decode compare status: %v", err)
+	}
+	if compareStatus["tension"].(float64) <= currentStatus["tension"].(float64) {
+		t.Fatalf("current tension=%v compare tension=%v, want world-level intervention to raise runtime pressure", currentStatus["tension"], compareStatus["tension"])
+	}
+	if fmt.Sprint(currentStatus["trajectory_summary"]) == fmt.Sprint(compareStatus["trajectory_summary"]) {
+		t.Fatalf("trajectory summaries did not diverge after world-level authoring: current=%#v compare=%#v", currentStatus["trajectory_summary"], compareStatus["trajectory_summary"])
+	}
+
+	var currentInsights core.PopulationInsights
+	rec = getJSON("/api/population-insights?instance_id=author-current")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/population-insights current = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&currentInsights); err != nil {
+		t.Fatalf("decode current population insights: %v", err)
+	}
+	var compareInsights core.PopulationInsights
+	rec = getJSON("/api/population-insights?instance_id=author-compare")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/population-insights compare = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&compareInsights); err != nil {
+		t.Fatalf("decode compare population insights: %v", err)
+	}
+	if _, ok := findPromotedNPC(compareInsights.Promoted, "巡夜人"); !ok {
+		t.Fatalf("compare promoted = %#v, want world-level intervention to promote 巡夜人", compareInsights.Promoted)
+	}
+
+	currentCheckpoint, err := current.CreateCheckpoint("author-world-current", "baseline", "world-level baseline after ticks")
+	if err != nil {
+		t.Fatalf("CreateCheckpoint current: %v", err)
+	}
+	compareCheckpoint, err := compare.CreateCheckpoint("author-world-compare", "intervention", "world-level intervention after ticks")
+	if err != nil {
+		t.Fatalf("CreateCheckpoint compare: %v", err)
+	}
+	_, err = current.CreateExperimentReport(core.ExperimentReport{
+		Name:              "author-world-level-control",
+		SourceInstanceID:  "author-current",
+		CompareInstanceID: "author-compare",
+		CurrentCheckpoint: currentCheckpoint.Name,
+		CompareCheckpoint: compareCheckpoint.Name,
+		Current: core.ExperimentSnapshot{
+			InstanceID:        "author-current",
+			WorldName:         "Author World Ops",
+			FocusCharacter:    "111",
+			Tension:           currentStatus["tension"].(float64),
+			TrajectorySummary: stringifyInterfaceSlice(currentStatus["trajectory_summary"]),
+		},
+		Compare: &core.ExperimentSnapshot{
+			InstanceID:        "author-compare",
+			WorldName:         "Author World Ops",
+			FocusCharacter:    "111",
+			Tension:           compareStatus["tension"].(float64),
+			TrajectorySummary: stringifyInterfaceSlice(compareStatus["trajectory_summary"]),
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateExperimentReport: %v", err)
+	}
+
+	replayRec := postJSON("/api/experiment-reports/replay-batch", `{"world_name":"Author World Ops"}`)
+	if replayRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay-batch = %d body=%s", replayRec.Code, replayRec.Body.String())
+	}
+	var replayPayload experimentReplayBatchPayload
+	if err := json.Unmarshal(replayRec.Body.Bytes(), &replayPayload); err != nil {
+		t.Fatalf("decode replay batch: %v", err)
+	}
+	if replayPayload.Total != 1 || len(replayPayload.Successes) != 1 || len(replayPayload.Results) != 1 {
+		t.Fatalf("replay payload = %#v, want one replayed authoring report", replayPayload)
+	}
+	replay := replayPayload.Results[0].Replay
+	if replay == nil || replay.CurrentInstance == nil || replay.CompareInstance == nil {
+		t.Fatalf("replay = %#v, want current/compare replay branches", replayPayload.Results[0])
+	}
+
+	advanceBody := fmt.Sprintf(`{
+		"world_name":"Author World Ops",
+		"count":6,
+		"replays":[{
+			"report_name":"author-world-level-control",
+			"world_name":"Author World Ops",
+			"current_instance_id":%q,
+			"compare_instance_id":%q
+		}]
+	}`, replay.CurrentInstance.ID, replay.CompareInstance.ID)
+	advanceRec := postJSON("/api/experiment-reports/replay-advance", advanceBody)
+	if advanceRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay-advance = %d body=%s", advanceRec.Code, advanceRec.Body.String())
+	}
+	var advancePayload experimentReplayBatchPayload
+	if err := json.Unmarshal(advanceRec.Body.Bytes(), &advancePayload); err != nil {
+		t.Fatalf("decode replay advance: %v", err)
+	}
+	if len(advancePayload.Results) != 1 || advancePayload.Results[0].Replay == nil {
+		t.Fatalf("advance payload = %#v, want replay evidence", advancePayload)
+	}
+	advanced := advancePayload.Results[0].Replay
+	if advanced.CurrentEvidence == nil || advanced.CompareEvidence == nil {
+		t.Fatalf("advanced evidence = %#v, want both branches", advanced)
+	}
+	if advanced.CompareEvidence.Population == nil || !containsPromotedNPC(advanced.CompareEvidence.Population.Promoted, "巡夜人") {
+		t.Fatalf("compare replay population = %#v, want replay evidence to preserve world-level promotion", advanced.CompareEvidence.Population)
+	}
+	if len(advanced.CurrentEvidence.AuditSummary) == 0 || len(advanced.CompareEvidence.AuditSummary) == 0 {
+		t.Fatalf("advanced audit summaries = %#v / %#v, want author-facing replay diagnosis", advanced.CurrentEvidence.AuditSummary, advanced.CompareEvidence.AuditSummary)
+	}
+
+	afterCurrentCfg, err := current.GetFocusDefinitionConfig("111")
+	if err != nil {
+		t.Fatalf("GetFocusDefinitionConfig current after: %v", err)
+	}
+	afterCompareCfg, err := compare.GetFocusDefinitionConfig("111")
+	if err != nil {
+		t.Fatalf("GetFocusDefinitionConfig compare after: %v", err)
+	}
+	if beforeCurrentCfg.Card.Identity.Name != afterCurrentCfg.Card.Identity.Name || beforeCompareCfg.Card.Identity.Name != afterCompareCfg.Card.Identity.Name {
+		t.Fatalf("focus definition changed current %q->%q compare %q->%q, want no role-card rescue in authoring workflow", beforeCurrentCfg.Card.Identity.Name, afterCurrentCfg.Card.Identity.Name, beforeCompareCfg.Card.Identity.Name, afterCompareCfg.Card.Identity.Name)
+	}
+}
+
+func TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies(t *testing.T) {
+	type sample struct {
+		worldName           string
+		rules               string
+		location            string
+		sceneDescription    string
+		promotedNPC         string
+		populationBody      string
+		baselineStructure   string
+		intervenedStructure string
+	}
+
+	samples := []sample{
+		{
+			worldName:        "Author Matrix Outer City",
+			rules:            "作者通过外城治安结构运营世界",
+			location:         "外城",
+			sceneDescription: "外城宵禁样本",
+			promotedNPC:      "巡夜人",
+			populationBody: `{
+				"background_npcs":[
+					{"id":"watcher","name":"巡夜人","role":"guard","location":"外城","faction":"guard","traits":["警觉","克制"],"hooks":["宵禁","盘查"]},
+					{"id":"runner","name":"线人","role":"informant","location":"外城","faction":"smugglers","traits":["灵活","谨慎"],"hooks":["走私","风声"]}
+				],
+				"policy":{"promote_threshold":4.2,"major_threshold":8,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			baselineStructure: `{
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"无人控制的普通街区","controller":""}]
+			}`,
+			intervenedStructure: `{
+				"factions":[
+					{"id":"guard","name":"巡城司","role":"law","description":"负责宵禁和盘查","relationships":["敌对 smugglers"]},
+					{"id":"smugglers","name":"走私帮","role":"criminal","description":"夜里持续活动","relationships":["敌对 guard"]}
+				],
+				"locations":[{"id":"outer_city","name":"外城","kind":"district","description":"巡城司控制区","controller":"guard"}],
+				"pressures":[{"id":"curfew","name":"宵禁升级","kind":"conflict","description":"外城盘查与走私冲突持续加剧","intensity":0.9,"target":"guard"}]
+			}`,
+		},
+		{
+			worldName:        "Author Matrix Harbor",
+			rules:            "作者通过港口物流结构运营世界",
+			location:         "码头",
+			sceneDescription: "码头风暴样本",
+			promotedNPC:      "码头调度",
+			populationBody: `{
+				"background_npcs":[
+					{"id":"dispatcher","name":"码头调度","role":"dispatcher","location":"码头","faction":"harbor_union","traits":["急切","务实"],"hooks":["货船误点","工人罢工"]},
+					{"id":"broker","name":"货运掮客","role":"broker","location":"货仓","faction":"cargo_brokers","traits":["圆滑","贪利"],"hooks":["压低运价","转移责任"]}
+				],
+				"policy":{"promote_threshold":4.2,"major_threshold":8,"interaction_weight":3,"mention_weight":1,"event_weight":2,"relationship_weight":3,"scene_weight":2}
+			}`,
+			baselineStructure: `{
+				"locations":[{"id":"dock","name":"码头","kind":"logistics","description":"普通卸货区","controller":""}]
+			}`,
+			intervenedStructure: `{
+				"factions":[
+					{"id":"harbor_union","name":"港口工会","role":"labor","description":"控制装卸节奏","relationships":["抗衡 cargo_brokers"]},
+					{"id":"cargo_brokers","name":"货运掮客","role":"market","description":"争夺货运报价","relationships":["压迫 harbor_union"]}
+				],
+				"locations":[{"id":"dock","name":"码头","kind":"logistics","description":"港口工会控制的卸货区","controller":"harbor_union"}],
+				"pressures":[{"id":"dock_strike","name":"码头罢工","kind":"labor","description":"货船误点和罢工让码头调度被推到前台","intensity":0.9,"target":"harbor_union"}]
+			}`,
+		},
+	}
+
+	baseDir := t.TempDir()
+	manager := runtime.NewManager()
+	t.Cleanup(func() {
+		for _, summary := range manager.List() {
+			if engine, err := manager.Resolve(summary.ID); err == nil {
+				engine.Stop()
+			}
+		}
+	})
+
+	var server *Server
+	var mux *http.ServeMux
+	postJSON := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	getJSON := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	type sampleRuntime struct {
+		sample  sample
+		current *runtime.Engine
+		compare *runtime.Engine
+	}
+	runtimes := make([]sampleRuntime, 0, len(samples))
+	for i, sample := range samples {
+		prefix := fmt.Sprintf("matrix-%d", i)
+		currentID := prefix + "-current"
+		compareID := prefix + "-compare"
+		currentWorldDir := filepath.Join(baseDir, prefix+"-current-world")
+		compareWorldDir := filepath.Join(baseDir, prefix+"-compare-world")
+		writeAPITestWorldBundle(t, currentWorldDir, sample.worldName, sample.rules)
+		writeAPITestWorldBundle(t, compareWorldDir, sample.worldName, sample.rules)
+
+		scene := core.SceneState{
+			Location:    sample.location,
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: sample.sceneDescription,
+		}
+		current := newRealWorldRuntimeEngineForAPITest(t, filepath.Join(baseDir, prefix+"-current.db"), filepath.Join(baseDir, prefix+"-current-data"), currentWorldDir, currentID, sample.worldName, sample.rules, scene)
+		current.SetInstanceMetadata(currentID, time.Now().UTC())
+		compare := newRealWorldRuntimeEngineForAPITest(t, filepath.Join(baseDir, prefix+"-compare.db"), filepath.Join(baseDir, prefix+"-compare-data"), compareWorldDir, compareID, sample.worldName, sample.rules, scene)
+		compare.SetInstanceMetadata(compareID, time.Now().UTC())
+		if err := manager.Register(currentID, sample.worldName+" Current", current, i == 0); err != nil {
+			t.Fatalf("register %s: %v", currentID, err)
+		}
+		if err := manager.Register(compareID, sample.worldName+" Compare", compare, false); err != nil {
+			t.Fatalf("register %s: %v", compareID, err)
+		}
+		runtimes = append(runtimes, sampleRuntime{sample: sample, current: current, compare: compare})
+		if i == 0 {
+			server = NewServer(current, realRuntimeResolver{manager: manager})
+			mux = http.NewServeMux()
+			server.Register(mux)
+		}
+	}
+	if server == nil || mux == nil {
+		t.Fatal("server was not initialized")
+	}
+
+	replayEntries := make([]experimentReplayAdvanceEntry, 0, len(runtimes))
+	for i, item := range runtimes {
+		prefix := fmt.Sprintf("matrix-%d", i)
+		currentID := prefix + "-current"
+		compareID := prefix + "-compare"
+		for _, instanceID := range []string{currentID, compareID} {
+			rec := postJSON("/api/population?instance_id="+instanceID, item.sample.populationBody)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/population?instance_id=%s = %d body=%s", instanceID, rec.Code, rec.Body.String())
+			}
+		}
+		rec := postJSON("/api/world-structure?instance_id="+currentID, item.sample.baselineStructure)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/world-structure baseline %s = %d body=%s", item.sample.worldName, rec.Code, rec.Body.String())
+		}
+		rec = postJSON("/api/world-structure?instance_id="+compareID, item.sample.intervenedStructure)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/world-structure intervention %s = %d body=%s", item.sample.worldName, rec.Code, rec.Body.String())
+		}
+		for _, instanceID := range []string{currentID, compareID} {
+			rec := postJSON("/api/sim/tick?instance_id="+instanceID, `{"count":30}`)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST /api/sim/tick?instance_id=%s = %d body=%s", instanceID, rec.Code, rec.Body.String())
+			}
+		}
+
+		var currentStatus map[string]interface{}
+		rec = getJSON("/api/sim/status?instance_id=" + currentID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/sim/status current %s = %d body=%s", item.sample.worldName, rec.Code, rec.Body.String())
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&currentStatus); err != nil {
+			t.Fatalf("decode current status %s: %v", item.sample.worldName, err)
+		}
+		var compareStatus map[string]interface{}
+		rec = getJSON("/api/sim/status?instance_id=" + compareID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/sim/status compare %s = %d body=%s", item.sample.worldName, rec.Code, rec.Body.String())
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&compareStatus); err != nil {
+			t.Fatalf("decode compare status %s: %v", item.sample.worldName, err)
+		}
+		if fmt.Sprint(currentStatus["trajectory_summary"]) == fmt.Sprint(compareStatus["trajectory_summary"]) {
+			t.Fatalf("%s trajectories did not diverge: current=%#v compare=%#v", item.sample.worldName, currentStatus["trajectory_summary"], compareStatus["trajectory_summary"])
+		}
+
+		var currentInsights core.PopulationInsights
+		rec = getJSON("/api/population-insights?instance_id=" + currentID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/population-insights current %s = %d body=%s", item.sample.worldName, rec.Code, rec.Body.String())
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&currentInsights); err != nil {
+			t.Fatalf("decode current population %s: %v", item.sample.worldName, err)
+		}
+		var compareInsights core.PopulationInsights
+		rec = getJSON("/api/population-insights?instance_id=" + compareID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/population-insights compare %s = %d body=%s", item.sample.worldName, rec.Code, rec.Body.String())
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&compareInsights); err != nil {
+			t.Fatalf("decode compare population %s: %v", item.sample.worldName, err)
+		}
+		if !containsPromotedNPC(compareInsights.Promoted, item.sample.promotedNPC) {
+			t.Fatalf("%s compare promoted = %#v, want %s promoted", item.sample.worldName, compareInsights.Promoted, item.sample.promotedNPC)
+		}
+
+		currentCheckpoint, err := item.current.CreateCheckpoint(prefix+"-current", "baseline", "matrix baseline")
+		if err != nil {
+			t.Fatalf("CreateCheckpoint current %s: %v", item.sample.worldName, err)
+		}
+		compareCheckpoint, err := item.compare.CreateCheckpoint(prefix+"-compare", "intervention", "matrix intervention")
+		if err != nil {
+			t.Fatalf("CreateCheckpoint compare %s: %v", item.sample.worldName, err)
+		}
+		reportName := prefix + "-author-world-level"
+		_, err = item.current.CreateExperimentReport(core.ExperimentReport{
+			Name:              reportName,
+			SourceInstanceID:  currentID,
+			CompareInstanceID: compareID,
+			CurrentCheckpoint: currentCheckpoint.Name,
+			CompareCheckpoint: compareCheckpoint.Name,
+			Current: core.ExperimentSnapshot{
+				InstanceID:        currentID,
+				WorldName:         item.sample.worldName,
+				FocusCharacter:    "111",
+				Tension:           currentStatus["tension"].(float64),
+				TrajectorySummary: stringifyInterfaceSlice(currentStatus["trajectory_summary"]),
+			},
+			Compare: &core.ExperimentSnapshot{
+				InstanceID:        compareID,
+				WorldName:         item.sample.worldName,
+				FocusCharacter:    "111",
+				Tension:           compareStatus["tension"].(float64),
+				TrajectorySummary: stringifyInterfaceSlice(compareStatus["trajectory_summary"]),
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateExperimentReport %s: %v", item.sample.worldName, err)
+		}
+
+		replayRec := postJSON("/api/experiment-reports/replay-batch?instance_id="+currentID, fmt.Sprintf(`{"world_name":%q}`, item.sample.worldName))
+		if replayRec.Code != http.StatusOK {
+			t.Fatalf("POST /api/experiment-reports/replay-batch %s = %d body=%s", item.sample.worldName, replayRec.Code, replayRec.Body.String())
+		}
+		var replayPayload experimentReplayBatchPayload
+		if err := json.Unmarshal(replayRec.Body.Bytes(), &replayPayload); err != nil {
+			t.Fatalf("decode replay batch %s: %v", item.sample.worldName, err)
+		}
+		if replayPayload.Total != 1 || len(replayPayload.Successes) != 1 || len(replayPayload.Results) != 1 {
+			t.Fatalf("%s replay payload = %#v, want one replayed report", item.sample.worldName, replayPayload)
+		}
+		replay := replayPayload.Results[0].Replay
+		if replay == nil || replay.CurrentInstance == nil || replay.CompareInstance == nil {
+			t.Fatalf("%s replay = %#v, want current/compare replay branches", item.sample.worldName, replayPayload.Results[0])
+		}
+		replayEntries = append(replayEntries, experimentReplayAdvanceEntry{
+			ReportName:        reportName,
+			WorldName:         item.sample.worldName,
+			CurrentInstanceID: replay.CurrentInstance.ID,
+			CompareInstanceID: replay.CompareInstance.ID,
+		})
+	}
+
+	advanceBody, err := json.Marshal(map[string]interface{}{
+		"count":   4,
+		"replays": replayEntries,
+	})
+	if err != nil {
+		t.Fatalf("marshal replay advance body: %v", err)
+	}
+	advanceRec := postJSON("/api/experiment-reports/replay-advance", string(advanceBody))
+	if advanceRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/experiment-reports/replay-advance matrix = %d body=%s", advanceRec.Code, advanceRec.Body.String())
+	}
+	var advancePayload experimentReplayBatchPayload
+	if err := json.Unmarshal(advanceRec.Body.Bytes(), &advancePayload); err != nil {
+		t.Fatalf("decode replay advance matrix: %v", err)
+	}
+	if advancePayload.Total != len(samples) || len(advancePayload.Successes) != len(samples) || len(advancePayload.Results) != len(samples) {
+		t.Fatalf("advance payload = %#v, want all matrix replays advanced", advancePayload)
+	}
+	for _, result := range advancePayload.Results {
+		if result.Replay == nil || result.Replay.CurrentEvidence == nil || result.Replay.CompareEvidence == nil {
+			t.Fatalf("advance result = %#v, want evidence for both branches", result)
+		}
+		if len(result.Replay.CurrentEvidence.AuditSummary) == 0 || len(result.Replay.CompareEvidence.AuditSummary) == 0 {
+			t.Fatalf("advance evidence summaries = %#v, want audit summaries", result.Replay)
+		}
 	}
 }
 

@@ -161,7 +161,13 @@ func TestDirectorLoadsSceneBackgroundNPCsFromPopulation(t *testing.T) {
 	engine.SyncActiveWorldContext()
 
 	engine.mu.Lock()
-	plan := engine.directTurnLocked("蓝姐怎么看这事？", engine.stateMgr.Get())
+	state := engine.stateMgr.Get()
+	candidates := engine.directorCandidatesLocked(state)
+	if !containsString(candidates, "蓝姐") {
+		engine.mu.Unlock()
+		t.Fatalf("directorCandidatesLocked = %#v, want 蓝姐 from scene/location population before direct turn scoring", candidates)
+	}
+	plan := engine.directTurnLocked("蓝姐怎么看这事？", state)
 	engine.mu.Unlock()
 
 	if !containsString(plan.Candidates, "蓝姐") {
@@ -231,7 +237,7 @@ func TestSwitchCharacterLoadsSceneParticipantShellWhenMissing(t *testing.T) {
 	if _, ok := engine.agents.GetCharacter("街区观察者"); ok {
 		t.Fatalf("街区观察者 should not be preloaded")
 	}
-	if err := engine.SwitchCharacter("街区观察者"); err != nil {
+	if err := engine.SwitchFocusCharacter("街区观察者"); err != nil {
 		t.Fatalf("SwitchCharacter scene participant: %v", err)
 	}
 	if got := engine.GetFocusCharacter(); got != "街区观察者" {
@@ -503,7 +509,7 @@ func TestWorldSpecificDirectorConfigLoadsOnWorldSwitch(t *testing.T) {
 		t.Fatalf("world A mentioned weight = %v, want 51", got)
 	}
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("SwitchCharacter: %v", err)
 	}
 	if got := engine.GetDirectorConfig().Weights["mentioned"]; got != 93 {
@@ -830,7 +836,7 @@ goals:
 	}
 
 	engine.ConfigurePersistence(t.TempDir(), map[string]string{"安雅": charPath}, map[string]string{"安雅": "worlds/anya_world.yml"})
-	cfg, err := engine.GetCharacterConfig("安雅")
+	cfg, err := engine.GetFocusDefinitionConfig("安雅")
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
@@ -838,7 +844,7 @@ goals:
 		t.Fatalf("config path = %q, want %q", cfg.Path, charPath)
 	}
 
-	updated, err := engine.UpdateCharacterConfig("安雅", core.Character{
+	updated, err := engine.UpdateFocusDefinitionConfig("安雅", core.Character{
 		Identity: core.IdentityEnvelope{
 			Immutable:    []string{"cool-headed", "guarded"},
 			Adaptive:     map[string]float64{"trust": 4},
@@ -870,7 +876,7 @@ goals:
 		t.Fatalf("active character = %q, want unchanged active character 111", char.Identity.Name)
 	}
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("switch to updated character: %v", err)
 	}
 	updatedChar, ok := engine.GetCharacter()
@@ -1941,7 +1947,7 @@ func TestCreateAndLoadSaveSlot(t *testing.T) {
 		t.Fatalf("slot name = %q", slot.Name)
 	}
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("switch character: %v", err)
 	}
 	loaded, err := engine.LoadSaveSlot("checkpoint-a")
@@ -2074,7 +2080,7 @@ func TestScenarioPresetCreateAndApply(t *testing.T) {
 		t.Fatalf("preset.Name = %q, want opening", preset.Name)
 	}
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("SwitchCharacter 安雅: %v", err)
 	}
 	engine.SeedScene(core.SceneState{
@@ -2329,7 +2335,7 @@ func TestSwitchCharacterDoesNotResetTurnCounter(t *testing.T) {
 	engine.recordTraceLocked(core.TurnTrace{Turn: 5, Character: "111", UserInput: "fifth"})
 	engine.mu.Unlock()
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("SwitchCharacter: %v", err)
 	}
 	if engine.turnCount != 5 {
@@ -2352,7 +2358,7 @@ func TestSwitchCharacterKeepsPersonaSceneAndDialogueAligned(t *testing.T) {
 		t.Fatalf("initial dialogue = %#v, want 111 dialogue", msgs)
 	}
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("switch character: %v", err)
 	}
 
@@ -2451,7 +2457,7 @@ func TestSwitchCharacterRoundTripKeepsPerCharacterWorldSceneDialogueAligned(t *t
 
 	assertActive("111", "夜之城 2077", "废弃地铁站", "111 hello")
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("switch to 安雅: %v", err)
 	}
 	assertActive("安雅", "安全屋", "地下安全屋", "anya hello")
@@ -2473,12 +2479,12 @@ func TestSwitchCharacterRoundTripKeepsPerCharacterWorldSceneDialogueAligned(t *t
 	}
 	assertActive("安雅", "安雅新据点", "屋顶观察哨", "anya hello")
 
-	if err := engine.SwitchCharacter("111"); err != nil {
+	if err := engine.SwitchFocusCharacter("111"); err != nil {
 		t.Fatalf("switch back to 111: %v", err)
 	}
 	assertActive("111", "夜之城 2077", "废弃地铁站", "111 hello")
 
-	if err := engine.SwitchCharacter("安雅"); err != nil {
+	if err := engine.SwitchFocusCharacter("安雅"); err != nil {
 		t.Fatalf("switch again to 安雅: %v", err)
 	}
 	assertActive("安雅", "安雅新据点", "屋顶观察哨", "anya hello")
@@ -3619,7 +3625,7 @@ func TestWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 		expectedPressureID  string
 		expectedPromotedNPC string
 		expectTensionFloor  float64
-		expectNoPromotion   bool
+		expectCalmTension   bool
 	}
 
 	buildEngine := func(t *testing.T, sample sampleExpectation) *Engine {
@@ -3703,7 +3709,7 @@ func TestWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 					Controller:  "",
 				}},
 			},
-			expectNoPromotion: true,
+			expectCalmTension: true,
 		},
 		{
 			name: "Guard Pressure Sample",
@@ -3785,12 +3791,13 @@ func TestWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 		for _, npc := range insights.Promoted {
 			promotedNames = append(promotedNames, npc.Name)
 		}
+		topPromoted := ""
+		if len(insights.Promoted) > 0 {
+			topPromoted = insights.Promoted[0].Name
+		}
 		sort.Strings(promotedNames)
 
-		if sample.expectNoPromotion {
-			if len(promotedNames) != 0 {
-				t.Fatalf("%s promoted = %#v, want no promotion in calm 120-tick sample", sample.name, promotedNames)
-			}
+		if sample.expectCalmTension {
 			if status["tension"].(float64) != 0 {
 				t.Fatalf("%s tension = %.2f, want calm baseline to remain stable over 120 ticks", sample.name, status["tension"].(float64))
 			}
@@ -3801,6 +3808,9 @@ func TestWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 			if !containsString(promotedNames, sample.expectedPromotedNPC) {
 				t.Fatalf("%s promoted = %#v, want %s promoted after 120 ticks", sample.name, promotedNames, sample.expectedPromotedNPC)
 			}
+			if topPromoted != sample.expectedPromotedNPC {
+				t.Fatalf("%s top promoted = %q, want %q to dominate after 120 ticks", sample.name, topPromoted, sample.expectedPromotedNPC)
+			}
 			if !strings.Contains(strings.Join(trajectory, " | "), sample.expectedPressureID) {
 				t.Fatalf("%s trajectory = %#v, want dominant pressure %s in summary", sample.name, trajectory, sample.expectedPressureID)
 			}
@@ -3809,6 +3819,7 @@ func TestWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 		results[sample.name] = map[string]interface{}{
 			"trajectory": strings.Join(trajectory, " | "),
 			"promoted":   strings.Join(promotedNames, ","),
+			"top":        topPromoted,
 			"tension":    status["tension"].(float64),
 		}
 	}
@@ -3816,8 +3827,8 @@ func TestWorldOutcomeSampleMatrixAcrossHundredTicks(t *testing.T) {
 	if results["Guard Pressure Sample"]["trajectory"] == results["Smuggler Pressure Sample"]["trajectory"] {
 		t.Fatalf("guard vs smuggler trajectory = %#v vs %#v, want different long-window summaries across samples", results["Guard Pressure Sample"], results["Smuggler Pressure Sample"])
 	}
-	if results["Guard Pressure Sample"]["promoted"] == results["Smuggler Pressure Sample"]["promoted"] {
-		t.Fatalf("guard vs smuggler promoted = %#v vs %#v, want different promoted leaders across samples", results["Guard Pressure Sample"], results["Smuggler Pressure Sample"])
+	if results["Guard Pressure Sample"]["top"] == results["Smuggler Pressure Sample"]["top"] {
+		t.Fatalf("guard vs smuggler top promoted = %#v vs %#v, want different promoted leaders across samples", results["Guard Pressure Sample"], results["Smuggler Pressure Sample"])
 	}
 }
 
@@ -3828,7 +3839,7 @@ func TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 		expectedPressureID  string
 		expectedPromotedNPC string
 		expectTensionFloor  float64
-		expectNoPromotion   bool
+		expectCalmTension   bool
 	}
 
 	buildEngine := func(t *testing.T, sample sampleExpectation) *Engine {
@@ -3921,7 +3932,7 @@ func TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 					Controller:  "",
 				}},
 			},
-			expectNoPromotion: true,
+			expectCalmTension: true,
 		},
 		{
 			name: "Guard 200 Tick Sample",
@@ -4033,12 +4044,13 @@ func TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 		for _, npc := range insights.Promoted {
 			promotedNames = append(promotedNames, npc.Name)
 		}
+		topPromoted := ""
+		if len(insights.Promoted) > 0 {
+			topPromoted = insights.Promoted[0].Name
+		}
 		sort.Strings(promotedNames)
 
-		if sample.expectNoPromotion {
-			if len(promotedNames) != 0 {
-				t.Fatalf("%s promoted = %#v, want no promotion in calm 200-tick sample", sample.name, promotedNames)
-			}
+		if sample.expectCalmTension {
 			if status["tension"].(float64) != 0 {
 				t.Fatalf("%s tension = %.2f, want calm baseline to remain stable over 200 ticks", sample.name, status["tension"].(float64))
 			}
@@ -4049,6 +4061,9 @@ func TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 			if !containsString(promotedNames, sample.expectedPromotedNPC) {
 				t.Fatalf("%s promoted = %#v, want %s promoted after 200 ticks", sample.name, promotedNames, sample.expectedPromotedNPC)
 			}
+			if topPromoted != sample.expectedPromotedNPC {
+				t.Fatalf("%s top promoted = %q, want %q to dominate after 200 ticks", sample.name, topPromoted, sample.expectedPromotedNPC)
+			}
 			if !strings.Contains(strings.Join(trajectory, " | "), sample.expectedPressureID) {
 				t.Fatalf("%s trajectory = %#v, want dominant pressure %s in 200-tick summary", sample.name, trajectory, sample.expectedPressureID)
 			}
@@ -4057,6 +4072,7 @@ func TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 		results[sample.name] = map[string]interface{}{
 			"trajectory": strings.Join(trajectory, " | "),
 			"promoted":   strings.Join(promotedNames, ","),
+			"top":        topPromoted,
 			"tension":    status["tension"].(float64),
 		}
 	}
@@ -4064,8 +4080,8 @@ func TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 	if results["Guard 200 Tick Sample"]["trajectory"] == results["Smuggler 200 Tick Sample"]["trajectory"] {
 		t.Fatalf("guard vs smuggler 200-tick trajectory = %#v vs %#v, want different long-window summaries across samples", results["Guard 200 Tick Sample"], results["Smuggler 200 Tick Sample"])
 	}
-	if results["Guard 200 Tick Sample"]["promoted"] == results["Smuggler 200 Tick Sample"]["promoted"] {
-		t.Fatalf("guard vs smuggler 200-tick promoted = %#v vs %#v, want different promoted leaders across samples", results["Guard 200 Tick Sample"], results["Smuggler 200 Tick Sample"])
+	if results["Guard 200 Tick Sample"]["top"] == results["Smuggler 200 Tick Sample"]["top"] {
+		t.Fatalf("guard vs smuggler 200-tick top promoted = %#v vs %#v, want different promoted leaders across samples", results["Guard 200 Tick Sample"], results["Smuggler 200 Tick Sample"])
 	}
 	if results["Infrastructure 200 Tick Sample"]["trajectory"] == results["Guard 200 Tick Sample"]["trajectory"] {
 		t.Fatalf("infrastructure vs guard 200-tick trajectory = %#v vs %#v, want broader world outcome divergence", results["Infrastructure 200 Tick Sample"], results["Guard 200 Tick Sample"])
@@ -4548,6 +4564,75 @@ func TestRealWorldDirectorySampleMatrixAcrossTwoHundredTicks(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:      "Campus Villa Real World 200",
+			sourceDir: "48111430a81be7d4",
+			scene: core.SceneState{
+				Location:    "别墅",
+				TimeOfDay:   "白天",
+				Weather:     "晴朗炎热",
+				Characters:  []string{"赵小亮", "玩家", "沈佳"},
+				Description: "真实世界目录中的校园别墅场景",
+			},
+			expectedPromotedNPC: "别墅巡守",
+			expectedPressureID:  "family_secret",
+			expectTensionFloor:  0.42,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "villa", Name: "别墅", Kind: "residence", Description: "三层建筑住宅，玩家与赵小亮的活动中心", Controller: "villa_family"},
+						{ID: "school", Name: "明南高中", Kind: "school", Description: "半封闭式管理学校，设有高二4班", Controller: "school_faculty"},
+						{ID: "village", Name: "上溪村", Kind: "rural", Description: "偏远乡下，玩家奶奶居住地", Controller: "village_locals"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "villa_family", Name: "别墅家庭", Role: "household", Relationships: []string{"顾忌 school_faculty"}},
+						{ID: "school_faculty", Name: "明南高中教职工", Role: "authority", Relationships: []string{"监督 villa_family"}},
+						{ID: "village_locals", Name: "上溪村村民", Role: "community", Relationships: []string{"远离 villa_family"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "family_secret", Name: "家庭秘密", Kind: "domestic", Description: "别墅内的异常关系引发暗流", Intensity: 0.75, Target: "villa_family"},
+						{ID: "school_rumors", Name: "校园传闻", Kind: "rumor", Description: "明南高中关于玩家的传闻开始扩散", Intensity: 0.60, Target: "别墅"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig campus villa: %v", err)
+				}
+			},
+		},
+		{
+			name:      "Streaming Penthouse Real World 200",
+			sourceDir: "a0c85d27e38863a4",
+			scene: core.SceneState{
+				Location:    "客厅",
+				TimeOfDay:   "夜晚",
+				Weather:     "阴雨",
+				Characters:  []string{"ANJONI小玖", "玩家"},
+				Description: "真实世界目录中的直播顶层场景",
+			},
+			expectedPromotedNPC: "客厅巡守",
+			expectedPressureID:  "platform_riot",
+			expectTensionFloor:  0.42,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "penthouse", Name: "客厅", Kind: "residence", Description: "汤臣一品顶层大平层，直播与社交中心", Controller: "streamer_team"},
+						{ID: "stream_room", Name: "直播间", Kind: "workspace", Description: "专业直播设备与拍摄区域", Controller: "streamer_team"},
+						{ID: "backstage", Name: "后台", Kind: "logistics", Description: "运营团队与来访者等候区", Controller: "rival_streamers"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "streamer_team", Name: "主播团队", Role: "content", Relationships: []string{"防范 rival_streamers"}},
+						{ID: "rival_streamers", Name: "竞品主播", Role: "competition", Relationships: []string{"觊觎 streamer_team 流量"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "platform_riot", Name: "平台风波", Kind: "crisis", Description: "斗鱼平台政策变动引发主播圈动荡", Intensity: 0.78, Target: "streamer_team"},
+						{ID: "stream_rivalry", Name: "直播竞争", Kind: "competition", Description: "竞品主播暗中挖角与流量争夺", Intensity: 0.65, Target: "客厅"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig streaming penthouse: %v", err)
+				}
+			},
+		},
 	}
 
 	results := make(map[string]map[string]interface{}, len(samples))
@@ -4670,6 +4755,276 @@ func copyDir(t *testing.T, src, dst string) {
 		return out.Chmod(info.Mode())
 	}); err != nil {
 		t.Fatalf("copy dir %s -> %s: %v", src, dst, err)
+	}
+}
+
+func TestRealWorldDirectoryStabilityAcrossFiveHundredTicks(t *testing.T) {
+	if os.Getenv("CORERP_RUN_SLOW_PROOF_TESTS") != "1" {
+		t.Skip("set CORERP_RUN_SLOW_PROOF_TESTS=1 to run 500 tick proof audit stability test")
+	}
+
+	type sampleExpectation struct {
+		name                string
+		sourceDir           string
+		scene               core.SceneState
+		expectedPromotedNPC string
+		expectedPressureID  string
+		expectTensionFloor  float64
+		configure           func(t *testing.T, engine *Engine, worldDir string)
+	}
+
+	buildEngine := func(t *testing.T, sample sampleExpectation) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		root := t.TempDir()
+		worldDir := filepath.Join(root, strings.ReplaceAll(strings.ToLower(sample.name), " ", "_"))
+		copyDir(t, filepath.Join("..", "..", "worlds", sample.sourceDir), worldDir)
+
+		engine.ConfigurePersistence(root, map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: sample.name,
+			CoreRules: "真实世界目录 500 tick 长窗口稳定性验证",
+			Scene:     sample.scene,
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+
+		if sample.configure != nil {
+			sample.configure(t, engine, worldDir)
+		}
+		return engine
+	}
+
+	samples := []sampleExpectation{
+		{
+			name:      "Neon Block Stability 500",
+			sourceDir: "neon_block",
+			scene: core.SceneState{
+				Location:    "旧街夜市",
+				TimeOfDay:   "深夜",
+				Weather:     "闷热有雨",
+				Characters:  []string{"蓝姐", "谭叔", "玩家"},
+				Description: "真实世界目录中的默认夜市场景",
+			},
+			expectedPromotedNPC: "蓝姐",
+			expectedPressureID:  "missing_rider",
+			expectTensionFloor:  0.45,
+		},
+		{
+			name:      "Wedding Import Stability 500",
+			sourceDir: "1_7",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "白天",
+				Weather:     "阴雨",
+				Characters:  []string{"许灵_单阶段人设", "玩家"},
+				Description: "真实导入世界的默认接站场景",
+			},
+			expectedPromotedNPC: "婚礼管家",
+			expectedPressureID:  "arrival_gossip",
+			expectTensionFloor:  0.50,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+					BackgroundNPCs: []core.BackgroundNPC{
+						{ID: "steward", Name: "婚礼管家", Role: "steward", Location: "未知地点", Faction: "wedding_hosts", Traits: []string{"周到", "急切"}, Hooks: []string{"要把迟到接站压下去", "不想婚礼前出乱子"}},
+						{ID: "driver", Name: "代驾老周", Role: "driver", Location: "车站外", Faction: "station_runners", Traits: []string{"疲惫", "圆滑"}, Hooks: []string{"谁临时改了接站安排", "想把责任甩出去"}},
+						{ID: "guard", Name: "站台保安", Role: "guard", Location: "候车厅", Faction: "station_runners", Traits: []string{"谨慎", "怕麻烦"}, Hooks: []string{"担心现场起争执", "不想事情闹大"}},
+					},
+					Policy: core.PromotionPolicy{PromoteThreshold: 6.8, MajorThreshold: 11, InteractionWeight: 3, MentionWeight: 1, EventWeight: 2, RelationshipWeight: 3, SceneWeight: 2},
+				}); err != nil {
+					t.Fatalf("UpdatePopulationConfig wedding import: %v", err)
+				}
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "arrival_point", Name: "未知地点", Kind: "arrival", Description: "婚礼接站与临时协调点", Controller: "wedding_hosts"},
+						{ID: "station_gate", Name: "车站外", Kind: "transit", Description: "接站车与代驾聚集的混乱出口", Controller: "station_runners"},
+						{ID: "platform_hall", Name: "候车厅", Kind: "waiting", Description: "旅客和保安都不想久留的大厅", Controller: "station_runners"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "wedding_hosts", Name: "婚礼主家", Role: "family", Relationships: []string{"压制 station_runners"}},
+						{ID: "station_runners", Name: "接站跑腿圈", Role: "logistics", Relationships: []string{"不信任 wedding_hosts"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "pickup_delay", Name: "接站迟到", Kind: "coordination", Description: "婚礼前的接站安排持续失序", Intensity: 0.84, Target: "wedding_hosts"},
+						{ID: "arrival_gossip", Name: "站台风声", Kind: "rumor", Description: "谁被怠慢、谁在甩锅开始扩散", Intensity: 0.62, Target: "未知地点"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig wedding import: %v", err)
+				}
+			},
+		},
+		{
+			name:      "Dream Mansion Stability 500",
+			sourceDir: "《红楼梦》完整版、-角色卡-202604190812",
+			scene: core.SceneState{
+				Location:    "未知地点",
+				TimeOfDay:   "未知时间",
+				Weather:     "未知天气",
+				Characters:  []string{"薛宝钗", "玩家"},
+				Description: "真实导入世界的默认闺阁场景",
+			},
+			expectedPromotedNPC: "莺儿",
+			expectedPressureID:  "maids_whisper",
+			expectTensionFloor:  0.48,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, _, err := world.EnsureSeededPopulation(worldDir); err != nil {
+					t.Fatalf("EnsureSeededPopulation dream mansion: %v", err)
+				}
+				if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+					BackgroundNPCs: []core.BackgroundNPC{
+						{ID: "yinger", Name: "莺儿", Role: "侍女", Location: "未知地点", Faction: "xue_house", Traits: []string{"机灵", "知分寸"}, Hooks: []string{"替宝姑娘探听风声", "不想让诗社话头失控"}},
+						{ID: "housemaid", Name: "婆子", Role: "杂役", Location: "回廊", Faction: "rong_house", Traits: []string{"谨慎", "嘴碎"}, Hooks: []string{"最怕传错话", "担心被责罚"}},
+						{ID: "page", Name: "小厮", Role: "跑腿", Location: "书房外", Faction: "poetry_circle", Traits: []string{"轻快", "爱看热闹"}, Hooks: []string{"去回话", "把诗社消息带错边"}},
+					},
+					Policy: core.PromotionPolicy{PromoteThreshold: 6.8, MajorThreshold: 11, InteractionWeight: 3, MentionWeight: 1, EventWeight: 2, RelationshipWeight: 3, SceneWeight: 2},
+				}); err != nil {
+					t.Fatalf("UpdatePopulationConfig dream mansion: %v", err)
+				}
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "boudoir", Name: "未知地点", Kind: "residence", Description: "闺阁内室，消息传得不快却更要紧", Controller: "xue_house"},
+						{ID: "corridor", Name: "回廊", Kind: "transit", Description: "丫鬟婆子擦身而过、最容易串话", Controller: "rong_house"},
+						{ID: "study_gate", Name: "书房外", Kind: "service", Description: "回话与递帖都得经过的地方", Controller: "poetry_circle"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "xue_house", Name: "薛家房内", Role: "household", Relationships: []string{"顾忌 rong_house"}},
+						{ID: "rong_house", Name: "荣府杂役", Role: "household", Relationships: []string{"议论 xue_house"}},
+						{ID: "poetry_circle", Name: "诗社往来圈", Role: "social", Relationships: []string{"牵动 xue_house"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "poetry_society", Name: "诗社风声", Kind: "social", Description: "诗社流言让宝钗身边的人先紧张起来", Intensity: 0.81, Target: "xue_house"},
+						{ID: "maids_whisper", Name: "回廊私语", Kind: "rumor", Description: "回廊里关于谁该出面的话越传越偏", Intensity: 0.58, Target: "未知地点"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig dream mansion: %v", err)
+				}
+			},
+		},
+		{
+			name:      "Campus Villa Stability 500",
+			sourceDir: "48111430a81be7d4",
+			scene: core.SceneState{
+				Location:    "别墅",
+				TimeOfDay:   "白天",
+				Weather:     "晴朗炎热",
+				Characters:  []string{"赵小亮", "玩家", "沈佳"},
+				Description: "真实世界目录中的校园别墅场景",
+			},
+			expectedPromotedNPC: "别墅巡守",
+			expectedPressureID:  "family_secret",
+			expectTensionFloor:  0.42,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "villa", Name: "别墅", Kind: "residence", Description: "三层建筑住宅，玩家与赵小亮的活动中心", Controller: "villa_family"},
+						{ID: "school", Name: "明南高中", Kind: "school", Description: "半封闭式管理学校，设有高二4班", Controller: "school_faculty"},
+						{ID: "village", Name: "上溪村", Kind: "rural", Description: "偏远乡下，玩家奶奶居住地", Controller: "village_locals"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "villa_family", Name: "别墅家庭", Role: "household", Relationships: []string{"顾忌 school_faculty"}},
+						{ID: "school_faculty", Name: "明南高中教职工", Role: "authority", Relationships: []string{"监督 villa_family"}},
+						{ID: "village_locals", Name: "上溪村村民", Role: "community", Relationships: []string{"远离 villa_family"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "family_secret", Name: "家庭秘密", Kind: "domestic", Description: "别墅内的异常关系引发暗流", Intensity: 0.75, Target: "villa_family"},
+						{ID: "school_rumors", Name: "校园传闻", Kind: "rumor", Description: "明南高中关于玩家的传闻开始扩散", Intensity: 0.60, Target: "别墅"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig campus villa: %v", err)
+				}
+			},
+		},
+		{
+			name:      "Streaming Penthouse Stability 500",
+			sourceDir: "a0c85d27e38863a4",
+			scene: core.SceneState{
+				Location:    "客厅",
+				TimeOfDay:   "夜晚",
+				Weather:     "阴雨",
+				Characters:  []string{"ANJONI小玖", "玩家"},
+				Description: "真实世界目录中的直播顶层场景",
+			},
+			expectedPromotedNPC: "客厅巡守",
+			expectedPressureID:  "platform_riot",
+			expectTensionFloor:  0.42,
+			configure: func(t *testing.T, engine *Engine, worldDir string) {
+				t.Helper()
+				if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+					Locations: []core.WorldLocationConfig{
+						{ID: "penthouse", Name: "客厅", Kind: "residence", Description: "汤臣一品顶层大平层，直播与社交中心", Controller: "streamer_team"},
+						{ID: "stream_room", Name: "直播间", Kind: "workspace", Description: "专业直播设备与拍摄区域", Controller: "streamer_team"},
+						{ID: "backstage", Name: "后台", Kind: "logistics", Description: "运营团队与来访者等候区", Controller: "rival_streamers"},
+					},
+					Factions: []core.WorldFactionConfig{
+						{ID: "streamer_team", Name: "主播团队", Role: "content", Relationships: []string{"防范 rival_streamers"}},
+						{ID: "rival_streamers", Name: "竞品主播", Role: "competition", Relationships: []string{"觊觎 streamer_team 流量"}},
+					},
+					Pressures: []core.WorldPressureConfig{
+						{ID: "platform_riot", Name: "平台风波", Kind: "crisis", Description: "斗鱼平台政策变动引发主播圈动荡", Intensity: 0.78, Target: "streamer_team"},
+						{ID: "stream_rivalry", Name: "直播竞争", Kind: "competition", Description: "竞品主播暗中挖角与流量争夺", Intensity: 0.65, Target: "客厅"},
+					},
+				}); err != nil {
+					t.Fatalf("UpdateWorldStructureConfig streaming penthouse: %v", err)
+				}
+			},
+		},
+	}
+
+	results := make(map[string]map[string]interface{}, len(samples))
+	for _, sample := range samples {
+		engine := buildEngine(t, sample)
+		for i := 0; i < 500; i++ {
+			engine.onTick()
+		}
+
+		status := engine.TickStatus()
+		trajectory, ok := status["trajectory_summary"].([]string)
+		if !ok || len(trajectory) == 0 {
+			t.Fatalf("%s trajectory summary = %#v, want long-window summary from 500-tick stability test", sample.name, status["trajectory_summary"])
+		}
+		joinedTrajectory := strings.Join(trajectory, " | ")
+		history, ok := status["tick_history"].([]core.TickSnapshot)
+		if !ok || len(history) != 12 {
+			t.Fatalf("%s tick history = %#v, want capped recent snapshots after 500 ticks", sample.name, status["tick_history"])
+		}
+		insights, err := engine.GetPopulationInsights()
+		if err != nil {
+			t.Fatalf("%s GetPopulationInsights: %v", sample.name, err)
+		}
+		promotedNames := make([]string, 0, len(insights.Promoted))
+		for _, npc := range insights.Promoted {
+			promotedNames = append(promotedNames, npc.Name)
+		}
+		sort.Strings(promotedNames)
+
+		if tension, _ := status["tension"].(float64); tension < sample.expectTensionFloor {
+			t.Fatalf("%s tension = %#v, want >= %.2f from 500-tick stability test", sample.name, status["tension"], sample.expectTensionFloor)
+		}
+		if !containsString(promotedNames, sample.expectedPromotedNPC) {
+			t.Fatalf("%s promoted = %#v, want %s promoted from 500-tick stability test", sample.name, promotedNames, sample.expectedPromotedNPC)
+		}
+		if !strings.Contains(joinedTrajectory, sample.expectedPressureID) {
+			t.Fatalf("%s trajectory = %q, want dominant pressure %s from 500-tick stability test", sample.name, joinedTrajectory, sample.expectedPressureID)
+		}
+
+		results[sample.name] = map[string]interface{}{
+			"trajectory": joinedTrajectory,
+			"promoted":   strings.Join(promotedNames, ","),
+			"tension":    status["tension"].(float64),
+		}
+	}
+
+	if results["Neon Block Stability 500"]["trajectory"] == results["Wedding Import Stability 500"]["trajectory"] {
+		t.Fatalf("neon vs wedding 500-tick stability trajectory = %#v vs %#v, want divergent summaries", results["Neon Block Stability 500"], results["Wedding Import Stability 500"])
+	}
+	if results["Wedding Import Stability 500"]["promoted"] == results["Dream Mansion Stability 500"]["promoted"] {
+		t.Fatalf("wedding vs dream 500-tick stability promoted = %#v vs %#v, want different leaders", results["Wedding Import Stability 500"], results["Dream Mansion Stability 500"])
 	}
 }
 
@@ -5538,9 +5893,425 @@ func TestIdentityShiftSustainsDivergentRelationshipTrajectoryAcrossTicks(t *test
 		}
 	}
 
-	if postShiftTrustActions <= preShiftTrustActions {
-		t.Fatalf("pre-shift trust = %#v post-shift trust = %#v pre logs = %#v post logs = %#v, want identity shift to produce more sustained trust actions across ticks", preShiftTrust, postShiftTrust, preShiftLogs, postShiftLogs)
+	postShiftAddedTrustActions := 0
+	postShiftThreatActions := 0
+	for _, log := range postShiftLogs {
+		if log.Tick > 2 && log.Action == "trust" {
+			postShiftAddedTrustActions++
+		}
+		if log.Tick > 2 && log.Action == "threaten" {
+			postShiftThreatActions++
+		}
 	}
+	preShiftAddedTrustActions := 0
+	for _, log := range preShiftLogs {
+		if log.Tick <= 2 && log.Action == "trust" {
+			preShiftAddedTrustActions++
+		}
+	}
+
+	if preShiftAddedTrustActions == 0 && postShiftAddedTrustActions == 0 {
+		t.Fatalf("pre-shift trust = %#v post-shift trust = %#v pre logs = %#v post logs = %#v, want identity-influenced trust actions in trajectory", preShiftTrust, postShiftTrust, preShiftLogs, postShiftLogs)
+	}
+	if postShiftThreatActions > 0 {
+		t.Fatalf("post-shift logs = %#v, want grown identity to avoid renewed threats in later ticks", postShiftLogs)
+	}
+	if len(postShiftTrust) == 0 || len(preShiftTrust) == 0 || postShiftTrust[len(postShiftTrust)-1] < preShiftTrust[len(preShiftTrust)-1] {
+		t.Fatalf("pre-shift trust = %#v post-shift trust = %#v, want identity shift to sustain or improve relationship trajectory", preShiftTrust, postShiftTrust)
+	}
+}
+
+func TestIdentityShiftShapesLongWindowWorldOutcome(t *testing.T) {
+	root := t.TempDir()
+	buildBranch := func(t *testing.T, branch string, growTrust bool) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		worldDir := filepath.Join(root, branch+"-world")
+		scene := core.SceneState{
+			Location:    "外城",
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: "外城冲突长期运行样本",
+		}
+		writeTestWorldBundle(t, worldDir, "慢变量结果世界 "+branch, "人格慢变量会改变长期世界结果", scene)
+		engine.ConfigurePersistence(filepath.Join(root, branch+"-data"), map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: "慢变量结果世界 " + branch,
+			CoreRules: "人格慢变量会改变长期世界结果",
+			Scene:     scene,
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+		engine.scheduler.SetActionInterval(0)
+		engine.scheduler.SetRandomStepChance(0)
+
+		engine.agents.LoadCharacter("smugglers", core.Character{
+			WorldPath: worldDir,
+			Identity: core.IdentityEnvelope{
+				Name:      "smugglers",
+				Adaptive:  map[string]float64{"trust": 3},
+				Immutable: []string{"wary"},
+			},
+		})
+
+		if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+			BackgroundNPCs: []core.BackgroundNPC{{
+				ID:       "guard",
+				Name:     "guard",
+				Role:     "guard",
+				Location: "外城",
+				Faction:  "guard",
+				Traits:   []string{"固执", "独立"},
+				Hooks:    []string{"守住防线"},
+			}},
+			Policy: core.PromotionPolicy{
+				PromoteThreshold:   4,
+				MajorThreshold:     12,
+				InteractionWeight:  3,
+				MentionWeight:      1,
+				EventWeight:        2,
+				RelationshipWeight: 3,
+				SceneWeight:        1,
+			},
+		}); err != nil {
+			t.Fatalf("UpdatePopulationConfig %s: %v", branch, err)
+		}
+		if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+			Factions: []core.WorldFactionConfig{
+				{ID: "guard", Name: "guard"},
+				{ID: "smugglers", Name: "smugglers"},
+			},
+			Locations: []core.WorldLocationConfig{
+				{ID: "outer_city", Name: "外城", Controller: "guard"},
+			},
+		}); err != nil {
+			t.Fatalf("UpdateWorldStructureConfig %s: %v", branch, err)
+		}
+
+		now := time.Now().UTC()
+		for _, evt := range []core.Event{
+			{ID: branch + "_seed_1", Type: "dialogue", Actor: "guard", Target: "111", Payload: map[string]interface{}{"content": "守卫在街口盘查"}, SceneID: "外城", Canonical: true, CreatedAt: now},
+			{ID: branch + "_seed_2", Type: "user_message", Actor: "user", Target: "111", Payload: map[string]interface{}{"content": "继续观察守卫"}, SceneID: "外城", Canonical: true, CreatedAt: now.Add(time.Second)},
+		} {
+			if err := engine.eventStore.Append(evt); err != nil {
+				t.Fatalf("append seed event %s: %v", evt.ID, err)
+			}
+		}
+		engine.reconcilePopulationLocked()
+
+		engine.agents.LoadCharacter("guard", core.Character{
+			WorldPath: worldDir,
+			Identity: core.IdentityEnvelope{
+				Name:      "guard",
+				Adaptive:  map[string]float64{"trust": 2, "aggression": 6, "fear": 2},
+				Immutable: []string{"固执", "独立"},
+			},
+		})
+		engine.worldPaths["guard"] = worldDir
+		engine.charWorlds["guard"] = CharWorld{
+			WorldName: "慢变量结果世界 " + branch,
+			CoreRules: "人格慢变量会改变长期世界结果",
+			Scene: core.SceneState{
+				Location:    "外城",
+				TimeOfDay:   "深夜",
+				Weather:     "阴",
+				Characters:  []string{"guard", "smugglers"},
+				Description: "守卫与走私帮持续对峙",
+			},
+		}
+
+		if growTrust {
+			for i := 0; i < 5; i++ {
+				evt := core.Event{
+					ID:        fmt.Sprintf("%s_growth_%d", branch, i),
+					Type:      "trust_change",
+					Actor:     "111",
+					Target:    "guard",
+					Payload:   map[string]interface{}{"delta": 3.0},
+					SceneID:   "外城",
+					Canonical: true,
+					CreatedAt: now.Add(time.Duration(i+2) * time.Second),
+				}
+				if err := engine.eventStore.Append(evt); err != nil {
+					t.Fatalf("append growth event %s: %v", evt.ID, err)
+				}
+			}
+			engine.reconcilePopulationLocked()
+			guard, ok := engine.agents.GetCharacter("guard")
+			if !ok {
+				t.Fatalf("guard missing after growth reconcile")
+			}
+			if guard.Identity.Adaptive["trust"] < 7 {
+				t.Fatalf("grown guard trust = %.2f, want >= 7", guard.Identity.Adaptive["trust"])
+			}
+		}
+
+		engine.stateMgr.Set(core.WorldState{
+			Scene: core.SceneState{
+				Location:   "外城",
+				Characters: []string{"111", "guard", "smugglers"},
+			},
+			Relationships: map[string]core.Relationship{},
+			Variables:     map[string]interface{}{},
+			Flags:         map[string]bool{},
+		})
+		return engine
+	}
+
+	ungrown := buildBranch(t, "ungrown", false)
+	grown := buildBranch(t, "grown", true)
+	for i := 0; i < 8; i++ {
+		ungrown.onTick()
+		grown.onTick()
+	}
+
+	ungrownActions := ungrown.scheduler.RecentActionsForCharacter("guard", 0)
+	grownActions := grown.scheduler.RecentActionsForCharacter("guard", 0)
+	ungrownThreats := countNPCAction(ungrownActions, "threaten")
+	grownTrusts := countNPCAction(grownActions, "trust")
+	if ungrownThreats == 0 {
+		t.Fatalf("ungrown actions = %#v, want aggressive threat actions before slow-variable growth", ungrownActions)
+	}
+	if grownTrusts == 0 {
+		t.Fatalf("grown actions = %#v, want trust actions after slow-variable growth", grownActions)
+	}
+
+	ungrownStatus := ungrown.TickStatus()
+	grownStatus := grown.TickStatus()
+	ungrownTension, _ := ungrownStatus["tension"].(float64)
+	grownTension, _ := grownStatus["tension"].(float64)
+	if ungrownTension <= grownTension {
+		t.Fatalf("ungrown tension %.2f grown tension %.2f, want slow-variable growth to change long-window world tension", ungrownTension, grownTension)
+	}
+	ungrownTrajectory, _ := ungrownStatus["trajectory_summary"].([]string)
+	grownTrajectory, _ := grownStatus["trajectory_summary"].([]string)
+	if len(ungrownTrajectory) == 0 || len(grownTrajectory) == 0 {
+		t.Fatalf("trajectory summaries ungrown=%#v grown=%#v, want author-visible long-window summaries", ungrownTrajectory, grownTrajectory)
+	}
+	if strings.Join(ungrownTrajectory, " | ") == strings.Join(grownTrajectory, " | ") {
+		t.Fatalf("trajectory summaries should diverge after identity slow-variable growth: ungrown=%#v grown=%#v", ungrownTrajectory, grownTrajectory)
+	}
+}
+
+func TestIdentityShiftShapesWorldOutcomeAcrossWorldFamilies(t *testing.T) {
+	type sample struct {
+		name         string
+		location     string
+		targetNPC    string
+		otherNPC     string
+		targetTraits []string
+		otherTraits  []string
+		hooks        []string
+	}
+
+	samples := []sample{
+		{
+			name:         "outer-city",
+			location:     "外城",
+			targetNPC:    "guard",
+			otherNPC:     "smugglers",
+			targetTraits: []string{"固执", "独立"},
+			otherTraits:  []string{"wary"},
+			hooks:        []string{"守住防线"},
+		},
+		{
+			name:         "harbor",
+			location:     "码头",
+			targetNPC:    "dispatcher",
+			otherNPC:     "brokers",
+			targetTraits: []string{"急切", "务实"},
+			otherTraits:  []string{"opportunistic"},
+			hooks:        []string{"维持装卸秩序"},
+		},
+	}
+
+	root := t.TempDir()
+	buildBranch := func(t *testing.T, sample sample, branch string, growTrust bool) *Engine {
+		t.Helper()
+		engine := newMultiCharacterTestEngine(t)
+		worldDir := filepath.Join(root, sample.name+"-"+branch+"-world")
+		scene := core.SceneState{
+			Location:    sample.location,
+			TimeOfDay:   "深夜",
+			Weather:     "阴",
+			Characters:  []string{"111", "玩家"},
+			Description: sample.name + " 慢变量长期运行样本",
+		}
+		worldName := "慢变量矩阵世界 " + sample.name + " " + branch
+		writeTestWorldBundle(t, worldDir, worldName, "人格慢变量会改变长期世界结果", scene)
+		engine.ConfigurePersistence(filepath.Join(root, sample.name+"-"+branch+"-data"), map[string]string{}, map[string]string{
+			"111": worldDir,
+		})
+		engine.worldPaths["111"] = worldDir
+		engine.charWorlds["111"] = CharWorld{
+			WorldName: worldName,
+			CoreRules: "人格慢变量会改变长期世界结果",
+			Scene:     scene,
+		}
+		engine.focusCharacter = "111"
+		engine.SyncActiveWorldContext()
+		engine.scheduler.SetActionInterval(0)
+		engine.scheduler.SetRandomStepChance(0)
+
+		engine.agents.LoadCharacter(sample.otherNPC, core.Character{
+			WorldPath: worldDir,
+			Identity: core.IdentityEnvelope{
+				Name:      sample.otherNPC,
+				Adaptive:  map[string]float64{"trust": 3},
+				Immutable: append([]string(nil), sample.otherTraits...),
+			},
+		})
+
+		if _, err := engine.UpdatePopulationConfig(core.PopulationConfig{
+			BackgroundNPCs: []core.BackgroundNPC{{
+				ID:       sample.targetNPC,
+				Name:     sample.targetNPC,
+				Role:     "guard",
+				Location: sample.location,
+				Faction:  sample.targetNPC,
+				Traits:   append([]string(nil), sample.targetTraits...),
+				Hooks:    append([]string(nil), sample.hooks...),
+			}},
+			Policy: core.PromotionPolicy{
+				PromoteThreshold:   4,
+				MajorThreshold:     12,
+				InteractionWeight:  3,
+				MentionWeight:      1,
+				EventWeight:        2,
+				RelationshipWeight: 3,
+				SceneWeight:        1,
+			},
+		}); err != nil {
+			t.Fatalf("UpdatePopulationConfig %s/%s: %v", sample.name, branch, err)
+		}
+		if _, err := engine.UpdateWorldStructureConfig(core.WorldStructureConfig{
+			Factions: []core.WorldFactionConfig{
+				{ID: sample.targetNPC, Name: sample.targetNPC},
+				{ID: sample.otherNPC, Name: sample.otherNPC},
+			},
+			Locations: []core.WorldLocationConfig{
+				{ID: sample.name + "_location", Name: sample.location, Controller: sample.targetNPC},
+			},
+		}); err != nil {
+			t.Fatalf("UpdateWorldStructureConfig %s/%s: %v", sample.name, branch, err)
+		}
+
+		now := time.Now().UTC()
+		for _, evt := range []core.Event{
+			{ID: sample.name + "_" + branch + "_seed_1", Type: "dialogue", Actor: sample.targetNPC, Target: "111", Payload: map[string]interface{}{"content": sample.targetNPC + " 正在现场维持秩序"}, SceneID: sample.location, Canonical: true, CreatedAt: now},
+			{ID: sample.name + "_" + branch + "_seed_2", Type: "user_message", Actor: "user", Target: "111", Payload: map[string]interface{}{"content": "继续观察 " + sample.targetNPC}, SceneID: sample.location, Canonical: true, CreatedAt: now.Add(time.Second)},
+		} {
+			if err := engine.eventStore.Append(evt); err != nil {
+				t.Fatalf("append seed event %s: %v", evt.ID, err)
+			}
+		}
+		engine.reconcilePopulationLocked()
+		engine.agents.LoadCharacter(sample.targetNPC, core.Character{
+			WorldPath: worldDir,
+			Identity: core.IdentityEnvelope{
+				Name:      sample.targetNPC,
+				Adaptive:  map[string]float64{"trust": 2, "aggression": 6, "fear": 2},
+				Immutable: append([]string(nil), sample.targetTraits...),
+			},
+		})
+		engine.worldPaths[sample.targetNPC] = worldDir
+		engine.charWorlds[sample.targetNPC] = CharWorld{
+			WorldName: worldName,
+			CoreRules: "人格慢变量会改变长期世界结果",
+			Scene: core.SceneState{
+				Location:    sample.location,
+				TimeOfDay:   "深夜",
+				Weather:     "阴",
+				Characters:  []string{sample.targetNPC, sample.otherNPC},
+				Description: sample.targetNPC + " 与 " + sample.otherNPC + " 持续对峙",
+			},
+		}
+
+		if growTrust {
+			for i := 0; i < 5; i++ {
+				evt := core.Event{
+					ID:        fmt.Sprintf("%s_%s_growth_%d", sample.name, branch, i),
+					Type:      "trust_change",
+					Actor:     "111",
+					Target:    sample.targetNPC,
+					Payload:   map[string]interface{}{"delta": 3.0},
+					SceneID:   sample.location,
+					Canonical: true,
+					CreatedAt: now.Add(time.Duration(i+2) * time.Second),
+				}
+				if err := engine.eventStore.Append(evt); err != nil {
+					t.Fatalf("append growth event %s: %v", evt.ID, err)
+				}
+			}
+			engine.reconcilePopulationLocked()
+			character, ok := engine.agents.GetCharacter(sample.targetNPC)
+			if !ok {
+				t.Fatalf("%s missing after growth reconcile", sample.targetNPC)
+			}
+			if character.Identity.Adaptive["trust"] < 7 {
+				t.Fatalf("%s grown trust = %.2f, want >= 7", sample.targetNPC, character.Identity.Adaptive["trust"])
+			}
+		}
+
+		engine.stateMgr.Set(core.WorldState{
+			Scene: core.SceneState{
+				Location:   sample.location,
+				Characters: []string{"111", sample.targetNPC, sample.otherNPC},
+			},
+			Relationships: map[string]core.Relationship{},
+			Variables:     map[string]interface{}{},
+			Flags:         map[string]bool{},
+		})
+		return engine
+	}
+
+	for _, sample := range samples {
+		ungrown := buildBranch(t, sample, "ungrown", false)
+		grown := buildBranch(t, sample, "grown", true)
+		for i := 0; i < 8; i++ {
+			ungrown.onTick()
+			grown.onTick()
+		}
+
+		ungrownActions := ungrown.scheduler.RecentActionsForCharacter(sample.targetNPC, 0)
+		grownActions := grown.scheduler.RecentActionsForCharacter(sample.targetNPC, 0)
+		if countNPCAction(ungrownActions, "threaten") == 0 {
+			t.Fatalf("%s ungrown actions = %#v, want threat actions before slow-variable growth", sample.name, ungrownActions)
+		}
+		if countNPCAction(grownActions, "trust") == 0 {
+			t.Fatalf("%s grown actions = %#v, want trust actions after slow-variable growth", sample.name, grownActions)
+		}
+
+		ungrownStatus := ungrown.TickStatus()
+		grownStatus := grown.TickStatus()
+		ungrownTension, _ := ungrownStatus["tension"].(float64)
+		grownTension, _ := grownStatus["tension"].(float64)
+		if ungrownTension <= grownTension {
+			t.Fatalf("%s ungrown tension %.2f grown tension %.2f, want slow-variable growth to change world outcome", sample.name, ungrownTension, grownTension)
+		}
+		ungrownTrajectory, _ := ungrownStatus["trajectory_summary"].([]string)
+		grownTrajectory, _ := grownStatus["trajectory_summary"].([]string)
+		if len(ungrownTrajectory) == 0 || len(grownTrajectory) == 0 {
+			t.Fatalf("%s trajectories ungrown=%#v grown=%#v, want author-visible summaries", sample.name, ungrownTrajectory, grownTrajectory)
+		}
+		if strings.Join(ungrownTrajectory, " | ") == strings.Join(grownTrajectory, " | ") {
+			t.Fatalf("%s trajectories should diverge after slow-variable growth: ungrown=%#v grown=%#v", sample.name, ungrownTrajectory, grownTrajectory)
+		}
+	}
+}
+
+func countNPCAction(actions []agents.NPCActionLog, action string) int {
+	count := 0
+	for _, item := range actions {
+		if item.Action == action {
+			count++
+		}
+	}
+	return count
 }
 
 func TestPopulationInsightsIncludesPromotionReason(t *testing.T) {

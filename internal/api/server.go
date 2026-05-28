@@ -193,12 +193,11 @@ type RuntimeEngine interface {
 	DeletePendingFact(eventID string) error
 	PromotePendingFact(eventID string) error
 	GetSceneParticipants() []string
-	SwitchCharacter(name string) error
+	SwitchFocusCharacter(name string) error
 	EnterWorld(path string) (core.ScenarioPreset, error)
 	GetWorldName() string
 	GetWorldPaths() map[string]string
 	GetFocusMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error)
-	GetMemorySnapshot(character string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error)
 	ListSaveSlots() ([]core.SaveSlot, error)
 	CreateSaveSlot(name, branch, note string) (core.SaveSlot, error)
 	LoadSaveSlot(name string) (core.SaveSlot, error)
@@ -1056,7 +1055,7 @@ func (s *Server) handleFocusSwitch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := engine.SwitchCharacter(name); err != nil {
+	if err := engine.SwitchFocusCharacter(name); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -2520,7 +2519,32 @@ func buildRuntimeAuditSummary(audit core.RuntimeAuditSnapshot) []string {
 		lines = append(lines, fmt.Sprintf("latest trace: turn %d · %s", audit.LatestTrace.Turn, strings.TrimSpace(audit.LatestTrace.UserInput)))
 	}
 	if len(audit.DirectorPlan.Selected) > 0 {
-		lines = append(lines, "director: "+strings.Join(audit.DirectorPlan.Selected, " -> "))
+		directorLine := "director: " + strings.Join(audit.DirectorPlan.Selected, " -> ")
+		if audit.DirectorPlan.Mode != "" {
+			directorLine = fmt.Sprintf("director [%s]: %s", audit.DirectorPlan.Mode, strings.Join(audit.DirectorPlan.Selected, " -> "))
+		}
+		lines = append(lines, directorLine)
+		if len(audit.DirectorPlan.CandidateDetails) > 0 {
+			for _, c := range audit.DirectorPlan.CandidateDetails {
+				if c.Selected {
+					factors := ""
+					if len(c.DominantFactors) > 0 {
+						factors = fmt.Sprintf(" · 主导 %s", strings.Join(c.DominantFactors, "/"))
+					}
+					lines = append(lines, fmt.Sprintf("  胜出: %s %.1f%s", c.Name, c.Score, factors))
+					break
+				}
+			}
+			for _, c := range audit.DirectorPlan.CandidateDetails {
+				if !c.Selected {
+					lines = append(lines, fmt.Sprintf("  候选: %s %.1f", c.Name, c.Score))
+					break
+				}
+			}
+		}
+	}
+	if len(audit.DirectorPlan.WorldSignals) > 0 {
+		lines = append(lines, "director-world: "+strings.Join(audit.DirectorPlan.WorldSignals, " · "))
 	}
 	lines = append(lines, fmt.Sprintf("audit assets: traces %d · checkpoints %d · presets %d · reports %d", len(audit.RecentTraces), len(audit.Checkpoints), len(audit.Presets), len(audit.ExperimentReports)))
 	return lines

@@ -4,6 +4,9 @@
 # Data
 data/
 llm_usage.jsonl
+*.db
+*.sqlite
+*.sqlite3
 
 # Logs
 server.log
@@ -33,6 +36,20 @@ PYEOF
 .env
 .env.*
 *.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+*.secret
+*.secrets
+*.token
+*.tokens
+*.credential
+*.credentials
+secrets/
+tokens/
+credentials/
 
 # Character and world data (user content)
 characters/*.yml

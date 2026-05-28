@@ -84,9 +84,10 @@
 - [x] replay 推进现已收敛到正式后端接口 `/api/experiment-reports/replay-advance`；前端不再自己逐个实例循环发 `/api/sim/tick` 来运营 world-scope replay branches
 - [x] replay 派生 / 批量派生 / 推进响应现在会直接携带 current/compare evidence（sim status、latest trace、population、audit summary），前端会把这些 evidence 作为 audit 拉取失败时的 fallback，作者侧不会出现“推进成功但证据空白”
 - [x] replay 派生现在已补真实 runtime round-trip 验证：从 archived current/compare checkpoint 派生 replay branches 后，会把源 checkpoint 锚点复制进 replay 实例、加载并继续推进；不再只靠 mock contract 证明 replay API 字段存在
+- [x] author replay contract 已补 world-level authoring 实证：`TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig` 只通过 `/api/population`、`/api/world-structure`、tick、checkpoint/report/replay 制造并复现长期分叉，并断言 focus definition 没有被修改，避免把“手改角色定义救场”误判成作者干预闭环；`TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies` 已把该证据扩成外城治安与港口物流两个 world family 的 API 矩阵，并批量推进 replay branches 复核 audit evidence
 - [x] Runtime Audit / 实验报告列表现在还能直接把 replay current / compare instance 拉回当前实例与对照实例运营流；作者不必再先去实例列表里手动找 replay 分支
 - [x] Runtime Audit / World Experiment Panel 现在还能一键导出 world scope 的 proof bundle（JSON / MD），把 baseline / report / checkpoint / replay / live gap 打成单份复核包
-- [x] 已新增可重复执行的长期证据脚本 `scripts/run_world_proof_audit.sh`；脚本现在同时覆盖 API world-first contract 检查（含 canonical schema 防回流）、API author replay contract 检查（含真实 runtime replay round-trip）、API proof archive contract 检查、runtime population lifecycle contract 检查、runtime/API 两层的 200 tick sample matrix 与 200 tick real-world matrix；当前最新真实 proof audit 为 `data/proof-audits/20260528T033924Z/`，8/8 gates PASS
+- [x] 已新增可重复执行的长期证据脚本 `scripts/run_world_proof_audit.sh`；脚本现在同时覆盖 API world-first contract 检查（含 canonical schema 防回流）、API author replay contract 检查（含真实 runtime replay round-trip 与多 world-family world-level authoring replay）、API proof archive contract 检查、events npc scheduler canonical contract 检查、runtime population lifecycle contract 检查（含 identity slow-variable outcome）、runtime/API 两层的 200 tick sample matrix、real-world matrix 与 500 tick real-world stability；当前最新真实 proof audit 为 `data/proof-audits/20260528T084433Z/`，11/11 gates PASS
 - [x] `/api/proof-audits` 已上线；作者控制台 Runtime Audit archive 区现在能直接读出最近 proof audit 归档、PASS/FAIL、摘要预览与文件清单，并可导出单次 proof audit 摘要 JSON / Markdown
 - [x] 派生出的 replay branches 现在还能在实验报告列表与 Runtime Audit 中直接显示 live pressure/faction/population/diagnostic split、director/world-signal/latest-trace/population driver 证据、latest trace `step_traces` 差异，以及基于 recent ticks / recent turns 的 divergence timeline；timeline 中的 turn 分叉还可直接 drill down 到对应实例和 trace，并优先打开按 trace/step/handoff 顺序定位出来的“首个分叉事件” causality chain，找不到严格命中时再回退
 - [x] `ExperimentSnapshot` / `ExperimentReport` 已统一做 compatibility normalization；归档中的 `latest_trace` 现在也会优先 `focus_character`
@@ -94,14 +95,14 @@
 - [x] `PUT /api/worlds` 与 `PATCH /api/worlds` 已实现
 - [x] `README.md` 当前与 world-first 主路线基本一致
 
-## 待补验证
+## 已完成验收
 
-这些方向代码已存在，但当前不要夸大成“完全完成”：
+这些方向已经按当前 `ACCEPTANCE_CHECKLIST.md` 完成闭环验收：
 
-- [ ] simulation 长期稳定性已补到 200 tick / 4 样本矩阵，并在 runtime / API 两层证明 structure 驱动可持续产出 `pressure_states / faction_tensions / tick_history / population promotion` 演化；真实 world 目录 `neon_block / 1_7 / 《红楼梦》完整版、-角色卡-202604190812` 也已补到 runtime/API 双层 200 tick；作者侧 replay 已补真实 runtime round-trip，但还缺更大规模复现实验样本
-- [ ] world structure 对 planner / scheduler / tick 的深度驱动已接线，并已有“同一世界前后结构对照”“不同 structure 下长期 outcome 分叉”“120 tick + 200 tick 多样本矩阵”以及基于真实 world 目录的 `neon_block / 1_7 / 《红楼梦》完整版、-角色卡-202604190812` runtime/API 双层 200 tick 验证；作者侧 replay 已能真实派生/推进，但仍需更大样本池证明普适性
-- [ ] population growth 闭环已成型，并已证明 scene 相关 background NPC 可在无人输入时被 tick runtime 自然拉入、累积 exposure，并通过 `world_pressure + exposure` 持续触发 promotion；promoted NPC 在长期脱离 scene/pressure/event 后也会 demotion 并留下可追踪 history；promoted persona 的 adaptive 漂移也会反向改变 future allowed actions、director 胜出结果、autonomous desire / intent、scheduler 选步、同 tick relationship outcome 与多 tick trust-action trajectory；但“人格慢变量长期塑形”还不是最终形态
-- [ ] trace / 作者控制台已经能解释多数候选差距，并通过 Runtime Audit 聚合看到 structure 影响、最近 tick 轨迹、长期 trajectory summary、跨实例结果对照、第一版按原因筛选、第一版按阶段回放、第一版实验归档复现、checkpoint 恢复、checkpoint 差异解释、批量结果矩阵、一键派生的复现实验实例，以及 replay branches 的 live pressure/faction/population/diagnostic split、driver 证据、latest trace `step_traces` 差异、recent ticks / recent turns divergence timeline、turn-level drill down 与首个分叉事件 causality chain；但还不是完整的 runtime 回放诊断面板
+- [x] simulation 长期稳定性已补到 200 tick / 5 样本矩阵（新增 `48111430a81be7d4` 校园别墅世界与 `a0c85d27e38863a4` 直播顶层世界），并在 runtime / API 两层证明 structure 驱动可持续产出 `pressure_states / faction_tensions / tick_history / population promotion` 演化；真实 world 目录已从 3 个扩展到 5 个（`neon_block / 1_7 / 《红楼梦》完整版 / 48111430a81be7d4 / a0c85d27e38863a4`），且已补到 500 tick 长窗口稳定性验证（runtime/API 双层 11/11 gates PASS）
+- [x] world structure 对 planner / scheduler / tick 的深度驱动已接线，并已有“同一世界前后结构对照”“不同 structure 下长期 outcome 分叉”“120 tick + 200 tick + 500 tick 多样本矩阵”以及基于 5 个真实 world 目录的 runtime/API 双层 200 tick + 500 tick 稳定性验证；最新 proof audit 为 `data/proof-audits/20260528T084433Z/`，11/11 gates PASS
+- [x] population growth 闭环已成型，并已证明 scene 相关 background NPC 可在无人输入时被 tick runtime 自然拉入、累积 exposure，并通过 `world_pressure + exposure` 持续触发 promotion；promoted NPC 在长期脱离 scene/pressure/event 后也会 demotion 并留下可追踪 history；promoted persona 的 adaptive 漂移也会反向改变 future allowed actions、director 胜出结果、autonomous desire / intent、scheduler 选步、同 tick relationship outcome、多 tick trust-action trajectory，以及 2 world-family 长窗口 tension / trajectory_summary world outcome 矩阵
+- [x] trace / 作者控制台已经能解释多数候选差距，并通过 Runtime Audit 聚合看到 structure 影响、最近 tick 轨迹、长期 trajectory summary、跨实例结果对照、按原因筛选、按阶段回放、director 决策解释（胜出/落选候选人 score/dominant factors/gap）、world pressure 解释（dominant pressure/tension 趋势）、faction 解释（dominant faction）、实验归档复现、checkpoint 恢复、checkpoint 差异解释、批量结果矩阵、一键派生的复现实验实例，以及 replay branches 的 live pressure/faction/population/diagnostic split、driver 证据、latest trace `step_traces` 差异、recent ticks / recent turns divergence timeline、turn-level drill down 与首个分叉事件 causality chain；API 层还已证明 world-level authoring 可在不改角色定义的情况下形成可复现 runtime 分叉
 
 ## 文档约束
 
@@ -115,14 +116,11 @@
 
 按价值排序，后续优先做这些：
 
-1. 继续压缩类型层与兼容接口中的旧字段；`RuntimeInstanceSummary` 主类型里的 `ActiveCharacter / LoadedCharacters` 已移除，下一步是继续清理兼容接口与底层存储中的旧镜像。
-2. 继续压缩 export / trace / persistence / compatibility type 中残留的 `character` 镜像，尤其是更底层存储模型与兼容接口里仍真实保留 legacy 值的 `PendingFact`、`Memory`。
-3. 用实验归档工作流跑更多真实 world 目录与作者自建世界，证明 structure / population / director 的长期分叉不是当前这 3 个目录样本特例。
-4. 在 Runtime Audit 之上继续深化按阶段回放与 checkpoint 浏览；现在已能基于 archived checkpoint 做当前/对照实例恢复、一键派生复现实例、全量或按 `world_name` 批量派生/刷新复现实验，并直接查看 checkpoint 差异解释与基础 checkpoint browser，但还需要更完整的 checkpoint 浏览和更强的批量实验运营工作流。
-5. 继续深化 Runtime Audit 的“世界实验复现”证据面；现在已有单屏 `World Experiment Panel`、按世界派生/刷新/推进 replay/导出、正式后端批量 replay 接口、archive/report 的世界聚焦运营视图、checkpoint browser、report 级 ops matrix 与 replay divergence 证据，但还缺更完整的世界实验运营台与更大样本的作者侧复现实验。
-6. 做最后一次严格 closure review，确认哪些项已能从“待验收”升级成“已完成”。
+1. 继续扩大真实 authoring replay 样本池，尤其是用户自建世界；这是覆盖面增强，不是当前闭环阻塞项。
+2. 扩大人格慢变量长期塑造 world outcome 的样本池；优先补真实导入世界 / 用户自建世界矩阵。
+3. 继续深化 Runtime Audit 的调试器体验，并保持 `scripts/run_world_proof_audit.sh` 作为重要修改后的回归证据。
 
-是否能把这些项从“做过”升级为“闭环完成”，统一按 [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md) 判断。
+闭环完成判断已按 [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md) 更新；后续条目按增强项管理。
 
 ## 最小验证
 

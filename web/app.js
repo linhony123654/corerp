@@ -3469,7 +3469,42 @@ function renderRuntimeAudit() {
       traceRows.push(`latest trace: turn ${Number(audit.latest_trace.turn || 0)} · ${safeText(audit.latest_trace.focus_character || '--')} · ${safeText(audit.latest_trace.user_input || '--')} <button type="button" class="ghost-button" data-audit-trace-turn="${Number(audit.latest_trace.turn || 0)}">打开</button>`);
     }
     if (audit.director_plan?.selected?.length) {
-      traceRows.push(`director: ${safeText(audit.director_plan.mode || 'manual')} -> ${audit.director_plan.selected.map(item => safeText(item)).join(' -> ')}`);
+      const plan = audit.director_plan;
+      traceRows.push(`director: ${safeText(plan.mode || 'manual')} -> ${plan.selected.map(item => safeText(item)).join(' -> ')}${plan.switched ? ' [已切换]' : ''}`);
+      if (plan.reason) {
+        traceRows.push(`director-reason: ${safeText(plan.reason)}`);
+      }
+      const candidateDetails = Array.isArray(plan.candidate_details) ? plan.candidate_details : [];
+      if (candidateDetails.length) {
+        const selected = candidateDetails.filter(c => c.selected);
+        const alternates = candidateDetails.filter(c => !c.selected).slice(0, 3);
+        for (const c of selected) {
+          const tags = [];
+          if (c.present) tags.push('在场');
+          if (c.location_match) tags.push('地点');
+          if (c.faction_match) tags.push('势力');
+          if (c.pressure_match) tags.push('pressure');
+          if (c.hook_match) tags.push('hook');
+          const factors = Array.isArray(c.dominant_factors) && c.dominant_factors.length ? ` · 主导 ${c.dominant_factors.join('/')}` : '';
+          traceRows.push(`  胜出: ${safeText(c.name)} ${Number(c.score || 0).toFixed(1)} [${tags.join('/') || '--'}] ${safeText(c.reason || '--')}${factors}`);
+        }
+        if (alternates.length && selected.length) {
+          const winner = selected[0];
+          for (const c of alternates) {
+            const gap = Number((winner.score || 0) - (c.score || 0));
+            const gapReasons = [];
+            const wBreak = winner.score_breakdown || {};
+            const cBreak = c.score_breakdown || {};
+            for (const key of ['present', 'location_match', 'faction_match', 'pressure_match', 'hook_match', 'mentioned', 'kind_persona', 'source_promoted']) {
+              const delta = Number((wBreak[key] || 0) - (cBreak[key] || 0));
+              if (delta > 0.01) gapReasons.push(`${key}-${delta.toFixed(1)}`);
+              if (gapReasons.length >= 3) break;
+            }
+            const gapText = gap > 0 ? `落后 ${gap.toFixed(1)}` : '并列';
+            traceRows.push(`  落选: ${safeText(c.name)} ${Number(c.score || 0).toFixed(1)} (${gapText}${gapReasons.length ? ` · ${gapReasons.join(' / ')}` : ''})`);
+          }
+        }
+      }
     }
     if (Array.isArray(audit.director_plan?.world_signals) && audit.director_plan.world_signals.length) {
       traceRows.push(`director-world: ${audit.director_plan.world_signals.map(item => safeText(item)).join(' · ')}`);
@@ -3492,20 +3527,45 @@ function renderRuntimeAudit() {
     if (trajectory.length) {
       pressureRows.push(`trajectory: ${trajectory.map(line => safeText(line)).join(' | ')}`);
     }
+    const tension = Number(simStatus.tension || 0);
+    if (tension > 0) {
+      pressureRows.push(`tension: ${tension.toFixed(2)}`);
+    }
+    const pressureStates = simStatus.pressure_states || {};
+    const pressureKeys = Object.keys(pressureStates);
+    if (pressureKeys.length) {
+      const dominant = pressureKeys.reduce((a, b) => (pressureStates[a] || 0) > (pressureStates[b] || 0) ? a : b, '');
+      if (dominant) {
+        pressureRows.push(`dominant pressure: ${safeText(dominant)} ${Number(pressureStates[dominant] || 0).toFixed(2)}`);
+      }
+      pressureRows.push(`all pressures: ${formatMetricMap(pressureStates, value => Number(value).toFixed(2))}`);
+    }
     const diagnostics = Array.isArray(simStatus.diagnostics) ? simStatus.diagnostics : [];
     if (diagnostics.length) {
       pressureRows.push(`diagnostics: ${diagnostics.slice(0, 3).map(item => `${safeText(item.metric || '--')}:${safeText(item.message || '--')}`).join(' · ')}`);
     }
-    const pressureStates = simStatus.pressure_states || {};
-    if (Object.keys(pressureStates).length) {
-      pressureRows.push(`pressure states: ${formatMetricMap(pressureStates, value => Number(value).toFixed(2))}`);
+    const tickHistory = Array.isArray(simStatus.tick_history) ? simStatus.tick_history : [];
+    if (tickHistory.length >= 2) {
+      const first = tickHistory[0];
+      const last = tickHistory[tickHistory.length - 1];
+      const firstTension = Number(first.tension || 0);
+      const lastTension = Number(last.tension || 0);
+      if (firstTension > 0 || lastTension > 0) {
+        const trend = lastTension > firstTension ? '上升' : lastTension < firstTension ? '下降' : '稳定';
+        pressureRows.push(`tension 趋势: ${firstTension.toFixed(1)} -> ${lastTension.toFixed(1)} (${trend})`);
+      }
     }
     sections.push(buildAuditSection('World Pressure', pressureRows, ['pressure']));
 
     const factionRows = [];
     const factionTensions = simStatus.faction_tensions || {};
-    if (Object.keys(factionTensions).length) {
-      factionRows.push(`faction tensions: ${formatMetricMap(factionTensions, value => Number(value).toFixed(2))}`);
+    const factionKeys = Object.keys(factionTensions);
+    if (factionKeys.length) {
+      const dominantFaction = factionKeys.reduce((a, b) => (factionTensions[a] || 0) > (factionTensions[b] || 0) ? a : b, '');
+      if (dominantFaction) {
+        factionRows.push(`dominant faction: ${safeText(dominantFaction)} ${Number(factionTensions[dominantFaction] || 0).toFixed(2)}`);
+      }
+      factionRows.push(`all factions: ${formatMetricMap(factionTensions, value => Number(value).toFixed(2))}`);
     }
     if (Array.isArray(audit.director_plan?.world_signals)) {
       const factionSignals = audit.director_plan.world_signals.filter(item => String(item || '').includes('faction'));

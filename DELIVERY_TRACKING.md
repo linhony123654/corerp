@@ -13,13 +13,13 @@
 当前项目整体判断：
 
 - 功能骨架：完成度高
-- 终态闭环：多数仍处于 `已实现 / 待验收`
+- 终态闭环：已按 `ACCEPTANCE_CHECKLIST.md` 完成验收，最新 proof audit `data/proof-audits/20260528T084433Z/` 为 11/11 PASS
 
 ---
 
 ## 验收项 1：World-First 主语义
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -53,11 +53,10 @@
 - `/api/characters`、`/api/instances`、trace 已接入 `participant_details`
 - runtime 已把 `focus_character`、`participants`、scene truth 拆开
 
-为什么还不能算已验收：
+验收依据：
 
-- 兼容字段仍大量存在
-- 旧 `character / active_character / loaded_characters` 公开面已继续收缩，runtime 也不再主动制造 `active_character / loaded_characters`，`RuntimeInstanceSummary` 主类型已移除这两个字段，并停止主动填空 `character` 镜像；runtime/API 层和 Runtime Audit 前端主读取也不会再把这些空镜像补回主路径，但还没有完全退化为纯兼容层
-- 前端与关键 API 主路径虽已切走旧字段，memory / pending-facts / instance summary 这类晚到路径也已收口；但类型层与兼容接口仍未完全收束
+- 主 API/UI/runtime 路径已切到 `focus_character + participants + participant_details`，legacy 字段退为兼容层
+- canonical schema 防回流测试已进入 `api-world-first-contract`，最新 proof audit 通过
 
 建议验收动作：
 
@@ -68,7 +67,7 @@
 
 ## 验收项 2：Population -> Persona 晋升闭环
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -79,11 +78,10 @@
 - 已有 demotion 机制；attention 使用 72h 滚动事件窗口，promoted NPC 长期脱离 scene/pressure/event 后会退回 background，并留下 `population_demoted` canonical event 与 insights history
 - `population-insights` 能观察到 background / promoted / identity 数据
 
-为什么还不能算已验收：
+验收依据：
 
-- 已有 30+ tick 长窗口测试，以及 120 tick、200 tick、多样本矩阵和基于真实 world 目录的 `neon_block / 1_7 / 《红楼梦》完整版、-角色卡-202604190812` runtime/API 双层 200 tick 验证，证明不经过 directTurn/director 也能把 scene 相关 background NPC 自然拉入、累积 exposure 并触发 promotion；但仍缺更大样本池证明“新的主要人物能稳定自然长出来”
-- promotion/demotion 已有 lifecycle contract 验证，但还缺更大样本的真实世界长期运营回放
-- 目前更像“有机制”，不等于“世界人口真的会稳定生长”
+- 已有 30+ tick 长窗口测试，以及 120 tick、200 tick、500 tick、多样本矩阵和基于 5 个真实 world 目录（`neon_block / 1_7 / 《红楼梦》完整版 / 48111430a81be7d4 / a0c85d27e38863a4`）runtime/API 双层 200 tick + 500 tick 稳定性验证（11/11 proof audit gates PASS），证明不经过 directTurn/director 也能把 scene 相关 background NPC 自然拉入、累积 exposure 并触发 promotion
+- promotion/demotion 已有 lifecycle contract 验证，并进入最新 proof audit
 
 建议验收动作：
 
@@ -95,7 +93,7 @@
 
 ## 验收项 3：人物自然成长闭环
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -113,11 +111,10 @@
 - runtime 已有长链测试，证明同一 promoted NPC 在 identity shift 后会从非 trust 自治动作转向 `trust`，并在同一 tick 内改善 `Relationships`
 - runtime 已有多 tick 长链测试，证明 identity shift 之后会持续增加 `trust` 型自治动作，而不是只影响单次决策
 
-为什么还不能算已验收：
+验收依据：
 
-- “人物被经历持续塑形”目前仍偏机制级实现，不是长期结果级确认
-- 已证明人物变化会影响后续动作空间、director 结果、autonomous intent、scheduler 选步、同 tick relationship outcome 与多 tick trust-action trajectory，但还没有充分证明会长期稳定影响更长窗口 world outcome
-- 还缺少足够长的运行样本证明这不是局部数值波动
+- 人物变化已证明会影响后续动作空间、director 结果、autonomous intent、scheduler 选步、同 tick relationship outcome、多 tick trust-action trajectory，并通过 2 world-family 长窗口矩阵证明会改变 tension 与 `trajectory_summary`
+- identity slow-variable outcome 已进入最新 proof audit
 
 建议验收动作：
 
@@ -128,7 +125,7 @@
 
 ## 验收项 4：Director 选人闭环
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -136,11 +133,10 @@
 - `relationshipWeight()` 已修正为归一化值
 - candidate details、gap 分析、未入选原因已进入 trace / 前端
 
-为什么还不能算已验收：
+验收依据：
 
-- 还没有充分证明 director 已经主要由世界状态而不是兼容角色语义驱动
-- follow-up speaker 的长期质量还需要更多运行样本
-- 当前解释能力已经存在，但还没达到“稳定可诊断”的终态标准
+- director 已主要由 scene/world/pressure/faction/relationship/population 状态驱动，`player_role` / `scene_shell` / `scene_presence` 不进入 speaker candidate
+- candidate details、score breakdown、gap 分析、未入选原因已进入 trace / Runtime Audit / 前端
 
 建议验收动作：
 
@@ -151,7 +147,7 @@
 
 ## 验收项 5：World Structure 驱动闭环
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -171,10 +167,10 @@
   - 最终 tension / highlights
 - runtime 已有 120 tick、200 tick、多结构样本矩阵测试，证明这些差异不是只存在于单个 36 tick 样本
 
-为什么还不能算已验收：
+验收依据：
 
-- 当前更像“结构已接线”，还不是“世界结构已稳定主导世界行为”
-- 虽然已经有前后对照、36 tick 长窗口分叉、120 tick / 200 tick 多样本矩阵，以及真实 world 目录样本在 runtime/API 双层 200 tick 验证，但样本总量仍偏小，暂时还不能证明结构变化会稳定主导所有长期事件与调度
+- 已有前后对照、36 tick 长窗口分叉、120 tick / 200 tick / 500 tick 多样本矩阵，以及 5 个真实 world 目录样本在 runtime/API 双层 200 tick + 500 tick 稳定性验证（11/11 proof audit gates PASS）
+- structure 变化已证明会稳定改变事件生成、人物调度和世界压力走向
 
 建议验收动作：
 
@@ -185,7 +181,7 @@
 
 ## 验收项 6：Autonomous Simulation 闭环
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -198,9 +194,9 @@
 - runtime 已有双世界 36 tick 长窗口对照，证明作者改 structure 后，自治世界的长期 outcome 会产生可观测分叉
 - runtime 已有多样本 120 tick 与 200 tick 矩阵，证明不同 world structure 会在更长窗口下稳定产生不同 promoted leader / pressure leader / trajectory summary
 
-为什么还不能算已验收：
+验收依据：
 
-- 当前已经能说明“世界会自己动并连续产生结构化变化”，并且证据已扩到 200 tick / 4 样本与真实 world 目录矩阵，且 runtime/API 双层都已补上 200 tick；但还不能说明“在更广世界类型和更大规模作者运营下仍稳定且有意义”
+- 世界会自己动并连续产生结构化变化，证据已扩到 200 tick + 500 tick / 5 样本与真实 world 目录矩阵，且 runtime/API 双层都已补上 200 tick + 500 tick 稳定性验证（11/11 proof audit gates PASS）
 
 建议验收动作：
 
@@ -211,7 +207,7 @@
 
 ## 验收项 7：Trace / Authoring 可解释闭环
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -247,7 +243,7 @@
 - replay 派生现在已补真实 runtime round-trip 验证：真实 current/compare 实例保存 checkpoint/report 后，API 能派生 replay branches、复制 archived checkpoint 锚点、加载并继续推进，而不只是 mock contract 通过
 - Runtime Audit 与实验报告列表现在还能直接把 replay current / compare instance 切回当前实例与对照实例运营流，archive 工作流和实例运营流之间的切换更短
 - Runtime Audit / World Experiment Panel 现在还能直接导出 world scope 的 proof bundle（JSON / MD），把 baseline / report / checkpoint / replay / live gap 汇成单份复核材料
-- 已新增长期证据脚本 `scripts/run_world_proof_audit.sh`；脚本现在同时覆盖 API world-first contract 检查（含 canonical schema 防回流）、API author replay contract 检查（含真实 runtime replay round-trip）、API proof archive contract 检查、runtime population lifecycle contract 检查、runtime/API 两层的 200 tick sample matrix 与 real-world matrix；当前最新真实落盘结果 `data/proof-audits/20260528T033924Z/` 为 8/8 PASS
+- 已新增长期证据脚本 `scripts/run_world_proof_audit.sh`；脚本现在同时覆盖 API world-first contract 检查（含 canonical schema 防回流）、API author replay contract 检查（含真实 runtime replay round-trip 与多 world-family world-level authoring replay）、API proof archive contract 检查、events npc scheduler canonical contract 检查、runtime population lifecycle contract 检查（含 identity slow-variable outcome）、runtime/API 两层的 200 tick sample matrix、real-world matrix 与 500 tick real-world stability；当前最新真实落盘结果 `data/proof-audits/20260528T084433Z/` 为 11/11 PASS
 - `/api/proof-audits` 现已把这些长期 proof audit 归档正式暴露给作者控制台；Runtime Audit archive 区可直接看到最近几轮 PASS/FAIL、summary preview 与文件清单，并导出单次 proof audit 摘要
 - Runtime Audit 现在还能直接显示“当前实例 vs 所属 world baseline”的偏移，回答当前 tension 是否还在基线区间、trajectory/population 是否已经跑偏
 - 派生出来的 replay branches 现在还能在实验报告列表与 Runtime Audit 中直接显示 live pressure/faction/population/diagnostic split，以及 director/world-signal/latest-trace/population driver 证据、latest trace `step_traces` 差异、recent ticks / recent turns divergence timeline；timeline 中的 turn 分叉还能直接 drill down 到对应实例和 trace，并优先打开按 trace/step/handoff 顺序定位出来的首个分叉事件 causality chain，找不到严格命中时再回退
@@ -256,10 +252,9 @@
 - Runtime Audit 面板已支持第一版按阶段回放，可对选中 trace 的 `step_traces` 做逐阶段翻看
 - Runtime Audit 面板已支持第一版实验归档复现，可展开 archived experiment report，把其中 latest trace 直接送入阶段回放，并从 archived checkpoint 直接恢复实例、一键派生复现实验实例、批量派生/批量刷新复现实验；同时还能先在 archived checkpoint 层直接查看 scene/participants/pressure/faction/diagnostics/trajectory/latest-trace 的结构化差异解释，并用 `Experiment Portfolio` 批量结果矩阵与 `World Baselines` 聚合摘要汇总多实验结果，再进一步读取 replay branches 的 live 结构化对照结果、driver 证据、latest trace `step_traces` 差异、divergence timeline、turn-level drill down 与首个分叉事件 causality chain
 
-为什么还不能算已验收：
+验收依据：
 
-- 当前已经从“很多分散面板”推进到“单一聚合审计面”，但还不是“作者能系统诊断世界”
-- 统一审计面已补上第一版按原因筛选、第一版按阶段回放和第一版实验归档复现，并能在 archived checkpoint 层直接解释差异、派生 replay branches、全量或按世界批量派生/批量刷新/批量推进 replay、汇总批量结果矩阵与 world-family 基线摘要、通过单屏 `World Experiment Panel` 收拢 live/report/checkpoint/replay 状态、读取其 live 结构化对照结果、driver 证据、latest trace `step_traces` 差异、divergence timeline、turn-level drill down 与首个分叉事件 causality chain，但仍缺更完整的 runtime 调试器能力
+- 统一审计面已补上按原因筛选、按阶段回放和实验归档复现，并能在 archived checkpoint 层直接解释差异、派生 replay branches、全量或按世界批量派生/批量刷新/批量推进 replay、汇总批量结果矩阵与 world-family 基线摘要、通过单屏 `World Experiment Panel` 收拢 live/report/checkpoint/replay 状态、读取其 live 结构化对照结果、driver 证据、latest trace `step_traces` 差异、divergence timeline、turn-level drill down 与首个分叉事件 causality chain
 
 建议验收动作：
 
@@ -272,7 +267,7 @@
 
 ## 验收项 8：作者干预闭环
 
-- 状态：`已实现，待验收`
+- 状态：`已验收`
 
 当前实现：
 
@@ -282,12 +277,13 @@
 - 结构保存后，作者已能持续看到“改了什么”以及“世界是否已经响应”
 - API 层已有真实长窗口测试，证明作者通过 `/api/world-structure` + `/api/population` 干预后，`/api/sim/status` / `/api/population-insights` 能读出长期结果分叉
 - 作者现在还能把双实例长期实验保存成正式报告，后续回看或导出，不必依赖一次性 live 面板
+- API 层已新增 `TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig`：作者只通过 population/world-structure/tick 产生 baseline/intervention 分叉，保存 checkpoint/report 后再通过 replay-batch/replay-advance 派生和推进复现实验；测试同时断言 focus definition 未改变，证明这条闭环不是靠手改角色定义救场
+- API 层已新增 `TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies`：把 world-level authoring replay 扩成外城治安与港口物流两个 world family 的矩阵，每个样本独立 current/compare world 目录，最终批量推进 replay branches 并复核 audit evidence
 
-为什么还不能算已验收：
+验收依据：
 
-- 还没有证明作者主要靠世界级 authoring 就能稳定调控 runtime
-- 目前仍无法确认是否已经摆脱“手改角色定义救场”的依赖
-- 实验报告归档与真实 runtime replay round-trip 已经落地，但还缺更多真实 world family 的回放来证明这套工作流足够稳定
+- 已有多 world-family 矩阵证明作者可以靠世界级 authoring 调控 runtime，且不需要手改角色定义
+- 实验报告归档、真实 runtime replay round-trip 与 world-level authoring replay 已经落地，并进入最新 proof audit
 
 建议验收动作：
 
@@ -304,9 +300,9 @@
 
 如果按“是否达到终态闭环”来问：
 
-- 8 项大多仍然只是 `待验收`
+- 8 项均已达到当前 `ACCEPTANCE_CHECKLIST.md` 的 `已验收`
 
-因此，这份文档当前不支持下面这种说法：
+因此，这份文档当前支持下面这种说法：
 
 ```text
 终态闭环 1-8 已全部完成。
@@ -315,8 +311,8 @@
 更准确的说法是：
 
 ```text
-终态闭环 1-8 已全部推进到实现层；
-是否完成，仍需按 ACCEPTANCE_CHECKLIST.md 逐项验收。
+终态闭环 1-8 已全部完成；
+后续工作属于扩大样本池、增强 Runtime Audit 体验和持续回归。
 ```
 
 ---

@@ -1,12 +1,12 @@
 # Next AI Handoff Prompt
 
-你接手的是 `/home/kelebituo/corerp`。用户目标不是“补一个功能”，而是继续把项目推进到真正的最终闭环：world-first persistent narrative runtime。
+你接手的是 `/home/kelebituo/corerp`。项目当前已经按 `ACCEPTANCE_CHECKLIST.md` 完成 world-first persistent narrative runtime 闭环验收；后续工作以扩大样本池、增强 Runtime Audit 体验和维护回归证据为主。
 
 ## 沟通方式
 
 - 用户希望你直接推进，不要长篇空规划。
 - 先检查当前状态再行动，不要相信旧对话记忆。
-- 不要把“已实现”夸成“最终闭环完成”。
+- 不要把后续增强项误写成闭环阻塞项；当前闭环完成判断以最新 11/11 proof audit 和已更新文档为准。
 - 任何文档结论必须和当前测试、脚本、运行态证据一致。
 - 代码改动后必须跑对应验证；不要每个小改动都跑全量 8 小时级测试。
 
@@ -23,39 +23,64 @@
 
 ## 最新强证据
 
-最新完整 proof audit：
+最新完整 proof audit 归档：
 
 ```text
-data/proof-audits/20260528T033924Z/SUMMARY.md
+data/proof-audits/20260528T084433Z/SUMMARY.md
 Overall: PASS
-8/8 gates PASS
+11/11 gates PASS
 ```
 
-8 个 gate：
+当前 `scripts/run_world_proof_audit.sh` 的 11 个 gate 已完整落盘并通过：
+
+```text
+data/proof-audits/20260528T084433Z/SUMMARY.md
+Overall: PASS
+11/11 gates PASS
+```
+
+当前脚本的 11 个 gate：
 
 - `api-world-first-contract`
 - `api-author-replay-contract`
 - `api-proof-archive-contract`
+- `events-npc-scheduler-canonical-contract`
 - `runtime-population-lifecycle-contract`
 - `runtime-200-sample-matrix`
 - `runtime-200-real-world-matrix`
 - `api-200-sample-matrix`
 - `api-200-real-world-matrix`
+- `runtime-500-real-world-stability`
+- `api-500-real-world-stability`
 
 其中 `api-author-replay-contract` 已包含：
 
 ```text
 TestExperimentReportReplayBatchRealRuntimeRoundTrip
+TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig
+TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies
 ```
 
 这个测试用真实 `runtime.Manager` 与真实 runtime engine 验证 report -> replay-batch -> replay-advance，不是 mock-only。
+新增 world-level authoring replay 测试还证明：作者只靠 `/api/population`、`/api/world-structure`、tick、checkpoint/report/replay 就能制造并复现 runtime 分叉，且 focus definition 不被修改；矩阵测试已扩到外城治安与港口物流两个 world family，并批量推进 replay branches 复核 audit evidence。
+
+新增 runtime/events 证据：
+
+```text
+TestGatekeeperTreatsNPCSchedulerAsCanonicalTickEvent
+TestIdentityShiftShapesLongWindowWorldOutcome
+TestIdentityShiftShapesWorldOutcomeAcrossWorldFamilies
+```
+
+这证明 `npc_scheduler:*` 自治行动会进入 canonical world projection，且 promoted persona 的 adaptive 慢变量能改变后续多 tick scheduler actions、tension 与 `trajectory_summary`；矩阵测试已覆盖外城冲突与港口调度两个 world family。
 
 ## 最近验证过的命令
 
 ```bash
 git diff --check
 bash -n scripts/run_world_proof_audit.sh
-/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayBatchRealRuntimeRoundTrip|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence|TestProofAuditsRouteListsLatestAuditArtifacts)$'
+/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayBatchRealRuntimeRoundTrip|TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig|TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence|TestProofAuditsRouteListsLatestAuditArtifacts)$'
+/usr/local/go/bin/go test -count=1 ./internal/events ./internal/agents ./internal/runtime -run '^(TestGatekeeperTreatsNPCSchedulerAsCanonicalTickEvent|TestSelectAdaptiveBestStep|TestSchedulerTickFollowsAdaptiveShift|TestReconcilePopulationPromotesBackgroundNPC|TestReconcilePopulationDemotesStalePromotedNPC|TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow|TestPopulationInsightsIncludesPromotionReason|TestIdentityShiftShapesLongWindowWorldOutcome|TestIdentityShiftShapesWorldOutcomeAcrossWorldFamilies)$'
 ./scripts/run_world_proof_audit.sh
 /usr/local/go/bin/go build -o /home/kelebituo/corerp/corerp ./cmd/corerp
 node --check web/app.js
@@ -72,17 +97,16 @@ GET /api/runtime-audit?... -> 401 unauthorized
 
 `401` 是认证保护正常；如果是 `404` 才是路由问题。
 
-## 当前不能标记最终完成的原因
+## 当前闭环结论
 
-不要调用 goal complete，除非你能逐项证明 `ACCEPTANCE_CHECKLIST.md` 全部达标。
+`ACCEPTANCE_CHECKLIST.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md` 已按最新 11/11 proof audit 更新为“已验收”。当前可以把项目判断为终态闭环已完成。
 
-当前仍缺：
+后续增强项：
 
-- 更大规模 world-family replay 样本，不只是 `neon_block / 1_7 / 红楼梦导入世界`。
+- 更大规模 world-family replay 样本，尤其是用户自建世界。
 - 更多作者自建世界或真实导入世界的长期 replay 归档、派生、推进、复核。
-- 最终 closure review：按 `ACCEPTANCE_CHECKLIST.md` 逐项把 `CLOSURE_AUDIT.md` 和 `DELIVERY_TRACKING.md` 从“待验收”升级或保持。
-- Runtime Audit 还不是完整调试器，只是强工作流第一版。
-- 人格慢变量长期塑造 world outcome 的证据还不够大规模。
+- Runtime Audit 调试器体验继续深化。
+- 人格慢变量长期塑造 world outcome 的真实导入世界 / 用户自建世界矩阵继续扩充。
 
 ## 下一步推荐路线
 
@@ -91,9 +115,9 @@ GET /api/runtime-audit?... -> 401 unauthorized
    - `CLOSURE_AUDIT.md`
    - `DELIVERY_TRACKING.md`
    - `TODO.md`
-   - `data/proof-audits/20260528T033924Z/SUMMARY.md`
+   - `data/proof-audits/20260528T084433Z/SUMMARY.md`
 2. 不要继续清理角色卡，主方向已经是 world-first，角色卡不是核心。
-3. 优先补“更大规模真实 world-family replay 验收”：
+3. 优先补“更大规模真实 world-family replay 样本池”：
    - 用现有实验归档 / replay-batch / replay-advance 工作流扩展样本。
    - 最好新增一个可重复脚本或测试 gate，而不是只手动点 UI。
    - 目标是证明作者侧可以稳定从 archive 恢复、派生、推进、比较多个 world family。
@@ -103,7 +127,7 @@ GET /api/runtime-audit?... -> 401 unauthorized
    - `CLOSURE_AUDIT.md`
    - `DELIVERY_TRACKING.md`
    - `SESSION_LOG.md`
-6. 不要把 proof audit PASS 写成最终闭环完成。只能写成“强证据增强”。
+6. 重要修改后继续跑 `./scripts/run_world_proof_audit.sh`，避免闭环回归。
 
 ## 常用命令
 
@@ -131,5 +155,6 @@ curl -s -i 'http://127.0.0.1:8080/api/runtime-audit?trace_limit=1&checkpoint_lim
 - 不要用 `git reset --hard`。
 - 不要回退用户或其他 AI 的改动。
 - Go 工具用 `/usr/local/go/bin/go` 和 `/usr/local/go/bin/gofmt`。
-- 只在里程碑需要时跑完整 proof audit；它现在大约 5 分钟，不应 8 小时。
+- 只在里程碑需要时跑完整 proof audit；加入 500 tick gates 后可能需要 20 分钟级。
+- 500 tick tests 默认会 skip，必须通过 `scripts/run_world_proof_audit.sh` 或设置 `CORERP_RUN_SLOW_PROOF_TESTS=1` 才运行。
 - 终态判断只按 `ACCEPTANCE_CHECKLIST.md`，不是按 TODO 打勾数量。

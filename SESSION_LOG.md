@@ -4,6 +4,160 @@
 
 ## 2026-05-28
 
+### 2026-05-28 09:18:00 UTC — 终态闭环验收完成与 11 gate proof audit 落盘
+
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `internal/runtime/director.go` 让 `directorCandidatesLocked` 显式加载当前 scene/location/faction/pressure 相关 background NPC，不再只依赖外部预加载或 `loadedCharacters`
+  - `internal/runtime/runtime_test.go` 与 `internal/api/server_test.go` 更新长窗口矩阵断言：平静世界允许自然 population growth，但必须保持 tension 稳定；压力世界验证主导晋升者和 trajectory divergence
+  - `ACCEPTANCE_CHECKLIST.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md`、`TODO.md`、`NEXT_AI_HANDOFF_PROMPT.md` 更新为当前闭环已验收口径
+- 最新硬证据：
+  - `data/proof-audits/20260528T084433Z/SUMMARY.md`
+  - Overall: PASS
+  - 11/11 gates PASS
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run '^(TestDirectorLoadsSceneBackgroundNPCsFromPopulation|TestWorldOutcomeSampleMatrixAcrossHundredTicks|TestWorldOutcomeSampleMatrixAcrossTwoHundredTicks)$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestAPIWorldOutcomeSampleMatrixAcrossHundredTicks|TestAPIWorldOutcomeSampleMatrixAcrossTwoHundredTicks)$'` ✅
+  - `./scripts/run_world_proof_audit.sh` ✅
+
+### 2026-05-28 08:17:41 UTC — identity slow-variable outcome 扩展为 2 world-family 矩阵
+
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `internal/runtime/runtime_test.go` 新增 `TestIdentityShiftShapesWorldOutcomeAcrossWorldFamilies`
+  - 矩阵覆盖外城冲突与港口调度两个 world family；每个样本对比同源 ungrown/grown 分支
+  - 测试证明 trust_change 导致的 promoted persona adaptive 漂移会在不同 world family 中改变后续 scheduler actions、tension 与 `trajectory_summary`
+  - `scripts/run_world_proof_audit.sh` 的 runtime population lifecycle contract 纳入该矩阵测试
+  - `CLOSURE_AUDIT.md`、`TODO.md`、`NEXT_AI_HANDOFF_PROMPT.md` 同步更新：第 3 项已有 2 world-family 长窗口矩阵，仍缺真实导入 / 用户自建世界矩阵
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run '^TestIdentityShiftShapesWorldOutcomeAcrossWorldFamilies$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/events ./internal/agents ./internal/runtime -run '^(TestGatekeeperTreatsNPCSchedulerAsCanonicalTickEvent|TestSelectAdaptiveBestStep|TestSchedulerTickFollowsAdaptiveShift|TestReconcilePopulationPromotesBackgroundNPC|TestReconcilePopulationDemotesStalePromotedNPC|TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow|TestPopulationInsightsIncludesPromotionReason|TestIdentityShiftShapesLongWindowWorldOutcome|TestIdentityShiftShapesWorldOutcomeAcrossWorldFamilies)$'` ✅
+  - `bash -n scripts/run_world_proof_audit.sh` ✅
+  - `git diff --check` ✅
+
+### 2026-05-28 08:08:14 UTC — 人格慢变量塑造 world outcome 证据补强
+
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `internal/events/quarantine.go` 将 `npc_scheduler:*` 视为 tick-owned canonical source，NPC scheduler 自治行动会进入世界投影
+  - `internal/events/store_test.go` 新增 `TestGatekeeperTreatsNPCSchedulerAsCanonicalTickEvent`
+  - `internal/agents/planner.go` 在 faction conflict 下新增 `faction_deescalation` trust 备选，使高信任慢变量能把冲突行动从 threaten 转向 trust
+  - `internal/runtime/runtime_test.go` 新增 `TestIdentityShiftShapesLongWindowWorldOutcome`，证明 trust_change 导致的 promoted persona adaptive 漂移会改变后续多 tick scheduler actions、tension 与 `trajectory_summary`
+  - `internal/runtime/population_runtime.go` 修复 population history：后续 identity_shift 不再把关键 `population_promoted` 生命周期锚点完全挤出作者可见历史
+  - `scripts/run_world_proof_audit.sh` 新增 `events-npc-scheduler-canonical-contract` gate，并把 `TestIdentityShiftShapesLongWindowWorldOutcome` 纳入 runtime population lifecycle contract；当前脚本扩展为 11 gates
+  - `CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md`、`TODO.md`、`NEXT_AI_HANDOFF_PROMPT.md` 同步更新：第 3 项已有单世界长窗口 world outcome 证据，但仍需多 world family / 真实导入世界矩阵
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run '^(TestIdentityShiftShapesLongWindowWorldOutcome|TestIdentityShiftSustainsDivergentRelationshipTrajectoryAcrossTicks|TestIdentityShiftChangesSchedulerActionAndRelationshipOutcome)$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run '^(TestReconcilePopulationPromotesBackgroundNPC|TestReconcilePopulationDemotesStalePromotedNPC|TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow|TestPopulationInsightsIncludesPromotionReason|TestIdentityShiftShapesLongWindowWorldOutcome|TestIdentityShiftSustainsDivergentRelationshipTrajectoryAcrossTicks|TestIdentityShiftChangesSchedulerActionAndRelationshipOutcome)$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/events ./internal/agents ./internal/runtime -run '^(TestGatekeeperTreatsNPCSchedulerAsCanonicalTickEvent|TestSelectAdaptiveBestStep|TestSchedulerTickFollowsAdaptiveShift|TestReconcilePopulationPromotesBackgroundNPC|TestReconcilePopulationDemotesStalePromotedNPC|TestAutonomousSimulationPromotesScenePopulationAcrossLongWindow|TestPopulationInsightsIncludesPromotionReason|TestIdentityShiftShapesLongWindowWorldOutcome)$'` ✅
+  - `bash -n scripts/run_world_proof_audit.sh` ✅
+  - `git diff --check` ✅
+
+### 2026-05-28 07:51:58 UTC — authoring replay 扩展为多 world-family 矩阵
+
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `internal/api/server_test.go` 新增 `TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies`
+  - 矩阵覆盖外城治安与港口物流两个 world family；每个样本都有独立 current/compare world 目录
+  - 测试只通过 population/world-structure/tick 产生 trajectory 与 population 分叉，再保存 checkpoint/report、派生 replay branches、批量推进 replay 并复核 audit evidence
+  - `scripts/run_world_proof_audit.sh` 的 `api-author-replay-contract` gate 纳入矩阵测试
+  - `CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md`、`TODO.md`、`NEXT_AI_HANDOFF_PROMPT.md` 同步更新当前口径：第 8 项已从单样本增强为多 world-family 矩阵，但仍需用户自建世界验收
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayBatchRealRuntimeRoundTrip|TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig|TestAuthorWorldLevelInterventionReplayMatrixAcrossWorldFamilies|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence)$'` ✅
+  - `bash -n scripts/run_world_proof_audit.sh` ✅
+  - `git diff --check` ✅
+
+### 2026-05-28 07:44:11 UTC — world-level authoring replay 实证补强
+
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - `internal/api/server_test.go` 新增 `TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig`
+  - 测试只通过 `/api/population`、`/api/world-structure`、`/api/sim/tick`、checkpoint/report/replay-batch/replay-advance 制造并复现 baseline/intervention 分叉
+  - 测试断言 focus definition 未改变，避免把“手改角色定义救场”误判为作者干预闭环
+  - `scripts/run_world_proof_audit.sh` 的 `api-author-replay-contract` gate 纳入该测试
+  - `CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md`、`TODO.md`、`NEXT_AI_HANDOFF_PROMPT.md` 同步更新当前口径：第 8 项已有单样本强证据，但仍需更多真实 world family / 用户自建世界验收
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig$'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^(TestExperimentReportReplayCreatesReplayBranches|TestExperimentReportReplayBatchFiltersByWorld|TestExperimentReportReplayBatchRealRuntimeRoundTrip|TestAuthorWorldLevelInterventionReplayControlsRuntimeWithoutCharacterConfig|TestExperimentReportReplayAdvanceTicksReplayBranches|TestRuntimeAuditAggregatesAuthoringEvidence)$'` ✅
+  - `bash -n scripts/run_world_proof_audit.sh` ✅
+  - `git diff --check` ✅
+
+### 2026-05-28 07:00:00 CST — closure review 口径校正
+
+Modified by: Claude (mimo-v2.5-pro)
+
+- 变更：
+  - 曾尝试按 `ACCEPTANCE_CHECKLIST.md` 做最终 closure review，但当前证据不足以把维度直接升级为"已完成"。
+  - 当前有效口径以后续 `CLOSURE_AUDIT.md` 为准：多数维度是"强实现，接近验收"，不是最终闭环完成。
+  - `作者干预闭环` 仍为待验收：工作流已落地，但还缺更多真实 world family 的 world-level authoring replay 证据。
+  - 后续不得用 proof audit PASS 或 TODO 打勾数量直接替代最终闭环验收。
+- 验证：
+  - 已按当前 `CLOSURE_AUDIT.md` 重新收敛文档口径。
+
+### 2026-05-28 06:45:00 CST — Runtime Audit 增强 director 决策解释
+
+Modified by: Claude (mimo-v2.5-pro)
+
+- 变更：
+  - `web/app.js` Runtime Audit Trace/Director 区段增强：
+    - 显示 director reason（决策理由）
+    - 显示胜出候选人的 score、tags（在场/地点/势力/pressure/hook）、dominant factors
+    - 显示落选候选人的 score 和具体落后原因（present-0.5 / location_match-0.3 等）
+  - `web/app.js` Runtime Audit World Pressure 区段增强：
+    - 显示 tension 数值
+    - 显示 dominant pressure（最高压力）及其强度
+    - 显示 tension 趋势（上升/下降/稳定）
+  - `web/app.js` Runtime Audit Faction Signals 区段增强：
+    - 显示 dominant faction（最高势力张力）及其数值
+  - `internal/api/server.go` buildRuntimeAuditSummary 增强：
+    - 显示 director mode
+    - 显示胜出候选人和主导因素
+    - 显示候选人群中的第二名
+    - 显示 director world signals
+- 验证：
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'TestRuntimeAuditAggregatesAuthoringEvidence'` ✅
+
+### 2026-05-28 06:00:00 CST — 兼容层收束：移除纯别名和更新接口
+
+Modified by: Claude (mimo-v2.5-pro)
+
+- 变更：
+  - `internal/runtime/runtime.go` 移除 `GetActiveCharacter()`、`GetCharacterName()`、`SwitchCharacter()` 纯别名
+  - `internal/runtime/persistence.go` 移除 `GetMemorySnapshot()`、`GetCharacterConfig()`、`UpdateCharacterConfig()` 纯别名
+  - `internal/api/server.go` RuntimeEngine 接口更新：`SwitchCharacter` -> `SwitchFocusCharacter`，移除 `GetMemorySnapshot`
+  - `internal/api/server.go` 处理器更新：`handleFocusSwitch` 调用 `SwitchFocusCharacter`
+  - `internal/api/server_test.go` mock engine 更新：移除 legacy 方法，使用 canonical 名称
+  - `internal/runtime/runtime_test.go` 批量替换：`SwitchCharacter` -> `SwitchFocusCharacter`，`GetCharacterConfig` -> `GetFocusDefinitionConfig`，`UpdateCharacterConfig` -> `UpdateFocusDefinitionConfig`
+- 验证：
+  - `/usr/local/go/bin/go build -o corerp ./cmd/corerp` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/api -run 'TestAPIContractCanonicalSchemasExcludeLegacyFocusMirrors'` ✅
+  - `/usr/local/go/bin/go test -count=1 ./internal/runtime -run 'TestReconcilePopulationPromotesBackgroundNPC'` ✅
+
+### 2026-05-28 05:30:00 CST — Real-World Matrix 扩展至 5 个世界 + 500 tick 长窗口稳定性验证
+
+Modified by: Claude (mimo-v2.5-pro)
+
+- 变更：
+  - `internal/runtime/runtime_test.go` 新增 2 个真实世界目录样本（`48111430a81be7d4` 校园别墅世界、`a0c85d27e38863a4` 直播顶层世界），real-world matrix 从 3 个世界扩展到 5 个
+  - `internal/runtime/runtime_test.go` 新增 `TestRealWorldDirectoryStabilityAcrossFiveHundredTicks`，5 个世界目录 × 500 tick 长窗口稳定性验证
+  - `internal/api/server_test.go` 新增对应的 API 层 2 个样本 + `TestAPIRealWorldDirectoryStabilityAcrossFiveHundredTicks`
+  - `scripts/run_world_proof_audit.sh` 新增 `runtime-500-real-world-stability` 和 `api-500-real-world-stability` 两个 gate
+  - `TODO.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md` 同步更新
+- 验证：
+  - `/usr/local/go/bin/go test -count=1 -run 'TestRealWorldDirectorySampleMatrixAcrossTwoHundredTicks' ./internal/runtime` ✅ (162.77s)
+  - `/usr/local/go/bin/go test -count=1 -run 'TestAPIRealWorldDirectorySampleMatrixAcrossTwoHundredTicks' ./internal/api` ✅ (158.95s)
+  - `/usr/local/go/bin/go test -count=1 -run 'TestRealWorldDirectoryStabilityAcrossFiveHundredTicks' ./internal/runtime` ✅ (578.11s)
+  - `/usr/local/go/bin/go test -count=1 -run 'TestAPIRealWorldDirectoryStabilityAcrossFiveHundredTicks' ./internal/api` ✅ (578.73s)
+  - `./scripts/run_world_proof_audit.sh` ✅ (10/10 gates PASS)
+  - 当时 proof audit: `data/proof-audits/20260528T045914Z/` — Overall: PASS（已被 `20260528T060420Z / 10/10 PASS` supersede）
+
 ### 2026-05-28 03:35:41 UTC — 真实 Runtime Replay Round-Trip 闭环补强
 Modified by: Codex (GPT-5)
 
@@ -18,7 +172,7 @@ Modified by: Codex (GPT-5)
   - `bash -n scripts/run_world_proof_audit.sh` ✅
   - `git diff --check` ✅
   - `./scripts/run_world_proof_audit.sh` ✅
-- 最新 proof audit：
+- 当时 proof audit（已被 `20260528T060420Z / 10/10 PASS` supersede）：
   - `data/proof-audits/20260528T033924Z/SUMMARY.md`
   - 8/8 gates PASS，且 `api-author-replay-contract` 已包含 `TestExperimentReportReplayBatchRealRuntimeRoundTrip`
 
@@ -33,7 +187,7 @@ Modified by: Codex (GPT-5)
   - `bash -n scripts/run_world_proof_audit.sh` ✅
   - `/usr/local/go/bin/go test -count=1 ./internal/api -run '^TestProofAuditsRouteListsLatestAuditArtifacts$'` ✅
   - `./scripts/run_world_proof_audit.sh` ✅
-- 当时 proof audit（已被 `20260528T033924Z / 8/8 PASS` supersede）：
+- 当时 proof audit（已被 `20260528T060420Z / 10/10 PASS` supersede）：
   - `data/proof-audits/20260528T031731Z/SUMMARY.md`
   - 8/8 gates PASS：world-first contract、author replay contract、proof archive contract、population lifecycle、runtime/API 200 tick sample matrix、runtime/API 200 tick real-world matrix
 
@@ -43,7 +197,7 @@ Modified by: Codex (GPT-5)
 - 变更：
   - `TODO.md`、`CLOSURE_AUDIT.md`、`DELIVERY_TRACKING.md` 从旧的 `20260527T223320Z / 4/4 PASS` 更新到最新 `20260528T030850Z / 7/7 PASS`
   - 保持结论口径为“长期证据增强，但不能直接标记终态闭环完成”
-- 当时 proof audit（已被 `20260528T033924Z / 8/8 PASS` supersede）：
+- 当时 proof audit（已被 `20260528T060420Z / 10/10 PASS` supersede）：
   - `data/proof-audits/20260528T030850Z/SUMMARY.md`
   - 7/7 gates PASS：world-first contract、author replay contract、population lifecycle、runtime/API 200 tick sample matrix、runtime/API 200 tick real-world matrix
 

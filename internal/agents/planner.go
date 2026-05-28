@@ -86,6 +86,12 @@ func (p *Planner) Plan(character string, state core.WorldState, goals []core.Goa
 					Priority: 6,
 					Reason:   fmt.Sprintf("faction_conflict: %s vs %s at %s", charFaction, otherFaction, sceneLocation),
 				})
+				steps = append(steps, PlanStep{
+					Action:   "trust",
+					Target:   other,
+					Priority: 5,
+					Reason:   fmt.Sprintf("faction_deescalation: %s attempts trust with %s at %s", character, other, sceneLocation),
+				})
 				break
 			}
 		}

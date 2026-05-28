@@ -626,6 +626,19 @@ func (e *Engine) directorCandidatesLocked(worldState core.WorldState) []string {
 	seen := map[string]bool{}
 	var out []string
 	activeWorldPath := e.currentWorldPathLocked()
+	if strings.TrimSpace(activeWorldPath) != "" {
+		if cfg, _, err := world.EnsureSeededPopulation(activeWorldPath); err == nil {
+			structure, _ := world.LoadStructure(activeWorldPath)
+			activeWorld := e.charWorlds[e.GetFocusCharacter()]
+			for _, npc := range cfg.BackgroundNPCs {
+				candidate := buildPopulationSceneCandidate(npc, worldState, structure, "")
+				if !populationCandidateRelevant(candidate) {
+					continue
+				}
+				e.ensureBackgroundNPCLoadedLocked(activeWorldPath, activeWorld, npc)
+			}
+		}
+	}
 	participantByName := make(map[string]core.ParticipantSummary)
 	for _, participant := range e.sceneParticipantDetailsLocked() {
 		participantByName[participant.Name] = participant

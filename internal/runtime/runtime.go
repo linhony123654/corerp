@@ -512,16 +512,6 @@ func (e *Engine) GetFocusCharacter() string {
 	return e.focusCharacter
 }
 
-// GetActiveCharacter is a compatibility alias for older "active character" callers.
-func (e *Engine) GetActiveCharacter() string {
-	return e.GetFocusCharacter()
-}
-
-// GetCharacterName is a compatibility alias for older API/runtime callers.
-func (e *Engine) GetCharacterName() string {
-	return e.GetActiveCharacter()
-}
-
 func (e *Engine) GetPlayerRole() core.PlayerRole {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -682,11 +672,6 @@ func (e *Engine) SwitchFocusCharacter(name string) error {
 	defer e.mu.Unlock()
 
 	return e.setActiveCharacterLocked(name, true, true)
-}
-
-// SwitchCharacter is a compatibility alias for older "active character" callers.
-func (e *Engine) SwitchCharacter(name string) error {
-	return e.SwitchFocusCharacter(name)
 }
 
 func (e *Engine) switchCharacterLocked(name string, syncWorld bool) error {

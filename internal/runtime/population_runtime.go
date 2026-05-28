@@ -859,6 +859,7 @@ func summarizeAdaptiveShift(before, after map[string]float64) string {
 
 func buildPopulationHistory(eventList []core.Event, name string) []core.PopulationGrowthEvent {
 	history := make([]core.PopulationGrowthEvent, 0, 4)
+	hasPromotion := false
 	for i := len(eventList) - 1; i >= 0 && len(history) < 4; i-- {
 		evt := eventList[i]
 		if strings.TrimSpace(evt.Target) != name {
@@ -866,6 +867,7 @@ func buildPopulationHistory(eventList []core.Event, name string) []core.Populati
 		}
 		switch evt.Type {
 		case "population_promoted":
+			hasPromotion = true
 			history = append(history, core.PopulationGrowthEvent{
 				EventID:   evt.ID,
 				Type:      evt.Type,
@@ -887,6 +889,21 @@ func buildPopulationHistory(eventList []core.Event, name string) []core.Populati
 				Summary:   fmt.Sprintf("降级回背景人口，score %.2f", numberPayload(evt.Payload["score"])),
 				CreatedAt: evt.CreatedAt,
 			})
+		}
+	}
+	if !hasPromotion {
+		for i := len(eventList) - 1; i >= 0; i-- {
+			evt := eventList[i]
+			if strings.TrimSpace(evt.Target) != name || evt.Type != "population_promoted" {
+				continue
+			}
+			history = append(history, core.PopulationGrowthEvent{
+				EventID:   evt.ID,
+				Type:      evt.Type,
+				Summary:   fmt.Sprintf("晋升为%s，score %.2f", safePayloadString(evt.Payload["status"], "promoted"), numberPayload(evt.Payload["score"])),
+				CreatedAt: evt.CreatedAt,
+			})
+			break
 		}
 	}
 	return history

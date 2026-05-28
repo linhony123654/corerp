@@ -66,11 +66,6 @@ func (e *Engine) GetFocusMemorySnapshot(characterName string, factLimit, episodi
 	}), nil
 }
 
-// GetMemorySnapshot is a compatibility alias for older character-centric callers.
-func (e *Engine) GetMemorySnapshot(characterName string, factLimit, episodicLimit, dialogueLimit int) (core.MemorySnapshot, error) {
-	return e.GetFocusMemorySnapshot(characterName, factLimit, episodicLimit, dialogueLimit)
-}
-
 func (e *Engine) GetFocusDefinitionConfig(characterName string) (core.CharacterConfig, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -89,11 +84,6 @@ func (e *Engine) GetFocusDefinitionConfig(characterName string) (core.CharacterC
 		WorldPath:      e.worldPaths[name],
 		Card:           card,
 	}, nil
-}
-
-// GetCharacterConfig is a compatibility alias for older character-centric callers.
-func (e *Engine) GetCharacterConfig(characterName string) (core.CharacterConfig, error) {
-	return e.GetFocusDefinitionConfig(characterName)
 }
 
 func (e *Engine) UpdateFocusDefinitionConfig(characterName string, card core.Character) (core.CharacterConfig, error) {
@@ -126,11 +116,6 @@ func (e *Engine) UpdateFocusDefinitionConfig(characterName string, card core.Cha
 		WorldPath:      e.worldPaths[name],
 		Card:           card,
 	}, nil
-}
-
-// UpdateCharacterConfig is a compatibility alias for older character-centric callers.
-func (e *Engine) UpdateCharacterConfig(characterName string, card core.Character) (core.CharacterConfig, error) {
-	return e.UpdateFocusDefinitionConfig(characterName, card)
 }
 
 func (e *Engine) ListSaveSlots() ([]core.SaveSlot, error) {

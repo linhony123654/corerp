@@ -30,11 +30,11 @@ func NewGatekeeper(store *Store) *Gatekeeper {
 // Submit decides canonical vs quarantine based on event source.
 // After storing, it automatically establishes causal links to recent events.
 func (g *Gatekeeper) Submit(e core.Event, source string) error {
-	switch source {
-	case "user_input", "system", "action_result", "tick":
+	switch {
+	case source == "user_input", source == "system", source == "action_result", source == "tick", strings.HasPrefix(source, "npc_scheduler:"):
 		e.Canonical = true
 		e.Confidence = 1.0
-	case "llm_extracted", "inferred":
+	case source == "llm_extracted", source == "inferred":
 		e.Canonical = false
 		if e.Confidence == 0 {
 			e.Confidence = 0.5

@@ -47,6 +47,31 @@ func TestStoreAppendAndRetrieve(t *testing.T) {
 	}
 }
 
+func TestGatekeeperTreatsNPCSchedulerAsCanonicalTickEvent(t *testing.T) {
+	s := newTestStore(t)
+	defer s.Close()
+
+	gatekeeper := NewGatekeeper(s)
+	if err := gatekeeper.Submit(core.Event{
+		ID:        "npc_sched_tension",
+		Type:      "tension_change",
+		Actor:     "guard",
+		Target:    "",
+		Payload:   map[string]interface{}{"delta": 0.6},
+		CreatedAt: time.Now(),
+	}, "npc_scheduler:guard"); err != nil {
+		t.Fatalf("submit npc scheduler event: %v", err)
+	}
+
+	canonical, err := s.GetCanonicalEvents()
+	if err != nil {
+		t.Fatalf("GetCanonicalEvents: %v", err)
+	}
+	if len(canonical) != 1 || canonical[0].ID != "npc_sched_tension" || !canonical[0].Canonical || canonical[0].Confidence != 1.0 {
+		t.Fatalf("canonical events = %#v, want npc scheduler event promoted as tick-owned canonical event", canonical)
+	}
+}
+
 func TestStoreGetAllEvents(t *testing.T) {
 	s := newTestStore(t)
 	defer s.Close()
