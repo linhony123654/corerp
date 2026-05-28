@@ -1,6 +1,8 @@
 package world
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +21,21 @@ type Bundle struct {
 	Ontology    Ontology
 	DirectFacts []core.FactFrame
 	Population  core.PopulationConfig
+}
+
+type StarterConfig struct {
+	Premise          string
+	CurrentSituation string
+	StartingScene    string
+	StartingLocation string
+	TimeOfDay        string
+	Weather          string
+	FocusCharacter   string
+	Factions         []core.WorldFactionConfig
+	Locations        []core.WorldLocationConfig
+	Pressures        []core.WorldPressureConfig
+	BackgroundNPCs   []core.BackgroundNPC
+	Rules            []core.WorldRule
 }
 
 type Ontology struct {
@@ -133,7 +150,8 @@ func CreateWorld(rootDir, name, coreRules string) (string, error) {
 	}
 	id := sanitizeID(name)
 	if id == "" {
-		id = "world"
+		sum := sha256.Sum256([]byte(name))
+		id = "world_" + hex.EncodeToString(sum[:])[:8]
 	}
 	dir := filepath.Join(rootDir, id)
 	if _, err := os.Stat(dir); err == nil {
@@ -173,6 +191,153 @@ func CreateWorld(rootDir, name, coreRules string) (string, error) {
 	os.WriteFile(filepath.Join(dir, "world", "seed.yml"), seedData, 0644)
 
 	return dir, nil
+}
+
+func CreateWorldWithStarter(rootDir, name, coreRules string, starter StarterConfig) (string, error) {
+	dir, err := CreateWorld(rootDir, name, coreRules)
+	if err != nil {
+		return "", err
+	}
+	starter = normalizeStarter(starter)
+	if starter.Premise == "" && starter.CurrentSituation == "" && starter.StartingLocation == "" && len(starter.BackgroundNPCs) == 0 && len(starter.Locations) == 0 && len(starter.Pressures) == 0 && len(starter.Factions) == 0 && len(starter.Rules) == 0 {
+		return dir, nil
+	}
+
+	sceneName := starter.StartingScene
+	if sceneName == "" {
+		sceneName = "default"
+	}
+	location := starter.StartingLocation
+	if location == "" {
+		location = "起点"
+	}
+	timeOfDay := starter.TimeOfDay
+	if timeOfDay == "" {
+		timeOfDay = "白天"
+	}
+	weather := starter.Weather
+	if weather == "" {
+		weather = "晴"
+	}
+	participants := starterSceneParticipants(starter)
+	if _, err := SaveScene(dir, core.SceneConfig{
+		Name: sceneName,
+		Scene: core.SceneState{
+			Location:    location,
+			TimeOfDay:   timeOfDay,
+			Weather:     weather,
+			Characters:  participants,
+			Description: starter.CurrentSituation,
+		},
+	}); err != nil {
+		return "", err
+	}
+
+	structure := core.WorldStructureConfig{
+		Seed: core.WorldSeedConfig{
+			Premise:          starter.Premise,
+			CurrentSituation: starter.CurrentSituation,
+			StartingScene:    sceneName,
+			TimeAnchor:       timeOfDay,
+			Stability:        "draft",
+			Variables:        map[string]interface{}{},
+		},
+		Factions:  starter.Factions,
+		Locations: starter.Locations,
+		Pressures: starter.Pressures,
+		Ruleset: core.WorldRulesetConfig{
+			Rules: starter.Rules,
+		},
+	}
+	if len(structure.Locations) == 0 {
+		structure.Locations = []core.WorldLocationConfig{{
+			ID:          sanitizeID(location),
+			Name:        location,
+			Kind:        "starting_area",
+			Description: starter.CurrentSituation,
+			Tags:        []string{"starter"},
+		}}
+	}
+	if structure.Locations[0].ID == "" {
+		structure.Locations[0].ID = "starting_area"
+	}
+	if _, err := SaveStructure(dir, structure); err != nil {
+		return "", err
+	}
+
+	population := core.PopulationConfig{BackgroundNPCs: starter.BackgroundNPCs}
+	if starter.FocusCharacter != "" && !backgroundNPCNameExists(population.BackgroundNPCs, starter.FocusCharacter) {
+		population.BackgroundNPCs = append([]core.BackgroundNPC{{
+			ID:       sanitizeID(starter.FocusCharacter),
+			Name:     starter.FocusCharacter,
+			Role:     "视角候选",
+			Location: location,
+			Traits:   []string{"可被剧情自然塑形"},
+			Hooks:    []string{"在起始场景中被世界压力牵引"},
+		}}, population.BackgroundNPCs...)
+		if population.BackgroundNPCs[0].ID == "" {
+			population.BackgroundNPCs[0].ID = "focus_candidate"
+		}
+	}
+	if _, err := SavePopulation(dir, population); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func normalizeStarter(starter StarterConfig) StarterConfig {
+	starter.Premise = strings.TrimSpace(starter.Premise)
+	starter.CurrentSituation = strings.TrimSpace(starter.CurrentSituation)
+	starter.StartingScene = strings.TrimSpace(starter.StartingScene)
+	starter.StartingLocation = strings.TrimSpace(starter.StartingLocation)
+	starter.TimeOfDay = strings.TrimSpace(starter.TimeOfDay)
+	starter.Weather = strings.TrimSpace(starter.Weather)
+	starter.FocusCharacter = strings.TrimSpace(starter.FocusCharacter)
+	for i := range starter.BackgroundNPCs {
+		npc := &starter.BackgroundNPCs[i]
+		npc.ID = strings.TrimSpace(npc.ID)
+		npc.Name = strings.TrimSpace(npc.Name)
+		npc.Role = strings.TrimSpace(npc.Role)
+		npc.Location = strings.TrimSpace(npc.Location)
+		npc.Faction = strings.TrimSpace(npc.Faction)
+		if npc.ID == "" {
+			npc.ID = sanitizeID(npc.Name)
+		}
+		if npc.Location == "" {
+			npc.Location = starter.StartingLocation
+		}
+	}
+	return starter
+}
+
+func starterSceneParticipants(starter StarterConfig) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	add(starter.FocusCharacter)
+	for _, npc := range starter.BackgroundNPCs {
+		if len(out) >= 4 {
+			break
+		}
+		add(npc.Name)
+	}
+	return out
+}
+
+func backgroundNPCNameExists(npcs []core.BackgroundNPC, name string) bool {
+	for _, npc := range npcs {
+		if strings.EqualFold(strings.TrimSpace(npc.Name), strings.TrimSpace(name)) {
+			return true
+		}
+	}
+	return false
 }
 
 func sanitizeID(name string) string {

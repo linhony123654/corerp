@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CoreRP 世界工坊</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #12100d;
+  --surface: rgba(31, 27, 22, 0.88);
+  --surface-2: rgba(45, 38, 30, 0.76);
+  --line: rgba(231, 197, 142, 0.2);
+  --text: #f3e8d6;
+  --muted: #b8a58c;
+  --accent: #e6a84a;
+  --accent-2: #6fc3b2;
+  --danger: #e36d5c;
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+  --font-ui: "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Consolas", monospace;
+}
+* { box-sizing: border-box; }
+body {
+  min-height: 100vh;
+  margin: 0;
+  font-family: var(--font-ui);
+  color: var(--text);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(230, 168, 74, 0.22), transparent 32rem),
+    radial-gradient(circle at 88% 18%, rgba(111, 195, 178, 0.18), transparent 28rem),
+    linear-gradient(135deg, #12100d 0%, #1b1815 46%, #171c1b 100%);
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image: linear-gradient(rgba(243, 232, 214, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(243, 232, 214, 0.04) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+a { color: inherit; }
+button, input, textarea {
+  font: inherit;
+}
+.shell {
+  position: relative;
+  width: min(1320px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+.page {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px;
+}
+.side {
+  position: sticky;
+  top: 18px;
+  align-self: start;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(16, 13, 10, 0.68);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+.side-title {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.side-link {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 12px;
+  text-decoration: none;
+}
+.side-link.primary-link {
+  color: #1a1308;
+  border-color: transparent;
+  background: linear-gradient(135deg, #ffd083, var(--accent));
+  font-weight: 700;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.brand {
+  display: grid;
+  gap: 4px;
+}
+.brand strong {
+  font-size: clamp(28px, 5vw, 58px);
+  letter-spacing: -0.06em;
+}
+.brand span {
+  color: var(--muted);
+}
+.back {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  text-decoration: none;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+  gap: 18px;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+}
+.card-inner {
+  padding: clamp(18px, 3vw, 28px);
+}
+.eyebrow {
+  color: var(--accent-2);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+h1, h2 {
+  margin: 0;
+}
+h1 {
+  margin-top: 10px;
+  font-size: clamp(30px, 5vw, 64px);
+  line-height: 0.96;
+  letter-spacing: -0.07em;
+}
+h2 {
+  font-size: 18px;
+}
+.copy {
+  color: var(--muted);
+  line-height: 1.7;
+}
+.stack {
+  display: grid;
+  gap: 12px;
+}
+.field {
+  display: grid;
+  gap: 7px;
+}
+.field span {
+  color: var(--muted);
+  font-size: 13px;
+}
+input, textarea, select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  background: rgba(10, 8, 6, 0.45);
+  outline: none;
+  padding: 12px 14px;
+}
+select {
+  min-height: 46px;
+  cursor: pointer;
+}
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: rgba(230, 168, 74, 0.65);
+  box-shadow: 0 0 0 3px rgba(230, 168, 74, 0.16);
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.primary, .secondary {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  cursor: pointer;
+}
+.primary {
+  color: #1a1308;
+  background: linear-gradient(135deg, #ffd083, var(--accent));
+  font-weight: 700;
+}
+.secondary {
+  color: var(--text);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.preview {
+  min-height: 520px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre;
+  overflow: auto;
+}
+.status {
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.status.error {
+  color: var(--danger);
+}
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+@media (max-width: 880px) {
+  .page { grid-template-columns: 1fr; }
+  .side { position: static; grid-template-columns: 1fr 1fr; }
+  .side-title { grid-column: 1 / -1; }
+  .layout { grid-template-columns: 1fr; }
+  .topbar { align-items: flex-start; flex-direction: column; }
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <strong>世界工坊</strong>
+        <span>把一句概念变成可运行的世界 seed、scene、pressure 和 population。</span>
+      </div>
+      <a class="back" href="/">返回运行台</a>
+    </header>
+
+    <div class="page">
+    <aside class="side" aria-label="世界工坊导航">
+      <div class="side-title">Workbench</div>
+      <a class="side-link primary-link" href="/world-starter.html">世界生成</a>
+      <a class="side-link" href="/#panel-world">设置</a>
+      <a class="side-link" href="/#panel-ops">API 设置</a>
+      <a class="side-link" href="/">返回运行台</a>
+    </aside>
+
+    <main class="layout">
+      <section class="card">
+        <div class="card-inner stack">
+          <div>
+            <div class="eyebrow">World Starter</div>
+            <h1>先生成世界，再让人物自然长出来。</h1>
+            <p class="copy">这里不是角色卡编辑器。它只创建世界初态：地点、压力、阵营和背景人口。后续角色是否晋升，交给 runtime 根据事件和互动决定。</p>
+          </div>
+
+          <label class="field">
+            <span>世界名称</span>
+            <input id="world-name" placeholder="例如 异常公寓七号楼">
+          </label>
+
+          <label class="field">
+            <span>一句话概念</span>
+            <textarea id="world-concept" placeholder="例如：现代都市，主角刚搬进一栋异常公寓，邻居们都有秘密。"></textarea>
+          </label>
+
+          <label class="field">
+            <span>生成方式</span>
+            <select id="draft-mode">
+              <option value="local">本地生成：稳定、快、适合测试结构</option>
+              <option value="ai">AI 生成：调用当前 API 配置，适合正式构思</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>核心规则，可选</span>
+            <textarea id="world-rules" placeholder="例如：世界状态只能通过 committed events 改变；人物从地点、压力和关系里自然浮现。"></textarea>
+          </label>
+
+          <div class="grid">
+            <label class="field">
+              <span>起始地点</span>
+              <input id="starting-location" placeholder="生成草稿后可修改">
+            </label>
+            <label class="field">
+              <span>初始视角候选</span>
+              <input id="focus-character" placeholder="可留空">
+            </label>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="draft-btn" type="button">生成草稿</button>
+            <button class="secondary" id="create-btn" type="button" disabled>创建并进入</button>
+          </div>
+          <div class="status" id="status">先输入世界名称和一句话概念。</div>
+
+          <div class="pill-row">
+            <span class="pill">结构化落盘</span>
+            <span class="pill">不生成角色卡</span>
+            <span class="pill">background NPC 可晋升</span>
+            <span class="pill">DCL 后续可叠加</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-inner stack">
+          <div>
+            <div class="eyebrow">Draft Preview</div>
+            <h2>创建前预览</h2>
+            <p class="copy">当前版本先走安全的本地结构化草稿。接入 LLM 后，这个预览区仍然是确认关口，AI 输出不会直接写入运行时。</p>
+          </div>
+          <textarea class="preview" id="starter-json" spellcheck="false" placeholder="草稿会显示在这里。你可以直接编辑 JSON 后再创建。"></textarea>
+        </div>
+      </section>
+    </main>
+    </div>
+  </div>
+  <script src="/world-starter.js?v=20260528b"></script>
+</body>
+</html>

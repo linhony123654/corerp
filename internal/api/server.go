@@ -43,6 +43,7 @@ type runtimeInstancePayload struct {
 	ID                 string                    `json:"id"`
 	Label              string                    `json:"label"`
 	WorldName          string                    `json:"world_name"`
+	WorldPath          string                    `json:"world_path,omitempty"`
 	FocusCharacter     string                    `json:"focus_character,omitempty"`
 	Participants       []string                  `json:"participants,omitempty"`
 	ParticipantDetails []core.ParticipantSummary `json:"participant_details,omitempty"`
@@ -150,6 +151,7 @@ func toRuntimeInstancePayload(summary core.RuntimeInstanceSummary) runtimeInstan
 		ID:                 summary.ID,
 		Label:              summary.Label,
 		WorldName:          summary.WorldName,
+		WorldPath:          summary.WorldPath,
 		FocusCharacter:     strings.TrimSpace(summary.FocusCharacter),
 		Participants:       participants,
 		ParticipantDetails: summary.ParticipantDetails,
@@ -376,6 +378,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/switch", a(s.handleFocusSwitch))
 	mux.HandleFunc("/api/world", a(s.handleWorld))
 	mux.HandleFunc("/api/worlds", a(s.handleWorlds))
+	mux.HandleFunc("/api/worlds/draft", a(s.handleWorldDraft))
+	mux.HandleFunc("/api/worlds/enter-clean", a(s.handleWorldEnterClean))
 	mux.HandleFunc("/api/dcl", a(s.handleDCL))
 	mux.HandleFunc("/api/dcl/install", a(s.handleDCLInstall))
 	mux.HandleFunc("/api/dcl/upload", a(s.handleDCLUpload))
@@ -974,14 +978,15 @@ func (s *Server) handleWorlds(w http.ResponseWriter, r *http.Request) {
 		})
 	case http.MethodPut:
 		var req struct {
-			Name      string `json:"name"`
-			CoreRules string `json:"core_rules"`
+			Name      string              `json:"name"`
+			CoreRules string              `json:"core_rules"`
+			Starter   worldStarterPayload `json:"starter"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		dir, err := worldpkg.CreateWorld(WorldCatalogRoot, req.Name, req.CoreRules)
+		dir, err := worldpkg.CreateWorldWithStarter(WorldCatalogRoot, req.Name, req.CoreRules, starterPayloadToConfig(req.Starter))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1011,6 +1016,453 @@ func (s *Server) handleWorlds(w http.ResponseWriter, r *http.Request) {
 		})
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleWorldEnterClean(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.resolver == nil {
+		http.Error(w, "instance manager unavailable", http.StatusNotImplemented)
+		return
+	}
+	_, sourceID, err := s.engineForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Path  string `json:"path"`
+		ID    string `json:"id"`
+		Label string `json:"label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	path := strings.TrimSpace(req.Path)
+	if path == "" {
+		http.Error(w, "world path is required", http.StatusBadRequest)
+		return
+	}
+	bundle, err := worldpkg.LoadBundle(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	scene := defaultWorldEntryScene(bundle)
+	focus := firstWorldEntryCharacter(scene, bundle)
+	if focus == "" {
+		http.Error(w, "world has no focus candidate", http.StatusBadRequest)
+		return
+	}
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		id = worldRuntimeInstanceID(path, bundle.Config.Name)
+	}
+	if existing, err := s.resolver.ResolveInstance(id); err == nil {
+		summary, _ := s.resolver.InstanceStatus(id)
+		if normalizePathForCompare(summary.WorldPath) != normalizePathForCompare(path) {
+			if _, err := existing.EnterWorld(path); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			summary, _ = s.resolver.InstanceStatus(id)
+		}
+		if err := s.resolver.SetDefaultInstance(id); err != nil {
+			writeInstanceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":                  true,
+			"reused":              true,
+			"instance":            toRuntimeInstancePayload(summary),
+			"instance_id":         id,
+			"world":               existing.GetWorldName(),
+			"focus_character":     existing.GetFocusCharacter(),
+			"participants":        existing.GetSceneParticipants(),
+			"participant_details": existing.GetSceneParticipantDetails(),
+		})
+		return
+	}
+	label := strings.TrimSpace(req.Label)
+	if label == "" {
+		label = "干净世界 · " + bundle.Config.Name
+	}
+	summary, err := s.resolver.CreateInstance(sourceID, id, label, focus)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.resolver.SetDefaultInstance(summary.ID); err != nil {
+		writeInstanceError(w, err)
+		return
+	}
+	engine, err := s.resolver.ResolveInstance(summary.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	preset, err := engine.EnterWorld(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	summary, _ = s.resolver.InstanceStatus(summary.ID)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":                  true,
+		"instance":            toRuntimeInstancePayload(summary),
+		"instance_id":         summary.ID,
+		"world":               engine.GetWorldName(),
+		"focus_character":     engine.GetFocusCharacter(),
+		"participants":        engine.GetSceneParticipants(),
+		"participant_details": engine.GetSceneParticipantDetails(),
+		"preset":              preset,
+	})
+}
+
+func defaultWorldEntryScene(bundle worldpkg.Bundle) core.SceneState {
+	scene := core.SceneState{}
+	for _, item := range bundle.Scenes {
+		if item.Name == bundle.Selected {
+			scene = item.Scene
+			break
+		}
+	}
+	if scene.Location == "" && len(bundle.Scenes) > 0 {
+		scene = bundle.Scenes[0].Scene
+	}
+	return scene
+}
+
+func firstWorldEntryCharacter(scene core.SceneState, bundle worldpkg.Bundle) string {
+	for _, name := range scene.Characters {
+		if strings.TrimSpace(name) != "" {
+			return strings.TrimSpace(name)
+		}
+	}
+	for _, npc := range bundle.Population.BackgroundNPCs {
+		if strings.TrimSpace(npc.Name) != "" {
+			return strings.TrimSpace(npc.Name)
+		}
+	}
+	for _, npc := range bundle.Population.PromotedNPCs {
+		if strings.TrimSpace(npc.Name) != "" {
+			return strings.TrimSpace(npc.Name)
+		}
+	}
+	return ""
+}
+
+func cleanInstanceID(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-' || r == '_':
+			b.WriteRune('-')
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+func worldRuntimeInstanceID(path, name string) string {
+	base := cleanInstanceID(name)
+	if base == "" {
+		base = cleanInstanceID(filepath.Base(path))
+	}
+	if base == "" {
+		base = "world"
+	}
+	sum := sha256.Sum256([]byte(normalizePathForCompare(path)))
+	return fmt.Sprintf("world-%s-%s", base, hex.EncodeToString(sum[:])[:8])
+}
+
+func normalizePathForCompare(path string) string {
+	return filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+}
+
+type worldStarterPayload struct {
+	Premise          string                     `json:"premise"`
+	CurrentSituation string                     `json:"current_situation"`
+	StartingScene    string                     `json:"starting_scene"`
+	StartingLocation string                     `json:"starting_location"`
+	TimeOfDay        string                     `json:"time_of_day"`
+	Weather          string                     `json:"weather"`
+	FocusCharacter   string                     `json:"focus_character"`
+	Factions         []core.WorldFactionConfig  `json:"factions"`
+	Locations        []core.WorldLocationConfig `json:"locations"`
+	Pressures        []core.WorldPressureConfig `json:"pressures"`
+	BackgroundNPCs   []core.BackgroundNPC       `json:"background_npcs"`
+	Rules            []core.WorldRule           `json:"rules"`
+}
+
+func starterPayloadToConfig(payload worldStarterPayload) worldpkg.StarterConfig {
+	return worldpkg.StarterConfig{
+		Premise:          payload.Premise,
+		CurrentSituation: payload.CurrentSituation,
+		StartingScene:    payload.StartingScene,
+		StartingLocation: payload.StartingLocation,
+		TimeOfDay:        payload.TimeOfDay,
+		Weather:          payload.Weather,
+		FocusCharacter:   payload.FocusCharacter,
+		Factions:         payload.Factions,
+		Locations:        payload.Locations,
+		Pressures:        payload.Pressures,
+		BackgroundNPCs:   payload.BackgroundNPCs,
+		Rules:            payload.Rules,
+	}
+}
+
+func (s *Server) handleWorldDraft(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Concept string `json:"concept"`
+		Mode    string `json:"mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	concept := strings.TrimSpace(req.Concept)
+	if concept == "" {
+		http.Error(w, "concept is required", http.StatusBadRequest)
+		return
+	}
+	mode := strings.TrimSpace(req.Mode)
+	if mode == "" {
+		mode = "local"
+	}
+	if mode == "ai" {
+		starter, err := buildAIWorldDraft(concept)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":      true,
+			"source":  "ai_draft",
+			"starter": starter,
+		})
+		return
+	}
+	if mode != "local" {
+		http.Error(w, "mode must be local or ai", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":      true,
+		"source":  "local_draft",
+		"starter": buildLocalWorldDraft(concept),
+	})
+}
+
+func buildAIWorldDraft(concept string) (worldStarterPayload, error) {
+	cfg := llm.GetActiveConfig()
+	if strings.TrimSpace(cfg.Endpoint) == "" || strings.TrimSpace(cfg.Model) == "" {
+		return worldStarterPayload{}, fmt.Errorf("active LLM config is incomplete; set API endpoint and model first")
+	}
+	adapter := llm.NewAdapter(cfg.Endpoint, cfg.APIKey, cfg.Model)
+	prompt := fmt.Sprintf(`你是 CoreRP 的世界初始生成器。根据用户概念生成一个可运行的世界 starter JSON。
+
+硬性规则：
+- 只输出 JSON 对象，不要 Markdown，不要解释。
+- 不要生成官方 IP 内容、真实受版权保护角色名或设定复刻。
+- 不要生成角色卡。人物只能作为 background_npcs。
+- background_npcs 必须绑定 location，并带 hooks。
+- pressure intensity 必须是 0 到 1 的数字。
+- starting_location 必须能在 locations.name 中找到。
+- JSON 字段必须使用下面 schema。
+
+schema:
+{
+  "premise": "string",
+  "current_situation": "string",
+  "starting_scene": "default",
+  "starting_location": "string",
+  "time_of_day": "string",
+  "weather": "string",
+  "focus_character": "string",
+  "locations": [{"id":"string","name":"string","kind":"string","description":"string","controller":"string","tags":["string"]}],
+  "factions": [{"id":"string","name":"string","role":"string","description":"string","goals":["string"],"relationships":["string"]}],
+  "pressures": [{"id":"string","name":"string","kind":"string","description":"string","intensity":0.35,"target":"string","escalates":["string"]}],
+  "background_npcs": [{"id":"string","name":"string","role":"string","location":"string","faction":"string","traits":["string"],"hooks":["string"]}],
+  "rules": [{"id":"string","title":"string","summary":"string","constraints":["string"],"effects":["string"]}]
+}
+
+用户概念：%s`, concept)
+	raw, err := adapter.GenerateNonStreamWithOptions([]core.LLMMessage{
+		{Role: "system", Content: "You generate safe structured JSON for a world-first narrative runtime."},
+		{Role: "user", Content: prompt},
+	}, 0.25, 4096)
+	if err != nil {
+		return worldStarterPayload{}, err
+	}
+	starter, err := parseWorldStarterJSON(raw, concept)
+	if err == nil {
+		return starter, nil
+	}
+	repairRaw, repairErr := adapter.GenerateNonStreamWithOptions([]core.LLMMessage{
+		{Role: "system", Content: "You repair malformed JSON. Output only one valid JSON object."},
+		{Role: "user", Content: fmt.Sprintf("下面是一个被模型生成但无法解析的 CoreRP world starter。请只输出修复后的完整 JSON 对象，不要解释，不要 Markdown。\n\n解析错误：%v\n\n原始内容：\n%s", err, raw)},
+	}, 0.1, 4096)
+	if repairErr != nil {
+		return worldStarterPayload{}, fmt.Errorf("AI draft JSON parse failed: %w; repair failed: %v; raw: %s", err, repairErr, previewText(raw, 260))
+	}
+	starter, repairParseErr := parseWorldStarterJSON(repairRaw, concept)
+	if repairParseErr != nil {
+		return worldStarterPayload{}, fmt.Errorf("AI draft JSON parse failed: %w; repair parse failed: %v; raw: %s", err, repairParseErr, previewText(raw, 260))
+	}
+	return starter, nil
+}
+
+func parseWorldStarterJSON(raw, concept string) (worldStarterPayload, error) {
+	var starter worldStarterPayload
+	if err := json.Unmarshal([]byte(extractJSONObject(raw)), &starter); err != nil {
+		return worldStarterPayload{}, err
+	}
+	return sanitizeWorldStarterPayload(starter, concept), nil
+}
+
+func previewText(value string, limit int) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\n", " "))
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
+}
+
+func extractJSONObject(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "```") {
+		raw = strings.TrimPrefix(raw, "```json")
+		raw = strings.TrimPrefix(raw, "```")
+		raw = strings.TrimSuffix(raw, "```")
+		raw = strings.TrimSpace(raw)
+	}
+	start := strings.Index(raw, "{")
+	if start < 0 {
+		return raw
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(raw); i++ {
+		ch := raw[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return raw[start : i+1]
+			}
+		}
+	}
+	return raw[start:]
+}
+
+func sanitizeWorldStarterPayload(starter worldStarterPayload, fallbackPremise string) worldStarterPayload {
+	starter.Premise = strings.TrimSpace(starter.Premise)
+	if starter.Premise == "" {
+		starter.Premise = fallbackPremise
+	}
+	starter.CurrentSituation = strings.TrimSpace(starter.CurrentSituation)
+	if strings.TrimSpace(starter.StartingScene) == "" {
+		starter.StartingScene = "default"
+	}
+	starter.StartingLocation = strings.TrimSpace(starter.StartingLocation)
+	if starter.StartingLocation == "" && len(starter.Locations) > 0 {
+		starter.StartingLocation = starter.Locations[0].Name
+	}
+	if starter.StartingLocation == "" {
+		starter.StartingLocation = "起始地点"
+	}
+	if strings.TrimSpace(starter.TimeOfDay) == "" {
+		starter.TimeOfDay = "白天"
+	}
+	if strings.TrimSpace(starter.Weather) == "" {
+		starter.Weather = "晴"
+	}
+	if len(starter.Locations) == 0 {
+		starter.Locations = []core.WorldLocationConfig{{ID: "starting_area", Name: starter.StartingLocation, Kind: "starting_area", Tags: []string{"starter"}}}
+	}
+	for i := range starter.Pressures {
+		if starter.Pressures[i].Intensity < 0 {
+			starter.Pressures[i].Intensity = 0
+		}
+		if starter.Pressures[i].Intensity > 1 {
+			starter.Pressures[i].Intensity = 1
+		}
+	}
+	return starter
+}
+
+func buildLocalWorldDraft(concept string) worldStarterPayload {
+	location := "起始街区"
+	if strings.Contains(concept, "公寓") {
+		location = "异常公寓"
+	} else if strings.Contains(concept, "学院") || strings.Contains(concept, "学校") {
+		location = "学院中庭"
+	} else if strings.Contains(concept, "王国") || strings.Contains(concept, "城") {
+		location = "城门集市"
+	}
+	factionName := "本地秩序维护者"
+	if strings.Contains(concept, "都市") || strings.Contains(concept, "街") {
+		factionName = "街区管理处"
+	} else if strings.Contains(concept, "异世界") || strings.Contains(concept, "王国") {
+		factionName = "边境巡守"
+	}
+	return worldStarterPayload{
+		Premise:          concept,
+		CurrentSituation: "故事从一个表面平静但压力已经累积的场景开始，角色会根据地点、阵营和事件自然浮现。",
+		StartingScene:    "default",
+		StartingLocation: location,
+		TimeOfDay:        "傍晚",
+		Weather:          "阴",
+		FocusCharacter:   "新来者",
+		Locations: []core.WorldLocationConfig{
+			{ID: "starting_area", Name: location, Kind: "starting_area", Description: "第一轮互动发生的位置，适合暴露世界规则和人物关系。", Tags: []string{"starter", "high_contact"}},
+			{ID: "backstreet", Name: "背街", Kind: "edge", Description: "信息流动更快、秩序更弱的边缘地点。", Tags: []string{"rumor", "pressure"}},
+		},
+		Factions: []core.WorldFactionConfig{
+			{ID: "local_order", Name: factionName, Role: "order", Description: "试图维持表面秩序，但对异常变化保持警惕。", Goals: []string{"压低公开冲突", "追踪异常源头"}},
+			{ID: "quiet_network", Name: "沉默互助网", Role: "civilian", Description: "由普通人组成的松散关系网，用消息和人情自保。", Goals: []string{"交换消息", "避免被卷入核心冲突"}},
+		},
+		Pressures: []core.WorldPressureConfig{
+			{ID: "hidden_tension", Name: "隐藏张力", Kind: "social", Description: "日常秩序下已经出现无法解释的异常和猜疑。", Intensity: 0.35, Target: location, Escalates: []string{"目击者增多", "谣言扩散"}},
+		},
+		BackgroundNPCs: []core.BackgroundNPC{
+			{ID: "watcher", Name: "守夜人", Role: "观察者", Location: location, Faction: "local_order", Traits: []string{"谨慎", "记忆力好"}, Hooks: []string{"注意到新来者的异常举动", "知道最近谁在失踪或撒谎"}},
+			{ID: "runner", Name: "跑腿人", Role: "消息中介", Location: "背街", Faction: "quiet_network", Traits: []string{"机灵", "不愿站队"}, Hooks: []string{"总能提前听到一点风声", "害怕被秩序维护者盯上"}},
+		},
+		Rules: []core.WorldRule{
+			{ID: "world_first", Title: "世界优先", Summary: "人物从地点、压力、阵营和事件中自然出现，而不是预先堆角色卡。", Constraints: []string{"新人物必须绑定地点或事件"}, Effects: []string{"background_npc 可被互动晋升"}},
+		},
 	}
 }
 
@@ -3265,9 +3717,34 @@ func (s *Server) handleLLMConfigs(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			if cfg.Name != "" && (cfg.APIKey == "" || strings.Contains(cfg.APIKey, "****")) {
+				if current, err := store.Get(cfg.Name); err == nil {
+					if cfg.APIKey == "" || strings.Contains(cfg.APIKey, "****") {
+						cfg.APIKey = current.APIKey
+					}
+					if cfg.Endpoint == "" {
+						cfg.Endpoint = current.Endpoint
+					}
+					if cfg.Model == "" {
+						cfg.Model = current.Model
+					}
+					if cfg.PromptPrice <= 0 {
+						cfg.PromptPrice = current.PromptPrice
+					}
+					if cfg.CompletionPrice <= 0 {
+						cfg.CompletionPrice = current.CompletionPrice
+					}
+				}
+			}
 			if err := store.Add(cfg); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
+			}
+			if active := llm.GetActiveConfig(); active.Name == cfg.Name {
+				llm.SetActiveConfigFull(cfg)
+				if engine, _, err := s.engineForRequest(r); err == nil {
+					engine.SwitchLLM(cfg.Name, cfg.Endpoint, cfg.APIKey, cfg.Model)
+				}
 			}
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 		default:
@@ -3324,6 +3801,9 @@ func (s *Server) handleLLMConfigs(w http.ResponseWriter, r *http.Request) {
 		}
 		if active := llm.GetActiveConfig(); active.Name == name {
 			llm.SetActiveConfigFull(updated)
+			if engine, _, err := s.engineForRequest(r); err == nil {
+				engine.SwitchLLM(updated.Name, updated.Endpoint, updated.APIKey, updated.Model)
+			}
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 	case "DELETE":

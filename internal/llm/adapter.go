@@ -122,12 +122,19 @@ func (a *Adapter) Generate(prompt string, onChunk func(core.LLMStreamChunk)) err
 
 // GenerateNonStream is used for simple completions (e.g. working memory summarization).
 func (a *Adapter) GenerateNonStream(messages []core.LLMMessage) (string, error) {
+	return a.GenerateNonStreamWithOptions(messages, 0.5, 1024)
+}
+
+func (a *Adapter) GenerateNonStreamWithOptions(messages []core.LLMMessage, temperature float64, maxTokens int) (string, error) {
+	if maxTokens <= 0 {
+		maxTokens = 1024
+	}
 	reqBody := core.LLMRequest{
 		Model:       a.model,
 		Messages:    messages,
 		Stream:      false,
-		Temperature: 0.5,
-		MaxTokens:   1024,
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
 	}
 
 	body, _ := json.Marshal(reqBody)
@@ -148,28 +155,56 @@ func (a *Adapter) GenerateNonStream(messages []core.LLMMessage) (string, error) 
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("LLM error %d: %s", resp.StatusCode, previewResponseBody(respBody, 500))
+	}
 	var result struct {
 		Choices []struct {
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+			FinishReason string `json:"finishReason"`
+		} `json:"candidates"`
 		Usage *struct {
 			PromptTokens     int `json:"prompt_tokens"`
 			CompletionTokens int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", err
+		return "", fmt.Errorf("parse LLM response failed: %w: %s", err, previewResponseBody(respBody, 500))
 	}
 	if result.Usage != nil {
 		a.promptTokens = result.Usage.PromptTokens
 		a.completionTokens = result.Usage.CompletionTokens
 	}
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no choices in LLM response")
+		var text strings.Builder
+		for _, candidate := range result.Candidates {
+			for _, part := range candidate.Content.Parts {
+				text.WriteString(part.Text)
+			}
+		}
+		if text.Len() > 0 {
+			return text.String(), nil
+		}
+		return "", fmt.Errorf("no choices in LLM response: %s", previewResponseBody(respBody, 500))
 	}
 	return result.Choices[0].Message.Content, nil
+}
+
+func previewResponseBody(body []byte, limit int) string {
+	text := strings.TrimSpace(string(body))
+	if limit <= 0 || len(text) <= limit {
+		return text
+	}
+	return text[:limit] + "..."
 }
 
 // flexibleFrame accepts multiple effects formats from LLM.

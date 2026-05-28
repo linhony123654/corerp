@@ -3,6 +3,7 @@
 
 # Data
 data/
+_cleanup_backups/
 llm_usage.jsonl
 *.db
 *.sqlite

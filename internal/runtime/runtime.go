@@ -657,6 +657,7 @@ func (e *Engine) InstanceSummary() core.RuntimeInstanceSummary {
 		ID:                 e.instanceID,
 		Label:              e.worldName,
 		WorldName:          e.worldName,
+		WorldPath:          e.currentWorldPathLocked(),
 		FocusCharacter:     e.GetFocusCharacter(),
 		Participants:       dedupeSceneCharacters(append([]string(nil), e.stateMgr.Get().Scene.Characters...)),
 		ParticipantDetails: e.sceneParticipantDetailsLocked(),
@@ -965,7 +966,9 @@ func (e *Engine) DebugInfo() map[string]interface{} {
 		"canonical_events":   canon,
 		"quarantined_events": quarantined,
 		"npc_actions":        e.scheduler.RecentActions(0),
-		"vector_search":      e.memEngine.CountFacts(e.GetFocusCharacter()) >= 100,
+		"semantic_facts":     e.memEngine.CountFacts(e.GetFocusCharacter()),
+		"episodic_events":    e.memEngine.CountEpisodic(e.GetFocusCharacter()),
+		"vector_search":      memory.ShouldUseVector(e.memEngine.CountFacts(e.GetFocusCharacter())),
 		"director_config":    normalizeDirectorConfig(e.directorCfg),
 		"director_plan":      e.lastPlan,
 	}

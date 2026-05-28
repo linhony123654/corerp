@@ -1,6 +1,9 @@
 package llm
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +22,54 @@ func TestExtractActionFrameJSONBlock(t *testing.T) {
 	}
 	if narrative == "" {
 		t.Error("narrative should not be empty")
+	}
+}
+
+func TestGenerateNonStreamWithOptionsParsesOpenAIChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	got, err := NewAdapter(server.URL, "key", "model").GenerateNonStreamWithOptions(nil, 0.1, 64)
+	if err != nil {
+		t.Fatalf("GenerateNonStreamWithOptions: %v", err)
+	}
+	if got != "ok" {
+		t.Fatalf("content = %q, want ok", got)
+	}
+}
+
+func TestGenerateNonStreamWithOptionsParsesGeminiCandidates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"hello "},{"text":"world"}]}}]}`))
+	}))
+	defer server.Close()
+
+	got, err := NewAdapter(server.URL, "key", "model").GenerateNonStreamWithOptions(nil, 0.1, 64)
+	if err != nil {
+		t.Fatalf("GenerateNonStreamWithOptions: %v", err)
+	}
+	if got != "hello world" {
+		t.Fatalf("content = %q, want hello world", got)
+	}
+}
+
+func TestGenerateNonStreamWithOptionsReportsEmptyChoicesBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"choices":[],"prompt_feedback":{"block_reason":"SAFETY"}}`))
+	}))
+	defer server.Close()
+
+	_, err := NewAdapter(server.URL, "key", "model").GenerateNonStreamWithOptions(nil, 0.1, 64)
+	if err == nil {
+		t.Fatalf("expected no choices error")
+	}
+	if !strings.Contains(err.Error(), "prompt_feedback") {
+		t.Fatalf("error = %q, want response body detail", err.Error())
 	}
 }
 

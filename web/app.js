@@ -4311,10 +4311,10 @@ function updateCharacterCard(character) {
 }
 
 function updateMemoryPanel(debugData) {
-  $('pan-facts').textContent = safeText(debugData.canonical_events, '0');
+  $('pan-facts').textContent = safeText(debugData.semantic_facts, '0');
   $('pan-vmode').textContent = debugData.vector_search ? '向量检索' : '关键词检索';
   $('pan-dialogue').textContent = safeText(debugData.dialogue_in_memory, '0');
-  $('pan-events').textContent = safeText(debugData.quarantined_events, '0');
+  $('pan-events').textContent = safeText(debugData.canonical_events, '0');
   $('msg-count').textContent = `${debugData.dialogue_in_memory || 0}条`;
 }
 
@@ -5853,7 +5853,7 @@ async function enterWorld(path) {
   if (normalizePath(path) === normalizePath(state.activeWorldPath || '')) {
     return;
   }
-  const resp = await apiFetch('/api/worlds', {
+  const resp = await apiFetch('/api/worlds/enter-clean', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
@@ -5865,10 +5865,18 @@ async function enterWorld(path) {
     return;
   }
   const data = await resp.json();
+  if (data.instance_id) {
+    state.selectedInstanceID = data.instance_id;
+    localStorage.setItem('corerp-instance-id', data.instance_id);
+    if (els.instanceSelect) {
+      els.instanceSelect.value = data.instance_id;
+    }
+  }
   els.chatScroll.innerHTML = '';
   state.msgCount = 0;
-  renderSceneDivider(`进入 ${safeText(data.world, path)} · 视角 ${safeText(data.focus_character, '--')}`);
+  renderSceneDivider(`进入 ${safeText(data.world, path)} · 视角 ${safeText(data.focus_character, '--')}${data.instance_id ? ` · 世界实例 ${safeText(data.instance_id)}` : ''}`);
   await Promise.all([
+    loadInstancesView(),
     loadWorlds(),
     loadCharacters(),
     loadPlayerRole(),
@@ -6302,6 +6310,7 @@ async function editConfig(name) {
     els.cfgName.value = cfg.name || '';
     els.cfgEndpoint.value = cfg.endpoint || '';
     els.cfgKey.value = '';
+    els.cfgKey.placeholder = cfg.api_key ? '留空则保留已保存密钥' : 'API Key';
     els.cfgModel.value = cfg.model || '';
     els.cfgModelSelect.style.display = 'none';
     els.cfgModelSelect.innerHTML = '';
@@ -6352,9 +6361,12 @@ async function saveConfig() {
   const cfg = {
     name: els.cfgName.value.trim(),
     endpoint: els.cfgEndpoint.value.trim(),
-    api_key: els.cfgKey.value.trim(),
     model: els.cfgModel.value.trim(),
   };
+  const apiKey = els.cfgKey.value.trim();
+  if (apiKey) {
+    cfg.api_key = apiKey;
+  }
   if (!cfg.name || !cfg.endpoint) {
     alert('至少填写配置名称和 API 地址');
     return;

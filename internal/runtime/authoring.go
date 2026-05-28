@@ -140,13 +140,10 @@ func (e *Engine) EnterWorld(path string) (core.ScenarioPreset, error) {
 	}
 
 	e.activeWorldPath = path
-	if e.worldPaths == nil {
-		e.worldPaths = map[string]string{}
-	}
+	e.loadedCharacters = []string{preset.FocusCharacter}
+	e.worldPaths = map[string]string{}
 	e.worldPaths[preset.FocusCharacter] = path
-	if e.charWorlds == nil {
-		e.charWorlds = map[string]CharWorld{}
-	}
+	e.charWorlds = map[string]CharWorld{}
 	e.charWorlds[preset.FocusCharacter] = CharWorld{
 		WorldName: bundle.Config.Name,
 		CoreRules: bundle.Config.CoreRules,

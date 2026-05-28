@@ -187,6 +187,12 @@ func TestNeonBlockWorldBundleLoadsDemoContent(t *testing.T) {
 
 func copyWorldDir(t *testing.T, src, dst string) {
 	t.Helper()
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("local world fixture %s is not present", src)
+		}
+		t.Fatalf("stat local world fixture %s: %v", src, err)
+	}
 	if err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err

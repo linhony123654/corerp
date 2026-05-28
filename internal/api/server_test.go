@@ -21,6 +21,7 @@ import (
 	"corerp/internal/memory"
 	"corerp/internal/narrative"
 	"corerp/internal/runtime"
+	worldpkg "corerp/internal/world"
 )
 
 var _ RuntimeEngine = (*runtime.Engine)(nil)
@@ -240,6 +241,7 @@ type mockEngine struct {
 	sceneParticipants       []string
 	loadedCharacters        []string
 	loadedCheckpoints       []string
+	lastLLMSwitch           llm.APIConfig
 }
 
 func (m *mockEngine) ProcessTurn(input string) (<-chan string, error) {
@@ -261,6 +263,7 @@ func (m *mockEngine) InstanceSummary() core.RuntimeInstanceSummary {
 		ID:                 m.GetInstanceID(),
 		Label:              "test",
 		WorldName:          "test-world",
+		WorldPath:          m.world.Path,
 		FocusCharacter:     m.name,
 		Participants:       participants,
 		ParticipantDetails: details,
@@ -614,13 +617,15 @@ func (m *mockEngine) MergeBranchState(sourceBranch, targetBranch string, mergeFl
 func (m *mockEngine) CompressEvents(from, to int) (*narrative.CompressionResult, error) {
 	return &narrative.CompressionResult{}, nil
 }
-func (m *mockEngine) CompressionStats() map[string]interface{}       { return map[string]interface{}{} }
-func (m *mockEngine) SwitchLLM(name, endpoint, apiKey, model string) {}
-func (m *mockEngine) LLMRoutes() map[string]interface{}              { return map[string]interface{}{} }
-func (m *mockEngine) GetDialogueLimit(limit int) []core.Message      { return m.dialogue }
-func (m *mockEngine) ResetDialogue()                                 { m.dialogue = nil }
-func (m *mockEngine) DebugInfo() map[string]interface{}              { return map[string]interface{}{} }
-func (m *mockEngine) SetTension(v float64)                           { m.state.Tension = v }
+func (m *mockEngine) CompressionStats() map[string]interface{} { return map[string]interface{}{} }
+func (m *mockEngine) SwitchLLM(name, endpoint, apiKey, model string) {
+	m.lastLLMSwitch = llm.APIConfig{Name: name, Endpoint: endpoint, APIKey: apiKey, Model: model}
+}
+func (m *mockEngine) LLMRoutes() map[string]interface{}         { return map[string]interface{}{} }
+func (m *mockEngine) GetDialogueLimit(limit int) []core.Message { return m.dialogue }
+func (m *mockEngine) ResetDialogue()                            { m.dialogue = nil }
+func (m *mockEngine) DebugInfo() map[string]interface{}         { return map[string]interface{}{} }
+func (m *mockEngine) SetTension(v float64)                      { m.state.Tension = v }
 func (m *mockEngine) QueryActionLog(character string, fired, blocked bool, limit int) []interface{} {
 	return nil
 }
@@ -829,6 +834,12 @@ func writeAPITestWorldBundle(t *testing.T, worldDir, name, rules string) {
 
 func copyTestDir(t *testing.T, src, dst string) {
 	t.Helper()
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("local world fixture %s is not present", src)
+		}
+		t.Fatalf("stat local world fixture %s: %v", src, err)
+	}
 	if err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -905,6 +916,29 @@ func TestStaticIndexSmoke(t *testing.T) {
 	}
 }
 
+func TestStaticWorldStarterSmoke(t *testing.T) {
+	withRepoRoot(t)
+	auth.Init("")
+
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest("GET", "/world-starter.html", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /world-starter.html → %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "世界工坊") {
+		t.Fatalf("GET /world-starter.html body missing starter marker")
+	}
+	if !strings.Contains(rec.Body.String(), "API 设置") {
+		t.Fatalf("GET /world-starter.html body missing API settings link")
+	}
+}
+
 func TestLoginSmokeAndAuthRedirect(t *testing.T) {
 	auth.Init("test-password")
 	t.Cleanup(func() { auth.Init("") })
@@ -966,6 +1000,8 @@ func TestRouteWrongMethod(t *testing.T) {
 		{"/api/characters", "POST", http.StatusMethodNotAllowed},
 		{"/api/world", "POST", http.StatusMethodNotAllowed},
 		{"/api/worlds", "DELETE", http.StatusMethodNotAllowed},
+		{"/api/worlds/draft", "GET", http.StatusMethodNotAllowed},
+		{"/api/worlds/enter-clean", "GET", http.StatusMethodNotAllowed},
 		{"/api/world-config", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/world-structure", "DELETE", http.StatusMethodNotAllowed},
 		{"/api/population", "DELETE", http.StatusMethodNotAllowed},
@@ -1858,6 +1894,185 @@ func TestWorldsRoutePostEntersWorld(t *testing.T) {
 	}
 	if _, ok := payload["participant_details"].([]interface{}); !ok {
 		t.Fatalf("participant_details = %#v, want array", payload["participant_details"])
+	}
+}
+
+func TestWorldEnterCleanCreatesFreshInstanceForWorld(t *testing.T) {
+	oldWorldRoot := WorldCatalogRoot
+	WorldCatalogRoot = filepath.Join(t.TempDir(), "worlds")
+	t.Cleanup(func() {
+		WorldCatalogRoot = oldWorldRoot
+	})
+	worldDir, err := worldpkg.CreateWorldWithStarter(WorldCatalogRoot, "Clean World", "rules", worldpkg.StarterConfig{
+		Premise:          "clean premise",
+		CurrentSituation: "clean scene",
+		StartingLocation: "Clean Gate",
+		FocusCharacter:   "Clean Focus",
+		BackgroundNPCs: []core.BackgroundNPC{{
+			ID:       "helper",
+			Name:     "Helper",
+			Role:     "guide",
+			Location: "Clean Gate",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorldWithStarter: %v", err)
+	}
+
+	defaultEngine := &mockEngine{instanceID: "default", name: "Old Focus"}
+	resolver := &mockResolver{
+		defaultID: "default",
+		engines:   map[string]RuntimeEngine{"default": defaultEngine},
+	}
+	s := NewServer(defaultEngine, resolver)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/worlds/enter-clean", strings.NewReader(fmt.Sprintf(`{"path":%q,"id":"clean-world-test"}`, worldDir)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/worlds/enter-clean = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if resolver.defaultID != "clean-world-test" {
+		t.Fatalf("default instance = %q, want clean-world-test", resolver.defaultID)
+	}
+	if resolver.lastCreate.sourceID != "default" || resolver.lastCreate.focusCharacter != "Clean Focus" {
+		t.Fatalf("lastCreate = %+v", resolver.lastCreate)
+	}
+	cleanEngine, ok := resolver.engines["clean-world-test"].(*mockEngine)
+	if !ok {
+		t.Fatalf("clean instance engine missing")
+	}
+	if cleanEngine.world.Path != worldDir {
+		t.Fatalf("clean instance world path = %q, want %q", cleanEngine.world.Path, worldDir)
+	}
+	if defaultEngine.world.Path == worldDir {
+		t.Fatalf("default source engine was mutated by clean enter")
+	}
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["instance_id"] != "clean-world-test" {
+		t.Fatalf("payload = %#v, want clean instance id", payload)
+	}
+}
+
+func TestWorldsRoutePutCreatesStarterWorld(t *testing.T) {
+	oldWorldRoot := WorldCatalogRoot
+	WorldCatalogRoot = filepath.Join(t.TempDir(), "worlds")
+	t.Cleanup(func() {
+		WorldCatalogRoot = oldWorldRoot
+	})
+
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/worlds", strings.NewReader(`{
+		"name":"异常公寓七号楼",
+		"core_rules":"世界优先",
+		"starter":{
+			"premise":"现代都市异常公寓",
+			"current_situation":"新来者搬入后，邻居开始试探。",
+			"starting_scene":"default",
+			"starting_location":"异常公寓",
+			"time_of_day":"傍晚",
+			"weather":"阴",
+			"focus_character":"新来者",
+			"locations":[{"id":"apt","name":"异常公寓","kind":"building"}],
+			"pressures":[{"id":"suspicion","name":"猜疑","kind":"social","intensity":0.4,"target":"异常公寓"}],
+			"background_npcs":[{"id":"watcher","name":"守夜人","role":"观察者","location":"异常公寓","hooks":["注意异常"]}]
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT /api/worlds starter = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	dir, ok := payload["path"].(string)
+	if !ok || dir == "" {
+		t.Fatalf("payload path missing: %#v", payload)
+	}
+	for _, file := range []string{
+		filepath.Join(dir, "world", "seed.yml"),
+		filepath.Join(dir, "world", "locations.yml"),
+		filepath.Join(dir, "world", "pressures.yml"),
+		filepath.Join(dir, "population", "background_npcs.yml"),
+		filepath.Join(dir, "scenes", "default.yml"),
+	} {
+		if _, err := os.Stat(file); err != nil {
+			t.Fatalf("starter world file missing %s: %v", file, err)
+		}
+	}
+	popData, err := os.ReadFile(filepath.Join(dir, "population", "background_npcs.yml"))
+	if err != nil {
+		t.Fatalf("read population: %v", err)
+	}
+	if !strings.Contains(string(popData), "守夜人") || !strings.Contains(string(popData), "新来者") {
+		t.Fatalf("population did not include starter NPCs and focus candidate:\n%s", string(popData))
+	}
+}
+
+func TestWorldDraftRouteReturnsStarterPayload(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/worlds/draft", strings.NewReader(`{"concept":"现代都市异常公寓","mode":"local"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/worlds/draft = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "starter") || !strings.Contains(rec.Body.String(), "异常公寓") {
+		t.Fatalf("draft payload missing starter data: %s", rec.Body.String())
+	}
+}
+
+func TestWorldDraftRouteRejectsInvalidMode(t *testing.T) {
+	s := newTestServer()
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/worlds/draft", strings.NewReader(`{"concept":"现代都市异常公寓","mode":"unsafe"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/worlds/draft invalid mode = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestParseWorldStarterJSONExtractsFencedObject(t *testing.T) {
+	raw := "```json\n{\"premise\":\"公寓\",\"starting_location\":\"异常公寓\",\"pressures\":[{\"id\":\"p\",\"intensity\":2}]}\n```"
+	starter, err := parseWorldStarterJSON(raw, "fallback")
+	if err != nil {
+		t.Fatalf("parseWorldStarterJSON: %v", err)
+	}
+	if starter.Premise != "公寓" || starter.StartingLocation != "异常公寓" {
+		t.Fatalf("starter = %+v", starter)
+	}
+	if len(starter.Pressures) != 1 || starter.Pressures[0].Intensity != 1 {
+		t.Fatalf("pressure intensity not clamped: %+v", starter.Pressures)
+	}
+}
+
+func TestParseWorldStarterJSONRejectsTruncatedObject(t *testing.T) {
+	_, err := parseWorldStarterJSON(`{"premise":"公寓","locations":[`, "fallback")
+	if err == nil {
+		t.Fatalf("parseWorldStarterJSON truncated object unexpectedly succeeded")
+	}
+	if got := previewText("1234567890", 4); got != "1234..." {
+		t.Fatalf("previewText = %q", got)
 	}
 }
 
@@ -5636,7 +5851,8 @@ func TestLLMActiveSwitchByName(t *testing.T) {
 
 func TestLLMConfigSingleItemPostUpdatesPricingOnly(t *testing.T) {
 	initTestLLMStore(t)
-	s := newTestServer()
+	engine := &mockEngine{instanceID: "default", name: "Anya"}
+	s := NewServer(engine)
 	mux := http.NewServeMux()
 	s.Register(mux)
 
@@ -5701,6 +5917,53 @@ func TestLLMConfigSingleItemPostUpdatesPricingOnly(t *testing.T) {
 	}
 	if active.PromptPrice != 2.5 || active.CompletionPrice != 9.5 {
 		t.Fatalf("active pricing = (%v,%v), want (2.5,9.5)", active.PromptPrice, active.CompletionPrice)
+	}
+	if engine.lastLLMSwitch.APIKey != "secret-key" {
+		t.Fatalf("active adapter switch key = %q, want preserved secret-key", engine.lastLLMSwitch.APIKey)
+	}
+}
+
+func TestLLMConfigPostPreservesExistingKeyWhenEmpty(t *testing.T) {
+	initTestLLMStore(t)
+	engine := &mockEngine{instanceID: "default", name: "Anya"}
+	s := NewServer(engine)
+	mux := http.NewServeMux()
+	s.Register(mux)
+
+	createReq := httptest.NewRequest("POST", "/api/llm-configs", strings.NewReader(`{"name":"cfg-k","endpoint":"http://example.test/v1","api_key":"secret-key","model":"demo"}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	mux.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/llm-configs create → %d", createRec.Code)
+	}
+
+	switchReq := httptest.NewRequest("POST", "/api/llm-active", strings.NewReader(`{"name":"cfg-k"}`))
+	switchReq.Header.Set("Content-Type", "application/json")
+	switchRec := httptest.NewRecorder()
+	mux.ServeHTTP(switchRec, switchReq)
+	if switchRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/llm-active by name → %d", switchRec.Code)
+	}
+
+	updateReq := httptest.NewRequest("POST", "/api/llm-configs", strings.NewReader(`{"name":"cfg-k","endpoint":"http://example.test/v2","model":"demo-2"}`))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRec := httptest.NewRecorder()
+	mux.ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/llm-configs update → %d body=%s", updateRec.Code, updateRec.Body.String())
+	}
+
+	store := llm.GetConfigStore()
+	stored, err := store.Get("cfg-k")
+	if err != nil {
+		t.Fatalf("get stored config: %v", err)
+	}
+	if stored.APIKey != "secret-key" {
+		t.Fatalf("stored key = %q, want preserved secret-key", stored.APIKey)
+	}
+	if engine.lastLLMSwitch.APIKey != "secret-key" || engine.lastLLMSwitch.Endpoint != "http://example.test/v2" || engine.lastLLMSwitch.Model != "demo-2" {
+		t.Fatalf("adapter switch = %+v, want updated endpoint/model with preserved key", engine.lastLLMSwitch)
 	}
 }
 

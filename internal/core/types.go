@@ -518,6 +518,7 @@ type RuntimeInstanceSummary struct {
 	ID                 string               `json:"id"`
 	Label              string               `json:"label"`
 	WorldName          string               `json:"world_name"`
+	WorldPath          string               `json:"world_path,omitempty"`
 	FocusCharacter     string               `json:"focus_character,omitempty"`     // current viewpoint only
 	Participants       []string             `json:"participants,omitempty"`        // scene truth
 	ParticipantDetails []ParticipantSummary `json:"participant_details,omitempty"` // unified participant model
