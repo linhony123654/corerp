@@ -4,6 +4,18 @@
 
 ## 2026-05-28
 
+### 2026-05-28 13:27:00 UTC — README 收口为 world-first 项目入口
+
+Modified by: Codex (GPT-5)
+
+- 变更：
+  - 重写 `README.md`，将其收口为项目入口文档，而不是历史会话日志
+  - 移除旧 `neon_block` 快速启动路径，改用仓库跟踪的 `worlds/example.yml`
+  - 补当前主工作流：World Starter、本地/AI 草稿、clean world entry、population growth、DCL 声明式包、runtime data 隔离
+  - 明确 README 只保留高层说明，细节转向 `ARCHITECTURE*.md`、`TODO.md`、`api-contract.yaml`
+- 验证：
+  - 人工审计 README 未包含真实密钥或本地运行数据路径
+
 ### 2026-05-28 16:06:00 UTC — DCL 声明式 Rule Engine v1
 
 Modified by: Codex (GPT-5)
