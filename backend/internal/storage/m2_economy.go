@@ -505,14 +505,25 @@ func prepareM2Wage(ctx context.Context, conn *sql.Conn, item SchedulerItem, payl
 		return scheduledMutation{}, err
 	}
 	if item.PhaseID == m2EconomyPhasePay {
+		var inactive int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='M2WagePeriodInactive' AND world_time=? AND json_extract(payload,'$.contract_id')=?`, M2DemoInstanceID, M2DemoBranchID, m2WageTime(payload.Day, 7, 0), payload.SubjectID).Scan(&inactive); err != nil {
+			return scheduledMutation{}, err
+		}
+		if inactive == 1 {
+			return scheduledMutation{EventType: "M2WageSettlementSkipped", EventPayload: struct {
+				ContractID string `json:"contract_id"`
+				Day        int    `json:"day"`
+				Reason     string `json:"reason_code"`
+			}{payload.SubjectID, payload.Day, "no_active_workers"}}, nil
+		}
 		hasTransfers, err := hasM2WageOwnerTransitions(ctx, conn, obligationID)
 		if err != nil {
 			return scheduledMutation{}, err
 		}
 		if hasTransfers {
-			due, ok := checkedMultiplyPositive(workers, rate)
-			if !ok {
-				return scheduledMutation{}, core.NewError(core.CodeIntegerOverflow, "slot wage due overflows")
+			due, _, _, _, err := readM2WageOrigin(ctx, conn, obligationID)
+			if err != nil {
+				return scheduledMutation{}, err
 			}
 			return prepareM2SlotAwareWageDue(ctx, conn, item, payload, obligationID, due)
 		}
@@ -526,7 +537,11 @@ func prepareM2Wage(ctx context.Context, conn *sql.Conn, item SchedulerItem, payl
 			return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "count wage claimant slices", err)
 		}
 	}
-	if activeSplits > 0 || obligationSlices > 0 {
+	departures, err := readM2WageDepartures(ctx, conn, m2WageTime(payload.Day, 7, 0))
+	if err != nil {
+		return scheduledMutation{}, err
+	}
+	if activeSplits > 0 || obligationSlices > 0 || len(departures) > 0 {
 		if item.PhaseID == m2EconomyPhasePay && obligationSlices == 0 {
 			return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "wage split missing claimant slices")
 		}
@@ -536,8 +551,15 @@ func prepareM2Wage(ctx context.Context, conn *sql.Conn, item SchedulerItem, payl
 	if err := conn.QueryRowContext(ctx, `SELECT population_count FROM cohorts WHERE cohort_id = ?`, M2DemoCohortID).Scan(&population); err != nil {
 		return scheduledMutation{}, classifyMissing(err, "M2 wage Cohort")
 	}
-	if population != workers {
+	if item.PhaseID == m2EconomyPhaseAccrue && population != workers {
 		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "wage population differs from unsplit contract")
+	}
+	if item.PhaseID == m2EconomyPhasePay {
+		var err error
+		_, _, rate, workers, err = readM2WageOrigin(ctx, conn, obligationID)
+		if err != nil {
+			return scheduledMutation{}, err
+		}
 	}
 	for _, accountID := range []string{employer, M2DemoCohortAssetAccountID, m2EconomyEmployerExpense, m2EconomyEmployerPayable, M2DemoCohortReceivableID, m2EconomyCohortIncome} {
 		if err := verifyM2AccountProjection(ctx, conn, accountID, currency); err != nil {
@@ -707,13 +729,36 @@ func verifyM2AccountProjection(ctx context.Context, conn *sql.Conn, accountID, c
 	return nil
 }
 
-// A wage contract covers individual workers; a one-party rent contract covers
-// the continuing household. Population can change only after worker contracts
-// expire and while that household still exists.
-func ensureM2ContractsPermitPopulationTransition(ctx context.Context, conn *sql.Conn, cohortID, worldTime string, remainingPopulation int64, wageSplit bool) error {
+// Population changes must preserve active wage shares or prove that only
+// unemployed capacity is affected. The one-party rent household must remain.
+func ensureM2ContractsPermitPopulationTransition(ctx context.Context, conn *sql.Conn, cohortID, worldTime string, remainingPopulation int64, wageSplit bool, returningMaterialization string) error {
 	at, err := time.Parse(time.RFC3339, worldTime)
 	if err != nil {
 		return core.WrapError(core.CodeInvalidArgument, "invalid M2 contract transition time", err)
+	}
+	noEmployedCohort := false
+	if !wageSplit && cohortID == M2DemoCohortID && remainingPopulation > 0 {
+		ended, err := readM2WageDepartures(ctx, conn, at.UTC().Format(time.RFC3339))
+		if err != nil {
+			return err
+		}
+		if len(ended) > 0 {
+			var baseline, employedNamed int64
+			if err := conn.QueryRowContext(ctx, `SELECT participant_count FROM m2_cohort_contracts WHERE contract_id=?`, m2EconomyContractID).Scan(&baseline); err != nil {
+				return err
+			}
+			if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM m2_wage_participation_splits s JOIN cohort_materializations m ON m.materialization_id=s.materialization_id AND m.status='active' WHERE s.contract_id=? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.instance_id=? AND e.branch_id=? AND e.event_type='CareerAggregateExitActivated' AND json_extract(e.payload,'$.materialization_id')=s.materialization_id AND e.world_time<=?)`, m2EconomyContractID, M2DemoInstanceID, M2DemoBranchID, at.UTC().Format(time.RFC3339)).Scan(&employedNamed); err != nil {
+				return err
+			}
+			noEmployedCohort = baseline == int64(len(ended))+employedNamed
+			if noEmployedCohort && returningMaterialization != "" {
+				var belongs int
+				if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM cohort_materializations m JOIN m2_cohort_contracts w ON w.cohort_id=m.source_cohort_id JOIN events e ON e.event_id=w.definition_event_id WHERE m.materialization_id=? AND w.contract_id=? AND m.materialize_sequence>e.event_sequence`, returningMaterialization, m2EconomyContractID).Scan(&belongs); err != nil {
+					return err
+				}
+				noEmployedCohort = belongs == 1
+			}
+		}
 	}
 	rows, err := conn.QueryContext(ctx, `SELECT kind, participant_count, effective_from, effective_until FROM m2_cohort_contracts WHERE cohort_id = ?`, cohortID)
 	if err != nil {
@@ -747,7 +792,7 @@ func ensureM2ContractsPermitPopulationTransition(ctx context.Context, conn *sql.
 		if kind == "rent" && participants == 1 && remainingPopulation > 0 {
 			continue
 		}
-		if kind == "wage" && wageSplit && remainingPopulation > 0 {
+		if kind == "wage" && (wageSplit || noEmployedCohort) && remainingPopulation > 0 {
 			continue
 		}
 		rows.Close()

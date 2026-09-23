@@ -70,6 +70,7 @@ type inventoryMutation struct {
 }
 
 type scheduledMutation struct {
+	Private         bool // Personal effects must not use the default instance-wide Outbox.
 	EventType       string
 	EventPayload    any
 	Postings        []scheduledPosting
@@ -387,8 +388,10 @@ func (s *Store) commitScheduledMutationForBranch(ctx context.Context, tx *immedi
 	if err != nil {
 		return err
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO outbox(outbox_id, event_id, topic, audience_scope, audience_scope_hash, payload) VALUES (?, ?, 'scheduler.event', ?, ?, ?)`, outboxID, eventID, audience, audienceHash, string(eventPayload)); err != nil {
-		return core.WrapError(core.CodeStorageFailure, "insert scheduler Outbox", err)
+	if !mutation.Private {
+		if _, err := tx.conn.ExecContext(ctx, `INSERT INTO outbox(outbox_id, event_id, topic, audience_scope, audience_scope_hash, payload) VALUES (?, ?, 'scheduler.event', ?, ?, ?)`, outboxID, eventID, audience, audienceHash, string(eventPayload)); err != nil {
+			return core.WrapError(core.CodeStorageFailure, "insert scheduler Outbox", err)
+		}
 	}
 	if _, err := tx.conn.ExecContext(ctx, `UPDATE command_attempts SET status = 'committed', finished_at_utc = ? WHERE command_id = ? AND attempt_no = 1 AND status = 'ready'`, nowText, commandID); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "commit scheduler attempt", err)
@@ -404,8 +407,33 @@ func prepareWageAccrual(ctx context.Context, conn *sql.Conn, payload scheduledPa
 	if err := conn.QueryRowContext(ctx, `SELECT gross_wage_minor, pay_period_days FROM employment_contracts WHERE contract_id = ? AND status = 'active'`, payload.SubjectID).Scan(&amount, &period); err != nil {
 		return scheduledMutation{}, classifyMissing(err, "employment contract")
 	}
-	start := int64(payload.Day) - period
-	obligationID := fmt.Sprintf("wage_%s_%d_%d", payload.SubjectID, start, payload.Day)
+	return prepareWageAccrualForPeriod(ctx, conn, wageAccrualPeriod{
+		ContractID: payload.SubjectID, StartDay: int64(payload.Day) - period,
+		EndDay: payload.Day, DueWorldTime: strictDayTime(payload.Day), AmountMinor: amount,
+	})
+}
+
+// wageAccrualPeriod is an internal, already-authorized earned-period snapshot.
+// The caller resolves effective contract terms and chronology; this accounting
+// boundary does not authorize employment changes or infer an epoch from a day.
+type wageAccrualPeriod struct {
+	ContractID   string
+	StartDay     int64
+	EndDay       int
+	DueWorldTime string
+	AmountMinor  int64
+}
+
+func prepareWageAccrualForPeriod(ctx context.Context, conn *sql.Conn, period wageAccrualPeriod) (scheduledMutation, error) {
+	if period.ContractID == "" || period.StartDay < 0 || int64(period.EndDay) <= period.StartDay || period.AmountMinor <= 0 {
+		return scheduledMutation{}, core.NewError(core.CodeInvalidArgument, "invalid earned wage period")
+	}
+	due, err := time.Parse(time.RFC3339, period.DueWorldTime)
+	if err != nil {
+		return scheduledMutation{}, core.NewError(core.CodeInvalidArgument, "invalid wage due time")
+	}
+	period.DueWorldTime = due.UTC().Format(time.RFC3339Nano)
+	obligationID := fmt.Sprintf("wage_%s_%d_%d", period.ContractID, period.StartDay, period.EndDay)
 	var existing int
 	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM wage_obligations WHERE obligation_id = ?`, obligationID).Scan(&existing); err != nil {
 		return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "check wage obligation idempotency", err)
@@ -416,11 +444,11 @@ func prepareWageAccrual(ctx context.Context, conn *sql.Conn, payload scheduledPa
 			Reason       string `json:"reason"`
 		}{obligationID, "wage_already_accrued"}}, nil
 	}
-	ledger, err := readObligationLedger(ctx, conn, "wage", payload.SubjectID)
+	ledger, err := readObligationLedger(ctx, conn, "wage", period.ContractID)
 	if err != nil {
 		return scheduledMutation{}, err
 	}
-	postings, balances, err := prepareAccrualAccounting(ctx, conn, ledger, amount, "wage accrual")
+	postings, balances, err := prepareAccrualAccounting(ctx, conn, ledger, period.AmountMinor, "wage accrual")
 	if err != nil {
 		return scheduledMutation{}, err
 	}
@@ -430,11 +458,11 @@ func prepareWageAccrual(ctx context.Context, conn *sql.Conn, payload scheduledPa
 		PeriodStart  int64  `json:"period_start_day"`
 		PeriodEnd    int    `json:"period_end_day"`
 		AmountMinor  int64  `json:"amount_minor"`
-	}{obligationID, payload.SubjectID, start, payload.Day, amount}
+	}{obligationID, period.ContractID, period.StartDay, period.EndDay, period.AmountMinor}
 	return scheduledMutation{
 		EventType: "WageObligationAccrued", EventPayload: eventPayload, Postings: postings, Balances: balances,
 		ApplyDomainRows: func(ctx context.Context, conn *sql.Conn, _ string, sequence int64) error {
-			_, err := conn.ExecContext(ctx, `INSERT INTO wage_obligations(obligation_id, contract_id, period_start_day, period_end_day, due_world_time, amount_due_minor, amount_paid_minor, status, last_event_sequence) VALUES (?, ?, ?, ?, ?, ?, 0, 'accrued', ?)`, obligationID, payload.SubjectID, start, payload.Day, strictDayTime(payload.Day), amount, sequence)
+			_, err := conn.ExecContext(ctx, `INSERT INTO wage_obligations(obligation_id, contract_id, period_start_day, period_end_day, due_world_time, amount_due_minor, amount_paid_minor, status, last_event_sequence) VALUES (?, ?, ?, ?, ?, ?, 0, 'accrued', ?)`, obligationID, period.ContractID, period.StartDay, period.EndDay, period.DueWorldTime, period.AmountMinor, sequence)
 			if err != nil {
 				return core.WrapError(core.CodeStorageFailure, "accrue wage obligation", err)
 			}

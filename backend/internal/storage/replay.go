@@ -208,7 +208,19 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	return compareProjectionRows(ctx, s.db, replay.State)
+	differences, err := compareProjectionRows(ctx, s.db, replay.State)
+	if err != nil {
+		return nil, err
+	}
+	wages, err := careerWageProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := careerRoleProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(differences, wages...), roles...), nil
 }
 
 func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID string) error {
@@ -300,6 +312,34 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 			knowledge.LearnedWorldTime, knowledge.ClaimPayload, knowledge.LastEventSequence); err != nil {
 			return core.WrapError(core.CodeStorageFailure, "rebuild Agent knowledge projection", err)
 		}
+	}
+	wages, err := careerWageProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	for _, wage := range wages {
+		if wage.Projection == "career_contract_status" {
+			if err := execAgentOne(ctx, tx.conn, "rebuild career contract status", `UPDATE employment_contracts SET status=? WHERE contract_id=? AND status=?`, wage.ExpectedText, wage.Key, wage.ActualText); err != nil {
+				return err
+			}
+			continue
+		}
+		if wage.Projection == "career_contract_position" {
+			if err := execAgentOne(ctx, tx.conn, "rebuild career position projection", `UPDATE employment_contracts SET position_id=? WHERE contract_id=? AND position_id=?`, wage.ExpectedText, wage.Key, wage.ActualText); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := execAgentOne(ctx, tx.conn, "rebuild career wage projection", `UPDATE employment_contracts SET gross_wage_minor=? WHERE contract_id=? AND gross_wage_minor=?`, wage.Expected, wage.Key, wage.Actual); err != nil {
+			return err
+		}
+	}
+	roles, err := careerRoleProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairCareerRoleProjections(ctx, tx.conn, instanceID, branchID, roles); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "commit projection rebuild", err)

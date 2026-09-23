@@ -338,14 +338,11 @@ func prepareM2SlotAwareWageRetry(ctx context.Context, conn *sql.Conn, item Sched
 }
 
 func loadM2WageClaimSlots(ctx context.Context, conn *sql.Conn, obligationID string, beforeSequence int64) ([]m2WageClaimSlot, error) {
-	var due, paid, rate, workers int64
-	var cohortID string
-	if err := conn.QueryRowContext(ctx, `SELECT o.amount_due_minor, o.amount_paid_minor, c.unit_rate_minor, c.participant_count, c.cohort_id FROM m2_economic_obligations o JOIN m2_cohort_contracts c ON c.contract_id = o.contract_id WHERE o.obligation_id = ? AND o.kind = 'wage' AND c.kind = 'wage'`, obligationID).Scan(&due, &paid, &rate, &workers, &cohortID); err != nil {
-		return nil, classifyMissing(err, "wage claim slot obligation")
+	due, paid, rate, workers, err := readM2WageOrigin(ctx, conn, obligationID)
+	if err != nil {
+		return nil, err
 	}
-	if due <= 0 || paid < 0 || paid > due || rate <= 0 || workers <= 0 || due != rate*workers || cohortID != M2DemoCohortID {
-		return nil, core.NewError(core.CodeProjectionDiverged, "wage claim slot contract differs from obligation")
-	}
+	cohortID := M2DemoCohortID
 	slices, err := loadM2WageObligationSlices(ctx, conn, obligationID)
 	if err != nil {
 		return nil, err
@@ -355,7 +352,7 @@ func loadM2WageClaimSlots(ctx context.Context, conn *sql.Conn, obligationID stri
 	}
 	var sliceDue int64
 	for index, slice := range slices {
-		if slice.due <= 0 || slice.due%rate != 0 || (index == 0 && (slice.kind != "cohort" || slice.claimant != cohortID)) || (index > 0 && (slice.kind != "entity" || slice.due != rate)) {
+		if slice.due <= 0 || slice.due%rate != 0 || (slice.kind == "cohort" && (index != 0 || slice.claimant != cohortID)) || (slice.kind == "entity" && slice.due != rate) || (slice.kind != "cohort" && slice.kind != "entity") {
 			return nil, core.NewError(core.CodeProjectionDiverged, "wage claim origin slices are invalid")
 		}
 		sliceDue += slice.due
@@ -660,9 +657,12 @@ func verifyM2WageSlotHistory(ctx context.Context, conn *sql.Conn, obligationID s
 	if err != nil {
 		return err
 	}
-	var due, rate int64
+	due, _, rate, _, err := readM2WageOrigin(ctx, conn, obligationID)
+	if err != nil {
+		return err
+	}
 	var periodEnd string
-	if err := conn.QueryRowContext(ctx, `SELECT o.amount_due_minor, c.unit_rate_minor, o.period_end FROM m2_economic_obligations o JOIN m2_cohort_contracts c ON c.contract_id = o.contract_id WHERE o.obligation_id = ?`, obligationID).Scan(&due, &rate, &periodEnd); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT period_end FROM m2_economic_obligations WHERE obligation_id = ?`, obligationID).Scan(&periodEnd); err != nil {
 		return classifyMissing(err, "slot wage payment authority")
 	}
 	policy, err := readM2WageAllocationPolicy(ctx, conn, periodEnd)

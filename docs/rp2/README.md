@@ -2,6 +2,8 @@
 
 Current: RP-2A–E verified locally, including [long-run life and initiative integration](phase-2e.md). See the [RP-2 acceptance summary](phase-2.md). The overall living-world goal continues with RP-3 through RP-8 and final300-turn/30-day integration, strictly serially; it is not complete.
 
+RP-3 career implementation, lifecycle and career↔RP evidence are tracked in [the phase report](phase-3.md) and [requirement audit](phase-3-audit.md). They include authenticated recruitment, work/payroll, attendance/leave/overtime, performance, grade/role/pay transitions, exits/reemployment and relationship-dependent voluntary work. See the report's current status for final verification and checkpoint; earlier increment entries are historical.
+
 ## Explicit life demo
 
 For RP-2 life integration, explicitly prepare a **fresh** database from `backend/` with `go run ./cmd/corerp-m2 -db /path/to/fresh-life.db -action rp-life-prepare`. This composes the existing finite employer/payroll/store economy, three NPCs, one player, five places/routes and Ada/Bo's30-day routines. It is not a startup side effect or a conversion of an existing minimal RP demo. Reuse normal Play server/auth setup with this database; do not run the older `rp-prepare`/`rp-travel-prepare` on it.

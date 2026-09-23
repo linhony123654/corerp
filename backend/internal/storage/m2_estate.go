@@ -150,6 +150,11 @@ func prepareM2EstateContribution(ctx context.Context, conn *sql.Conn, item Sched
 	if err != nil {
 		return scheduledMutation{}, err
 	}
+	if deferred, err := prepareM2EstateWithoutProceeding(ctx, conn, item, p); err != nil {
+		return scheduledMutation{}, err
+	} else if deferred != nil {
+		return *deferred, nil
+	}
 	if err := verifyM2BankruptcyClaims(ctx, conn, p.Actor); err != nil {
 		return scheduledMutation{}, err
 	}
@@ -188,6 +193,11 @@ func prepareM2EstateDistribution(ctx context.Context, conn *sql.Conn, item Sched
 	p, err := readM2EstatePolicy(ctx, conn)
 	if err != nil {
 		return scheduledMutation{}, err
+	}
+	if deferred, err := prepareM2EstateWithoutProceeding(ctx, conn, item, p); err != nil {
+		return scheduledMutation{}, err
+	} else if deferred != nil {
+		return *deferred, nil
 	}
 	if err := verifyM2BankruptcyClaims(ctx, conn, p.Actor); err != nil {
 		return scheduledMutation{}, err
@@ -236,14 +246,22 @@ func prepareM2EstateDistribution(ctx context.Context, conn *sql.Conn, item Sched
 		}, nil
 	}
 	var obligationID, cohortID, currency, caseStatus string
-	var due, paid, participants, openingOutstanding int64
-	err = conn.QueryRowContext(ctx, `SELECT o.obligation_id, k.cohort_id, k.currency_id, o.amount_due_minor, o.amount_paid_minor, k.participant_count, c.outstanding_at_open_minor, a.status FROM m2_economic_obligations o JOIN m2_cohort_contracts k ON k.contract_id = o.contract_id JOIN m2_bankruptcy_claims c ON c.obligation_id = o.obligation_id JOIN m2_arrears_cases a ON a.obligation_id = o.obligation_id WHERE k.actor_id = ? AND k.kind = 'wage' AND o.kind = 'wage' AND o.amount_paid_minor < o.amount_due_minor AND o.period_end < ? ORDER BY o.period_end, o.obligation_id LIMIT 1`, p.Actor, item.WorldTime).Scan(&obligationID, &cohortID, &currency, &due, &paid, &participants, &openingOutstanding, &caseStatus)
+	var due, paid, openingOutstanding int64
+	err = conn.QueryRowContext(ctx, `SELECT o.obligation_id, k.cohort_id, k.currency_id, o.amount_due_minor, o.amount_paid_minor, c.outstanding_at_open_minor, a.status FROM m2_economic_obligations o JOIN m2_cohort_contracts k ON k.contract_id = o.contract_id JOIN m2_bankruptcy_claims c ON c.obligation_id = o.obligation_id JOIN m2_arrears_cases a ON a.obligation_id = o.obligation_id WHERE k.actor_id = ? AND k.kind = 'wage' AND o.kind = 'wage' AND o.amount_paid_minor < o.amount_due_minor AND o.period_end < ? ORDER BY o.period_end, o.obligation_id LIMIT 1`, p.Actor, item.WorldTime).Scan(&obligationID, &cohortID, &currency, &due, &paid, &openingOutstanding, &caseStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "declared M2 estate wage claim is absent")
 	}
 	if err != nil {
 		return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "select oldest M2 estate wage claim", err)
 	}
+	originalDue, originalPaid, _, originalWorkers, err := readM2WageOrigin(ctx, conn, obligationID)
+	if err != nil {
+		return scheduledMutation{}, err
+	}
+	if originalDue != due || originalPaid != paid {
+		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "estate wage claim differs from original obligation")
+	}
+	participants := originalWorkers
 	if cohortID != M2DemoCohortID || currency != M2DemoCurrencyID || participants != 18 || p.Amount != participants*p.PerWorker || due-paid < p.Amount || openingOutstanding < p.Amount || caseStatus != "grace_expired" {
 		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "M2 estate claim is inconsistent with declared distribution")
 	}

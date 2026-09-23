@@ -25,13 +25,69 @@ func TestParseTokenConfiguration(t *testing.T) {
 }
 
 func TestRunPerformsBoundedGracefulShutdown(t *testing.T) {
-	// Leave enough startup time for SQLite migrations under the race detector,
-	// then prove the process still exits through its bounded shutdown path.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	err := run(ctx, filepath.Join(t.TempDir(), "shutdown.db"), "127.0.0.1:0", `{"buyer-token":"principal_buyer"}`, "test-cursor-secret-must-be-at-least-32-bytes", logger)
-	if err != nil {
-		t.Fatalf("graceful shutdown: %v", err)
+	// A fixed cancellation delay can interrupt migrations instead of exercising
+	// server shutdown. Wait for completed initialization / HTTP serve entry, then
+	// independently bound shutdown and require its completion log.
+	ctx, cancel := context.WithCancel(context.Background())
+	started, stopped := make(chan struct{}, 1), make(chan struct{}, 1)
+	logger := slog.New(shutdownTestHandler{slog.NewTextHandler(io.Discard, nil), started, stopped})
+	finished := make(chan struct{})
+	var runErr error
+	dbPath := filepath.Join(t.TempDir(), "shutdown.db")
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-finished:
+		case <-time.After(15 * time.Second):
+			t.Error("server did not exit during cleanup")
+		}
+	})
+	go func() {
+		runErr = run(ctx, dbPath, "127.0.0.1:0", `{"buyer-token":"principal_buyer"}`, "test-cursor-secret-must-be-at-least-32-bytes", logger)
+		close(finished)
+	}()
+	select {
+	case <-started:
+	case <-finished:
+		t.Fatalf("server exited before HTTP serve entry: %v", runErr)
+	case <-time.After(30 * time.Second):
+		t.Fatal("server initialization did not finish")
 	}
+	cancel()
+	select {
+	case <-finished:
+		if runErr != nil {
+			t.Fatalf("graceful shutdown: %v", runErr)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("graceful shutdown exceeded its bound")
+	}
+	select {
+	case <-stopped:
+	default:
+		t.Fatal("server did not complete its graceful shutdown path")
+	}
+}
+
+type shutdownTestHandler struct {
+	slog.Handler
+	started chan struct{}
+	stopped chan struct{}
+}
+
+func (h shutdownTestHandler) Handle(ctx context.Context, record slog.Record) error {
+	var signal chan struct{}
+	switch record.Message {
+	case "CoreRP HTTP API listening":
+		signal = h.started
+	case "CoreRP HTTP API stopped":
+		signal = h.stopped
+	}
+	if signal != nil {
+		select {
+		case signal <- struct{}{}:
+		default:
+		}
+	}
+	return h.Handler.Handle(ctx, record)
 }

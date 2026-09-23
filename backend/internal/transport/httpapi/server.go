@@ -38,6 +38,34 @@ type Service interface {
 	MoveRP(context.Context, core.RPMoveRequest) (storage.RPMoveResult, error)
 	SocialRP(context.Context, core.RPSocialRequest) (storage.RPSocialResult, error)
 	MaterializeRPBackground(context.Context, core.RPBackgroundRequest) (storage.RPBackgroundResult, error)
+	DefineCareerOrganization(context.Context, core.CareerOrganizationRequest) (storage.CareerRecord, error)
+	DefineCareerGradeScale(context.Context, core.CareerGradeScaleRequest) (storage.CareerRecord, error)
+	OfferCareerPositionChange(context.Context, core.CareerPositionOfferRequest) (storage.CareerRecord, error)
+	DeclineCareerPositionChange(context.Context, core.CareerPositionDeclineRequest) (storage.CareerRecord, error)
+	AcceptCareerPositionChange(context.Context, core.CareerPositionAcceptRequest) (storage.CareerRecord, error)
+	SpeakCareerAnnouncement(context.Context, core.CareerAnnouncementRequest) (storage.CareerRecord, error)
+	EndCareerEmployment(context.Context, core.CareerExitRequest) (storage.CareerRecord, error)
+	RequestCareerAggregateExit(context.Context, core.CareerAggregateExitRequest) (storage.CareerRecord, error)
+	PostCareerPosition(context.Context, core.CareerPostingRequest) (storage.CareerRecord, error)
+	ApplyForCareerPosition(context.Context, core.CareerApplicationRequest) (storage.CareerRecord, error)
+	DiscoverCareerPositions(context.Context, string, string, string, string, int64) (storage.CareerMarket, error)
+	ReadCareerApplication(context.Context, string, string, string, string) (storage.CareerRecord, error)
+	InviteCareerInterview(context.Context, core.CareerInterviewRequest) (storage.CareerRecord, error)
+	AnswerCareerInterview(context.Context, core.CareerInterviewAnswerRequest) (storage.CareerRecord, error)
+	EvaluateCareerApplication(context.Context, core.CareerEvaluationRequest) (storage.CareerRecord, error)
+	OfferCareerEmployment(context.Context, core.CareerOfferRequest) (storage.CareerRecord, error)
+	DeclineCareerOffer(context.Context, core.CareerOfferDeclineRequest) (storage.CareerRecord, error)
+	AcceptCareerOffer(context.Context, core.CareerOfferAcceptRequest) (storage.CareerRecord, error)
+	ReadCareerAttendance(context.Context, string, string, string, string, int) (storage.CareerAttendanceRecord, error)
+	RecordCareerPerformance(context.Context, core.CareerPerformanceRequest) (storage.CareerRecord, error)
+	RegularizeCareerEmployment(context.Context, core.CareerRegularizationRequest) (storage.CareerRecord, error)
+	RequestCareerLeave(context.Context, core.CareerLeaveRequest) (storage.CareerRecord, error)
+	ReviewCareerLeave(context.Context, core.CareerLeaveReviewRequest) (storage.CareerRecord, error)
+	OfferCareerOvertime(context.Context, core.CareerOvertimeRequest) (storage.CareerRecord, error)
+	RespondCareerOvertime(context.Context, core.CareerOvertimeResponseRequest) (storage.CareerRecord, error)
+	RaiseCareerWage(context.Context, core.CareerRaiseRequest) (storage.CareerRecord, error)
+	ReferCareerCandidate(context.Context, core.CareerReferralRequest) (storage.CareerRecord, error)
+	ReadCareerRecruitmentRecord(context.Context, string, string, string, string, string) (storage.CareerRecord, error)
 	SetRPStyle(context.Context, storage.RPStyleSetRequest) (storage.RPStyleSetResult, error)
 	ReadRPStyle(context.Context, core.RPSessionReadRequest) (storage.RPResolvedStyle, error)
 	ReadRPNarrative(context.Context, storage.RPNarrativeReadRequest) (storage.RPNarrativeReadResult, error)
@@ -150,6 +178,62 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPSocial(response, request, requestID, principalID)
 	case "/api/v1/rp/background/materialize":
 		s.handleRPBackground(response, request, requestID, principalID)
+	case "/api/v1/career/organizations/define":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOrganizationRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineCareerOrganization)
+	case "/api/v1/career/positions/post":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerPostingRequest) *string { return &r.Binding.PrincipalID }, s.service.PostCareerPosition)
+	case "/api/v1/career/grades/define":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerGradeScaleRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineCareerGradeScale)
+	case "/api/v1/career/position-changes/offer":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerPositionOfferRequest) *string { return &r.Binding.PrincipalID }, s.service.OfferCareerPositionChange)
+	case "/api/v1/career/position-changes/decline":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerPositionDeclineRequest) *string { return &r.Binding.PrincipalID }, s.service.DeclineCareerPositionChange)
+	case "/api/v1/career/position-changes/accept":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerPositionAcceptRequest) *string { return &r.Binding.PrincipalID }, s.service.AcceptCareerPositionChange)
+	case "/api/v1/career/announcements/speak":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerAnnouncementRequest) *string { return &r.Binding.PrincipalID }, s.service.SpeakCareerAnnouncement)
+	case "/api/v1/career/employment/end":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerExitRequest) *string { return &r.Binding.PrincipalID }, s.service.EndCareerEmployment)
+	case "/api/v1/career/aggregate-employment/exit":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerAggregateExitRequest) *string { return &r.Binding.PrincipalID }, s.service.RequestCareerAggregateExit)
+	case "/api/v1/career/applications/submit":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerApplicationRequest) *string { return &r.Binding.PrincipalID }, s.service.ApplyForCareerPosition)
+	case "/api/v1/career/positions/query":
+		s.handleCareerMarket(response, request, requestID, principalID)
+	case "/api/v1/career/applications/read":
+		s.handleCareerApplicationRead(response, request, requestID, principalID)
+	case "/api/v1/career/interviews/invite":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerInterviewRequest) *string { return &r.Binding.PrincipalID }, s.service.InviteCareerInterview)
+	case "/api/v1/career/interviews/answer":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerInterviewAnswerRequest) *string { return &r.Binding.PrincipalID }, s.service.AnswerCareerInterview)
+	case "/api/v1/career/evaluations/record":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerEvaluationRequest) *string { return &r.Binding.PrincipalID }, s.service.EvaluateCareerApplication)
+	case "/api/v1/career/offers/make":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOfferRequest) *string { return &r.Binding.PrincipalID }, s.service.OfferCareerEmployment)
+	case "/api/v1/career/offers/decline":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOfferDeclineRequest) *string { return &r.Binding.PrincipalID }, s.service.DeclineCareerOffer)
+	case "/api/v1/career/offers/accept":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOfferAcceptRequest) *string { return &r.Binding.PrincipalID }, s.service.AcceptCareerOffer)
+	case "/api/v1/career/attendance/read":
+		s.handleCareerAttendanceRead(response, request, requestID, principalID)
+	case "/api/v1/career/performance/record":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerPerformanceRequest) *string { return &r.Binding.PrincipalID }, s.service.RecordCareerPerformance)
+	case "/api/v1/career/employment/regularize":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerRegularizationRequest) *string { return &r.Binding.PrincipalID }, s.service.RegularizeCareerEmployment)
+	case "/api/v1/career/leave/request":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerLeaveRequest) *string { return &r.Binding.PrincipalID }, s.service.RequestCareerLeave)
+	case "/api/v1/career/leave/review":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerLeaveReviewRequest) *string { return &r.Binding.PrincipalID }, s.service.ReviewCareerLeave)
+	case "/api/v1/career/overtime/offer":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOvertimeRequest) *string { return &r.Binding.PrincipalID }, s.service.OfferCareerOvertime)
+	case "/api/v1/career/overtime/respond":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOvertimeResponseRequest) *string { return &r.Binding.PrincipalID }, s.service.RespondCareerOvertime)
+	case "/api/v1/career/employment/raise":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerRaiseRequest) *string { return &r.Binding.PrincipalID }, s.service.RaiseCareerWage)
+	case "/api/v1/career/referrals/submit":
+		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerReferralRequest) *string { return &r.Binding.PrincipalID }, s.service.ReferCareerCandidate)
+	case "/api/v1/career/records/read":
+		s.handleCareerRecordRead(response, request, requestID, principalID)
 	case "/api/v1/rp/style/set":
 		s.handleRPStyleSet(response, request, requestID, principalID)
 	case "/api/v1/rp/style/read":

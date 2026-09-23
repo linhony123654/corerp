@@ -71,8 +71,8 @@ func planM2WageParticipation(ctx context.Context, conn *sql.Conn, command core.M
 	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(SUM(s.worker_count), 0) FROM m2_wage_participation_splits s JOIN cohort_materializations m ON m.materialization_id = s.materialization_id AND m.status = 'active' WHERE s.contract_id = ?`, contractID).Scan(&existing); err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "count named wage participants", err)
 	}
-	if priorPopulation+existing != participants {
-		return nil, core.NewError(core.CodeProjectionDiverged, "wage participants differ from contract")
+	if err := verifyM2WagePopulation(ctx, conn, participants, priorPopulation); err != nil {
+		return nil, err
 	}
 	var next string
 	err = conn.QueryRowContext(ctx, `SELECT world_time FROM scheduler_items WHERE instance_id = ? AND branch_id = ? AND phase_id = ? AND status = 'pending' AND world_time > ? AND world_time < ? ORDER BY world_time, scheduler_item_id LIMIT 1`, command.InstanceID, command.BranchID, m2EconomyPhaseAccrue, worldTime, ends).Scan(&next)
@@ -81,6 +81,22 @@ func planM2WageParticipation(ctx context.Context, conn *sql.Conn, command core.M
 	}
 	if err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "find next wage accrual", err)
+	}
+	ended, err := readM2WageDepartures(ctx, conn, next)
+	if err != nil {
+		return nil, err
+	}
+	if len(ended) > 0 {
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM m2_wage_participation_splits s JOIN cohort_materializations m ON m.materialization_id=s.materialization_id AND m.status='active' WHERE s.contract_id=? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.instance_id=? AND e.branch_id=? AND e.event_type='CareerAggregateExitActivated' AND json_extract(e.payload,'$.materialization_id')=s.materialization_id AND json_extract(e.payload,'$.final_period_end')<? AND e.world_time<=?)`, contractID, command.InstanceID, command.BranchID, next, next).Scan(&existing); err != nil {
+			return nil, err
+		}
+		remainingWorkers := participants - int64(len(ended)) - existing
+		if remainingWorkers < 0 || remainingWorkers > priorPopulation {
+			return nil, core.NewError(core.CodeProjectionDiverged, "remaining wage workforce exceeds population")
+		}
+		if remainingWorkers == 0 {
+			return nil, nil
+		}
 	}
 	return &m2WageParticipation{contractID, next, 1}, nil
 }
@@ -101,12 +117,12 @@ type m2WageReceipt struct {
 // stable ID. Recomputing at a later cumulative total and subtracting the
 // earlier total gives an exact retry delta with no timing-dependent rounding.
 func allocateM2WageCumulative(policy string, slices []m2WageSlice, rate, totalDue, cumulativePaid int64) ([]int64, error) {
-	if policy != m2WageAllocationPolicyVersion || rate <= 0 || totalDue <= 0 || cumulativePaid < 0 || cumulativePaid > totalDue || len(slices) == 0 || slices[0].kind != "cohort" {
+	if policy != m2WageAllocationPolicyVersion || rate <= 0 || totalDue <= 0 || cumulativePaid < 0 || cumulativePaid > totalDue || len(slices) == 0 {
 		return nil, core.NewError(core.CodeProjectionDiverged, "invalid split wage allocation policy or amount")
 	}
 	var workers, sumDue int64
 	for index, slice := range slices {
-		if slice.due <= 0 || slice.due%rate != 0 || (index > 0 && (slice.kind != "entity" || slice.due != rate || slices[index-1].claimant >= slice.claimant && index > 1)) {
+		if slice.due <= 0 || slice.due%rate != 0 || (slice.kind == "cohort" && (index != 0 || slice.claimant != M2DemoCohortID)) || (slice.kind == "entity" && (slice.due != rate || index > 0 && slices[index-1].kind == "entity" && slices[index-1].claimant >= slice.claimant)) || (slice.kind != "entity" && slice.kind != "cohort") {
 			return nil, core.NewError(core.CodeProjectionDiverged, "invalid split wage worker slots")
 		}
 		var ok bool
@@ -167,9 +183,12 @@ func verifyM2WageSplitReceipts(ctx context.Context, conn *sql.Conn, obligationID
 	if err != nil || len(slices) == 0 {
 		return err
 	}
-	var due, rate int64
+	due, _, rate, _, err := readM2WageOrigin(ctx, conn, obligationID)
+	if err != nil {
+		return err
+	}
 	var periodEnd string
-	if err := conn.QueryRowContext(ctx, `SELECT o.amount_due_minor, c.unit_rate_minor, o.period_end FROM m2_economic_obligations o JOIN m2_cohort_contracts c ON c.contract_id = o.contract_id WHERE o.obligation_id = ? AND o.kind = 'wage'`, obligationID).Scan(&due, &rate, &periodEnd); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT period_end FROM m2_economic_obligations WHERE obligation_id = ? AND kind = 'wage'`, obligationID).Scan(&periodEnd); err != nil {
 		return classifyMissing(err, "split wage obligation authority")
 	}
 	policy, err := readM2WageAllocationPolicy(ctx, conn, periodEnd)
@@ -323,6 +342,17 @@ func verifyM2WageSplitReceipts(ctx context.Context, conn *sql.Conn, obligationID
 }
 
 func loadM2WageObligationSlices(ctx context.Context, conn *sql.Conn, obligationID string) ([]m2WageSlice, error) {
+	var invalid int64
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM m2_wage_split_obligations s
+		LEFT JOIN m2_economic_obligations o ON o.obligation_id = s.obligation_id
+		LEFT JOIN events e ON e.event_id = s.accrual_event_id AND e.event_sequence = s.accrual_event_sequence
+		WHERE s.obligation_id = ? AND (o.defining_event_id IS NULL OR o.defining_event_id != s.accrual_event_id
+		OR e.event_id IS NULL OR e.event_type != 'M2WageAccrued' OR e.instance_id != ? OR e.branch_id != ? OR e.world_time != o.period_end)`, obligationID, M2DemoInstanceID, M2DemoBranchID).Scan(&invalid); err != nil {
+		return nil, core.WrapError(core.CodeStorageFailure, "verify wage slice accrual authority", err)
+	}
+	if invalid != 0 {
+		return nil, core.NewError(core.CodeProjectionDiverged, "wage claimant slice lacks its original accrual")
+	}
 	rows, err := conn.QueryContext(ctx, `SELECT s.claimant_kind, s.claimant_id, s.asset_account_id, s.receivable_account_id, s.income_account_id, s.due_minor, a.owner_id, a.account_type, r.owner_id, r.account_type, i.owner_id, i.account_type FROM m2_wage_split_obligations s JOIN accounts a ON a.account_id = s.asset_account_id JOIN accounts r ON r.account_id = s.receivable_account_id JOIN accounts i ON i.account_id = s.income_account_id WHERE s.obligation_id = ? ORDER BY CASE s.claimant_kind WHEN 'cohort' THEN 0 ELSE 1 END, s.claimant_id`, obligationID)
 	if err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "load split wage obligation slices", err)
@@ -353,69 +383,110 @@ func loadM2WageObligationSlices(ctx context.Context, conn *sql.Conn, obligationI
 
 func prepareM2SplitWage(ctx context.Context, conn *sql.Conn, item SchedulerItem, payload scheduledPayload, workers, rate int64, currency, employer string) (scheduledMutation, error) {
 	obligationID := fmt.Sprintf("obligation_m2_wage_day_%d", payload.Day)
-	rows, err := conn.QueryContext(ctx, `SELECT s.materialization_id, s.cohort_id, s.entity_id, s.worker_count, s.effective_from, e.asset_account_id, e.receivable_account_id, s.income_account_id, v.payload
+	var slices []m2WageSlice
+	var amount int64
+	var err error
+	if item.PhaseID == m2EconomyPhasePay {
+		amount, _, rate, workers, err = readM2WageOrigin(ctx, conn, obligationID)
+		if err != nil {
+			return scheduledMutation{}, err
+		}
+		slices, err = loadM2WageObligationSlices(ctx, conn, obligationID)
+		if err != nil {
+			return scheduledMutation{}, err
+		}
+		if len(slices) == 0 {
+			return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "earned wage claimant slices are missing")
+		}
+	} else {
+		ended, err := readM2WageDepartures(ctx, conn, m2WageTime(payload.Day, 7, 0))
+		if err != nil {
+			return scheduledMutation{}, err
+		}
+		var inactiveNamed int64
+		rows, err := conn.QueryContext(ctx, `SELECT s.materialization_id, s.cohort_id, s.entity_id, s.worker_count, s.effective_from, e.asset_account_id, e.receivable_account_id, s.income_account_id, v.payload
 		FROM m2_wage_participation_splits s JOIN materialized_entities e ON e.entity_id = s.entity_id AND e.materialization_id = s.materialization_id
 		JOIN cohort_materializations m ON m.materialization_id = s.materialization_id AND m.materialize_event_id = s.split_event_id AND m.materialize_sequence = s.split_event_sequence AND m.status = 'active'
 		JOIN events v ON v.event_id = s.split_event_id AND v.event_sequence = s.split_event_sequence AND v.event_type = 'CohortMaterialized' AND v.instance_id = ? AND v.branch_id = ?
 		WHERE s.contract_id = ? AND s.effective_from <= ? AND e.status = 'active' ORDER BY s.entity_id`, M2DemoInstanceID, M2DemoBranchID, m2EconomyContractID, m2WageTime(payload.Day, 7, 0))
-	if err != nil {
-		return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "load wage participants", err)
-	}
-	slices := []m2WageSlice{}
-	for rows.Next() {
-		var s m2WageSlice
-		var materializationID, cohortID, effectiveFrom, eventJSON string
-		var count int64
-		if err := rows.Scan(&materializationID, &cohortID, &s.claimant, &count, &effectiveFrom, &s.asset, &s.receivable, &s.income, &eventJSON); err != nil {
-			rows.Close()
-			return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "scan wage participant", err)
-		}
-		var event materializationEventPayload
-		if err := json.Unmarshal([]byte(eventJSON), &event); err != nil {
-			rows.Close()
-			return scheduledMutation{}, core.WrapError(core.CodeProjectionDiverged, "decode wage split event", err)
-		}
-		expectedHash, err := core.HashJSON(m2WageParticipation{m2EconomyContractID, effectiveFrom, 1})
 		if err != nil {
+			return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "load wage participants", err)
+		}
+		slices = []m2WageSlice{}
+		for rows.Next() {
+			var s m2WageSlice
+			var materializationID, cohortID, effectiveFrom, eventJSON string
+			var count int64
+			if err := rows.Scan(&materializationID, &cohortID, &s.claimant, &count, &effectiveFrom, &s.asset, &s.receivable, &s.income, &eventJSON); err != nil {
+				rows.Close()
+				return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "scan wage participant", err)
+			}
+			var event materializationEventPayload
+			if err := json.Unmarshal([]byte(eventJSON), &event); err != nil {
+				rows.Close()
+				return scheduledMutation{}, core.WrapError(core.CodeProjectionDiverged, "decode wage split event", err)
+			}
+			expectedHash, err := core.HashJSON(m2WageParticipation{m2EconomyContractID, effectiveFrom, 1})
+			if err != nil {
+				rows.Close()
+				return scheduledMutation{}, err
+			}
+			if cohortID != M2DemoCohortID || count != 1 || event.MaterializationID != materializationID || event.SourceCohortID != cohortID || event.EntityID != s.claimant || event.PopulationCount != 1 || event.WageParticipationHash != expectedHash {
+				rows.Close()
+				return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "named wage participation lacks materialization authority")
+			}
+			if ended[materializationID] {
+				inactiveNamed++
+				continue
+			}
+			s.kind, s.due = "entity", rate
+			slices = append(slices, s)
+		}
+		if err := rows.Err(); err != nil {
 			rows.Close()
+			return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "iterate wage participants", err)
+		}
+		if err := rows.Close(); err != nil {
+			return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "close wage participants", err)
+		}
+		var population int64
+		if err := conn.QueryRowContext(ctx, `SELECT population_count FROM cohorts WHERE cohort_id = ?`, M2DemoCohortID).Scan(&population); err != nil {
+			return scheduledMutation{}, classifyMissing(err, "wage Cohort")
+		}
+		if err := verifyM2WagePopulation(ctx, conn, workers, population); err != nil {
 			return scheduledMutation{}, err
 		}
-		if cohortID != M2DemoCohortID || count != 1 || event.MaterializationID != materializationID || event.SourceCohortID != cohortID || event.EntityID != s.claimant || event.PopulationCount != 1 || event.WageParticipationHash != expectedHash {
-			rows.Close()
-			return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "named wage participation lacks materialization authority")
+		var totalSplits int64
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM m2_wage_participation_splits s JOIN cohort_materializations m ON m.materialization_id = s.materialization_id AND m.status = 'active' WHERE s.contract_id = ? AND s.effective_from <= ?`, m2EconomyContractID, m2WageTime(payload.Day, 7, 0)).Scan(&totalSplits); err != nil {
+			return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "count recorded wage participation", err)
 		}
-		s.kind, s.due = "entity", rate
-		slices = append(slices, s)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "iterate wage participants", err)
-	}
-	if err := rows.Close(); err != nil {
-		return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "close wage participants", err)
-	}
-	var population int64
-	if err := conn.QueryRowContext(ctx, `SELECT population_count FROM cohorts WHERE cohort_id = ?`, M2DemoCohortID).Scan(&population); err != nil {
-		return scheduledMutation{}, classifyMissing(err, "wage Cohort")
-	}
-	if population <= 0 || population+int64(len(slices)) != workers {
-		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "split worker count differs from wage contract")
-	}
-	var totalSplits int64
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM m2_wage_participation_splits s JOIN cohort_materializations m ON m.materialization_id = s.materialization_id AND m.status = 'active' WHERE s.contract_id = ? AND s.effective_from <= ?`, m2EconomyContractID, m2WageTime(payload.Day, 7, 0)).Scan(&totalSplits); err != nil {
-		return scheduledMutation{}, core.WrapError(core.CodeStorageFailure, "count recorded wage participation", err)
-	}
-	if totalSplits != int64(len(slices)) {
-		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "wage participation lineage is incomplete")
-	}
-	cohortDue, ok := checkedMultiplyPositive(population, rate)
-	if !ok {
-		return scheduledMutation{}, core.NewError(core.CodeIntegerOverflow, "Cohort wage slice overflows")
-	}
-	slices = append([]m2WageSlice{{"cohort", M2DemoCohortID, M2DemoCohortAssetAccountID, M2DemoCohortReceivableID, m2EconomyCohortIncome, cohortDue}}, slices...)
-	amount, ok := checkedMultiplyPositive(workers, rate)
-	if !ok {
-		return scheduledMutation{}, core.NewError(core.CodeIntegerOverflow, "aggregate wage overflows")
+		if totalSplits != int64(len(slices))+inactiveNamed {
+			return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "wage participation lineage is incomplete")
+		}
+		workers -= int64(len(ended))
+		cohortWorkers := workers - int64(len(slices))
+		if cohortWorkers < 0 || cohortWorkers > population {
+			return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "employment subset exceeds population")
+		}
+		if workers == 0 {
+			return scheduledMutation{EventType: "M2WagePeriodInactive", EventPayload: struct {
+				ContractID string `json:"contract_id"`
+				PeriodEnd  string `json:"period_end"`
+				Workers    int64  `json:"worker_count"`
+			}{m2EconomyContractID, item.WorldTime, 0}}, nil
+		}
+		if cohortWorkers > 0 {
+			cohortDue, ok := checkedMultiplyPositive(cohortWorkers, rate)
+			if !ok {
+				return scheduledMutation{}, core.NewError(core.CodeIntegerOverflow, "Cohort wage slice overflows")
+			}
+			slices = append([]m2WageSlice{{"cohort", M2DemoCohortID, M2DemoCohortAssetAccountID, M2DemoCohortReceivableID, m2EconomyCohortIncome, cohortDue}}, slices...)
+		}
+		var ok bool
+		amount, ok = checkedMultiplyPositive(workers, rate)
+		if !ok {
+			return scheduledMutation{}, core.NewError(core.CodeIntegerOverflow, "aggregate wage overflows")
+		}
 	}
 	policy, err := readM2WageAllocationPolicy(ctx, conn, item.WorldTime)
 	if err != nil {
@@ -613,12 +684,18 @@ func prepareM2SplitWageArrearsRetry(ctx context.Context, conn *sql.Conn, item Sc
 	if err != nil {
 		return scheduledMutation{}, err
 	}
-	if len(slices) < 2 {
-		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "split wage is missing a named claimant")
+	if len(slices) == 0 {
+		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "split wage is missing claimants")
 	}
-	var rate int64
+	originalDue, originalPaid, rate, _, err := readM2WageOrigin(ctx, conn, obligationID)
+	if err != nil {
+		return scheduledMutation{}, err
+	}
+	if originalDue != due || originalPaid != paid {
+		return scheduledMutation{}, core.NewError(core.CodeProjectionDiverged, "wage arrears differ from original obligation")
+	}
 	var periodEnd string
-	if err := conn.QueryRowContext(ctx, `SELECT c.unit_rate_minor, o.period_end FROM m2_economic_obligations o JOIN m2_cohort_contracts c ON c.contract_id = o.contract_id WHERE o.obligation_id = ? AND o.contract_id = ?`, obligationID, m2EconomyContractID).Scan(&rate, &periodEnd); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT period_end FROM m2_economic_obligations WHERE obligation_id = ? AND contract_id = ?`, obligationID, m2EconomyContractID).Scan(&periodEnd); err != nil {
 		return scheduledMutation{}, classifyMissing(err, "split wage contract for arrears")
 	}
 	policy, err := readM2WageAllocationPolicy(ctx, conn, periodEnd)

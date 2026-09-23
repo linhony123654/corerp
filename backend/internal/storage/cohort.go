@@ -168,7 +168,7 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 			return core.CohortTransitionResult{}, err
 		}
 	}
-	if err := ensureM2ContractsPermitPopulationTransition(ctx, tx.conn, command.SourceCohortID, command.WorldTime, newPopulation, wageSplit != nil); err != nil {
+	if err := ensureM2ContractsPermitPopulationTransition(ctx, tx.conn, command.SourceCohortID, command.WorldTime, newPopulation, wageSplit != nil, ""); err != nil {
 		return core.CohortTransitionResult{}, err
 	}
 	var entityCount int
@@ -568,7 +568,7 @@ func (s *Store) DematerializeCohort(ctx context.Context, command core.Dematerial
 	if !populationOK || !assetOK || !receivableOK || !liabilityOK || !inventoryOK {
 		return core.CohortTransitionResult{}, core.NewError(core.CodeIntegerOverflow, "dematerialization restoration overflows a conserved balance")
 	}
-	if err := ensureM2ContractsPermitPopulationTransition(ctx, tx.conn, projection.sourceCohortID, command.WorldTime, newPopulation, activeWageSplit > 0); err != nil {
+	if err := ensureM2ContractsPermitPopulationTransition(ctx, tx.conn, projection.sourceCohortID, command.WorldTime, newPopulation, activeWageSplit > 0, command.MaterializationID); err != nil {
 		return core.CohortTransitionResult{}, err
 	}
 	var returnedClaims []m2ClaimShare

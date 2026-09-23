@@ -41,12 +41,21 @@ type RPRelationship struct {
 	SourceEventIDs  []string `json:"source_event_ids"`
 }
 type RPOwnEmployment struct {
-	ContractID     string `json:"contract_id"`
-	OrganizationID string `json:"organization_id"`
-	WageMinor      int64  `json:"wage_minor"`
-	SourceEventID  string `json:"source_event_id"`
+	PositionID           string   `json:"position_id,omitempty"`
+	OccupationID         string   `json:"occupation_id,omitempty"`
+	Grade                string   `json:"grade,omitempty"`
+	PositionCapabilities []string `json:"position_capabilities,omitempty"`
+	Status               string   `json:"status,omitempty"`
+	WorkplaceID          string   `json:"workplace_id,omitempty"`
+	StartsOnDay          int      `json:"starts_on_day,omitempty"`
+	PayPeriodDays        int      `json:"pay_period_days,omitempty"`
+	ContractID           string   `json:"contract_id"`
+	OrganizationID       string   `json:"organization_id"`
+	WageMinor            int64    `json:"wage_minor"`
+	SourceEventID        string   `json:"source_event_id"`
 }
 type RPLifeContext struct {
+	Unemployment           *RPUnemployment    `json:"unemployment,omitempty"`
 	Background             *RPBackground      `json:"background,omitempty"`
 	RoutineSourceEventID   string             `json:"routine_source_event_id"`
 	Disposition            RPDisposition      `json:"disposition"`
@@ -61,6 +70,13 @@ type RPLifeContext struct {
 	Needs                  []RPNeed           `json:"needs"`
 	Goals                  []RPGoal           `json:"goals"`
 	Commitments            []RPSocialEvidence `json:"commitments"`
+}
+
+type RPUnemployment struct {
+	PreviousContractID string `json:"previous_contract_id"`
+	SinceDay           int    `json:"since_day"`
+	Kind               string `json:"kind"`
+	SourceEventID      string `json:"source_event_id"`
 }
 
 // This versioned seed is a minimal stable tendency, not a generated biography.
@@ -108,6 +124,9 @@ func DeriveRPLifeGoals(input RPDecisionInput, life *RPLifeContext) {
 			sources = append(sources, input.NextSchedule.SourceEventID)
 		}
 		add("work_commitment", "high", "keep_work_schedule", sources, "extended_socializing")
+	}
+	if life.Unemployment != nil {
+		add("employment_continuity", "normal", "find_work", []string{life.Unemployment.SourceEventID})
 	}
 	for _, relation := range life.Relationships {
 		if relation.Tension > 2+life.Disposition.Patience {

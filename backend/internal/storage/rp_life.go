@@ -156,6 +156,9 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 		return nil, err
 	}
 	rows.Close()
+	if err := appendCareerLifeEvidence(ctx, conn, input, life); err != nil {
+		return nil, err
+	}
 	if err := applyRPSocialLife(ctx, conn, input.NPCEntityID, life); err != nil {
 		return nil, err
 	}
@@ -172,8 +175,9 @@ func readRPOwnEmployment(ctx context.Context, conn *sql.Conn, entityID, worldTim
  LEFT JOIN m2_wage_participation_returns r ON r.materialization_id=s.materialization_id
  WHERE s.entity_id=? AND s.effective_from<=? AND c.effective_from<=?
  AND (c.effective_until IS NULL OR c.effective_until>?) AND (r.effective_from IS NULL OR r.effective_from>?)
+ AND NOT EXISTS (SELECT 1 FROM events ended WHERE ended.instance_id=? AND ended.branch_id=? AND ended.event_type='CareerAggregateExitActivated' AND json_extract(ended.payload,'$.materialization_id')=s.materialization_id AND ended.world_time<=?)
  UNION ALL SELECT contract_id,employer_entity_id,gross_wage_minor,definition_event_id FROM employment_contracts
- WHERE employee_entity_id=? AND status='active' ORDER BY contract_id`, entityID, worldTime, worldTime, worldTime, worldTime, entityID)
+ WHERE employee_entity_id=? AND status='active' ORDER BY contract_id`, entityID, worldTime, worldTime, worldTime, worldTime, M2DemoInstanceID, M2DemoBranchID, worldTime, entityID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +190,14 @@ func readRPOwnEmployment(ctx context.Context, conn *sql.Conn, entityID, worldTim
 		}
 		jobs = append(jobs, job)
 	}
-	return jobs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err := enrichCareerOwnEmployment(ctx, conn, entityID, worldTime, jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
 }
 
 func applyRPSocialLife(ctx context.Context, conn *sql.Conn, observer string, life *core.RPLifeContext) error {
