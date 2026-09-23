@@ -12,7 +12,8 @@
     "verify:m1-evidence": "node scripts/verify-m1-evidence.cjs",
     "verify:m2-evidence": "node scripts/verify-m2-evidence.cjs",
     "verify:rp1-play": "node scripts/verify-rp1-play.mjs",
-    "verify:rp2-provider": "node scripts/verify-rp1-play.mjs --fake-model"
+    "verify:rp2-provider": "node scripts/verify-rp1-play.mjs --fake-model",
+    "verify:rp2-life": "node scripts/verify-rp1-play.mjs --life"
   },
   "dependencies": {
     "vue": "^3.5.13"

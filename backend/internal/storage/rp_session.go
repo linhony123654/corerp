@@ -303,10 +303,11 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		 UNION ALL
 		 SELECT e.event_id, json_array(CASE e.event_type
 		 WHEN 'RPPlayerMoved' THEN '你前往了 ' || p.display_name || '。'
+		 WHEN 'RPInterpersonalAction' THEN json_extract(e.payload,'$.description')
 		 ELSE '你等待至 ' || json_extract(e.payload, '$.target_world_time') || '。' END), e.event_sequence
 		 FROM events e LEFT JOIN agent_places p ON p.place_id = json_extract(e.payload, '$.to_place_id')
 		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ?
-		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted') AND json_extract(e.payload, '$.session_id') = ?
+		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction') AND json_extract(e.payload, '$.session_id') = ?
 		 ORDER BY settled_sequence DESC LIMIT 50)
 		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID, session.SessionID)
 	if err != nil {

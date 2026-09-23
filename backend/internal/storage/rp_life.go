@@ -1,0 +1,237 @@
+package storage
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"sort"
+
+	"corerp.local/backend/internal/core"
+)
+
+// One snapshot; numeric state remains in economics, memory in observation
+// evidence. No private context is borrowed from other characters or a Cohort.
+func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) (*core.RPLifeContext, error) {
+	life := &core.RPLifeContext{Employment: []core.RPOwnEmployment{}, Relationships: []core.RPRelationship{}, SalientMemories: []core.RPLifeMemory{}, RecentWork: []core.RPLifeMemory{}, EconomicSourceEventIDs: []string{}}
+	var origin string
+	err := conn.QueryRowContext(ctx, `SELECT m.materialize_event_id,a.definition_event_id,r.balance_minor,-l.balance_minor
+ FROM materialized_entities n JOIN cohort_materializations m ON m.materialization_id=n.materialization_id
+ JOIN agent_profiles a ON a.agent_id=n.entity_id JOIN account_balances r ON r.account_id=n.receivable_account_id
+ JOIN account_balances l ON l.account_id=n.liability_account_id
+ WHERE n.entity_id=? AND a.instance_id=? AND a.branch_id=?`, input.NPCEntityID, input.InstanceID, input.BranchID).Scan(&origin, &life.RoutineSourceEventID, &life.ReceivableMinor, &life.LiabilityMinor)
+	if err != nil {
+		return nil, classifyMissing(err, "NPC own life state")
+	}
+	life.Disposition = core.DeriveRPDisposition(input.NPCEntityID, origin)
+	// Projection last_event_sequence can change during rebuild without a new
+	// economic fact. Trace causal sources through immutable posted entries.
+	rows, err := conn.QueryContext(ctx, `WITH own_latest AS (
+ SELECT MAX(e.event_sequence) AS sequence FROM materialized_entities n
+ JOIN postings p ON p.account_id IN (n.asset_account_id,n.receivable_account_id,n.liability_account_id)
+ JOIN journal_entries j ON j.entry_id=p.entry_id AND j.status='posted'
+ JOIN events e ON e.event_id=j.event_id AND e.instance_id=? AND e.branch_id=?
+ WHERE n.entity_id=? GROUP BY p.account_id)
+ SELECT DISTINCT e.event_id FROM own_latest l JOIN events e ON e.event_sequence=l.sequence
+ WHERE e.instance_id=? AND e.branch_id=? ORDER BY e.event_sequence,e.event_id`, input.InstanceID, input.BranchID, input.NPCEntityID, input.InstanceID, input.BranchID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		life.EconomicSourceEventIDs = append(life.EconomicSourceEventIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(SUM(o.amount_due_minor-o.amount_paid_minor),0)
+ FROM rent_contracts c JOIN rent_obligations o ON o.contract_id=c.contract_id
+ WHERE c.tenant_entity_id=? AND o.amount_due_minor>o.amount_paid_minor`, input.NPCEntityID).Scan(&life.RentDueMinor); err != nil {
+		return nil, err
+	}
+
+	rows, err = conn.QueryContext(ctx, `SELECT c.contract_id,c.actor_id,c.unit_rate_minor,s.split_event_id
+ FROM m2_wage_participation_splits s JOIN m2_cohort_contracts c ON c.contract_id=s.contract_id
+ LEFT JOIN m2_wage_participation_returns r ON r.materialization_id=s.materialization_id
+ WHERE s.entity_id=? AND s.effective_from<=? AND c.effective_from<=?
+ AND (c.effective_until IS NULL OR c.effective_until>?) AND (r.effective_from IS NULL OR r.effective_from>?)
+ UNION ALL SELECT contract_id,employer_entity_id,gross_wage_minor,definition_event_id FROM employment_contracts
+ WHERE employee_entity_id=? AND status='active' ORDER BY contract_id`, input.NPCEntityID, input.WorldTime, input.WorldTime, input.WorldTime, input.WorldTime, input.NPCEntityID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var job core.RPOwnEmployment
+		if err := rows.Scan(&job.ContractID, &job.OrganizationID, &job.WageMinor, &job.SourceEventID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		life.Employment = append(life.Employment, job)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	// Repeat contact supports familiarity, not trust. Other dimensions remain
+	// neutral until there are explicit sourced interpersonal actions.
+	rows, err = conn.QueryContext(ctx, `SELECT subject_agent_id,COUNT(*),MIN(source_event_id),MAX(source_event_id)
+ FROM agent_knowledge WHERE observer_agent_id=? AND json_extract(claim_payload,'$.claim_type') IN ('speaker_said','agent_presence')
+ GROUP BY subject_agent_id ORDER BY subject_agent_id`, input.NPCEntityID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		relation := core.RPRelationship{Role: "acquaintance"}
+		var first, last string
+		if err := rows.Scan(&relation.SubjectEntityID, &relation.Familiarity, &first, &last); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if relation.Familiarity > 100 {
+			relation.Familiarity = 100
+		}
+		relation.SourceEventIDs = []string{first}
+		if last != first {
+			relation.SourceEventIDs = append(relation.SourceEventIDs, last)
+		}
+		life.Relationships = append(life.Relationships, relation)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	rows, err = conn.QueryContext(ctx, `SELECT subject_agent_id,learned_world_time,source_event_id,claim_payload FROM agent_knowledge
+ WHERE observer_agent_id=? AND json_extract(claim_payload,'$.claim_type') IN ('speaker_said','agent_presence')
+ ORDER BY last_event_sequence DESC,claim_key LIMIT 8`, input.NPCEntityID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var memory core.RPLifeMemory
+		var raw string
+		var claim struct {
+			Kind string `json:"claim_type"`
+			Text string `json:"text"`
+		}
+		if err := rows.Scan(&memory.SubjectEntityID, &memory.WorldTime, &memory.SourceEventID, &raw); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(raw), &claim); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		memory.Kind = claim.Kind
+		memory.Text = claim.Text
+		life.SalientMemories = append(life.SalientMemories, memory)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	rows, err = conn.QueryContext(ctx, `SELECT event_id,world_time,activity_code FROM agent_movements
+ WHERE agent_id=? AND activity_code='work' ORDER BY world_time DESC,event_id LIMIT 5`, input.NPCEntityID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		memory := core.RPLifeMemory{Kind: "own_work_arrival", SubjectEntityID: input.NPCEntityID}
+		if err := rows.Scan(&memory.SourceEventID, &memory.WorldTime, &memory.Text); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		life.RecentWork = append(life.RecentWork, memory)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	if err := applyRPSocialLife(ctx, conn, input.NPCEntityID, life); err != nil {
+		return nil, err
+	}
+	core.DeriveRPLifeGoals(input, life)
+	return life, nil
+}
+
+func applyRPSocialLife(ctx context.Context, conn *sql.Conn, observer string, life *core.RPLifeContext) error {
+	rows, err := conn.QueryContext(ctx, `SELECT subject_agent_id,source_event_id,learned_world_time,claim_payload FROM agent_knowledge
+	WHERE observer_agent_id=? AND json_extract(claim_payload,'$.claim_type')='interpersonal_action'
+	ORDER BY last_event_sequence,claim_key`, observer)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	index := map[string]int{}
+	for i, r := range life.Relationships {
+		index[r.SubjectEntityID] = i
+	}
+	promises := map[string]core.RPSocialEvidence{}
+	socialMemories := []core.RPLifeMemory{}
+	for rows.Next() {
+		var other, eventID, worldTime, raw string
+		var e core.RPSocialEvidence
+		if err := rows.Scan(&other, &eventID, &worldTime, &raw); err != nil {
+			return err
+		}
+		if err := json.Unmarshal([]byte(raw), &e); err != nil {
+			return err
+		}
+		if !((e.ActorEntityID == observer && e.TargetEntityID == other) || (e.ActorEntityID == other && e.TargetEntityID == observer)) {
+			return core.NewError(core.CodeProjectionDiverged, "interpersonal knowledge subject mismatch")
+		}
+		i, found := index[other]
+		if !found {
+			i = len(life.Relationships)
+			index[other] = i
+			life.Relationships = append(life.Relationships, core.RPRelationship{SubjectEntityID: other, Role: "acquaintance", SourceEventIDs: []string{}})
+		}
+		core.ApplyRPSocialEvidence(&life.Relationships[i], observer, eventID, e)
+		if e.Action == "promise_meeting" {
+			e.PromiseEventID = eventID
+			promises[eventID] = e
+		}
+		if e.Action == "keep_meeting" {
+			delete(promises, e.PromiseEventID)
+		}
+		socialMemories = append(socialMemories, core.RPLifeMemory{Kind: "interpersonal_action", SubjectEntityID: other, SourceEventID: eventID, WorldTime: worldTime, Text: e.Description})
+		if len(socialMemories) > 8 {
+			socialMemories = socialMemories[1:]
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	sort.Slice(life.Relationships, func(i, j int) bool {
+		return life.Relationships[i].SubjectEntityID < life.Relationships[j].SubjectEntityID
+	})
+	life.Commitments = []core.RPSocialEvidence{}
+	keys := make([]string, 0, len(promises))
+	for key := range promises {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		life.Commitments = append(life.Commitments, promises[key])
+	}
+	// Interpersonal experiences are salient, while the original observation
+	// remains authoritative. Retain bounded recent ordinary memories as well.
+	for i, j := 0, len(socialMemories)-1; i < j; i, j = i+1, j-1 {
+		socialMemories[i], socialMemories[j] = socialMemories[j], socialMemories[i]
+	}
+	life.SalientMemories = append(socialMemories, life.SalientMemories...)
+	if len(life.SalientMemories) > 12 {
+		life.SalientMemories = life.SalientMemories[:12]
+	}
+	return nil
+}

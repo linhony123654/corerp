@@ -11,6 +11,7 @@ import { createServer } from 'node:http'
 // Real world/service/browser. --fake-model adds only a local model HTTP fixture;
 // it verifies the adapter, not live model quality. Never inherit live model credentials.
 const fakeModel = process.argv.includes('--fake-model')
+const lifeScenario = process.argv.includes('--life')
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp1-e2e-'))
 const database = join(temp, 'world.db')
@@ -133,6 +134,34 @@ try {
   assert.match(await page.locator('.reading').innerText(), /你前往了 Ada Home/)
   await speak('我们接着聊。')
   if (fakeModel) { assert.ok(modelCalls > callsBeforeRestart); assert.match(await page.locator('.turn').last().innerText(), /来自测试模型的问候/) }
+  if (lifeScenario) {
+    for (let i = 0; i < 3; i++) {
+      const result = await page.evaluate(async ({ credential, i }) => {
+        const session = JSON.parse(localStorage.getItem('corerp.play.v1')).session
+        const call = async (path, body) => {
+          const response = await fetch(`/api/v1/rp/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+          if (!response.ok) throw new Error(`social HTTP ${response.status}`)
+          return (await response.json()).data
+        }
+        const view = await call('observe', { session_id: session })
+        return call('actions/social', { session_id: session, target_entity_id: 'entity_m2_rp_cai', action: 'insult', expected_cursor: view.observation_cursor, idempotency_key: `life-conflict-${i}` })
+      }, { credential, i })
+      assert.match(result.description, /冒犯/)
+    }
+    await page.getByRole('button', { name: '环顾四周' }).click()
+    await page.getByText('Lin 对 Cai 做出了冒犯的手势。', { exact: true }).first().waitFor()
+    await speak('你好。')
+    assert.match(await page.locator('.turn').last().innerText(), /Cai 离开了/)
+    assert.doesNotMatch(await page.locator('.presence').innerText(), /Cai/)
+    await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/readyz')
+    await page.reload()
+    await page.getByLabel('玩家访问凭证').fill(credential)
+    await page.getByRole('button', { name: '继续这段生活' }).click()
+    await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
+    assert.doesNotMatch(await page.locator('.presence').innerText(), /Cai/)
+    assert.match(await page.locator('.reading').innerText(), /Cai 离开了/)
+    assert.equal(Number(sql("SELECT COUNT(*) FROM agent_knowledge WHERE observer_agent_id='entity_m2_rp_cai' AND json_extract(claim_payload,'$.claim_type')='interpersonal_action'")), 3)
+  }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile overflow')
   await page.screenshot({ path: join(temp, 'play-mobile.png'), fullPage: true })
   await page.screenshot({ path: join(temp, 'play-mobile-viewport.png') })
@@ -141,7 +170,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.screenshot({ path: join(temp, 'play-desktop.png'), fullPage: true })
   assert.equal(errors.length, 0, errors.join('\n'))
-  console.log(JSON.stringify({ status: 'PASS', provider: fakeModel ? 'local HTTP fixture (not live LLM)' : 'deterministic', modelCalls, artifacts: temp, session, recoveryCountsUnchanged: counts, hearingCount, checks: ['real session', 'same-place refusal and hearing', 'legal move and offsite exclusion', 'schedule affects NPC reply', 'scheduler wait', 'lost-response plus process/browser restart', 'same-key no duplicate facts or model calls', 'server-backed history', 'continue after restart', 'mobile no overflow', 'no credential persistence', 'no browser errors'] }, null, 2))
+  console.log(JSON.stringify({ status: 'PASS', provider: fakeModel ? 'local HTTP fixture (not live LLM)' : 'deterministic', lifeScenario, modelCalls, artifacts: temp, session, recoveryCountsUnchanged: counts, hearingCount, checks: ['real session', 'same-place refusal and hearing', 'legal move and offsite exclusion', 'schedule affects NPC reply', 'scheduler wait', 'lost-response plus process/browser restart', 'same-key no duplicate facts or model calls', 'server-backed history', 'continue after restart', 'mobile no overflow', 'no credential persistence', 'no browser errors', ...(lifeScenario ? ['experienced conflict changes actual NPC movement', 'relationship knowledge and action persist after second restart'] : [])] }, null, 2))
 } finally {
   await browser?.close()
   await stop(server); await stop(vite)

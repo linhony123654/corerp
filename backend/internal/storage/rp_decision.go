@@ -65,6 +65,7 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 		return core.RPDecisionInput{}, core.NewError(core.CodeProjectionDiverged, "turn speaker differs from session control")
 	}
 	var heard int
+	input.InterlocutorEntityID = speakerID
 	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM observation_records o JOIN agent_knowledge k ON k.observation_id = o.observation_id WHERE o.source_event_id = ? AND o.observer_agent_id = ? AND o.subject_agent_id = ? AND k.claim_key = 'speech:' || ?`, input.SpeechEventID, request.NPCEntityID, speakerID, input.SpeechEventID).Scan(&heard); err != nil {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "check NPC hearing evidence", err)
 	}
@@ -159,7 +160,7 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 	}
 	rows.Close()
 	var next core.RPDecisionSchedule
-	err = tx.conn.QueryRowContext(ctx, `SELECT world_time, place_id, activity_code FROM agent_schedule_entries WHERE agent_id = ? AND status = 'active' AND world_time >= ? ORDER BY world_time, declared_priority, scheduler_item_id LIMIT 1`, request.NPCEntityID, input.WorldTime).Scan(&next.WorldTime, &next.PlaceID, &next.ActivityCode)
+	err = tx.conn.QueryRowContext(ctx, `SELECT world_time, place_id, activity_code, definition_event_id FROM agent_schedule_entries WHERE agent_id = ? AND status = 'active' AND world_time >= ? ORDER BY world_time, declared_priority, scheduler_item_id LIMIT 1`, request.NPCEntityID, input.WorldTime).Scan(&next.WorldTime, &next.PlaceID, &next.ActivityCode, &next.SourceEventID)
 	if err == nil {
 		input.NextSchedule = &next
 	} else if !errors.Is(err, sql.ErrNoRows) {
@@ -189,6 +190,10 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 	rows.Close()
 	if len(input.ReachablePlaceIDs) != 0 {
 		input.LegalActions = append(input.LegalActions, "leave")
+	}
+	input.Life, err = buildRPLifeContext(ctx, tx.conn, input)
+	if err != nil {
+		return core.RPDecisionInput{}, err
 	}
 	return input, nil
 }

@@ -36,6 +36,7 @@ type Service interface {
 	CloseRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
 	ObserveRPSession(context.Context, core.RPSessionReadRequest) (storage.RPObservation, error)
 	MoveRP(context.Context, core.RPMoveRequest) (storage.RPMoveResult, error)
+	SocialRP(context.Context, core.RPSocialRequest) (storage.RPSocialResult, error)
 	WaitRP(context.Context, core.RPWaitRequest) (storage.RPWaitResult, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
@@ -141,6 +142,8 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPObserve(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/move":
 		s.handleRPMove(response, request, requestID, principalID)
+	case "/api/v1/rp/actions/social":
+		s.handleRPSocial(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/wait":
 		s.handleRPWait(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/speak":
@@ -606,6 +609,27 @@ func (s *Server) handleRPMove(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	result, err := s.service.MoveRP(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPSocial(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input core.RPSocialRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.SocialRP(request.Context(), input)
 	if err != nil {
 		writeError(response, requestID, err)
 		return
