@@ -7,7 +7,7 @@ Implement and verify all six stages of `/tmp/f1edf80b-3702-4376-9e97-85d6670a910
 Full-project DEFINE → DESIGN → BUILD → POLISH → local SHIP. Crosses SQLite authority, HTTP, NPC decisions, turn recovery, and UI. No production publication.
 
 ## Current Phase
-RP-1D DESIGN — replaceable NPC decision provider, legally filtered input and validated proposals. RP-1C passed and awaits checkpoint commit.
+RP-1E DESIGN — durable idempotent turn orchestration and narrative view. RP-1D passed and awaits checkpoint commit.
 
 ## Phases
 
@@ -36,14 +36,15 @@ RP-1D DESIGN — replaceable NPC decision provider, legally filtered input and v
 - [x] Accepted utterance, audibility evidence, listener knowledge in one authority commit with turn stage and Outbox
 - [x] Crash/retry/reopen/replay, privacy and false-claim tests
 - [x] Final full Go tests/vet/related race and report
-- [ ] Git checkpoint commit
-- **Status:** validated, checkpoint pending
+- [x] Git checkpoint commit `809f9cc`
+- **Status:** complete
 
 ### RP-1D — NPC DecisionProvider
-- [ ] Replaceable deterministic provider and legally filtered NPC input
-- [ ] Validated respond/refuse/silence/action proposals; failure no-op
-- [ ] Full Go tests/vet/related race, report and checkpoint
-- **Status:** pending
+- [x] Replaceable deterministic provider and legally filtered NPC input
+- [x] Validated and committed respond/refuse/silence/wait/leave effects; failure no-op
+- [x] Final full Go tests/vet/related race and report
+- [ ] Git checkpoint commit
+- **Status:** validated, checkpoint pending
 
 ### RP-1E — Orchestrator / Recovery
 - [ ] Durable idempotent turn state machine and narrative view
@@ -68,6 +69,7 @@ No Jev, SillyTavern, MCP, Studio, character-card authority, multiplayer, new mac
 - RP-1B design: add versioned place links as world topology, not presence/location authority. A separate explicit setup event after RP-1A declares links, preserving existing head-7 fixture and migration compatibility. An immediate player move is one validated Event Batch using the existing `agent_movements`/`agent_positions` chain; because schema 007 accepts only `scheduled`, its same-transaction scheduler item/entry is created already completed, never run a second time. Guard session control, observed head, from-place and declared link; use existing idempotent command/event/Outbox pattern and co-location knowledge. A focused cafe→home move and forbidden home→work move are the representative slice.
 - RP-1B wait: a narrow application `rp_wait_intents` table records the target/request hash before any scheduler work, not a second clock. On retry, the same intent resumes within a fixed work budget; different payload conflicts. The existing M2 runner settles due items, and only after `pending_due=0` does a separate short transaction commit a `RPWaitCompleted` Event, same world-clock checkpoint, Branch Head, intent completion and Outbox. Budget exhaustion returns partial status and current authoritative time; no false completion. This avoids a pending world command whose original expected head would become stale as scheduler events commit. Branch-level pending RP wait blocks another RP move/wait; closing its session is denied until completion. Privileged concurrent external scheduler advancement is outside the single-player slice and may create a reported conflict; never mark a false completion.
 - RP-1C design: add immutable accepted utterance metadata linked to one Event and Turn ID, not an editable transcript authority. Same-place active profiles are the only first-slice hearers (no whisper/acoustic/privacy rule exists yet). For each listener insert an `observation_records` row using the existing `co_location` evidence channel, with `claim_type=speaker_said` and explicit speaker/utterance attribution; update `agent_knowledge` in the same transaction. This reuses the existing replay/rebuild path and never asserts the content as objective economic/character truth. Commit utterance, listener evidence/knowledge, session turn stage, Branch Head/clock lineage and Outbox together. Deny a new speech while a branch wait is pending.
+- RP-1D design: no LLM adapter exists. Define a replaceable provider over a deliberately filtered, immutable NPC decision input. The input comes from a committed speech that this NPC actually heard, its own Agent profile/position/schedule/knowledge and own asset account, plus same-place visible identities and legal route candidates. No relationship/episodic-memory authority exists beyond observed Knowledge, so do not fabricate it. Provider output is a candidate only; CoreRP validates type/text/destination against captured legal actions and head. A distinct explicit commit revalidates the proposal and writes an Event-backed response/refusal, movement or no-op, with hearing Knowledge where speech occurs. This gives RP-1E real NPC effects to orchestrate. Deterministic provider and non-authoritative failure diagnostics are the initial adapter; no external LLM is available.
 - Representative first slice: Open session for a T09 materialized entity with a player control grant, Observe actual position, close/reopen DB and observe again. Broaden to invalid bindings, privacy, HTTP and 3-NPC fixture only after this path passes.
 
 ## Errors
@@ -78,4 +80,4 @@ No Jev, SillyTavern, MCP, Studio, character-card authority, multiplayer, new mac
 - First RP-1A documentation patch failed atomically due to a wrong root README heading; corrected with a targeted patch after rereading the file.
 
 ## Gate state
-- DEFINE: PASS — six stages and DoD from goal are observable. RP-1A/B DESIGN/BUILD/POLISH PASS with checkpoints. RP-1C DESIGN/BUILD/POLISH PASS: final full Go, vet, related race, migration/replay/reopen/HTTP and docs; checkpoint pending. RP-1D–F pending.
+- DEFINE: PASS — six stages and DoD from goal are observable. RP-1A/B/C DESIGN/BUILD/POLISH PASS with checkpoints. RP-1D DESIGN/BUILD/POLISH PASS: final full Go, vet, related race, migration/replay/reopen and docs; checkpoint pending. RP-1E/F pending.

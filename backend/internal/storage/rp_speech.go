@@ -26,6 +26,7 @@ type RPSpeechResult struct {
 type rpSpeechEvent struct {
 	SessionID       string   `json:"session_id"`
 	TurnID          string   `json:"turn_id"`
+	ParentTurnID    string   `json:"parent_turn_id,omitempty"`
 	UtteranceID     string   `json:"utterance_id"`
 	SpeakerEntityID string   `json:"speaker_entity_id"`
 	PlaceID         string   `json:"place_id"`
@@ -131,7 +132,7 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	commandID, attemptID := "cmd_rp_speech_"+suffix, "attempt_rp_speech_"+suffix
 	batchID, eventID := "batch_rp_speech_"+suffix, "event_rp_speech_"+suffix
 	turnID, utteranceID := "turn_rp_speech_"+suffix, "utterance_rp_speech_"+suffix
-	payload := rpSpeechEvent{session.SessionID, turnID, utteranceID, session.ControlledEntityID, placeID, request.Text, request.SpeechAct, listeners}
+	payload := rpSpeechEvent{SessionID: session.SessionID, TurnID: turnID, UtteranceID: utteranceID, SpeakerEntityID: session.ControlledEntityID, PlaceID: placeID, Text: request.Text, SpeechAct: request.SpeechAct, ListenerIDs: listeners}
 	payloadJSON, err := core.CanonicalJSON(payload)
 	if err != nil {
 		return RPSpeechResult{}, err
@@ -161,20 +162,8 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 			return RPSpeechResult{}, err
 		}
 	}
-	claim := rpSpeechClaim{"speaker_said", session.ControlledEntityID, utteranceID, request.Text, request.SpeechAct}
-	claimJSON, err := core.CanonicalJSON(claim)
-	if err != nil {
+	if err := insertRPSpeechHearings(ctx, tx.conn, eventID, sequence, session.ControlledEntityID, placeID, worldTime, utteranceID, request.Text, request.SpeechAct, listeners); err != nil {
 		return RPSpeechResult{}, err
-	}
-	for _, listenerID := range listeners {
-		observationID := fmt.Sprintf("observation_%s_%s_%s", eventID, listenerID, session.ControlledEntityID)
-		claimKey := "speech:" + eventID
-		if err := execAgentOne(ctx, tx.conn, "RP speech hearing evidence", `INSERT INTO observation_records(observation_id, source_event_id, observer_agent_id, subject_agent_id, place_id, channel, observed_world_time, claim_key, claim_payload) VALUES (?, ?, ?, ?, ?, 'co_location', ?, ?, ?)`, observationID, eventID, listenerID, session.ControlledEntityID, placeID, worldTime, claimKey, string(claimJSON)); err != nil {
-			return RPSpeechResult{}, err
-		}
-		if err := execAgentOne(ctx, tx.conn, "RP listener knowledge", `INSERT INTO agent_knowledge(observer_agent_id, claim_key, subject_agent_id, place_id, source_event_id, observation_id, learned_world_time, claim_payload, projection_version, last_event_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`, listenerID, claimKey, session.ControlledEntityID, placeID, eventID, observationID, worldTime, string(claimJSON), sequence); err != nil {
-			return RPSpeechResult{}, err
-		}
 	}
 	if err := execAgentOne(ctx, tx.conn, "advance RP speech clock lineage", `UPDATE world_clocks SET projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time = ?`, sequence, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return RPSpeechResult{}, err
@@ -188,7 +177,7 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+commandID, "observation", eventID, commandID, attemptID, worldTime, now, payloadJSON); err != nil {
 		return RPSpeechResult{}, err
 	}
-	if err := insertRPSpeechOutbox(ctx, tx.conn, "outbox_"+commandID, eventID, session.InstanceID, session.BranchID, session.ControlledEntityID, listeners, payloadJSON); err != nil {
+	if err := insertRPParticipantOutbox(ctx, tx.conn, "outbox_"+commandID, eventID, "rp.speech.accepted", session.InstanceID, session.BranchID, session.ControlledEntityID, listeners, payloadJSON); err != nil {
 		return RPSpeechResult{}, err
 	}
 	if err := execAgentOne(ctx, tx.conn, "commit RP speech attempt", `UPDATE command_attempts SET status = 'committed', finished_at_utc = ? WHERE command_id = ? AND attempt_no = 1 AND status = 'ready'`, now, commandID); err != nil {
@@ -208,7 +197,26 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	return RPSpeechResult{commandID, eventID, sequence, turnID, utteranceID, worldTime, placeID, listeners, false}, nil
 }
 
-func insertRPSpeechOutbox(ctx context.Context, conn *sql.Conn, outboxID, eventID, instanceID, branchID, speakerID string, listeners []string, payload []byte) error {
+func insertRPSpeechHearings(ctx context.Context, conn *sql.Conn, eventID string, sequence int64, speakerID, placeID, worldTime, utteranceID, speechText, speechAct string, listeners []string) error {
+	claim := rpSpeechClaim{"speaker_said", speakerID, utteranceID, speechText, speechAct}
+	claimJSON, err := core.CanonicalJSON(claim)
+	if err != nil {
+		return err
+	}
+	for _, listenerID := range listeners {
+		observationID := fmt.Sprintf("observation_%s_%s_%s", eventID, listenerID, speakerID)
+		claimKey := "speech:" + eventID
+		if err := execAgentOne(ctx, conn, "RP speech hearing evidence", `INSERT INTO observation_records(observation_id, source_event_id, observer_agent_id, subject_agent_id, place_id, channel, observed_world_time, claim_key, claim_payload) VALUES (?, ?, ?, ?, ?, 'co_location', ?, ?, ?)`, observationID, eventID, listenerID, speakerID, placeID, worldTime, claimKey, string(claimJSON)); err != nil {
+			return err
+		}
+		if err := execAgentOne(ctx, conn, "RP listener knowledge", `INSERT INTO agent_knowledge(observer_agent_id, claim_key, subject_agent_id, place_id, source_event_id, observation_id, learned_world_time, claim_payload, projection_version, last_event_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`, listenerID, claimKey, speakerID, placeID, eventID, observationID, worldTime, string(claimJSON), sequence); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertRPParticipantOutbox(ctx context.Context, conn *sql.Conn, outboxID, eventID, topic, instanceID, branchID, speakerID string, listeners []string, payload []byte) error {
 	participants := append([]string{speakerID}, listeners...)
 	scope := struct {
 		Kind       string   `json:"kind"`
@@ -224,7 +232,7 @@ func insertRPSpeechOutbox(ctx context.Context, conn *sql.Conn, outboxID, eventID
 	if err != nil {
 		return err
 	}
-	return execAgentOne(ctx, conn, "insert scoped RP speech Outbox", `INSERT INTO outbox(outbox_id, event_id, topic, audience_scope, audience_scope_hash, payload) VALUES (?, ?, 'rp.speech.accepted', ?, ?, ?)`, outboxID, eventID, string(scopeJSON), scopeHash, string(payload))
+	return execAgentOne(ctx, conn, "insert scoped RP participant Outbox", `INSERT INTO outbox(outbox_id, event_id, topic, audience_scope, audience_scope_hash, payload) VALUES (?, ?, ?, ?, ?, ?)`, outboxID, eventID, topic, string(scopeJSON), scopeHash, string(payload))
 }
 
 func loadRPSpeechResult(ctx context.Context, conn *sql.Conn, commandID string, replayed bool) (RPSpeechResult, error) {

@@ -1,0 +1,317 @@
+package storage
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"strings"
+	"time"
+
+	"corerp.local/backend/internal/core"
+)
+
+type RPDecisionResult struct {
+	NPCEntityID  string                  `json:"npc_entity_id"`
+	TurnID       string                  `json:"turn_id"`
+	HeadSequence int64                   `json:"head_sequence"`
+	InputHash    string                  `json:"input_hash"`
+	Proposal     core.RPDecisionProposal `json:"proposal"`
+	Status       string                  `json:"status"`
+}
+
+// BuildRPDecisionInput is deliberately narrower than the world's state. It
+// requires proof that this NPC heard the committed player speech in this turn.
+func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisionRequest) (core.RPDecisionInput, error) {
+	if err := request.Validate(); err != nil {
+		return core.RPDecisionInput{}, err
+	}
+	tx, err := beginImmediate(ctx, s.db)
+	if err != nil {
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "begin NPC decision observation", err)
+	}
+	defer tx.Rollback(ctx)
+	session, err := loadRPSession(ctx, tx.conn, request.PrincipalID, request.SessionID)
+	if err != nil {
+		return core.RPDecisionInput{}, err
+	}
+	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+		return core.RPDecisionInput{}, err
+	}
+	if session.Status != "active" || session.TurnCursor != request.TurnID || (session.TurnState != "speech_committed" && session.TurnState != "npc_effects_committed") {
+		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "NPC decision requires the active committed speech turn")
+	}
+	if request.NPCEntityID == session.ControlledEntityID {
+		return core.RPDecisionInput{}, core.NewError(core.CodeInvalidArgument, "player cannot be selected as NPC")
+	}
+	input := core.RPDecisionInput{
+		InstanceID: session.InstanceID, BranchID: session.BranchID,
+		TurnID: request.TurnID, NPCEntityID: request.NPCEntityID,
+		VisibleEntities:   make([]core.RPDecisionVisibleEntity, 0),
+		Knowledge:         make([]core.RPDecisionKnowledge, 0),
+		ReachablePlaceIDs: make([]string, 0),
+		LegalActions:      []string{"respond", "refuse", "silence", "wait"},
+	}
+	var speakerID, speechPlace string
+	err = tx.conn.QueryRowContext(ctx, `
+		SELECT u.event_id, u.speaker_entity_id, u.place_id, u.speech_text
+		FROM rp_utterances u JOIN events e ON e.event_id = u.event_id
+		WHERE u.session_id = ? AND u.turn_id = ? AND e.instance_id = ? AND e.branch_id = ?`,
+		session.SessionID, request.TurnID, session.InstanceID, session.BranchID,
+	).Scan(&input.SpeechEventID, &speakerID, &speechPlace, &input.PlayerSpeechText)
+	if err != nil {
+		return core.RPDecisionInput{}, classifyMissing(err, "committed player speech")
+	}
+	if speakerID != session.ControlledEntityID {
+		return core.RPDecisionInput{}, core.NewError(core.CodeProjectionDiverged, "turn speaker differs from session control")
+	}
+	var heard int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM observation_records o JOIN agent_knowledge k ON k.observation_id = o.observation_id WHERE o.source_event_id = ? AND o.observer_agent_id = ? AND o.subject_agent_id = ? AND k.claim_key = 'speech:' || ?`, input.SpeechEventID, request.NPCEntityID, speakerID, input.SpeechEventID).Scan(&heard); err != nil {
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "check NPC hearing evidence", err)
+	}
+	if heard != 1 {
+		return core.RPDecisionInput{}, core.NewError(core.CodeNotFound, "NPC did not hear this speech")
+	}
+	err = tx.conn.QueryRowContext(ctx, `
+		SELECT b.head_sequence, c.current_world_time, e.display_name, p.place_id, l.display_name, p.activity_code,
+		       a.goal_code, balances.balance_minor, e.currency_id
+		FROM agent_profiles a JOIN materialized_entities e ON e.entity_id = a.agent_id
+		JOIN agent_positions p ON p.agent_id = a.agent_id
+		JOIN agent_places l ON l.place_id = p.place_id
+		JOIN account_balances balances ON balances.account_id = e.asset_account_id
+		JOIN branches b ON b.instance_id = a.instance_id AND b.branch_id = a.branch_id
+		JOIN world_clocks c ON c.instance_id = b.instance_id AND c.branch_id = b.branch_id
+		WHERE a.agent_id = ? AND a.instance_id = ? AND a.branch_id = ?
+		  AND a.status = 'active' AND e.status = 'active' AND e.population_count = 1 AND l.status = 'active'`,
+		request.NPCEntityID, session.InstanceID, session.BranchID,
+	).Scan(&input.HeadSequence, &input.WorldTime, &input.NPCName, &input.PlaceID, &input.PlaceName,
+		&input.ActivityCode, &input.GoalCode, &input.OwnAssetMinor, &input.CurrencyID)
+	if err != nil {
+		return core.RPDecisionInput{}, classifyMissing(err, "active NPC decision state")
+	}
+	if input.PlaceID != speechPlace {
+		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "NPC has left the speech scene")
+	}
+	var playerPlace string
+	if err := tx.conn.QueryRowContext(ctx, `SELECT p.place_id FROM agent_positions p JOIN agent_profiles a ON a.agent_id = p.agent_id WHERE a.agent_id = ? AND a.instance_id = ? AND a.branch_id = ? AND a.status = 'active'`, session.ControlledEntityID, session.InstanceID, session.BranchID).Scan(&playerPlace); err != nil {
+		return core.RPDecisionInput{}, classifyMissing(err, "current player position")
+	}
+	if playerPlace != input.PlaceID {
+		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "player has left the speech scene")
+	}
+	rows, err := tx.conn.QueryContext(ctx, `
+		SELECT e.entity_id, e.display_name FROM agent_profiles a
+		JOIN agent_positions p ON p.agent_id = a.agent_id
+		JOIN materialized_entities e ON e.entity_id = a.agent_id
+		WHERE a.instance_id = ? AND a.branch_id = ? AND a.status = 'active' AND e.status = 'active'
+		  AND p.place_id = ? AND a.agent_id <> ? ORDER BY e.entity_id`,
+		session.InstanceID, session.BranchID, input.PlaceID, request.NPCEntityID)
+	if err != nil {
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC visible entities", err)
+	}
+	for rows.Next() {
+		var visible core.RPDecisionVisibleEntity
+		if err := rows.Scan(&visible.EntityID, &visible.DisplayName); err != nil {
+			rows.Close()
+			return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "scan NPC visible entity", err)
+		}
+		input.VisibleEntities = append(input.VisibleEntities, visible)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "iterate NPC visible entities", err)
+	}
+	rows.Close()
+	rows, err = tx.conn.QueryContext(ctx, `
+		SELECT k.subject_agent_id, k.place_id, k.source_event_id, k.claim_payload
+		FROM agent_knowledge k WHERE k.observer_agent_id = ?
+		ORDER BY k.last_event_sequence DESC, k.claim_key LIMIT 20`, request.NPCEntityID)
+	if err != nil {
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC own knowledge", err)
+	}
+	for rows.Next() {
+		var subjectID, placeID, eventID, payloadJSON string
+		if err := rows.Scan(&subjectID, &placeID, &eventID, &payloadJSON); err != nil {
+			rows.Close()
+			return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "scan NPC own knowledge", err)
+		}
+		var payload struct {
+			ClaimType string `json:"claim_type"`
+			Text      string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+			rows.Close()
+			return core.RPDecisionInput{}, core.WrapError(core.CodeProjectionDiverged, "decode NPC knowledge claim", err)
+		}
+		claim := core.RPDecisionKnowledge{ClaimType: payload.ClaimType, SubjectEntityID: subjectID, SourceEventID: eventID}
+		switch payload.ClaimType {
+		case "agent_presence":
+			claim.PlaceID = placeID
+		case "speaker_said":
+			claim.Text = payload.Text
+		default:
+			continue // Unknown claim types are not provider-visible by default.
+		}
+		input.Knowledge = append(input.Knowledge, claim)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "iterate NPC own knowledge", err)
+	}
+	rows.Close()
+	var next core.RPDecisionSchedule
+	err = tx.conn.QueryRowContext(ctx, `SELECT world_time, place_id, activity_code FROM agent_schedule_entries WHERE agent_id = ? AND status = 'active' AND world_time >= ? ORDER BY world_time, declared_priority, scheduler_item_id LIMIT 1`, request.NPCEntityID, input.WorldTime).Scan(&next.WorldTime, &next.PlaceID, &next.ActivityCode)
+	if err == nil {
+		input.NextSchedule = &next
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC next schedule", err)
+	}
+	rows, err = tx.conn.QueryContext(ctx, `
+		SELECT link.to_place_id FROM rp_place_links link
+		JOIN agent_places destination ON destination.place_id = link.to_place_id
+		WHERE link.instance_id = ? AND link.branch_id = ? AND link.from_place_id = ?
+		  AND destination.status = 'active' AND destination.instance_id = link.instance_id AND destination.branch_id = link.branch_id
+		ORDER BY link.to_place_id`, session.InstanceID, session.BranchID, input.PlaceID)
+	if err != nil {
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read legal NPC destinations", err)
+	}
+	for rows.Next() {
+		var placeID string
+		if err := rows.Scan(&placeID); err != nil {
+			rows.Close()
+			return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "scan legal NPC destination", err)
+		}
+		input.ReachablePlaceIDs = append(input.ReachablePlaceIDs, placeID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "iterate legal NPC destinations", err)
+	}
+	rows.Close()
+	if len(input.ReachablePlaceIDs) != 0 {
+		input.LegalActions = append(input.LegalActions, "leave")
+	}
+	return input, nil
+}
+
+// DecideRP asks a provider for a candidate only; a later turn command must
+// recheck the head and legality before any proposed world effect is committed.
+func (s *Store) DecideRP(ctx context.Context, request core.RPDecisionRequest, provider core.RPDecisionProvider) (RPDecisionResult, error) {
+	if provider == nil {
+		return RPDecisionResult{}, core.NewError(core.CodeInvalidArgument, "RP decision provider is required")
+	}
+	input, err := s.BuildRPDecisionInput(ctx, request)
+	if err != nil {
+		return RPDecisionResult{}, err
+	}
+	inputHash, err := core.HashJSON(input)
+	if err != nil {
+		return RPDecisionResult{}, err
+	}
+	result := RPDecisionResult{NPCEntityID: request.NPCEntityID, TurnID: request.TurnID, HeadSequence: input.HeadSequence, InputHash: inputHash}
+	proposal, err := provider.Propose(ctx, input)
+	auditCtx, stopAudit := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer stopAudit()
+	if err != nil {
+		result.Proposal = core.RPDecisionProposal{Action: "silence"}
+		result.Status = "provider_fallback"
+		if auditErr := s.auditRPDecision(auditCtx, input, result); auditErr != nil {
+			return RPDecisionResult{}, auditErr
+		}
+		return result, nil
+	}
+	if err := validateRPDecisionProposal(input, proposal); err != nil {
+		result.Proposal = proposal
+		result.Status = "rejected"
+		if auditErr := s.auditRPDecision(auditCtx, input, result); auditErr != nil {
+			return RPDecisionResult{}, auditErr
+		}
+		return RPDecisionResult{}, err
+	}
+	result.Proposal = proposal
+	result.Status = "validated"
+	if err := s.auditRPDecision(auditCtx, input, result); err != nil {
+		return RPDecisionResult{}, err
+	}
+	return result, nil
+}
+
+func validateRPDecisionProposal(input core.RPDecisionInput, proposal core.RPDecisionProposal) error {
+	allowed := false
+	for _, action := range input.LegalActions {
+		if action == proposal.Action {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return core.NewError(core.CodeInvalidArgument, "NPC proposal action is not legal in this scene")
+	}
+	switch proposal.Action {
+	case "respond", "refuse":
+		if strings.TrimSpace(proposal.Text) == "" || len([]rune(proposal.Text)) > 2000 || proposal.DestinationPlaceID != "" {
+			return core.NewError(core.CodeInvalidArgument, "NPC speech proposal requires only valid text")
+		}
+	case "leave":
+		if proposal.Text != "" {
+			return core.NewError(core.CodeInvalidArgument, "NPC leave proposal cannot include speech")
+		}
+		for _, placeID := range input.ReachablePlaceIDs {
+			if placeID == proposal.DestinationPlaceID {
+				return nil
+			}
+		}
+		return core.NewError(core.CodeInvalidArgument, "NPC leave destination is not reachable")
+	case "silence", "wait":
+		if proposal.Text != "" || proposal.DestinationPlaceID != "" {
+			return core.NewError(core.CodeInvalidArgument, "NPC no-op proposal cannot contain effects")
+		}
+	}
+	return nil
+}
+
+func (s *Store) auditRPDecision(ctx context.Context, input core.RPDecisionInput, result RPDecisionResult) error {
+	id, err := newRPSessionID()
+	if err != nil {
+		return err
+	}
+	payload := struct {
+		TurnID    string                  `json:"turn_id"`
+		NPCID     string                  `json:"npc_entity_id"`
+		InputHash string                  `json:"input_hash"`
+		Status    string                  `json:"status"`
+		Proposal  core.RPDecisionProposal `json:"proposal"`
+	}{result.TurnID, result.NPCEntityID, result.InputHash, result.Status, result.Proposal}
+	payloadJSON, err := core.CanonicalJSON(payload)
+	if err != nil {
+		return err
+	}
+	scopeJSON, err := core.CanonicalJSON(struct {
+		Kind       string `json:"kind"`
+		InstanceID string `json:"instance_id"`
+	}{"rp_internal", input.InstanceID})
+	if err != nil {
+		return err
+	}
+	tx, err := beginImmediate(ctx, s.db)
+	if err != nil {
+		return core.WrapError(core.CodeStorageFailure, "begin NPC decision audit", err)
+	}
+	defer tx.Rollback(ctx)
+	var order int64
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(record_order), 0) + 1 FROM audit_records WHERE instance_id = ? AND branch_id = ?`, input.InstanceID, input.BranchID).Scan(&order); err != nil {
+		return core.WrapError(core.CodeStorageFailure, "allocate NPC decision audit order", err)
+	}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	recordType := "agent_decision"
+	if result.Status != "validated" {
+		recordType = "runtime_diagnostic"
+	}
+	if err := execAgentOne(ctx, tx.conn, "record non-authoritative NPC decision", `INSERT INTO audit_records(record_id, instance_id, branch_id, record_order, record_type, authority, related_event_id, trace_id, world_time, recorded_at_utc, audience_scope, payload) VALUES (?, ?, ?, ?, ?, 'non-authoritative', ?, ?, ?, ?, ?, ?)`, "audit_rp_decision_"+id, input.InstanceID, input.BranchID, order, recordType, input.SpeechEventID, "trace_rp_decision_"+id, input.WorldTime, now, string(scopeJSON), string(payloadJSON)); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return core.WrapError(core.CodeStorageFailure, "commit NPC decision audit", err)
+	}
+	return nil
+}

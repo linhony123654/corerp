@@ -270,6 +270,17 @@ func TestEmbeddedMigrationsMatchContracts(t *testing.T) {
 	if !bytes.Equal(embedded, contract) {
 		t.Fatal("embedded migration diverges from docs/rp1/schema-023-utterances.sql")
 	}
+	embedded, err = migrationFiles.ReadFile("migrations/024_rp_npc_decisions.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err = os.ReadFile(filepath.Join("..", "..", "..", "docs", "rp1", "schema-024-npc-decisions.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(embedded, contract) {
+		t.Fatal("embedded migration diverges from docs/rp1/schema-024-npc-decisions.sql")
+	}
 }
 
 func TestOpenMigratesExistingM0DatabaseToRecoverySchema(t *testing.T) {

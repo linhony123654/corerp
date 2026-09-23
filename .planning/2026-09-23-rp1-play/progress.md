@@ -25,6 +25,10 @@
 - RP-1C source mapping: `observation_records`/`agent_knowledge` already replay through existing Event lineage; `channel=co_location` is the current same-place evidence path. No acoustic/whisper rule exists. Chose an immutable accepted-utterance index plus existing attributed Knowledge projection, avoiding a second Knowledge authority or objective-truth promotion.
 - Implemented migration 023 and mirror, scoped player speech HTTP endpoint, same-transaction Event/turn/knowledge/Outbox writer, and tests for one/multiple hearers, offsite exclusion, false financial claim, idempotency, precommit rollback, postpublish/pre-mark crash, reopen/replay/rebuild, immutability and 022→023 upgrade. Focused tests passed. Full regression/race rerun after last upgrade test is in progress; vet already passed. Wrote `docs/rp1/phase-c.md` pending final gate result.
 - RP-1C final uncached Go suite passed after the added upgrade test (storage 48.456s; HTTP 4.621s); related race passed (storage 25.237s, HTTP 9.156s, CLI 4.826s); vet clean. `npm run verify:m2-evidence` passed with 26 executable tests. No frontend source changed. Stage checkpoint is next.
+- RP-1C checkpoint commit `809f9cc` created after staged diff check. Advanced to RP-1D design without separate approval.
+- RP-1D mapped the available NPC profile, schedule, own materialized asset balance, co-location and Knowledge. No real LLM adapter, Relationship or independent Episodic Memory authority exists. Added replaceable provider input/output contract, deterministic policy, scoped NPC input builder and non-authoritative decision/failure audit.
+- Added migration 024/mirror and explicit `CommitRPDecision`: revalidate captured head/input/scene/route; commit NPC response/refusal with listener Knowledge, legal movement via existing Agent lineage, or silence/wait no-effect Event. Same Turn/NPC retry is idempotent; Session turn stage and participant Outbox update atomically. Focused tests pass for privacy, three-NPC sequential effects, refusal, leave/no-op, stale proposal, rollback/reopen/replay and 023→024 upgrade. Final full regression after last Outbox-topic correction is pending; `docs/rp1/phase-d.md` written.
+- RP-1D final uncached full Go suite passed after Outbox-topic correction (storage 51.134s; HTTP 4.323s); related race passed (storage 40.133s, HTTP 9.135s, CLI 4.852s); vet clean. M2 evidence still passes with 26 executable tests. Stage checkpoint is next.
 
 ## Verification ledger
 | Check | Result | Evidence |
@@ -51,3 +55,8 @@
 | RP-1C final Go vet | PASS | `go vet ./...`; no findings |
 | RP-1C final related race | PASS | `go test -race ./internal/storage ./internal/transport/httpapi ./cmd/corerp-m2 -run 'TestRP\|TestM2CLIRP\|TestEmbeddedMigrationsMatchContracts\|TestM2WagePolicyMigrationUpgradesExistingSplitLineage' -count=1`; storage 25.237s, HTTP 9.156s, CLI 4.826s |
 | RP-1C M2 evidence | PASS | `npm run verify:m2-evidence`; 26 executable tests |
+| RP-1D focused decision/commit/migration | PASS | `go test ./internal/storage ./internal/core -run 'TestRPNPC\|TestRPDecision\|TestRPDeterministic\|TestDeterministicRPDecision\|TestRPSpeech\|TestEmbeddedMigrationsMatchContracts' -count=1` |
+| RP-1D final full Go suite | PASS | `go test ./... -count=1`; storage 51.134s, HTTP 4.323s, other packages pass |
+| RP-1D final Go vet | PASS | `go vet ./...`; no findings |
+| RP-1D final related race | PASS | `go test -race ./internal/storage ./internal/transport/httpapi ./cmd/corerp-m2 -run 'TestRP\|TestM2CLIRP\|TestEmbeddedMigrationsMatchContracts\|TestM2WagePolicyMigrationUpgradesExistingSplitLineage' -count=1`; storage 40.133s, HTTP 9.135s, CLI 4.852s |
+| RP-1D M2 evidence | PASS | `npm run verify:m2-evidence`; 26 executable tests |
