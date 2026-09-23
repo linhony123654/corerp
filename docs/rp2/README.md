@@ -1,6 +1,18 @@
 # RP-2 — 人物生命层
 
-Current: RP-2A provider integration, RP-2B life/relationships, [RP-2C background initialization](background.md) and [RP-2D scoped style](style.md) verified locally. RP-2E remains pending. The overall living-world goal continues through RP-8 and final 300-turn/30-day integration, strictly serially.
+Current: RP-2A–E verified locally, including [long-run life and initiative integration](phase-2e.md). See the [RP-2 acceptance summary](phase-2.md). The overall living-world goal continues with RP-3 through RP-8 and final300-turn/30-day integration, strictly serially; it is not complete.
+
+## Explicit life demo
+
+For RP-2 life integration, explicitly prepare a **fresh** database from `backend/` with `go run ./cmd/corerp-m2 -db /path/to/fresh-life.db -action rp-life-prepare`. This composes the existing finite employer/payroll/store economy, three NPCs, one player, five places/routes and Ada/Bo's30-day routines. It is not a startup side effect or a conversion of an existing minimal RP demo. Reuse normal Play server/auth setup with this database; do not run the older `rp-prepare`/`rp-travel-prepare` on it.
+
+Preparation is a sequence of independently atomic commands, safely repeatable after interruption or restart. Cai/Lin materialize after the wage contract starts, with actual participation and **zero unearned receivables**; the first payroll transfers10minor each from the existing funded employer. No balances or population guards are bypassed. Existing minimal demo setup results are unchanged. See the [RP-2E report](phase-2e.md) for long-run, initiative and diversity evidence and the current stage gate.
+
+Play waits now run bounded nearby NPC initiative through the configured DecisionProvider after the authoritative time advance. The wait Event pins up to16 original nearby NPC identities; same-key retries finish missing decisions and return already committed ones without another model call. A later user action can supersede an uncommitted opportunity; it never authorizes acting in an old scene. Each actor has a one-world-hour cooldown and its existing daily action budget. Ordinary life may produce silence, which creates no scene message. Only actual accepted speech/observed movement appears in Play history, never private financial reasons or proposal metadata. The wait's `event_sequence` identifies the time-advance Event; observe afterward for the current cursor after NPC effects.
+
+`npm run verify:rp2-initiative` verifies a real pre-player-speech NPC initiative and recovery after losing the wait response and restarting backend/browser. `node scripts/verify-rp1-play.mjs --initiative --fake-model` also proves configured HTTP-model routing and zero repeated committed model calls, using only a local fixture.
+
+Legal early arrival at a scheduled destination records `AgentActivityStarted` when the appointment begins, without inventing zero-distance movement. Position replay and own work memory include this authoritative activity Event. Schema026 is unchanged; code rollback after creating these new Events requires a matching database backup, since older binaries do not understand the new activity fact. No production data was modified during verification.
 
 ## Real DecisionProvider configuration
 

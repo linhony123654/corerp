@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 
 	"corerp.local/backend/internal/core"
@@ -47,6 +46,10 @@ func (s *Store) BootstrapRPPlayDemo(ctx context.Context) (RPPlaySetupResult, err
 }
 
 func (s *Store) setupRPParticipants(ctx context.Context) (RPPlaySetupResult, error) {
+	return s.setupRPParticipantsAt(ctx, m2RPSetupTime)
+}
+
+func (s *Store) setupRPParticipantsAt(ctx context.Context, setupTime string) (RPPlaySetupResult, error) {
 	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
 		return RPPlaySetupResult{}, core.WrapError(core.CodeStorageFailure, "begin RP participants setup", err)
@@ -71,10 +74,14 @@ func (s *Store) setupRPParticipants(ctx context.Context) (RPPlaySetupResult, err
 	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&head); err != nil {
 		return RPPlaySetupResult{}, classifyMissing(err, "RP participants branch")
 	}
-	if head != 6 {
-		return RPPlaySetupResult{}, core.NewError(core.CodeBranchConflict, fmt.Sprintf("RP participants setup requires head 6, got %d", head))
+	var participants int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM materialized_entities n JOIN cohorts c ON c.cohort_id=n.source_cohort_id WHERE n.entity_id IN (?,?) AND n.population_count=1 AND n.status='active' AND c.instance_id=? AND c.branch_id=?`, M2RPPlayerID, M2RPNPCID, M2DemoInstanceID, M2DemoBranchID).Scan(&participants); err != nil {
+		return RPPlaySetupResult{}, err
 	}
-	if err := ensureCohortTransitionChronology(ctx, tx.conn, M2DemoInstanceID, M2DemoBranchID, m2RPSetupTime); err != nil {
+	if participants != 2 {
+		return RPPlaySetupResult{}, core.NewError(core.CodeBranchConflict, "RP participants require actual player and NPC materializations")
+	}
+	if err := ensureCohortTransitionChronology(ctx, tx.conn, M2DemoInstanceID, M2DemoBranchID, setupTime); err != nil {
 		return RPPlaySetupResult{}, err
 	}
 	sequence := head + 1
@@ -100,7 +107,7 @@ func (s *Store) setupRPParticipants(ctx context.Context) (RPPlaySetupResult, err
 		Sequence  int64  `json:"sequence"`
 		WorldTime string `json:"world_time"`
 		Payload   any    `json:"payload"`
-	}{m2RPSetupCommandID, sequence, m2RPSetupTime, payload})
+	}{m2RPSetupCommandID, sequence, setupTime, payload})
 	if err != nil {
 		return RPPlaySetupResult{}, err
 	}
@@ -113,8 +120,8 @@ func (s *Store) setupRPParticipants(ctx context.Context) (RPPlaySetupResult, err
 	}{
 		{"RP setup command", `INSERT INTO commands(command_id, instance_id, branch_id, command_type, idempotency_key, request_hash, expected_head, principal_id, command_policy, status, created_at_utc) VALUES (?, ?, ?, 'InitializeRPPlayParticipants', 'rp-play-fixture-v1', ?, ?, 'principal_system', '{"authorization":"system-bootstrap"}', 'pending', ?)`, []any{m2RPSetupCommandID, M2DemoInstanceID, M2DemoBranchID, requestHash, head, now}},
 		{"RP setup attempt", `INSERT INTO command_attempts(command_id, attempt_no, attempt_id, status, lease_owner, lease_until_utc, proposal_hash, created_at_utc) VALUES (?, 1, ?, 'ready', 'corerp-rp1', ?, ?, ?)`, []any{m2RPSetupCommandID, attemptID, s.now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano), requestHash, now}},
-		{"RP setup batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, m2RPSetupCommandID, M2DemoInstanceID, M2DemoBranchID, epochID, head, sequence, sequence, m2RPSetupTime, batchHash, now}},
-		{"RP setup event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, 'RPParticipantsInitialized', 'system', ?, ?)`, []any{m2RPSetupEventID, batchID, M2DemoInstanceID, M2DemoBranchID, sequence, m2RPSetupTime, string(payloadJSON)}},
+		{"RP setup batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, m2RPSetupCommandID, M2DemoInstanceID, M2DemoBranchID, epochID, head, sequence, sequence, setupTime, batchHash, now}},
+		{"RP setup event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, 'RPParticipantsInitialized', 'system', ?, ?)`, []any{m2RPSetupEventID, batchID, M2DemoInstanceID, M2DemoBranchID, sequence, setupTime, string(payloadJSON)}},
 	}
 	for _, statement := range statements {
 		if err := execAgentOne(ctx, tx.conn, statement.name, statement.query, statement.args...); err != nil {
@@ -138,20 +145,20 @@ func (s *Store) setupRPParticipants(ctx context.Context) (RPPlaySetupResult, err
 		if err := execAgentOne(ctx, tx.conn, "insert RP spatial profile", `INSERT INTO agent_profiles(agent_id, instance_id, branch_id, principal_id, agent_level, goal_code, action_budget_per_day, status, definition_event_id) VALUES (?, ?, ?, ?, 'L2', ?, 8, 'active', ?)`, participant.id, M2DemoInstanceID, M2DemoBranchID, participant.principal, participant.goal, m2RPSetupEventID); err != nil {
 			return RPPlaySetupResult{}, err
 		}
-		if err := execAgentOne(ctx, tx.conn, "insert RP initial movement", `INSERT INTO agent_movements(movement_id, event_id, agent_id, from_place_id, to_place_id, schedule_id, activity_code, world_time, movement_kind) VALUES (?, ?, ?, NULL, ?, NULL, 'present', ?, 'initialize')`, "movement_m2_rp_initialize_"+participant.id, m2RPSetupEventID, participant.id, M2AgentCafeID, m2RPSetupTime); err != nil {
+		if err := execAgentOne(ctx, tx.conn, "insert RP initial movement", `INSERT INTO agent_movements(movement_id, event_id, agent_id, from_place_id, to_place_id, schedule_id, activity_code, world_time, movement_kind) VALUES (?, ?, ?, NULL, ?, NULL, 'present', ?, 'initialize')`, "movement_m2_rp_initialize_"+participant.id, m2RPSetupEventID, participant.id, M2AgentCafeID, setupTime); err != nil {
 			return RPPlaySetupResult{}, err
 		}
-		if err := execAgentOne(ctx, tx.conn, "insert RP initial position", `INSERT INTO agent_positions(agent_id, place_id, activity_code, effective_world_time, projection_version, last_event_sequence) VALUES (?, ?, 'present', ?, 0, ?)`, participant.id, M2AgentCafeID, m2RPSetupTime, sequence); err != nil {
+		if err := execAgentOne(ctx, tx.conn, "insert RP initial position", `INSERT INTO agent_positions(agent_id, place_id, activity_code, effective_world_time, projection_version, last_event_sequence) VALUES (?, ?, 'present', ?, 0, ?)`, participant.id, M2AgentCafeID, setupTime, sequence); err != nil {
 			return RPPlaySetupResult{}, err
 		}
 	}
 	if err := execAgentOne(ctx, tx.conn, "insert player control grant", `INSERT INTO capability_grants(grant_id, principal_id, capability_id, instance_id, branch_id, subject_id, field_scope, status, definition_event_id) VALUES ('grant_m2_rp_player_control', ?, 'world.rp.control', ?, ?, ?, '[]', 'active', ?)`, M2RPPlayerPrincipal, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, m2RPSetupEventID); err != nil {
 		return RPPlaySetupResult{}, err
 	}
-	if err := execAgentOne(ctx, tx.conn, "advance RP world clock", `UPDATE world_clocks SET current_world_time = ?, projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ?`, m2RPSetupTime, sequence, M2DemoInstanceID, M2DemoBranchID); err != nil {
+	if err := execAgentOne(ctx, tx.conn, "advance RP world clock", `UPDATE world_clocks SET current_world_time = ?, projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ?`, setupTime, sequence, M2DemoInstanceID, M2DemoBranchID); err != nil {
 		return RPPlaySetupResult{}, err
 	}
-	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+m2RPSetupCommandID, "agent_decision", m2RPSetupEventID, m2RPSetupCommandID, attemptID, m2RPSetupTime, now, payloadJSON); err != nil {
+	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+m2RPSetupCommandID, "agent_decision", m2RPSetupEventID, m2RPSetupCommandID, attemptID, setupTime, now, payloadJSON); err != nil {
 		return RPPlaySetupResult{}, err
 	}
 	if err := insertAgentOutbox(ctx, tx.conn, "outbox_m2_rp_participants_setup", m2RPSetupEventID, "rp.participants.initialized", payloadJSON); err != nil {

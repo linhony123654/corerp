@@ -9,6 +9,23 @@ import (
 	"time"
 )
 
+func TestM2CLIRPLifePreparationIsExplicitAndRepeatable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rp-life-cli.db")
+	var output bytes.Buffer
+	for attempt := 0; attempt < 2; attempt++ {
+		output.Reset()
+		if err := run(context.Background(), path, "rp-life-prepare", &output); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(output.String(), `"npc_count": 3`) || !strings.Contains(output.String(), `"schedule_count": 116`) {
+			t.Fatalf("missing life composition: %s", output.String())
+		}
+		if attempt == 1 && strings.Count(output.String(), `"replayed": true`) != 4 {
+			t.Fatalf("life preparation not idempotent: %s", output.String())
+		}
+	}
+}
+
 func TestM2CLIBootstrapAndRoundTripAreRepeatable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "m2-cli.db")
 	var output bytes.Buffer

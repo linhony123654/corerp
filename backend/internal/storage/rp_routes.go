@@ -41,6 +41,10 @@ func (s *Store) PrepareRPTravel(ctx context.Context) (RPTravelSetupResult, error
 	if _, err := s.BootstrapRPPlayDemo(ctx); err != nil {
 		return RPTravelSetupResult{}, err
 	}
+	return s.setupRPTravelAt(ctx, m2RPSetupTime)
+}
+
+func (s *Store) setupRPTravelAt(ctx context.Context, setupTime string) (RPTravelSetupResult, error) {
 	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
 		return RPTravelSetupResult{}, core.WrapError(core.CodeStorageFailure, "begin RP route setup", err)
@@ -65,10 +69,14 @@ func (s *Store) PrepareRPTravel(ctx context.Context) (RPTravelSetupResult, error
 	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&head); err != nil {
 		return RPTravelSetupResult{}, classifyMissing(err, "RP route branch")
 	}
-	if head != 7 {
-		return RPTravelSetupResult{}, core.NewError(core.CodeBranchConflict, fmt.Sprintf("RP route setup requires head 7, got %d", head))
+	var initialized int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPParticipantsInitialized'`, m2RPSetupEventID, M2DemoInstanceID, M2DemoBranchID).Scan(&initialized); err != nil {
+		return RPTravelSetupResult{}, err
 	}
-	if err := ensureCohortTransitionChronology(ctx, tx.conn, M2DemoInstanceID, M2DemoBranchID, m2RPSetupTime); err != nil {
+	if initialized != 1 {
+		return RPTravelSetupResult{}, core.NewError(core.CodeBranchConflict, "RP route setup requires initialized participants")
+	}
+	if err := ensureCohortTransitionChronology(ctx, tx.conn, M2DemoInstanceID, M2DemoBranchID, setupTime); err != nil {
 		return RPTravelSetupResult{}, err
 	}
 	sequence := head + 1
@@ -93,7 +101,7 @@ func (s *Store) PrepareRPTravel(ctx context.Context) (RPTravelSetupResult, error
 		Sequence  int64  `json:"sequence"`
 		WorldTime string `json:"world_time"`
 		Payload   any    `json:"payload"`
-	}{m2RPTravelCommandID, sequence, m2RPSetupTime, payload})
+	}{m2RPTravelCommandID, sequence, setupTime, payload})
 	if err != nil {
 		return RPTravelSetupResult{}, err
 	}
@@ -106,8 +114,8 @@ func (s *Store) PrepareRPTravel(ctx context.Context) (RPTravelSetupResult, error
 	}{
 		{"RP route command", `INSERT INTO commands(command_id, instance_id, branch_id, command_type, idempotency_key, request_hash, expected_head, principal_id, command_policy, status, created_at_utc) VALUES (?, ?, ?, 'DefineRPTravel', 'rp-travel-fixture-v1', ?, ?, 'principal_system', '{"authorization":"system-bootstrap"}', 'pending', ?)`, []any{m2RPTravelCommandID, M2DemoInstanceID, M2DemoBranchID, requestHash, head, now}},
 		{"RP route attempt", `INSERT INTO command_attempts(command_id, attempt_no, attempt_id, status, lease_owner, lease_until_utc, proposal_hash, created_at_utc) VALUES (?, 1, ?, 'ready', 'corerp-rp1', ?, ?, ?)`, []any{m2RPTravelCommandID, attemptID, s.now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano), requestHash, now}},
-		{"RP route batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, m2RPTravelCommandID, M2DemoInstanceID, M2DemoBranchID, epochID, head, sequence, sequence, m2RPSetupTime, batchHash, now}},
-		{"RP route event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, 'RPTravelDefined', 'system', ?, ?)`, []any{m2RPTravelEventID, batchID, M2DemoInstanceID, M2DemoBranchID, sequence, m2RPSetupTime, string(payloadJSON)}},
+		{"RP route batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, m2RPTravelCommandID, M2DemoInstanceID, M2DemoBranchID, epochID, head, sequence, sequence, setupTime, batchHash, now}},
+		{"RP route event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, 'RPTravelDefined', 'system', ?, ?)`, []any{m2RPTravelEventID, batchID, M2DemoInstanceID, M2DemoBranchID, sequence, setupTime, string(payloadJSON)}},
 	}
 	for _, statement := range statements {
 		if err := execAgentOne(ctx, tx.conn, statement.name, statement.query, statement.args...); err != nil {
@@ -119,10 +127,10 @@ func (s *Store) PrepareRPTravel(ctx context.Context) (RPTravelSetupResult, error
 			return RPTravelSetupResult{}, err
 		}
 	}
-	if err := execAgentOne(ctx, tx.conn, "advance RP route clock lineage", `UPDATE world_clocks SET projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time = ?`, sequence, M2DemoInstanceID, M2DemoBranchID, m2RPSetupTime); err != nil {
+	if err := execAgentOne(ctx, tx.conn, "advance RP route clock lineage", `UPDATE world_clocks SET projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time = ?`, sequence, M2DemoInstanceID, M2DemoBranchID, setupTime); err != nil {
 		return RPTravelSetupResult{}, err
 	}
-	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+m2RPTravelCommandID, "agent_decision", m2RPTravelEventID, m2RPTravelCommandID, attemptID, m2RPSetupTime, now, payloadJSON); err != nil {
+	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+m2RPTravelCommandID, "agent_decision", m2RPTravelEventID, m2RPTravelCommandID, attemptID, setupTime, now, payloadJSON); err != nil {
 		return RPTravelSetupResult{}, err
 	}
 	if err := insertAgentOutbox(ctx, tx.conn, "outbox_m2_rp_travel_setup", m2RPTravelEventID, "rp.travel.defined", payloadJSON); err != nil {

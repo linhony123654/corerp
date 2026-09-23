@@ -430,7 +430,10 @@ func replayRange(ctx context.Context, query replayQuerier, instanceID, branchID 
 		SELECT e.event_sequence, e.event_id, m.agent_id, m.to_place_id, m.activity_code, m.world_time
 		FROM agent_movements m JOIN events e ON e.event_id = m.event_id
 		WHERE e.instance_id = ? AND e.branch_id = ? AND e.event_sequence > ? AND e.event_sequence <= ?
-		ORDER BY e.event_sequence, m.movement_id`, instanceID, branchID, afterSequence, throughSequence)
+		UNION ALL
+		SELECT e.event_sequence,e.event_id,e.actor_id,json_extract(e.payload,'$.to_place_id'),json_extract(e.payload,'$.activity_code'),e.world_time
+		FROM events e WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence>? AND e.event_sequence<=? AND e.event_type='AgentActivityStarted'
+		ORDER BY 1,3`, instanceID, branchID, afterSequence, throughSequence, instanceID, branchID, afterSequence, throughSequence)
 	if err != nil {
 		return ReplayResult{}, core.WrapError(core.CodeStorageFailure, "read replay Agent movements", err)
 	}
@@ -668,11 +671,11 @@ func compareProjectionRows(ctx context.Context, query replayQuerier, state Repla
 		}
 	}
 	rows, err = query.QueryContext(ctx, `
-		SELECT p.agent_id, p.place_id, p.activity_code, p.effective_world_time, m.event_id, p.last_event_sequence
+		SELECT p.agent_id, p.place_id, p.activity_code, p.effective_world_time, e.event_id, p.last_event_sequence
 		FROM agent_positions p JOIN agent_profiles a ON a.agent_id = p.agent_id
-		JOIN agent_movements m ON m.agent_id = p.agent_id
-		JOIN events e ON e.event_id = m.event_id AND e.event_sequence = p.last_event_sequence
-		WHERE a.instance_id = ? AND a.branch_id = ? ORDER BY p.agent_id`, state.InstanceID, state.BranchID)
+		JOIN events e ON e.event_sequence=p.last_event_sequence AND e.instance_id=a.instance_id AND e.branch_id=a.branch_id
+		LEFT JOIN agent_movements m ON m.agent_id=p.agent_id AND m.event_id=e.event_id
+		WHERE a.instance_id = ? AND a.branch_id = ? AND (m.movement_id IS NOT NULL OR (e.event_type='AgentActivityStarted' AND e.actor_id=p.agent_id)) ORDER BY p.agent_id`, state.InstanceID, state.BranchID)
 	if err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "read Agent position projections", err)
 	}

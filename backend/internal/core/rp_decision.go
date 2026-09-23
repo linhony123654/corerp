@@ -43,6 +43,7 @@ type RPDecisionSchedule struct {
 // RPDecisionInput is the only data boundary exposed to a replaceable provider.
 // No account identifiers, other people's finances, creator data or raw DB rows.
 type RPDecisionInput struct {
+	Trigger              *RPDecisionTrigger        `json:"trigger,omitempty"`
 	Life                 *RPLifeContext            `json:"life,omitempty"`
 	InstanceID           string                    `json:"instance_id"`
 	BranchID             string                    `json:"branch_id"`
@@ -82,6 +83,9 @@ type RPDecisionProvider interface {
 type DeterministicRPDecisionProvider struct{}
 
 func (DeterministicRPDecisionProvider) Propose(_ context.Context, input RPDecisionInput) (RPDecisionProposal, error) {
+	if input.Trigger != nil {
+		return proposeRPInitiative(input)
+	}
 	if input.Life != nil {
 		for _, goal := range input.Life.Goals {
 			switch goal.Code {

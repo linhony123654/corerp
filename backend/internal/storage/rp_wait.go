@@ -11,24 +11,27 @@ import (
 )
 
 type RPWaitResult struct {
-	IntentID         string `json:"intent_id"`
-	Status           string `json:"status"`
-	TargetWorldTime  string `json:"target_world_time"`
-	CurrentWorldTime string `json:"current_world_time"`
-	ProcessedItems   int    `json:"processed_items"`
-	PendingDue       int64  `json:"pending_due"`
-	CommandID        string `json:"command_id,omitempty"`
-	EventID          string `json:"event_id,omitempty"`
-	EventSequence    int64  `json:"event_sequence,omitempty"`
-	Replayed         bool   `json:"replayed"`
+	InitiativeNPCIDs []string             `json:"initiative_npc_ids,omitempty"`
+	Initiatives      []RPInitiativeResult `json:"initiatives,omitempty"`
+	IntentID         string               `json:"intent_id"`
+	Status           string               `json:"status"`
+	TargetWorldTime  string               `json:"target_world_time"`
+	CurrentWorldTime string               `json:"current_world_time"`
+	ProcessedItems   int                  `json:"processed_items"`
+	PendingDue       int64                `json:"pending_due"`
+	CommandID        string               `json:"command_id,omitempty"`
+	EventID          string               `json:"event_id,omitempty"`
+	EventSequence    int64                `json:"event_sequence,omitempty"`
+	Replayed         bool                 `json:"replayed"`
 }
 
 type rpWaitEvent struct {
-	SessionID       string `json:"session_id"`
-	EntityID        string `json:"entity_id"`
-	FromWorldTime   string `json:"from_world_time"`
-	TargetWorldTime string `json:"target_world_time"`
-	ProcessedItems  int    `json:"processed_items"`
+	InitiativeNPCIDs []string `json:"initiative_npc_ids,omitempty"`
+	SessionID        string   `json:"session_id"`
+	EntityID         string   `json:"entity_id"`
+	FromWorldTime    string   `json:"from_world_time"`
+	TargetWorldTime  string   `json:"target_world_time"`
+	ProcessedItems   int      `json:"processed_items"`
 }
 
 // WaitRP stores only retry intent before invoking the existing M2 scheduler.
@@ -205,7 +208,21 @@ func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, re
 	}
 	suffix := intentID[len("intent_rp_wait_"):]
 	commandID, attemptID, batchID, eventID := "cmd_rp_wait_"+suffix, "attempt_rp_wait_"+suffix, "batch_rp_wait_"+suffix, "event_rp_wait_"+suffix
-	payload := rpWaitEvent{session.SessionID, session.ControlledEntityID, currentText, request.TargetWorldTime, processed}
+	var playerPlace string
+	if err := tx.conn.QueryRowContext(ctx, `SELECT place_id FROM agent_positions WHERE agent_id=?`, session.ControlledEntityID).Scan(&playerPlace); err != nil {
+		return RPWaitResult{}, err
+	}
+	npcs, err := rpCoLocatedEntityIDs(ctx, tx.conn, session.InstanceID, session.BranchID, playerPlace, session.ControlledEntityID)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	// A bounded nearby cohort for this request, not an unbounded background loop.
+	// Persist identities before calling providers so recovery cannot select a
+	// different scene after an earlier initiative has moved an actor.
+	if len(npcs) > 16 {
+		npcs = npcs[:16]
+	}
+	payload := rpWaitEvent{InitiativeNPCIDs: npcs, SessionID: session.SessionID, EntityID: session.ControlledEntityID, FromWorldTime: currentText, TargetWorldTime: request.TargetWorldTime, ProcessedItems: processed}
 	payloadJSON, err := core.CanonicalJSON(payload)
 	if err != nil {
 		return RPWaitResult{}, err
@@ -267,7 +284,7 @@ func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, re
 	if err := tx.Commit(ctx); err != nil {
 		return RPWaitResult{}, core.WrapError(core.CodeStorageFailure, "commit RP wait completion", err)
 	}
-	return RPWaitResult{IntentID: intentID, Status: "completed", TargetWorldTime: request.TargetWorldTime, CurrentWorldTime: request.TargetWorldTime, ProcessedItems: processed, CommandID: commandID, EventID: eventID, EventSequence: sequence}, nil
+	return RPWaitResult{InitiativeNPCIDs: npcs, IntentID: intentID, Status: "completed", TargetWorldTime: request.TargetWorldTime, CurrentWorldTime: request.TargetWorldTime, ProcessedItems: processed, CommandID: commandID, EventID: eventID, EventSequence: sequence}, nil
 }
 
 func loadRPWaitResult(ctx context.Context, conn *sql.Conn, intentID, commandID string, replayed bool) (RPWaitResult, error) {
@@ -286,5 +303,6 @@ func loadRPWaitResult(ctx context.Context, conn *sql.Conn, intentID, commandID s
 	result.ProcessedItems = payload.ProcessedItems
 	result.CommandID = commandID
 	result.Replayed = replayed
+	result.InitiativeNPCIDs = payload.InitiativeNPCIDs
 	return result, nil
 }

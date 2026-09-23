@@ -14,12 +14,13 @@ const fakeModel = process.argv.includes('--fake-model')
 const lifeScenario = process.argv.includes('--life')
 const emergentScenario = process.argv.includes('--emergent')
 const styleScenario = process.argv.includes('--style')
+const initiativeScenario = process.argv.includes('--initiative')
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp1-e2e-'))
 const database = join(temp, 'world.db')
 const credential = randomBytes(24).toString('hex')
 const creatorCredential = randomBytes(24).toString('hex')
-const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [credential]: 'principal_m2_rp_player', ...(emergentScenario ? { [creatorCredential]: 'principal_creator' } : {}) }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex') }
+const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [credential]: 'principal_m2_rp_player', ...(emergentScenario || initiativeScenario ? { [creatorCredential]: 'principal_creator' } : {}) }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex') }
 Object.assign(env, { CORERP_DECISION_PROVIDER: 'deterministic', CORERP_LLM_ENDPOINT: '', CORERP_LLM_MODEL: '', CORERP_LLM_API_KEY: '', CORERP_LLM_TIMEOUT: '', CORERP_LLM_ATTEMPTS: '' })
 const sql = query => execFileSync('sqlite3', [database, query], { encoding: 'utf8' }).trim()
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'pipe' })
@@ -47,7 +48,13 @@ try {
         const input = JSON.parse(body.messages[1].content).character
         modelCalls++
         let action = 'respond', text = '来自测试模型的问候。'
-        if (input.player_speech_text.includes('借') || input.own_asset_minor < 100) { action = 'refuse'; text = '测试模型：抱歉，我现在无法答应。' }
+        if (input.trigger?.kind === 'elapsed_time') {
+          assert.equal(input.player_speech_text, '')
+          assert.equal(input.speech_event_id, '')
+          action = input.own_asset_minor < 100 ? 'respond' : 'silence'
+          text = action === 'respond' ? '测试模型主动说：我得先处理手头的开销。' : ''
+        }
+        else if (input.player_speech_text.includes('借') || input.own_asset_minor < 100) { action = 'refuse'; text = '测试模型：抱歉，我现在无法答应。' }
         else if (input.next_schedule?.activity_code === 'work') { action = 'refuse'; text = '测试模型：我得先去工作，晚些再聊。' }
         response.setHeader('Content-Type', 'application/json')
         response.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ action, text, destination_place_id: '' }) } }] }))
@@ -79,6 +86,44 @@ try {
     assert.ok(result.data, JSON.stringify(result))
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
     return result.data
+  }
+  if (initiativeScenario) {
+    const creatorCall = async (path, body) => {
+      const response = await fetch(`http://127.0.0.1:8080/api/v1/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${creatorCredential}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const result = await response.json(); assert.equal(response.status, 200, JSON.stringify(result)); return result.data
+    }
+    const scope = { instance_id: 'inst_m2_t09', branch_id: 'br_main' }
+    const worldTime = sql("SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main'")
+    const head = Number(sql("SELECT head_sequence FROM branches WHERE instance_id='inst_m2_t09' AND branch_id='br_main'"))
+    const npc = 'entity_initiative_nora'
+    const materialized = await creatorCall('commands/materialize-cohort', { ...scope, command_id: 'cmd_initiative_nora', materialization_id: 'mat_initiative_nora', capability_id: 'world.cohort.materialize', idempotency_key: 'initiative-nora', expected_head: head, world_time: worldTime, source_cohort_id: 'cohort_block_a', entity_id: npc, display_name: 'Nora', population_count: 1, asset_minor: 90, inventory_minor: 1, receivable_minor: 0, liability_minor: 30, allocation_algorithm_version: 'equal-share-v1' })
+    const at = hours => new Date(Date.parse(worldTime) + hours * 3600000).toISOString().replace('.000Z', 'Z')
+    await creatorCall('rp/background/materialize', { ...scope, entity_id: npc, expected_head: materialized.last_sequence, idempotency_key: 'initiative-nora-background', age_min: 25, age_max: 34, residence_place_id: 'place_m2_home_bo', initial_place_id: 'place_m2_cafe', schedule: [{ world_time: at(12), place_id: 'place_m2_home_bo', activity_code: 'home' }, { world_time: at(16), place_id: 'place_m2_cafe', activity_code: 'present' }] })
+    await page.getByRole('button', { name: '环顾四周' }).click()
+    await page.waitForFunction(() => document.querySelector('.presence').textContent.includes('Nora'))
+    await page.route('**/api/v1/rp/actions/wait', async route => {
+      const response = await route.fetch(); assert.equal(response.status(), 200); await route.abort('failed')
+    }, { times: 1 })
+    await page.getByRole('button', { name: '等四小时' }).click()
+    await page.getByRole('button', { name: '继续未完成的行动', exact: true }).waitFor()
+    assert.equal(sql("SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin'"), '0', 'initiative precedes all player speech')
+    assert.equal(sql("SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_initiative_nora'"), '1', 'life need causes actual NPC utterance')
+    const before = sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM observation_records)||':'||(SELECT COUNT(*) FROM rp_utterances)")
+    const beforeCalls = modelCalls
+    const saved = await context.storageState()
+    assert.ok(!JSON.stringify(saved).includes(credential) && !JSON.stringify(saved).includes(creatorCredential))
+    await context.close(); await stop(server)
+    server = startServer(); await ready('http://127.0.0.1:8080/readyz')
+    context = await browser.newContext({ storageState: saved, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
+    page = await context.newPage(); page.on('pageerror', e => errors.push(e.message))
+    await page.goto('http://127.0.0.1:4178')
+    await page.getByLabel('玩家访问凭证').fill(credential)
+    await page.getByRole('button', { name: '继续这段生活' }).click()
+    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
+    assert.match(await page.locator('.reading').innerText(), /Nora说.*手头的开销/)
+    assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM observation_records)||':'||(SELECT COUNT(*) FROM rp_utterances)"), before)
+    assert.equal(modelCalls, beforeCalls, 'wait recovery does not repeat committed initiative model calls')
+    console.log(JSON.stringify({ initiativeScenario: 'PASS', beforePlayerSpeech: true, lostWaitResponseRestart: true, factsUnchanged: before, modelCallsUnchanged: beforeCalls }))
   }
   await speak('能借我一点钱吗？')
   assert.match(await page.locator('.reading').innerText(), /Cai 拒绝了/)

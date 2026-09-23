@@ -451,8 +451,21 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 	).Scan(&scheduleWorldTime, &targetPlace, &activity, &scheduleStatus, &fromPlace, &positionVersion); err != nil {
 		return false, classifyMissing(err, "active Agent schedule")
 	}
-	if scheduleStatus != "active" || scheduleWorldTime != item.WorldTime || targetPlace != scheduled.ToPlaceID || activity != scheduled.ActivityCode || fromPlace == targetPlace {
+	if scheduleStatus != "active" || scheduleWorldTime != item.WorldTime || targetPlace != scheduled.ToPlaceID || activity != scheduled.ActivityCode {
 		return false, core.NewError(core.CodeProjectionDiverged, "Agent schedule, position, and scheduler item do not agree")
+	}
+	eventType, outboxTopic := "AgentMoved", "agent.moved"
+	if fromPlace == targetPlace {
+		// Arriving early is legal. Before accepting a same-place activity,
+		// prove the projection still matches its committed location source.
+		var established int
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_positions p JOIN events e ON e.event_sequence=p.last_event_sequence AND e.instance_id=? AND e.branch_id=? LEFT JOIN agent_movements m ON m.event_id=e.event_id AND m.agent_id=p.agent_id WHERE p.agent_id=? AND p.effective_world_time=e.world_time AND ((m.to_place_id=p.place_id AND m.activity_code=p.activity_code) OR (e.event_type='AgentActivityStarted' AND e.actor_id=p.agent_id AND json_extract(e.payload,'$.to_place_id')=p.place_id AND json_extract(e.payload,'$.activity_code')=p.activity_code))`, M2DemoInstanceID, M2DemoBranchID, scheduled.AgentID).Scan(&established); err != nil {
+			return false, err
+		}
+		if established != 1 {
+			return false, core.NewError(core.CodeProjectionDiverged, "same-place schedule lacks committed position evidence")
+		}
+		eventType, outboxTopic = "AgentActivityStarted", "agent.activity_started"
 	}
 	rows, err := tx.conn.QueryContext(ctx, `
 		SELECT p.agent_id FROM agent_positions p JOIN agent_profiles a ON a.agent_id = p.agent_id
@@ -505,7 +518,7 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		ItemID, WorldTime, EventType string
 		Sequence                     int64
 		Payload                      agentMovementPayload
-	}{item.SchedulerItemID, item.WorldTime, "AgentMoved", sequence, eventPayload})
+	}{item.SchedulerItemID, item.WorldTime, eventType, sequence, eventPayload})
 	if err != nil {
 		return false, err
 	}
@@ -521,11 +534,15 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		{"Agent movement command", `INSERT INTO commands(command_id, instance_id, branch_id, command_type, idempotency_key, request_hash, expected_head, principal_id, command_policy, status, created_at_utc) VALUES (?, ?, ?, 'AgentScheduledMove', ?, ?, ?, 'principal_system', '{"authorization":"ruleset-scheduler"}', 'pending', ?)`, []any{commandID, M2DemoInstanceID, M2DemoBranchID, item.SchedulerItemID, requestHash, head, nowText}},
 		{"Agent movement attempt", `INSERT INTO command_attempts(command_id, attempt_no, attempt_id, status, lease_owner, lease_until_utc, proposal_hash, created_at_utc) VALUES (?, 1, ?, 'ready', 'corerp-m2-agent', ?, ?, ?)`, []any{commandID, attemptID, s.now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano), requestHash, nowText}},
 		{"Agent movement batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, commandID, M2DemoInstanceID, M2DemoBranchID, epochID, head, sequence, sequence, item.WorldTime, batchHash, nowText}},
-		{"Agent movement event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, 'AgentMoved', ?, ?, ?)`, []any{eventID, batchID, M2DemoInstanceID, M2DemoBranchID, sequence, scheduled.AgentID, item.WorldTime, string(eventPayloadJSON)}},
-		{"Agent movement fact", `INSERT INTO agent_movements(movement_id, event_id, agent_id, from_place_id, to_place_id, schedule_id, activity_code, world_time, movement_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')`, []any{"movement_" + item.SchedulerItemID, eventID, scheduled.AgentID, fromPlace, targetPlace, scheduled.ScheduleID, activity, item.WorldTime}},
+		{"Agent schedule event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`, []any{eventID, batchID, M2DemoInstanceID, M2DemoBranchID, sequence, eventType, scheduled.AgentID, item.WorldTime, string(eventPayloadJSON)}},
 	}
 	for _, statement := range statements {
 		if err := execAgentOne(ctx, tx.conn, statement.name, statement.query, statement.args...); err != nil {
+			return false, err
+		}
+	}
+	if fromPlace != targetPlace {
+		if err := execAgentOne(ctx, tx.conn, "Agent movement fact", `INSERT INTO agent_movements(movement_id, event_id, agent_id, from_place_id, to_place_id, schedule_id, activity_code, world_time, movement_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')`, "movement_"+item.SchedulerItemID, eventID, scheduled.AgentID, fromPlace, targetPlace, scheduled.ScheduleID, activity, item.WorldTime); err != nil {
 			return false, err
 		}
 	}
@@ -555,7 +572,7 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+commandID, "agent_decision", eventID, commandID, attemptID, item.WorldTime, nowText, eventPayloadJSON); err != nil {
 		return false, err
 	}
-	if err := insertAgentOutbox(ctx, tx.conn, "outbox_"+item.SchedulerItemID, eventID, "agent.moved", eventPayloadJSON); err != nil {
+	if err := insertAgentOutbox(ctx, tx.conn, "outbox_"+item.SchedulerItemID, eventID, outboxTopic, eventPayloadJSON); err != nil {
 		return false, err
 	}
 	if err := execAgentOne(ctx, tx.conn, "commit Agent movement attempt", `UPDATE command_attempts SET status = 'committed', finished_at_utc = ? WHERE command_id = ? AND attempt_no = 1 AND status = 'ready'`, nowText, commandID); err != nil {

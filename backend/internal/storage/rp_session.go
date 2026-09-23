@@ -308,8 +308,18 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		 FROM events e LEFT JOIN agent_places p ON p.place_id = json_extract(e.payload, '$.to_place_id')
 		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ?
 		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction') AND json_extract(e.payload, '$.session_id') = ?
+		 UNION ALL
+		 SELECT e.event_id,json_array(CASE e.event_type
+		 WHEN 'RPSpeechAccepted' THEN n.display_name || '说：“' || u.speech_text || '”'
+		 ELSE n.display_name || '前往了 ' || p.display_name || '。' END),e.event_sequence
+		 FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id
+		 JOIN materialized_entities n ON n.entity_id=e.actor_id
+		 LEFT JOIN rp_utterances u ON u.event_id=e.event_id
+		 LEFT JOIN agent_places p ON p.place_id=json_extract(e.payload,'$.to_place_id')
+		 WHERE c.command_type='RPNPCInitiative' AND e.instance_id=? AND e.branch_id=? AND json_extract(e.payload,'$.session_id')=?
+		 AND (e.event_type='RPNPCMoved' OR (e.event_type='RPSpeechAccepted' AND EXISTS (SELECT 1 FROM observation_records o WHERE o.source_event_id=e.event_id AND o.observer_agent_id=?)))
 		 ORDER BY settled_sequence DESC LIMIT 50)
-		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID, session.SessionID)
+		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID, session.SessionID, session.InstanceID, session.BranchID, session.SessionID, session.ControlledEntityID)
 	if err != nil {
 		return RPObservation{}, err
 	}

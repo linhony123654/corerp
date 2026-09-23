@@ -72,22 +72,9 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 	if heard != 1 {
 		return core.RPDecisionInput{}, core.NewError(core.CodeNotFound, "NPC did not hear this speech")
 	}
-	err = tx.conn.QueryRowContext(ctx, `
-		SELECT b.head_sequence, c.current_world_time, e.display_name, p.place_id, l.display_name, p.activity_code,
-		       a.goal_code, balances.balance_minor, e.currency_id
-		FROM agent_profiles a JOIN materialized_entities e ON e.entity_id = a.agent_id
-		JOIN agent_positions p ON p.agent_id = a.agent_id
-		JOIN agent_places l ON l.place_id = p.place_id
-		JOIN account_balances balances ON balances.account_id = e.asset_account_id
-		JOIN branches b ON b.instance_id = a.instance_id AND b.branch_id = a.branch_id
-		JOIN world_clocks c ON c.instance_id = b.instance_id AND c.branch_id = b.branch_id
-		WHERE a.agent_id = ? AND a.instance_id = ? AND a.branch_id = ?
-		  AND a.status = 'active' AND e.status = 'active' AND e.population_count = 1 AND l.status = 'active'`,
-		request.NPCEntityID, session.InstanceID, session.BranchID,
-	).Scan(&input.HeadSequence, &input.WorldTime, &input.NPCName, &input.PlaceID, &input.PlaceName,
-		&input.ActivityCode, &input.GoalCode, &input.OwnAssetMinor, &input.CurrencyID)
+	input, err = readRPOwnDecisionContext(ctx, tx.conn, input)
 	if err != nil {
-		return core.RPDecisionInput{}, classifyMissing(err, "active NPC decision state")
+		return core.RPDecisionInput{}, err
 	}
 	if input.PlaceID != speechPlace {
 		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "NPC has left the speech scene")
@@ -99,13 +86,36 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 	if playerPlace != input.PlaceID {
 		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "player has left the speech scene")
 	}
-	rows, err := tx.conn.QueryContext(ctx, `
+	return input, nil
+}
+
+// readRPOwnDecisionContext shares only own/visible evidence. Callers must first
+// authorize the actor and establish their distinct speech or time trigger.
+func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) (core.RPDecisionInput, error) {
+	err := conn.QueryRowContext(ctx, `
+		SELECT b.head_sequence, c.current_world_time, e.display_name, p.place_id, l.display_name, p.activity_code,
+		       a.goal_code, balances.balance_minor, e.currency_id
+		FROM agent_profiles a JOIN materialized_entities e ON e.entity_id = a.agent_id
+		JOIN agent_positions p ON p.agent_id = a.agent_id
+		JOIN agent_places l ON l.place_id = p.place_id
+		JOIN account_balances balances ON balances.account_id = e.asset_account_id
+		JOIN branches b ON b.instance_id = a.instance_id AND b.branch_id = a.branch_id
+		JOIN world_clocks c ON c.instance_id = b.instance_id AND c.branch_id = b.branch_id
+		WHERE a.agent_id = ? AND a.instance_id = ? AND a.branch_id = ?
+		  AND a.status = 'active' AND e.status = 'active' AND e.population_count = 1 AND l.status = 'active'`,
+		input.NPCEntityID, input.InstanceID, input.BranchID,
+	).Scan(&input.HeadSequence, &input.WorldTime, &input.NPCName, &input.PlaceID, &input.PlaceName,
+		&input.ActivityCode, &input.GoalCode, &input.OwnAssetMinor, &input.CurrencyID)
+	if err != nil {
+		return core.RPDecisionInput{}, classifyMissing(err, "active NPC decision state")
+	}
+	rows, err := conn.QueryContext(ctx, `
 		SELECT e.entity_id, e.display_name FROM agent_profiles a
 		JOIN agent_positions p ON p.agent_id = a.agent_id
 		JOIN materialized_entities e ON e.entity_id = a.agent_id
 		WHERE a.instance_id = ? AND a.branch_id = ? AND a.status = 'active' AND e.status = 'active'
 		  AND p.place_id = ? AND a.agent_id <> ? ORDER BY e.entity_id`,
-		session.InstanceID, session.BranchID, input.PlaceID, request.NPCEntityID)
+		input.InstanceID, input.BranchID, input.PlaceID, input.NPCEntityID)
 	if err != nil {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC visible entities", err)
 	}
@@ -122,10 +132,10 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "iterate NPC visible entities", err)
 	}
 	rows.Close()
-	rows, err = tx.conn.QueryContext(ctx, `
+	rows, err = conn.QueryContext(ctx, `
 		SELECT k.subject_agent_id, k.place_id, k.source_event_id, k.claim_payload
 		FROM agent_knowledge k WHERE k.observer_agent_id = ?
-		ORDER BY k.last_event_sequence DESC, k.claim_key LIMIT 20`, request.NPCEntityID)
+		ORDER BY k.last_event_sequence DESC, k.claim_key LIMIT 20`, input.NPCEntityID)
 	if err != nil {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC own knowledge", err)
 	}
@@ -160,18 +170,18 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 	}
 	rows.Close()
 	var next core.RPDecisionSchedule
-	err = tx.conn.QueryRowContext(ctx, `SELECT world_time, place_id, activity_code, definition_event_id FROM agent_schedule_entries WHERE agent_id = ? AND status = 'active' AND world_time >= ? ORDER BY world_time, declared_priority, scheduler_item_id LIMIT 1`, request.NPCEntityID, input.WorldTime).Scan(&next.WorldTime, &next.PlaceID, &next.ActivityCode, &next.SourceEventID)
+	err = conn.QueryRowContext(ctx, `SELECT world_time, place_id, activity_code, definition_event_id FROM agent_schedule_entries WHERE agent_id = ? AND status = 'active' AND world_time >= ? ORDER BY world_time, declared_priority, scheduler_item_id LIMIT 1`, input.NPCEntityID, input.WorldTime).Scan(&next.WorldTime, &next.PlaceID, &next.ActivityCode, &next.SourceEventID)
 	if err == nil {
 		input.NextSchedule = &next
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC next schedule", err)
 	}
-	rows, err = tx.conn.QueryContext(ctx, `
+	rows, err = conn.QueryContext(ctx, `
 		SELECT link.to_place_id FROM rp_place_links link
 		JOIN agent_places destination ON destination.place_id = link.to_place_id
 		WHERE link.instance_id = ? AND link.branch_id = ? AND link.from_place_id = ?
 		  AND destination.status = 'active' AND destination.instance_id = link.instance_id AND destination.branch_id = link.branch_id
-		ORDER BY link.to_place_id`, session.InstanceID, session.BranchID, input.PlaceID)
+		ORDER BY link.to_place_id`, input.InstanceID, input.BranchID, input.PlaceID)
 	if err != nil {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read legal NPC destinations", err)
 	}
@@ -191,7 +201,7 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 	if len(input.ReachablePlaceIDs) != 0 {
 		input.LegalActions = append(input.LegalActions, "leave")
 	}
-	input.Life, err = buildRPLifeContext(ctx, tx.conn, input)
+	input.Life, err = buildRPLifeContext(ctx, conn, input)
 	if err != nil {
 		return core.RPDecisionInput{}, err
 	}

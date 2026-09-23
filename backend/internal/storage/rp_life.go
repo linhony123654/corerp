@@ -135,14 +135,17 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 		return nil, err
 	}
 	rows.Close()
-	rows, err = conn.QueryContext(ctx, `SELECT event_id,world_time,activity_code FROM agent_movements
- WHERE agent_id=? AND activity_code='work' ORDER BY world_time DESC,event_id LIMIT 5`, input.NPCEntityID)
+	rows, err = conn.QueryContext(ctx, `SELECT event_id,world_time,activity_code,'own_work_arrival' AS kind FROM agent_movements
+ WHERE agent_id=? AND activity_code='work'
+ UNION ALL SELECT event_id,world_time,json_extract(payload,'$.activity_code'),'own_work_start' FROM events
+ WHERE actor_id=? AND instance_id=? AND branch_id=? AND event_type='AgentActivityStarted' AND json_extract(payload,'$.activity_code')='work'
+ ORDER BY world_time DESC,event_id LIMIT 5`, input.NPCEntityID, input.NPCEntityID, input.InstanceID, input.BranchID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		memory := core.RPLifeMemory{Kind: "own_work_arrival", SubjectEntityID: input.NPCEntityID}
-		if err := rows.Scan(&memory.SourceEventID, &memory.WorldTime, &memory.Text); err != nil {
+		if err := rows.Scan(&memory.SourceEventID, &memory.WorldTime, &memory.Text, &memory.Kind); err != nil {
 			rows.Close()
 			return nil, err
 		}
