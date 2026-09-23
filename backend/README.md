@@ -36,9 +36,11 @@ Initialize and exercise the isolated M2 T09 Cohort fixture without changing the 
 /usr/local/go/bin/go run ./cmd/corerp-m2 -db /tmp/corerp-m2-agents.db -action agents
 /usr/local/go/bin/go run ./cmd/corerp-m2 -db /tmp/corerp-m2-agents30.db -action agents30-prepare
 /usr/local/go/bin/go run ./cmd/corerp-m2 -db /tmp/corerp-m2-agents30.db -action agents30-drive -interval 1s -batch 4
+/usr/local/go/bin/go run ./cmd/corerp-m2 -db /tmp/corerp-rp1.db -action rp-prepare
 ```
 
 The schema, conservation boundary, evidence, and explicit broader-M2 deferrals are in [`../docs/m2/`](../docs/m2/).
+The opt-in `rp-prepare` action reuses the M2 instance, T09 identities and Agent positions to add a real player, a third NPC, and a player-scoped control grant. Start the HTTP server against that same database and map a local development token to `principal_m2_rp_player`; the RP-1A open/read/resume/close/observe endpoints and their authority boundary are documented in [`../docs/rp1/`](../docs/rp1/README.md). No server startup implicitly prepares the fixture, and no RP action/decision/Play frontend is claimed yet.
 
 ## Readiness and next backend scope
 

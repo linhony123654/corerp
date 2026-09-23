@@ -24,3 +24,9 @@ Source goal: `/tmp/f1edf80b-3702-4376-9e97-85d6670a9109.md`. Contracts C1–C6 a
 - Migration 007 `agent_movements` currently accepts only `initialize`/`scheduled` and scheduled rows require a declared schedule; RP direct movement must preserve this authority/replay contract, not silently update only `agent_positions`.
 - HTTP uses injectable authentication and storage-backed service interface. M2 player/agent identity differs from M1 buyer; creator grants must never backstop Play.
 - v0.5 RP-T01–T26 are Proposed test matrix. The current goal's explicit RP-1A–F and DoD govern execution; no real LLM infrastructure is required when unavailable, but deterministic provider E2E must be honest about that limitation.
+
+## RP-1A implementation decisions
+- Migration 020 adds only app-session metadata; `world.rp.control` grant is the player/entity authority, and `agent_positions` remains the sole location projection. A session read never stores or returns a copied character sheet, location or world time.
+- The opt-in RP demo extends the same M2 branch from head 4 to 7: Cai and Lin are independently materialized from the Cohort, then one setup event gives them existing cafe positions, player/agent principals and a player-only control grant. Existing Ada/Bo and five places are retained.
+- Observation is serialized in a short `BEGIN IMMEDIATE` transaction with cursor advance so position/time/version match; HTTP body identity is bound to the authenticated Principal. Only identity, place and co-located names/IDs are returned.
+- The existing replay logic reads `agent_movements` generically; the RP setup's two initialization movements compare equal to projections and snapshot continuation. A later RP move writer must preserve this lineage rather than writing only the position projection.

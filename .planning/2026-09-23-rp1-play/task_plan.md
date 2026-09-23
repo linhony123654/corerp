@@ -7,22 +7,23 @@ Implement and verify all six stages of `/tmp/f1edf80b-3702-4376-9e97-85d6670a910
 Full-project DEFINE → DESIGN → BUILD → POLISH → local SHIP. Crosses SQLite authority, HTTP, NPC decisions, turn recovery, and UI. No production publication.
 
 ## Current Phase
-Baseline / DEFINE / DESIGN. No RP-1 implementation has been validated yet.
+RP-1A local gate passed; checkpoint pending, then RP-1B.
 
 ## Phases
 
 ### Baseline and architecture
-- [ ] Read v0.5, RP-0, M2 contracts, migrations and affected tests
-- [ ] Record Git state, source archive SHA256 and baseline checks
-- [ ] Map existing authority to RP contract, design first vertical slice
-- **Status:** in_progress
+- [x] Read relevant v0.5, RP-0, M2 contracts, migrations and affected tests
+- [x] Record Git state, source archive SHA256 and baseline checks
+- [x] Map existing authority to RP contract and choose first vertical slice
+- **Status:** complete
 
 ### RP-1A — Session / Presence / Observation
-- [ ] Durable idempotent real World/Branch/Entity binding and resume
-- [ ] Derived location/presence and privacy-scoped observation
-- [ ] Minimal authenticated HTTP gateway, restart and negative tests
-- [ ] Full Go tests/vet/related race, report and checkpoint
-- **Status:** pending
+- [x] Durable idempotent real World/Branch/Entity binding and resume
+- [x] Derived location/presence and privacy-scoped observation
+- [x] Minimal authenticated HTTP gateway, restart and negative tests
+- [x] Full Go tests/vet/related race and report
+- [ ] Git checkpoint commit
+- **Status:** in_progress — verification PASS; checkpoint pending
 
 ### RP-1B — Player Action / Move / Wait
 - [ ] Validated event-backed move, projection, derived observation
@@ -58,14 +59,17 @@ Baseline / DEFINE / DESIGN. No RP-1 implementation has been validated yet.
 No Jev, SillyTavern, MCP, Studio, character-card authority, multiplayer, new macroeconomy, or production deployment.
 
 ## Decisions and risks
-- Existing Git repo is empty (`main`, no HEAD); phase commits are explicitly authorized by the linked RP-1 goal. Protect the pre-RP source with an archive and SHA256 first.
+- Pre-RP Git baseline commit `d24b083` on `main`; source archive SHA256 `a54e813b32b98de4fb7269c439a560105582c4b9531fe993f9811074e99c7c90`. Phase commits are authorized by the linked RP-1 goal.
 - Keep existing `.planning/2026-09-22-corerp-m0-rfc` intact as historical state; this plan is independent.
-- Architecture choices remain provisional until source/RP-0 baseline audit.
+- RP-1A: a dedicated application-state `rp_sessions` table stores only binding/cursors/lifecycle; `capability_grants` owns `world.rp.control` authorization; `materialized_entities`/`agent_profiles`/`agent_positions` remain sole identity/location authority. Observation derives from position and world clock under one SQLite snapshot and returns only player-visible fields. A player profile can be spatial but must not be selected for NPC AI decisions.
+- Representative first slice: Open session for a T09 materialized entity with a player control grant, Observe actual position, close/reopen DB and observe again. Broaden to invalid bindings, privacy, HTTP and 3-NPC fixture only after this path passes.
 
 ## Errors
 - First historical-plan read was truncated by output limits; use targeted sections for needed facts.
 - `vexor` semantic search failed with `OpenAI API request failed: Connection error.`; use scoped local `rg`/file inspection instead, without repeated retries.
 - `git rev-parse HEAD` failed because this repository has no commits; recorded as expected baseline state, not a blocker.
+- Initial `git diff --cached --check` flagged three pre-existing whitespace issues in migration 006 and `scripts/verify-m0.cjs`; preserved source, committed baseline with known formatting debt.
+- First RP-1A documentation patch failed atomically due to a wrong root README heading; corrected with a targeted patch after rereading the file.
 
 ## Gate state
-- DEFINE: in_progress. DESIGN/BUILD/POLISH/SHIP: not yet passed.
+- DEFINE: PASS — six stages and DoD from goal are observable. DESIGN: PASS for RP-1A slice only; later phases require their own local design. BUILD/POLISH/SHIP: pending.

@@ -25,7 +25,78 @@ const (
 	operatorToken = "token-operator"
 	adaAgentToken = "token-agent-ada"
 	boAgentToken  = "token-agent-bo"
+	rpPlayerToken = "token-rp-player"
 )
+
+func TestRPHTTPPlayerSessionObservationAndRestart(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "rp-http.db")
+	store, handler := openHTTPTestServer(t, ctx, path)
+	if _, err := store.BootstrapRPPlayDemo(ctx); err != nil {
+		t.Fatal(err)
+	}
+	open := core.RPSessionOpenRequest{
+		InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID,
+		EntityID: storage.M2RPPlayerID, POV: "second_person", IdempotencyKey: "rp-http-open-1",
+	}
+	response := performJSON(t, handler, "/api/v1/rp/sessions/open", "", open)
+	assertAPIError(t, response, http.StatusUnauthorized, core.CodeUnauthenticated)
+	response = performJSON(t, handler, "/api/v1/rp/sessions/open", creatorToken, open)
+	assertAPIError(t, response, http.StatusForbidden, core.CodeUnauthorized)
+	response = performJSON(t, handler, "/api/v1/rp/sessions/open", rpPlayerToken, open)
+	assertStatus(t, response, http.StatusOK)
+	session := decodeData[storage.RPSession](t, response)
+	if session.SessionID == "" || session.ControlledEntityID != storage.M2RPPlayerID {
+		t.Fatalf("wrong player binding: %+v", session)
+	}
+	read := core.RPSessionReadRequest{SessionID: session.SessionID}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	view := decodeData[storage.RPObservation](t, response)
+	if view.PlaceID != storage.M2AgentCafeID || len(view.PresentEntities) != 1 || view.PresentEntities[0].EntityID != storage.M2RPNPCID {
+		t.Fatalf("HTTP observation did not use real presence: %+v", view)
+	}
+	for _, hidden := range []string{"goal_code", "asset_account", "liability", "knowledge", "memory", "principal_id"} {
+		if strings.Contains(response.Body.String(), hidden) {
+			t.Fatalf("HTTP observation leaked %q", hidden)
+		}
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", creatorToken, read)
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	spoof := read
+	spoof.PrincipalID = storage.M2RPPlayerPrincipal
+	response = performJSON(t, handler, "/api/v1/rp/observe", creatorToken, spoof)
+	assertAPIError(t, response, http.StatusForbidden, core.CodeUnauthorized)
+	response = performJSON(t, handler, "/api/v1/rp/sessions/read", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	stored := decodeData[storage.RPSession](t, response)
+	if stored.ObservationCursor != view.ObservationCursor {
+		t.Fatalf("observation cursor did not persist: %+v", stored)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, handler := openHTTPTestServer(t, ctx, path)
+	defer reopened.Close()
+	response = performJSON(t, handler, "/api/v1/rp/sessions/resume", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	resumed := decodeData[storage.RPSession](t, response)
+	if resumed.SessionID != session.SessionID || resumed.ObservationCursor != view.ObservationCursor {
+		t.Fatalf("HTTP resume lost state: %+v", resumed)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPObservation](t, response); got.PlaceID != view.PlaceID || len(got.PresentEntities) != 1 {
+		t.Fatalf("HTTP restart lost world presence: %+v", got)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/sessions/close", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPSession](t, response); got.Status != "closed" {
+		t.Fatalf("HTTP close did not invalidate session: %+v", got)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertAPIError(t, response, http.StatusConflict, core.CodeBranchConflict)
+}
 
 func TestHealthReadinessAndStrictRequestBoundary(t *testing.T) {
 	ctx := context.Background()
@@ -563,6 +634,7 @@ func openHTTPTestServer(t *testing.T, ctx context.Context, path string) (*storag
 	authenticator, err := NewStaticTokenAuthenticator(map[string]string{
 		buyerToken: "principal_buyer", creatorToken: "principal_creator", operatorToken: "principal_operator",
 		adaAgentToken: storage.M2AgentAdaPrincipal, boAgentToken: storage.M2AgentBoPrincipal,
+		rpPlayerToken: storage.M2RPPlayerPrincipal,
 	})
 	if err != nil {
 		store.Close()

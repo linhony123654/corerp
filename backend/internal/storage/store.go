@@ -34,7 +34,8 @@ const (
 	WageParticipationSchemaVersion  = "corerp-m2-wage-participation-016-2026-09-23"
 	WageAllocationSchemaVersion     = "corerp-m2-wage-allocation-017-2026-09-23"
 	WageClaimOwnershipSchemaVersion = "corerp-m2-wage-claim-ownership-018-2026-09-23"
-	SchemaVersion                   = "corerp-m2-bankruptcy-slot-claims-019-2026-09-23"
+	BankruptcySlotSchemaVersion     = "corerp-m2-bankruptcy-slot-claims-019-2026-09-23"
+	SchemaVersion                   = "corerp-rp1-sessions-020-2026-09-23"
 )
 
 const (
@@ -164,7 +165,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		{WageParticipationSchemaVersion, "016_m2_wage_participation.sql"},
 		{WageAllocationSchemaVersion, "017_m2_wage_allocation_policy.sql"},
 		{WageClaimOwnershipSchemaVersion, "018_m2_wage_claim_ownership.sql"},
-		{SchemaVersion, "019_m2_bankruptcy_slot_claims.sql"},
+		{BankruptcySlotSchemaVersion, "019_m2_bankruptcy_slot_claims.sql"},
+		{SchemaVersion, "020_rp_sessions.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

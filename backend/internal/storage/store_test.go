@@ -226,6 +226,17 @@ func TestEmbeddedMigrationsMatchContracts(t *testing.T) {
 	if !bytes.Equal(embedded, contract) {
 		t.Fatal("embedded migration diverges from docs/m2/schema-019-bankruptcy-slot-claims.sql")
 	}
+	embedded, err = migrationFiles.ReadFile("migrations/020_rp_sessions.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err = os.ReadFile(filepath.Join("..", "..", "..", "docs", "rp1", "schema-020-sessions.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(embedded, contract) {
+		t.Fatal("embedded migration diverges from docs/rp1/schema-020-sessions.sql")
+	}
 }
 
 func TestOpenMigratesExistingM0DatabaseToRecoverySchema(t *testing.T) {
@@ -259,7 +270,7 @@ func TestOpenMigratesExistingM0DatabaseToRecoverySchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	if currentVersion != 1 || payloadTable != 1 {
-		t.Fatalf("migrations through 008 not applied: version=%d table=%d", currentVersion, payloadTable)
+		t.Fatalf("migrations through the current schema not applied: version=%d table=%d", currentVersion, payloadTable)
 	}
 }
 

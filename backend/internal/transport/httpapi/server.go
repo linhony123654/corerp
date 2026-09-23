@@ -30,6 +30,11 @@ type Service interface {
 	ReadPrivateEconomy(context.Context, core.PrivateEconomicRead) (storage.PrivateEconomicView, error)
 	ReadAgentKnowledge(context.Context, core.AgentKnowledgeRead) (storage.AgentKnowledgeView, error)
 	ResolveEncounter(context.Context, core.EncounterRead) (storage.EncounterView, error)
+	OpenRPSession(context.Context, core.RPSessionOpenRequest) (storage.RPSession, error)
+	ReadRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
+	ResumeRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
+	CloseRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
+	ObserveRPSession(context.Context, core.RPSessionReadRequest) (storage.RPObservation, error)
 	ReadDemoStateAuthorized(context.Context, core.StateReadRequest) (storage.State, error)
 	ListVisibleEvents(context.Context, core.VisibleEventRequest) (storage.VisibleEventPage, error)
 }
@@ -119,6 +124,16 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleAgentKnowledge(response, request, requestID, principalID)
 	case "/api/v1/encounters/query":
 		s.handleEncounter(response, request, requestID, principalID)
+	case "/api/v1/rp/sessions/open":
+		s.handleRPSessionOpen(response, request, requestID, principalID)
+	case "/api/v1/rp/sessions/read":
+		s.handleRPSessionRead(response, request, requestID, principalID)
+	case "/api/v1/rp/sessions/resume":
+		s.handleRPSessionResume(response, request, requestID, principalID)
+	case "/api/v1/rp/sessions/close":
+		s.handleRPSessionClose(response, request, requestID, principalID)
+	case "/api/v1/rp/observe":
+		s.handleRPObserve(response, request, requestID, principalID)
 	case "/api/v1/state/query":
 		s.handleState(response, request, requestID, principalID)
 	case "/api/v1/events":
@@ -487,6 +502,95 @@ func (s *Server) handleEncounter(response http.ResponseWriter, request *http.Req
 		return
 	}
 	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPSessionOpen(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input core.RPSessionOpenRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.OpenRPSession(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPSessionRead(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	input, ok := s.decodeRPSessionRead(response, request, requestID, principalID)
+	if !ok {
+		return
+	}
+	result, err := s.service.ReadRPSession(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPSessionResume(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	input, ok := s.decodeRPSessionRead(response, request, requestID, principalID)
+	if !ok {
+		return
+	}
+	result, err := s.service.ResumeRPSession(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPSessionClose(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	input, ok := s.decodeRPSessionRead(response, request, requestID, principalID)
+	if !ok {
+		return
+	}
+	result, err := s.service.CloseRPSession(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPObserve(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	input, ok := s.decodeRPSessionRead(response, request, requestID, principalID)
+	if !ok {
+		return
+	}
+	result, err := s.service.ObserveRPSession(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) decodeRPSessionRead(response http.ResponseWriter, request *http.Request, requestID, principalID string) (core.RPSessionReadRequest, bool) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return core.RPSessionReadRequest{}, false
+	}
+	var input core.RPSessionReadRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return core.RPSessionReadRequest{}, false
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return core.RPSessionReadRequest{}, false
+	}
+	return input, true
 }
 
 func (s *Server) handleState(response http.ResponseWriter, request *http.Request, requestID, principalID string) {

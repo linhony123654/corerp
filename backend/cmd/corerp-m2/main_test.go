@@ -55,6 +55,26 @@ func TestM2CLIAgentLifeIsRepeatable(t *testing.T) {
 	}
 }
 
+func TestM2CLIRPPrepareIsRepeatable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "m2-rp-cli.db")
+	var output bytes.Buffer
+	if err := run(context.Background(), path, "rp-prepare", &output); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{`"event_sequence": 7`, `"player_id": "entity_m2_rp_lin"`, `"npc_count": 3`, `"place_count": 5`} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("RP setup CLI result lacks %s: %s", expected, output.String())
+		}
+	}
+	output.Reset()
+	if err := run(context.Background(), path, "rp-prepare", &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), `"replayed": true`) || !strings.Contains(output.String(), `"event_sequence": 7`) {
+		t.Fatalf("repeated RP setup changed world: %s", output.String())
+	}
+}
+
 func TestM2CLIEconomyDayOneIsExplicitAndRestartable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "m2-economy-cli.db")
 	var output bytes.Buffer
