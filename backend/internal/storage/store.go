@@ -39,7 +39,8 @@ const (
 	RPRouteSchemaVersion            = "corerp-rp1-routes-021-2026-09-23"
 	RPWaitSchemaVersion             = "corerp-rp1-wait-intents-022-2026-09-23"
 	RPSpeechSchemaVersion           = "corerp-rp1-utterances-023-2026-09-23"
-	SchemaVersion                   = "corerp-rp1-npc-decisions-024-2026-09-23"
+	RPNPCDecisionSchemaVersion      = "corerp-rp1-npc-decisions-024-2026-09-23"
+	SchemaVersion                   = "corerp-rp1-turn-runs-025-2026-09-23"
 )
 
 const (
@@ -79,6 +80,7 @@ type Store struct {
 	now              func() time.Time
 	beforeCommit     func() error
 	afterPublish     func(OutboxMessage) error
+	afterRPTurnStage func(string) error
 	reverseAgentSeed bool
 }
 
@@ -174,7 +176,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		{RPRouteSchemaVersion, "021_rp_routes.sql"},
 		{RPWaitSchemaVersion, "022_rp_wait_intents.sql"},
 		{RPSpeechSchemaVersion, "023_rp_utterances.sql"},
-		{SchemaVersion, "024_rp_npc_decisions.sql"},
+		{RPNPCDecisionSchemaVersion, "024_rp_npc_decisions.sql"},
+		{SchemaVersion, "025_rp_turn_runs.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

@@ -224,6 +224,53 @@ func TestRPSpeechHTTPCommitsSamePlaceHearingAndRejectsWrongPrincipal(t *testing.
 	}
 }
 
+func TestRPTurnHTTPRunsAndResumesDurablePlayerNPCNarrative(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "rp-turn-http.db")
+	store, handler := openHTTPTestServer(t, ctx, path)
+	if _, err := store.PrepareRPTravel(ctx); err != nil {
+		t.Fatal(err)
+	}
+	response := performJSON(t, handler, "/api/v1/rp/sessions/open", rpPlayerToken, core.RPSessionOpenRequest{
+		InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID,
+		EntityID: storage.M2RPPlayerID, POV: "second_person", IdempotencyKey: "http-turn-session",
+	})
+	assertStatus(t, response, http.StatusOK)
+	session := decodeData[storage.RPSession](t, response)
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, core.RPSessionReadRequest{SessionID: session.SessionID})
+	assertStatus(t, response, http.StatusOK)
+	initial := decodeData[storage.RPObservation](t, response)
+	request := core.RPSpeechRequest{SessionID: session.SessionID, Text: "你好，Cai。", ExpectedCursor: initial.ObservationCursor, IdempotencyKey: "http-turn-one"}
+	response = performJSON(t, handler, "/api/v1/rp/turns/run", creatorToken, request)
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	response = performJSON(t, handler, "/api/v1/rp/turns/run", rpPlayerToken, request)
+	assertStatus(t, response, http.StatusOK)
+	first := decodeData[storage.RPTurnResult](t, response)
+	if first.Status != "settled" || len(first.NPCEventIDs) != 1 || len(first.NarrativeLines) != 2 || first.SettledSequence <= initial.ObservationCursor {
+		t.Fatalf("HTTP turn did not settle real player/NPC facts: %+v", first)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/turns/run", rpPlayerToken, request)
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPTurnResult](t, response); !got.Replayed || got.PlayerEventID != first.PlayerEventID {
+		t.Fatalf("HTTP turn retry duplicated world: %+v", got)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, handler = openHTTPTestServer(t, ctx, path)
+	defer store.Close()
+	response = performJSON(t, handler, "/api/v1/rp/turns/resume", rpPlayerToken, storage.RPTurnResumeRequest{SessionID: session.SessionID, IdempotencyKey: "http-turn-one"})
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPTurnResult](t, response); !got.Replayed || got.PlayerEventID != first.PlayerEventID || got.SettledSequence != first.SettledSequence {
+		t.Fatalf("HTTP turn did not survive process handle restart: %+v", got)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, core.RPSessionReadRequest{SessionID: session.SessionID})
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPObservation](t, response); got.ObservationCursor != first.SettledSequence {
+		t.Fatalf("HTTP observation missed settled turn: %+v", got)
+	}
+}
+
 func TestHealthReadinessAndStrictRequestBoundary(t *testing.T) {
 	ctx := context.Background()
 	store, handler := openHTTPTestServer(t, ctx, filepath.Join(t.TempDir(), "boundary.db"))

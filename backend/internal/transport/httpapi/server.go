@@ -38,6 +38,8 @@ type Service interface {
 	MoveRP(context.Context, core.RPMoveRequest) (storage.RPMoveResult, error)
 	WaitRP(context.Context, core.RPWaitRequest) (storage.RPWaitResult, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
+	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
+	PlayResumeRPTurn(context.Context, storage.RPTurnResumeRequest) (storage.RPTurnResult, error)
 	ReadDemoStateAuthorized(context.Context, core.StateReadRequest) (storage.State, error)
 	ListVisibleEvents(context.Context, core.VisibleEventRequest) (storage.VisibleEventPage, error)
 }
@@ -143,6 +145,10 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPWait(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/speak":
 		s.handleRPSpeak(response, request, requestID, principalID)
+	case "/api/v1/rp/turns/run":
+		s.handleRPTurnRun(response, request, requestID, principalID)
+	case "/api/v1/rp/turns/resume":
+		s.handleRPTurnResume(response, request, requestID, principalID)
 	case "/api/v1/state/query":
 		s.handleState(response, request, requestID, principalID)
 	case "/api/v1/events":
@@ -642,6 +648,48 @@ func (s *Server) handleRPSpeak(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	result, err := s.service.SpeakRP(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPTurnRun(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input core.RPSpeechRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.PlayRPTurn(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPTurnResume(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input storage.RPTurnResumeRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.PlayResumeRPTurn(request.Context(), input)
 	if err != nil {
 		writeError(response, requestID, err)
 		return

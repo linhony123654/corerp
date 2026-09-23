@@ -187,10 +187,13 @@ func TestRPNPCDecision023UpgradePreservesTurnAndRetryMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_turn_runs`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_npc_decisions`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version = ?`, SchemaVersion); err != nil {
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version IN (?, ?)`, SchemaVersion, RPNPCDecisionSchemaVersion); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {

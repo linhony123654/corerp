@@ -1,6 +1,6 @@
 # CoreRP RP-1 实施记录
 
-RP-1 在现有 M2 世界/经济内核上增量实现 Play。RP-1A 提供会话、派生在场与玩家受限观察；RP-1B 增加玩家移动与等待；RP-1C 加入原子提交的玩家发言、实际听者认知与回合阶段；RP-1D 加入受限输入的 NPC 决策与事件提交。连续回合与前端仍未因此自动成立。
+RP-1 在现有 M2 世界/经济内核上增量实现 Play。RP-1A 提供会话、派生在场与玩家受限观察；RP-1B 增加玩家移动与等待；RP-1C 加入原子提交的玩家发言、实际听者认知与回合阶段；RP-1D 加入受限输入的 NPC 决策与事件提交；RP-1E 把这些能力编排成可恢复的对话回合。前端仍未因此自动成立。
 
 ## RP-1A 数据与权限边界
 
@@ -48,4 +48,10 @@ cd /home/ubuntu/corerp-console/backend
 
 Provider 只能提议 `respond`、`refuse`、`silence`、`wait` 或可达地点的 `leave`。`DecideRP` 验证提案并记录非权威审计；失败或超时返回可审计的沉默回退，不改世界。后端内部 `CommitRPDecision` 再检查输入哈希、Branch Head、玩家/NPC 位置、路线和回合，再以迁移 024 的不可变决策记录原子提交 NPC 回复/拒绝及听者 Knowledge、真实移动事实，或沉默/等待选择事件。相同玩家 Turn/NPC 的重试返回原 Event；不同效果冲突。Session 的阶段进入 `npc_effects_committed`，供后续 RP-1E 编排。当前仓库没有现成外部 LLM adapter，只有确定性和测试 Provider；真实 LLM E2E 在可用时仍需接入验证。
 
-阶段报告见 [RP-1A](phase-a.md)、[RP-1B](phase-b.md)、[RP-1C](phase-c.md) 和 [RP-1D](phase-d.md)。后续 RP-1E–F 尚待完成，不能把当前后端行为视作整个可玩 RP-1 闭环。
+## RP-1E 连续回合与恢复
+
+`POST /api/v1/rp/turns/run` 使用与 `speak` 相同的玩家发言 Body：`session_id`、`text`、可选 `speech_act`、最新 `expected_cursor`、`idempotency_key`。它调用当前本地确定性 Provider，完成玩家发言、实际听者的 NPC 子决策、真实回复/拒绝/行动、只读叙事视图和观察 cursor。`POST /api/v1/rp/turns/resume` 只需 `session_id` 与原 `idempotency_key`，从迁移 025 持久化的意图与阶段继续。响应包含稳定的 `player_turn_id`、Event ID、叙事行与最终序号。结算后相同请求返回原结果，不再调用 Provider。
+
+`rp_turn_runs` 保存工作流阶段及未接受输入的重试意图，不复制人物、地点、经济或世界时间权威。阶段为 `open → player_committed → npc_deciding → npc_effects_committed → narrative_ready → settled`；已接受发言与 NPC 世界效果仍分别由 Event/Knowledge/Movement 提交链拥有。每个 NPC 以其父 Turn 与 Entity 唯一，重启时已提交的效果直接跳过。叙事仅引用已提交的原话和动作，不写回世界，也不把人物的主张升格为真相。直接 `move`/`wait`/其他发言与关闭会话在未结算回合期间被拒绝；移动与调度器时间推进仍作为回合间的独立玩家动作使用。
+
+阶段报告见 [RP-1A](phase-a.md)、[RP-1B](phase-b.md)、[RP-1C](phase-c.md)、[RP-1D](phase-d.md) 和 [RP-1E](phase-e.md)。后续 RP-1F 前端仍待完成，不能把当前后端行为视作整个可玩 RP-1 闭环。

@@ -29,8 +29,12 @@
 - RP-1D mapped the available NPC profile, schedule, own materialized asset balance, co-location and Knowledge. No real LLM adapter, Relationship or independent Episodic Memory authority exists. Added replaceable provider input/output contract, deterministic policy, scoped NPC input builder and non-authoritative decision/failure audit.
 - Added migration 024/mirror and explicit `CommitRPDecision`: revalidate captured head/input/scene/route; commit NPC response/refusal with listener Knowledge, legal movement via existing Agent lineage, or silence/wait no-effect Event. Same Turn/NPC retry is idempotent; Session turn stage and participant Outbox update atomically. Focused tests pass for privacy, three-NPC sequential effects, refusal, leave/no-op, stale proposal, rollback/reopen/replay and 023→024 upgrade. Final full regression after last Outbox-topic correction is pending; `docs/rp1/phase-d.md` written.
 - RP-1D final uncached full Go suite passed after Outbox-topic correction (storage 51.134s; HTTP 4.323s); related race passed (storage 40.133s, HTTP 9.135s, CLI 4.852s); vet clean. M2 evidence still passes with 26 executable tests. Stage checkpoint is next.
+- RP-1D checkpoint commit `b183bf6` created after staged diff check. Advanced to RP-1E design without separate approval.
+- RP-1E added migration 025/mirror with one durable unsettled turn per session, idempotent player speech and NPC-child effect recovery, conservative competing-action guards, fact-only narrative view, observation cursor settlement, internal resume and authenticated run/resume HTTP routes. Focused tests pass for 20 turns across reopen with wait/move, six injected crash stages, no repeat provider for committed effects, false-claim/silence fallback, HTTP auth/reopen and 024→025 upgrade. Final full regression is running; `docs/rp1/phase-e.md` written.
 
 ## Verification ledger
+- RP-1E final uncached full Go suite PASS (storage 55.793s, HTTP 4.602s); vet PASS; related race PASS (storage 60.990s, HTTP 11.513s, CLI 4.777s); M2 evidence PASS, 26 tests. Recorded after interruption; no source changed since these completed checks.
+
 | Check | Result | Evidence |
 |---|---|---|
 | Project Git status | PASS | `main`, no commits; project-local `.git` exists |

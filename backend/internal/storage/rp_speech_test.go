@@ -175,13 +175,16 @@ func TestRPSpeechSchemaUpgradeFrom022PreservesSessionAndWorld(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, read, initial := newRPWaitTestSession(t, ctx, store)
+	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_turn_runs`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_npc_decisions`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_utterances`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version IN (?, ?)`, SchemaVersion, RPSpeechSchemaVersion); err != nil {
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version IN (?, ?, ?)`, SchemaVersion, RPNPCDecisionSchemaVersion, RPSpeechSchemaVersion); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {

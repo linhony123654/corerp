@@ -87,6 +87,14 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	if session.Status != "active" {
 		return RPSpeechResult{}, core.NewError(core.CodeBranchConflict, "RP session is closed")
 	}
+	var reservedKey string
+	err = tx.conn.QueryRowContext(ctx, `SELECT player_speech_key FROM rp_turn_runs WHERE session_id = ? AND status <> 'settled'`, session.SessionID).Scan(&reservedKey)
+	if err == nil && reservedKey != request.IdempotencyKey {
+		return RPSpeechResult{}, core.NewError(core.CodeCommandInProgress, "another RP turn owns this session")
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return RPSpeechResult{}, core.WrapError(core.CodeStorageFailure, "check reserved RP turn speech", err)
+	}
 	if err := validateRPBinding(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPSpeechResult{}, err
 	}

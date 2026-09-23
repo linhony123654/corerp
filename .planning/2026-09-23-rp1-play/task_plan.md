@@ -7,7 +7,7 @@ Implement and verify all six stages of `/tmp/f1edf80b-3702-4376-9e97-85d6670a910
 Full-project DEFINE → DESIGN → BUILD → POLISH → local SHIP. Crosses SQLite authority, HTTP, NPC decisions, turn recovery, and UI. No production publication.
 
 ## Current Phase
-RP-1E DESIGN — durable idempotent turn orchestration and narrative view. RP-1D passed and awaits checkpoint commit.
+RP-1F DESIGN — E final regression passed; checkpoint then player-facing UI and real process/browser recovery.
 
 ## Phases
 
@@ -43,14 +43,14 @@ RP-1E DESIGN — durable idempotent turn orchestration and narrative view. RP-1D
 - [x] Replaceable deterministic provider and legally filtered NPC input
 - [x] Validated and committed respond/refuse/silence/wait/leave effects; failure no-op
 - [x] Final full Go tests/vet/related race and report
-- [ ] Git checkpoint commit
-- **Status:** validated, checkpoint pending
+- [x] Git checkpoint commit `b183bf6`
+- **Status:** complete
 
 ### RP-1E — Orchestrator / Recovery
-- [ ] Durable idempotent turn state machine and narrative view
-- [ ] 20 deterministic turns and crash/restart/replay scenarios
-- [ ] Full Go tests/vet/related race, report and checkpoint
-- **Status:** pending
+- [x] Durable idempotent turn state machine and narrative view
+- [x] 20 deterministic turns and crash/restart/replay scenarios
+- [x] Final full Go tests/vet/related race and report; checkpoint is the commit containing phase-e.md
+- **Status:** complete
 
 ### RP-1F — Minimal CoreRP Play
 - [ ] Mobile-first player-only play UI and session resume
@@ -80,4 +80,4 @@ No Jev, SillyTavern, MCP, Studio, character-card authority, multiplayer, new mac
 - First RP-1A documentation patch failed atomically due to a wrong root README heading; corrected with a targeted patch after rereading the file.
 
 ## Gate state
-- DEFINE: PASS — six stages and DoD from goal are observable. RP-1A/B/C DESIGN/BUILD/POLISH PASS with checkpoints. RP-1D DESIGN/BUILD/POLISH PASS: final full Go, vet, related race, migration/replay/reopen and docs; checkpoint pending. RP-1E/F pending.
+- DEFINE: PASS — six stages and DoD from goal are observable. RP-1A/B/C/D DESIGN/BUILD/POLISH PASS with checkpoints. RP-1E DESIGN/BUILD and focused POLISH checks PASS; final full regression and checkpoint pending. RP-1F pending.

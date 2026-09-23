@@ -112,6 +112,13 @@ func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitReque
 	if pending != 0 {
 		return RPWaitResult{}, false, core.NewError(core.CodeCommandInProgress, "another RP wait is pending in this world")
 	}
+	var pendingTurns int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_turn_runs r JOIN rp_sessions s ON s.session_id = r.session_id WHERE s.instance_id = ? AND s.branch_id = ? AND r.status <> 'settled'`, session.InstanceID, session.BranchID).Scan(&pendingTurns); err != nil {
+		return RPWaitResult{}, false, core.WrapError(core.CodeStorageFailure, "check pending RP turn before wait", err)
+	}
+	if pendingTurns != 0 {
+		return RPWaitResult{}, false, core.NewError(core.CodeCommandInProgress, "RP turn must settle before waiting")
+	}
 	var head int64
 	var currentText string
 	if err := tx.conn.QueryRowContext(ctx, `SELECT b.head_sequence, c.current_world_time FROM branches b JOIN world_clocks c ON c.instance_id = b.instance_id AND c.branch_id = b.branch_id WHERE b.instance_id = ? AND b.branch_id = ?`, session.InstanceID, session.BranchID).Scan(&head, &currentText); err != nil {

@@ -81,6 +81,14 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 	if session.Status != "active" || session.TurnCursor != request.TurnID || (session.TurnState != "speech_committed" && session.TurnState != "npc_effects_committed") {
 		return RPNPCDecisionCommitResult{}, core.NewError(core.CodeBranchConflict, "NPC decision turn is no longer active")
 	}
+	var runStatus string
+	err = tx.conn.QueryRowContext(ctx, `SELECT status FROM rp_turn_runs WHERE session_id = ? AND player_turn_id = ?`, session.SessionID, request.TurnID).Scan(&runStatus)
+	if err == nil && runStatus != "npc_deciding" {
+		return RPNPCDecisionCommitResult{}, core.NewError(core.CodeBranchConflict, "orchestrated NPC decision stage is no longer open")
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return RPNPCDecisionCommitResult{}, core.WrapError(core.CodeStorageFailure, "check NPC decision turn stage", err)
+	}
 	var head, currentDay int64
 	var worldTime, npcPlace, playerPlace string
 	if err := tx.conn.QueryRowContext(ctx, `SELECT b.head_sequence, c.current_world_time, c.current_day FROM branches b JOIN world_clocks c ON c.instance_id = b.instance_id AND c.branch_id = b.branch_id WHERE b.instance_id = ? AND b.branch_id = ?`, session.InstanceID, session.BranchID).Scan(&head, &worldTime, &currentDay); err != nil {

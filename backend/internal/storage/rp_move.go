@@ -76,6 +76,13 @@ func (s *Store) MoveRP(ctx context.Context, request core.RPMoveRequest) (RPMoveR
 	if pendingWaits != 0 {
 		return RPMoveResult{}, core.NewError(core.CodeCommandInProgress, "RP wait must complete before another player action")
 	}
+	var pendingTurns int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_turn_runs r JOIN rp_sessions s ON s.session_id = r.session_id WHERE s.instance_id = ? AND s.branch_id = ? AND r.status <> 'settled'`, session.InstanceID, session.BranchID).Scan(&pendingTurns); err != nil {
+		return RPMoveResult{}, core.WrapError(core.CodeStorageFailure, "check pending RP turn before move", err)
+	}
+	if pendingTurns != 0 {
+		return RPMoveResult{}, core.NewError(core.CodeCommandInProgress, "RP turn must settle before another player action")
+	}
 	if err := validateRPBinding(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPMoveResult{}, err
 	}

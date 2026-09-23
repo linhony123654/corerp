@@ -175,6 +175,13 @@ func (s *Store) CloseRPSession(ctx context.Context, request core.RPSessionReadRe
 	if pendingWaits != 0 {
 		return RPSession{}, core.NewError(core.CodeCommandInProgress, "RP wait must complete before closing the session")
 	}
+	var pendingTurns int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_turn_runs WHERE session_id = ? AND status <> 'settled'`, session.SessionID).Scan(&pendingTurns); err != nil {
+		return RPSession{}, core.WrapError(core.CodeStorageFailure, "check pending RP turn before close", err)
+	}
+	if pendingTurns != 0 {
+		return RPSession{}, core.NewError(core.CodeCommandInProgress, "RP turn must settle before closing the session")
+	}
 	if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_sessions SET status = 'closed' WHERE session_id = ? AND status = 'active'`, session.SessionID); err != nil {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "close RP session", err)
 	}
