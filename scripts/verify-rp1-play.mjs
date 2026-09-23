@@ -13,6 +13,7 @@ import { createServer } from 'node:http'
 const fakeModel = process.argv.includes('--fake-model')
 const lifeScenario = process.argv.includes('--life')
 const emergentScenario = process.argv.includes('--emergent')
+const styleScenario = process.argv.includes('--style')
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp1-e2e-'))
 const database = join(temp, 'world.db')
@@ -203,6 +204,36 @@ try {
     assert.ok(Number(sql("SELECT COUNT(*) FROM agent_knowledge WHERE observer_agent_id='entity_browser_nora'")) >= 2)
     assert.ok(!JSON.stringify(await context.storageState()).includes(creatorCredential), 'creator credential never enters browser storage')
     console.log(JSON.stringify({ emergentScenario: 'PASS', checks: ['conserved Cohort materialization', 'minimal sourced background', 'RP interaction', 'schedule departure and re-encounter', 'restart stable identity and background'] }))
+  }
+  if (styleScenario) {
+    const call = async (path, body) => {
+      const response = await fetch(`http://127.0.0.1:8080/api/v1/rp/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const value = await response.json()
+      assert.equal(response.status, 200, JSON.stringify(value)); return value.data
+    }
+    const setting = { instance_id: 'inst_m2_t09', branch_id: 'br_main', scope: 'session', session_id: session, expected_revision: 0, idempotency_key: 'browser-style-first', patch: { pov: 'first_person', narrative_pack_ref: 'builtin/dialogue@1' } }
+    await call('style/set', setting)
+    await page.route('**/api/v1/rp/turns/run', async route => { await route.fetch(); await route.abort('failed') }, { times: 1 })
+    await page.getByLabel('你想说的话').fill('文风重启测试。')
+    await page.getByRole('button', { name: '说出' }).click()
+    await page.getByRole('button', { name: '继续未完成的行动', exact: true }).waitFor()
+    const pinnedCounts = sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)||':'||(SELECT COUNT(*) FROM rp_utterances)")
+    await call('style/set', { ...setting, expected_revision: 1, idempotency_key: 'browser-style-second', patch: { pov: 'second_person' } })
+    await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/readyz')
+    await page.reload(); await page.getByLabel('玩家访问凭证').fill(credential)
+    await page.getByRole('button', { name: '继续这段生活' }).click()
+    await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
+    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
+    assert.match(await page.locator('.reading').innerText(), /我说：[\s\S]*文风重启测试/)
+    assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)||':'||(SELECT COUNT(*) FROM rp_utterances)"), pinnedCounts)
+    const current = await speak('新回合使用新文风。')
+    assert.equal(current.narrative_style.pov, 'second_person')
+    const sameFactsBefore = sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)||':'||(SELECT COUNT(*) FROM rp_utterances)")
+    const variant = await call('narrative/render', { session_id: session, turn_run_id: current.turn_run_id, style_override: { pov: 'third_person', verbosity: 'detailed', description_density: 80 } })
+    assert.match(variant.view.lines[0], /Lin说/)
+    assert.equal(variant.view.event_ids[0], current.player_event_id)
+    assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)||':'||(SELECT COUNT(*) FROM rp_utterances)"), sameFactsBefore)
+    console.log(JSON.stringify({ styleScenario: 'PASS', checks: ['session style applies to actual Play turn', 'lost-response restart preserves pinned style despite changed settings', 'next turn uses new style', 'same-event read-only variant'] }))
   }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile overflow')
   await page.screenshot({ path: join(temp, 'play-mobile.png'), fullPage: true })

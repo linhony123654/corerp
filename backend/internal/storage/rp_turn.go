@@ -12,14 +12,16 @@ import (
 )
 
 type RPTurnResult struct {
-	TurnRunID       string   `json:"turn_run_id"`
-	PlayerTurnID    string   `json:"player_turn_id"`
-	PlayerEventID   string   `json:"player_event_id"`
-	NPCEventIDs     []string `json:"npc_event_ids"`
-	NarrativeLines  []string `json:"narrative_lines"`
-	SettledSequence int64    `json:"settled_sequence"`
-	Status          string   `json:"status"`
-	Replayed        bool     `json:"replayed"`
+	NarrativeStyle    core.RPStyleProfile `json:"narrative_style"`
+	NarrativeWarnings []string            `json:"narrative_warnings"`
+	TurnRunID         string              `json:"turn_run_id"`
+	PlayerTurnID      string              `json:"player_turn_id"`
+	PlayerEventID     string              `json:"player_event_id"`
+	NPCEventIDs       []string            `json:"npc_event_ids"`
+	NarrativeLines    []string            `json:"narrative_lines"`
+	SettledSequence   int64               `json:"settled_sequence"`
+	Status            string              `json:"status"`
+	Replayed          bool                `json:"replayed"`
 }
 
 type RPTurnResumeRequest struct {
@@ -105,6 +107,7 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 		return RPTurnResult{}, err
 	}
 	speechRequest := request
+	speechRequest.NarrativeStyle = nil
 	speechRequest.IdempotencyKey = run.SpeechKey
 	speech, err := s.SpeakRP(ctx, speechRequest)
 	if err != nil {
@@ -153,7 +156,11 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 		return RPTurnResult{}, err
 	}
 	if current.Status != "narrative_ready" && current.Status != "settled" {
-		lines, err := s.renderRPTurn(ctx, run.SessionID, speech.TurnID, speech.EventID)
+		style, err := s.loadRPTurnStyle(ctx, run.ID)
+		if err != nil {
+			return RPTurnResult{}, err
+		}
+		view, err := s.renderRPTurnStyled(ctx, run.SessionID, speech.TurnID, speech.EventID, style.Profile)
 		if err != nil {
 			return RPTurnResult{}, err
 		}
@@ -161,7 +168,7 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 		if err != nil {
 			return RPTurnResult{}, err
 		}
-		if err := s.markRPTurnNarrativeReady(ctx, run.ID, lines, observation.ObservationCursor); err != nil {
+		if err := s.markRPTurnNarrativeReady(ctx, run.ID, view.Lines, observation.ObservationCursor); err != nil {
 			return RPTurnResult{}, err
 		}
 	}
@@ -252,6 +259,9 @@ func (s *Store) ensureRPTurnRun(ctx context.Context, request core.RPSpeechReques
 	run = rpTurnRun{ID: "rpturn_" + suffix, SessionID: session.SessionID, SpeechKey: "turn_" + suffix, Status: "open", ListenerIDsJSON: "[]", NarrativeJSON: "[]"}
 	now := s.now().UTC().Format(time.RFC3339Nano)
 	if err := execAgentOne(ctx, tx.conn, "save RP turn intent", `INSERT INTO rp_turn_runs(turn_run_id, session_id, idempotency_key, player_speech_key, request_hash, request_json, status, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)`, run.ID, session.SessionID, request.IdempotencyKey, run.SpeechKey, requestHash, string(requestJSON), now, now); err != nil {
+		return rpTurnRun{}, false, err
+	}
+	if err := pinRPTurnStyle(ctx, tx.conn, run.ID, session, request.NarrativeStyle); err != nil {
 		return rpTurnRun{}, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -385,6 +395,19 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 	result := RPTurnResult{TurnRunID: run.ID, PlayerTurnID: run.PlayerTurnID, PlayerEventID: run.PlayerEventID, NPCEventIDs: make([]string, 0), SettledSequence: run.SettledSequence.Int64, Status: "settled", Replayed: replayed}
 	if err := json.Unmarshal([]byte(run.NarrativeJSON), &result.NarrativeLines); err != nil {
 		return RPTurnResult{}, core.WrapError(core.CodeProjectionDiverged, "decode RP narrative view", err)
+	}
+	style, err := s.loadRPTurnStyle(ctx, run.ID)
+	if err != nil {
+		return RPTurnResult{}, err
+	}
+	result.NarrativeStyle = style.Profile
+	result.NarrativeWarnings = []string{}
+	if style.Profile.ProseInstructions != "" || len(style.Profile.ForbiddenPatterns) > 0 {
+		view, err := s.renderRPTurnStyled(ctx, run.SessionID, run.PlayerTurnID, run.PlayerEventID, style.Profile)
+		if err != nil {
+			return RPTurnResult{}, err
+		}
+		result.NarrativeWarnings = view.Warnings
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.event_id FROM rp_npc_decisions d JOIN events e ON e.event_id = d.event_id WHERE d.session_id = ? AND d.parent_turn_id = ? ORDER BY e.event_sequence`, run.SessionID, run.PlayerTurnID)
 	if err != nil {

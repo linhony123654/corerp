@@ -47,6 +47,9 @@ type rpSpeechClaim struct {
 // attributed knowledge are committed with the Event and turn stage, not later
 // by transcript rendering, vector indexing or notification delivery.
 func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSpeechResult, error) {
+	if request.NarrativeStyle != nil {
+		return RPSpeechResult{}, core.NewError(core.CodeInvalidArgument, "narrative style belongs to turn rendering, not speech commands")
+	}
 	if err := request.Validate(); err != nil {
 		return RPSpeechResult{}, err
 	}

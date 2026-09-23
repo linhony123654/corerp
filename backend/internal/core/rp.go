@@ -94,15 +94,21 @@ func (r RPWaitRequest) Validate() error {
 }
 
 type RPSpeechRequest struct {
-	PrincipalID    string `json:"principal_id"`
-	SessionID      string `json:"session_id"`
-	Text           string `json:"text"`
-	SpeechAct      string `json:"speech_act,omitempty"`
-	ExpectedCursor int64  `json:"expected_cursor"`
-	IdempotencyKey string `json:"idempotency_key"`
+	NarrativeStyle *RPStylePatch `json:"narrative_style,omitempty"`
+	PrincipalID    string        `json:"principal_id"`
+	SessionID      string        `json:"session_id"`
+	Text           string        `json:"text"`
+	SpeechAct      string        `json:"speech_act,omitempty"`
+	ExpectedCursor int64         `json:"expected_cursor"`
+	IdempotencyKey string        `json:"idempotency_key"`
 }
 
 func (r RPSpeechRequest) Validate() error {
+	if r.NarrativeStyle != nil {
+		if _, err := ResolveRPStyle(*r.NarrativeStyle); err != nil {
+			return err
+		}
+	}
 	if strings.TrimSpace(r.PrincipalID) == "" || strings.TrimSpace(r.SessionID) == "" || strings.TrimSpace(r.IdempotencyKey) == "" {
 		return NewError(CodeInvalidArgument, "principal_id, session_id and idempotency_key are required")
 	}

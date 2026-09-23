@@ -38,6 +38,9 @@ type Service interface {
 	MoveRP(context.Context, core.RPMoveRequest) (storage.RPMoveResult, error)
 	SocialRP(context.Context, core.RPSocialRequest) (storage.RPSocialResult, error)
 	MaterializeRPBackground(context.Context, core.RPBackgroundRequest) (storage.RPBackgroundResult, error)
+	SetRPStyle(context.Context, storage.RPStyleSetRequest) (storage.RPStyleSetResult, error)
+	ReadRPStyle(context.Context, core.RPSessionReadRequest) (storage.RPResolvedStyle, error)
+	ReadRPNarrative(context.Context, storage.RPNarrativeReadRequest) (storage.RPNarrativeReadResult, error)
 	WaitRP(context.Context, core.RPWaitRequest) (storage.RPWaitResult, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
@@ -147,6 +150,12 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPSocial(response, request, requestID, principalID)
 	case "/api/v1/rp/background/materialize":
 		s.handleRPBackground(response, request, requestID, principalID)
+	case "/api/v1/rp/style/set":
+		s.handleRPStyleSet(response, request, requestID, principalID)
+	case "/api/v1/rp/style/read":
+		s.handleRPStyleRead(response, request, requestID, principalID)
+	case "/api/v1/rp/narrative/render":
+		s.handleRPNarrativeRead(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/wait":
 		s.handleRPWait(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/speak":

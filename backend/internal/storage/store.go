@@ -40,7 +40,9 @@ const (
 	RPWaitSchemaVersion             = "corerp-rp1-wait-intents-022-2026-09-23"
 	RPSpeechSchemaVersion           = "corerp-rp1-utterances-023-2026-09-23"
 	RPNPCDecisionSchemaVersion      = "corerp-rp1-npc-decisions-024-2026-09-23"
-	SchemaVersion                   = "corerp-rp1-turn-runs-025-2026-09-23"
+	RPTurnSchemaVersion             = "corerp-rp1-turn-runs-025-2026-09-23"
+	RPStyleSchemaVersion            = "corerp-rp2-styles-026-2026-09-23"
+	SchemaVersion                   = RPStyleSchemaVersion
 )
 
 const (
@@ -177,7 +179,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		{RPWaitSchemaVersion, "022_rp_wait_intents.sql"},
 		{RPSpeechSchemaVersion, "023_rp_utterances.sql"},
 		{RPNPCDecisionSchemaVersion, "024_rp_npc_decisions.sql"},
-		{SchemaVersion, "025_rp_turn_runs.sql"},
+		{RPTurnSchemaVersion, "025_rp_turn_runs.sql"},
+		{SchemaVersion, "026_rp_styles.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

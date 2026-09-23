@@ -292,6 +292,17 @@ func TestEmbeddedMigrationsMatchContracts(t *testing.T) {
 	if !bytes.Equal(embedded, contract) {
 		t.Fatal("embedded migration diverges from docs/rp1/schema-025-turn-runs.sql")
 	}
+	embedded, err = migrationFiles.ReadFile("migrations/026_rp_styles.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err = os.ReadFile(filepath.Join("..", "..", "..", "docs", "rp2", "schema-026-styles.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(embedded, contract) {
+		t.Fatal("embedded migration diverges from docs/rp2/schema-026-styles.sql")
+	}
 }
 
 func TestOpenMigratesExistingM0DatabaseToRecoverySchema(t *testing.T) {
