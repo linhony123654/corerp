@@ -1,5 +1,11 @@
 # RP-1 findings
 
+## RP-1F final integration
+- Default frontend was still a fixture. Added a dedicated player-only Play entry; `/demo` preserves the historical fixture. Current legal destinations and recent committed dialogue/move/wait history are scoped server views, not client world state.
+- UI follows a warm paper/journal direction with serif dialogue and a quiet current-place heading. Actual mobile review found composer overlap of the latest reply; scrolling to document end fixed it. Reduced texture and formatted wait dates; accepted quoted speech is unchanged.
+- Real browser/HTTP process restart with a deliberately lost committed response passed: persisted request key recovered exactly once, same session/history, unchanged Event/hearing/utterance counts. Wait crosses actual work/lunch tasks; all three NPCs become present at cafe.
+- Real LLM, independent relationship/episodic-memory systems and production release remain unavailable/out of scope, explicitly deferred. No schema migration in F.
+
 ## Scope
 Source goal: `/tmp/f1edf80b-3702-4376-9e97-85d6670a9109.md`. Contracts C1–C6 and acceptance RP-1A–F are authoritative for this task; current source and tests decide what is Existing versus Proposed.
 

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -41,6 +42,18 @@ type RPObservation struct {
 	PlaceKind         string            `json:"place_kind"`
 	PresentEntities   []RPVisibleEntity `json:"present_entities"`
 	ObservationCursor int64             `json:"observation_cursor"`
+	ReachablePlaces   []RPVisiblePlace  `json:"reachable_places"`
+	RecentTurns       []RPHistoryTurn   `json:"recent_turns"`
+}
+
+type RPVisiblePlace struct {
+	PlaceID     string `json:"place_id"`
+	DisplayName string `json:"display_name"`
+}
+
+type RPHistoryTurn struct {
+	TurnRunID      string   `json:"turn_run_id"`
+	NarrativeLines []string `json:"narrative_lines"`
 }
 
 func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenRequest) (RPSession, error) {
@@ -258,6 +271,63 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	if err := rows.Close(); err != nil {
 		return RPObservation{}, core.WrapError(core.CodeStorageFailure, "close RP presence cursor", err)
 	}
+	view.ReachablePlaces = make([]RPVisiblePlace, 0)
+	rows, err = tx.conn.QueryContext(ctx, `SELECT p.place_id, p.display_name FROM rp_place_links l
+		JOIN agent_places p ON p.place_id = l.to_place_id
+		WHERE l.instance_id = ? AND l.branch_id = ? AND l.from_place_id = ?
+		AND p.instance_id = l.instance_id AND p.branch_id = l.branch_id AND p.status = 'active'
+		ORDER BY p.place_id`, session.InstanceID, session.BranchID, view.PlaceID)
+	if err != nil {
+		return RPObservation{}, err
+	}
+	for rows.Next() {
+		var place RPVisiblePlace
+		if err := rows.Scan(&place.PlaceID, &place.DisplayName); err != nil {
+			rows.Close()
+			return RPObservation{}, err
+		}
+		view.ReachablePlaces = append(view.ReachablePlaces, place)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return RPObservation{}, err
+	}
+	rows.Close()
+	// Only this authenticated session's settled view, never raw events or NPC private state.
+	view.RecentTurns = make([]RPHistoryTurn, 0)
+	rows, err = tx.conn.QueryContext(ctx, `SELECT turn_run_id, narrative_json FROM
+		(SELECT turn_run_id, narrative_json, settled_sequence FROM rp_turn_runs
+		 WHERE session_id = ? AND status = 'settled'
+		 UNION ALL
+		 SELECT e.event_id, json_array(CASE e.event_type
+		 WHEN 'RPPlayerMoved' THEN '你前往了 ' || p.display_name || '。'
+		 ELSE '你等待至 ' || json_extract(e.payload, '$.target_world_time') || '。' END), e.event_sequence
+		 FROM events e LEFT JOIN agent_places p ON p.place_id = json_extract(e.payload, '$.to_place_id')
+		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ?
+		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted') AND json_extract(e.payload, '$.session_id') = ?
+		 ORDER BY settled_sequence DESC LIMIT 50)
+		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID, session.SessionID)
+	if err != nil {
+		return RPObservation{}, err
+	}
+	for rows.Next() {
+		var turn RPHistoryTurn
+		var raw string
+		if err := rows.Scan(&turn.TurnRunID, &raw); err != nil {
+			rows.Close()
+			return RPObservation{}, err
+		}
+		if err := json.Unmarshal([]byte(raw), &turn.NarrativeLines); err != nil {
+			rows.Close()
+			return RPObservation{}, err
+		}
+		view.RecentTurns = append(view.RecentTurns, turn)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return RPObservation{}, err
+	}
+	rows.Close()
 	if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_sessions SET observation_cursor = ? WHERE session_id = ?`, view.ObservationCursor, session.SessionID); err != nil {
 		return RPObservation{}, core.WrapError(core.CodeStorageFailure, "advance RP observation cursor", err)
 	}

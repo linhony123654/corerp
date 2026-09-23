@@ -7,7 +7,7 @@ Implement and verify all six stages of `/tmp/f1edf80b-3702-4376-9e97-85d6670a910
 Full-project DEFINE → DESIGN → BUILD → POLISH → local SHIP. Crosses SQLite authority, HTTP, NPC decisions, turn recovery, and UI. No production publication.
 
 ## Current Phase
-RP-1F DESIGN — E final regression passed; checkpoint then player-facing UI and real process/browser recovery.
+COMPLETE — RP-1A–F implemented and verified locally. Final report: docs/rp1/result.md. Stop at RP-1; no deployment or RP-2 work.
 
 ## Phases
 
@@ -53,10 +53,10 @@ RP-1F DESIGN — E final regression passed; checkpoint then player-facing UI and
 - **Status:** complete
 
 ### RP-1F — Minimal CoreRP Play
-- [ ] Mobile-first player-only play UI and session resume
-- [ ] Real backend E2E with speech, NPC, move, wait and process restart
-- [ ] Frontend configured checks; final DoD audit, report and checkpoint
-- **Status:** pending
+- [x] Mobile-first player-only play UI and session resume
+- [x] Real backend E2E with speech, NPC, move, wait and process restart
+- [x] Frontend configured checks; final DoD audit, report and checkpoint (commit containing docs/rp1/result.md)
+- **Status:** complete
 
 ## Non-goals
 No Jev, SillyTavern, MCP, Studio, character-card authority, multiplayer, new macroeconomy, or production deployment.
@@ -80,4 +80,4 @@ No Jev, SillyTavern, MCP, Studio, character-card authority, multiplayer, new mac
 - First RP-1A documentation patch failed atomically due to a wrong root README heading; corrected with a targeted patch after rereading the file.
 
 ## Gate state
-- DEFINE: PASS — six stages and DoD from goal are observable. RP-1A/B/C/D DESIGN/BUILD/POLISH PASS with checkpoints. RP-1E DESIGN/BUILD and focused POLISH checks PASS; final full regression and checkpoint pending. RP-1F pending.
+- DEFINE: PASS — six stages and DoD from goal are observable. RP-1A–E DESIGN/BUILD/POLISH PASS with checkpoints (E `98de398`). F DESIGN/BUILD/POLISH/local SHIP PASS: scoped real UI, backend history/routes, full Go/vet/race, final typecheck/build, actual browser/service recovery, inspected responsive screenshots and final DoD report. Production release N/A (not requested); real external LLM REQUIRED_IF_AVAILABLE (unavailable, deterministic path verified).

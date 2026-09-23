@@ -1,13 +1,10 @@
-# CoreRP · 叙事流 + 世界观测台（M0 契约可视化演示）
+# CoreRP · Play 与世界内核
 
-两个并列工作空间：**Story（玩家）** 与 **Inspector（观测）**。
+默认入口是连接真实 Go/SQLite 世界的 **CoreRP Play**。原有 Story / Inspector 契约演示保留在 `/demo`。
 技术栈遵循《CoreRP v0.3.1 · M0 工程审计版》§24.1：**Vue 3 + TypeScript + Vite**，
 不引入 UI 组件库，零运行时 CDN 依赖。
 
-> ⚠️ 本页为 M0 契约可视化 + 叙事交互演示。全部数据结构、审计链路、叙事文本与
-> 行动反馈都是**构造示例**，没有连接后端或 LLM。仓库现有的 Go/SQLite 后端已包含
-> M1 严格世界与一个有边界的双 Agent 日程/知识/遭遇纵切，但前端仍未与它接线，
-> 也不代表完整产品已经实现。
+> Play 已接入持久会话、同场发言/NPC 回应、移动、等待和重启恢复。人物使用确定性 Provider，未接入外部 LLM。`/demo` 仍全部是构造示例，不应作为真实世界状态。启动方式见 [Play 本地指南](docs/rp1/play.md)。
 
 ## M0 契约 RFC
 
@@ -23,17 +20,17 @@ npm run verify:m0
 
 [`backend/`](backend/README.md) 现在包含独立的 Go/SQLite 严格世界内核：权威 genesis、稳定调度器、90 日工资/房租/预算消费/付费补货、采购事务、快照重放与投影修复、Outbox 恢复、受控发行及最小私密读取授权。Event、分录、库存流转、投影、Branch Head 与 Outbox 均在各自写事务内同成同败；另有独立 HTTP 进程提供认证命令、查询以及按权限过滤且可断线续传的 SSE。
 
-它仍不提供生产身份/TLS、LLM/Agent、规则热激活、跨币种金融或前端接线；当前静态 Bearer Token 仅供本地开发。完整范围、API 契约和可复现命令见 [backend/README.md](backend/README.md)。
+它仍不提供生产身份/TLS、外部 LLM、规则热激活或跨币种金融；当前静态 Bearer Token 仅供本地开发。完整范围、API 契约和可复现命令见 [backend/README.md](backend/README.md)。
 
 ## M2 后端纵切
 
 [`docs/m2/`](docs/m2/README.md) 已实现 Cohort 守恒、双 Agent 状态化遭遇、可显式启动的 30 日空间日程，以及独立启用的 30 日工资/房租因果结算（含真实欠薪、欠租）。它不调用 LLM，也不代表完整 M2；自主决策、生产常驻调度、Belief/语义记忆、消费/库存/补货、完整 LOD 经济、主观地位和 100 人/10 店规模门仍未完成。前端 fixture 尚未接入这些接口。
 
-## RP-1 实施中
+## RP-1 最小可玩闭环
 
-[RP-1A–E 会话、行动、发言、NPC 与连续回合](docs/rp1/README.md)已在同一 M2 世界上提供真实玩家 Entity 绑定、受限在场观察、HTTP 恢复入口、可达性验证的移动、调度器支持的等待、原子发言与听者认知、受限 NPC 决策，以及可跨重启恢复的 20 回合确定性对话。本地切片经 T09 准备 1 名玩家、3 名 NPC、5 个地点。现有 Story 前端仍是 fixture；可玩 Play 前端尚未完成，不能把后端闭环视作整个 RP-1 完成。
+[RP-1A–F](docs/rp1/README.md)在同一 M2 世界上提供真实玩家绑定、受限观察、移动、调度器等待、原子发言/听者认知、NPC 决策和连续回合，以及移动端 Play。本地切片经 T09 准备 1 名玩家、3 名 NPC、5 个地点。20 回合后端测试和真实浏览器/服务重启测试均已通过；未部署生产环境。`npm run verify:rp1-play` 可复现完整浏览器恢复场景。
 
-## 两个工作空间
+## 历史 `/demo` 的两个工作空间
 
 | | Story 叙事流 | Inspector 观测台 |
 |---|---|---|

@@ -33,6 +33,12 @@
 - RP-1E added migration 025/mirror with one durable unsettled turn per session, idempotent player speech and NPC-child effect recovery, conservative competing-action guards, fact-only narrative view, observation cursor settlement, internal resume and authenticated run/resume HTTP routes. Focused tests pass for 20 turns across reopen with wait/move, six injected crash stages, no repeat provider for committed effects, false-claim/silence fallback, HTTP auth/reopen and 024→025 upgrade. Final full regression is running; `docs/rp1/phase-e.md` written.
 
 ## Verification ledger
+- Final F typecheck/build and real-process Play E2E rerun after last formatter change PASS; artifacts `/tmp/corerp-rp1-e2e-Cc7v3E`, recovery counts unchanged `32:30:8`. All RP-1 DoD sections audited in `docs/rp1/result.md`. No remaining required work; checkpoint then STOP.
+- RP-1E checkpoint `98de398` created; continued to F on user resume.
+- RP-1F real Play, scoped route/history observation, server-backed transcript and durable client retry implemented. Focused Play/turn tests PASS. Full Go PASS (storage 56.532s, HTTP 4.924s), vet PASS, related race PASS (storage 63.040s, HTTP 11.685s, CLI 4.876s).
+- Real Playwright E2E PASS after correcting a test query to read `claim_type` from JSON. Actual server/browser restart after losing a committed response preserves 32 Events / 30 hearing records / 8 utterances; continued turn succeeds. Final artifacts include `/tmp/corerp-rp1-e2e-WZFoxm`. Mobile/desktop screenshots inspected; composer overlap corrected and asserted; no credential persistence, browser exceptions or mobile overflow.
+- Frontend build/typecheck PASS; M0 52 checks, M1 evidence, M2 26 executable tests PASS. Existing package has no separate lint/unit test. Full report `docs/rp1/result.md`; local operation `docs/rp1/play.md`.
+- A combined documentation patch failed due to an incorrect findings anchor; apply_patch was atomic and the corrected patch succeeded. No source or verification change resulted.
 - RP-1E final uncached full Go suite PASS (storage 55.793s, HTTP 4.602s); vet PASS; related race PASS (storage 60.990s, HTTP 11.513s, CLI 4.777s); M2 evidence PASS, 26 tests. Recorded after interruption; no source changed since these completed checks.
 
 | Check | Result | Evidence |

@@ -1,6 +1,6 @@
 # CoreRP RP-1 实施记录
 
-RP-1 在现有 M2 世界/经济内核上增量实现 Play。RP-1A 提供会话、派生在场与玩家受限观察；RP-1B 增加玩家移动与等待；RP-1C 加入原子提交的玩家发言、实际听者认知与回合阶段；RP-1D 加入受限输入的 NPC 决策与事件提交；RP-1E 把这些能力编排成可恢复的对话回合。前端仍未因此自动成立。
+RP-1 在现有 M2 世界/经济内核上增量实现 Play。RP-1A 提供会话、派生在场与玩家受限观察；RP-1B 增加玩家移动与等待；RP-1C 加入原子提交的玩家发言、实际听者认知与回合阶段；RP-1D 加入受限输入的 NPC 决策与事件提交；RP-1E 编排可恢复的对话回合；RP-1F 提供真实接线的移动端 Play。参见 [本地启动与恢复](play.md)。
 
 ## RP-1A 数据与权限边界
 
@@ -54,4 +54,6 @@ Provider 只能提议 `respond`、`refuse`、`silence`、`wait` 或可达地点�
 
 `rp_turn_runs` 保存工作流阶段及未接受输入的重试意图，不复制人物、地点、经济或世界时间权威。阶段为 `open → player_committed → npc_deciding → npc_effects_committed → narrative_ready → settled`；已接受发言与 NPC 世界效果仍分别由 Event/Knowledge/Movement 提交链拥有。每个 NPC 以其父 Turn 与 Entity 唯一，重启时已提交的效果直接跳过。叙事仅引用已提交的原话和动作，不写回世界，也不把人物的主张升格为真相。直接 `move`/`wait`/其他发言与关闭会话在未结算回合期间被拒绝；移动与调度器时间推进仍作为回合间的独立玩家动作使用。
 
-阶段报告见 [RP-1A](phase-a.md)、[RP-1B](phase-b.md)、[RP-1C](phase-c.md)、[RP-1D](phase-d.md) 和 [RP-1E](phase-e.md)。后续 RP-1F 前端仍待完成，不能把当前后端行为视作整个可玩 RP-1 闭环。
+阶段报告见 [RP-1A](phase-a.md)、[RP-1B](phase-b.md)、[RP-1C](phase-c.md)、[RP-1D](phase-d.md)、[RP-1E](phase-e.md) 和 [RP-1F](phase-f.md)。
+
+RP-1F 扩展受限 Observation：`reachable_places` 仅包含当前地点的合法目的地 ID/公开名称；`recent_turns` 是当前认证会话最近 50 段已提交对话、移动和等待的只读叙事视图。历史来自持久化结果/Event，不读取其他会话、不返回 NPC 私密状态，不改变世界。无需新增迁移。
