@@ -1,0 +1,55 @@
+{
+  "schema_version": "m0-draft-2026-09-22",
+  "world_definition": {
+    "id": "world.metro.minimal",
+    "version": "0.1.0",
+    "world_time_origin": "2026-03-01T06:00:00+08:00",
+    "default_currency_id": "currency.metro_credit",
+    "region_id": "region.metro.block.7"
+  },
+  "currencies": [
+    { "currency_id": "currency.metro_credit", "scale": 2, "symbol": "¤" }
+  ],
+  "entities": [
+    { "entity_id": "org.studio", "archetype": "organization", "display_name": "七号街设计事务所" },
+    { "entity_id": "person.worker.1", "archetype": "person", "display_name": "陈岚" },
+    { "entity_id": "person.worker.2", "archetype": "person", "display_name": "孟周" },
+    { "entity_id": "person.worker.3", "archetype": "person", "display_name": "苏禾" },
+    { "entity_id": "person.landlord", "archetype": "person", "display_name": "吴敏" },
+    { "entity_id": "org.store", "archetype": "store", "display_name": "七码便利店" }
+  ],
+  "accounts": [
+    { "account_id": "account.studio.cash", "owner_id": "org.studio", "currency_id": "currency.metro_credit", "opening_balance_minor": 1200000, "overdraft_limit_minor": 0 },
+    { "account_id": "account.worker.1.cash", "owner_id": "person.worker.1", "currency_id": "currency.metro_credit", "opening_balance_minor": 320000, "overdraft_limit_minor": 0 },
+    { "account_id": "account.worker.2.cash", "owner_id": "person.worker.2", "currency_id": "currency.metro_credit", "opening_balance_minor": 270000, "overdraft_limit_minor": 0 },
+    { "account_id": "account.worker.3.cash", "owner_id": "person.worker.3", "currency_id": "currency.metro_credit", "opening_balance_minor": 250000, "overdraft_limit_minor": 0 },
+    { "account_id": "account.landlord.cash", "owner_id": "person.landlord", "currency_id": "currency.metro_credit", "opening_balance_minor": 1600000, "overdraft_limit_minor": 0 },
+    { "account_id": "account.store.cash", "owner_id": "org.store", "currency_id": "currency.metro_credit", "opening_balance_minor": 900000, "overdraft_limit_minor": 0 }
+  ],
+  "skus": [
+    { "sku_id": "sku.lunch", "base_unit": "piece", "quantity_scale": 0 },
+    { "sku_id": "sku.coffee", "base_unit": "cup", "quantity_scale": 0 }
+  ],
+  "inventory": [
+    { "location_id": "stock.store.lunch", "owner_id": "org.store", "sku_id": "sku.lunch", "opening_quantity_minor": 40 },
+    { "location_id": "stock.store.coffee", "owner_id": "org.store", "sku_id": "sku.coffee", "opening_quantity_minor": 120 }
+  ],
+  "employment_contracts": [
+    { "contract_id": "contract.worker.1", "employer_id": "org.studio", "employee_id": "person.worker.1", "gross_wage_minor": 180000, "currency_id": "currency.metro_credit", "pay_period": "P1M" },
+    { "contract_id": "contract.worker.2", "employer_id": "org.studio", "employee_id": "person.worker.2", "gross_wage_minor": 170000, "currency_id": "currency.metro_credit", "pay_period": "P1M" },
+    { "contract_id": "contract.worker.3", "employer_id": "org.studio", "employee_id": "person.worker.3", "gross_wage_minor": 160000, "currency_id": "currency.metro_credit", "pay_period": "P1M" }
+  ],
+  "rent_contracts": [
+    { "contract_id": "rent.worker.1", "landlord_id": "person.landlord", "tenant_id": "person.worker.1", "rent_minor": 70000, "currency_id": "currency.metro_credit", "pay_period": "P1M" }
+  ],
+  "scheduler_seed": [
+    { "scheduler_item_id": "schedule.wage.worker.1", "phase_id": "obligation.due", "declared_priority": 100 },
+    { "scheduler_item_id": "schedule.rent.worker.1", "phase_id": "obligation.due", "declared_priority": 200 }
+  ],
+  "extensions": {
+    "world.metro.minimal": {
+      "transit_station_id": "place.metro.station.7",
+      "commute_route_id": "route.worker.1"
+    }
+  }
+}

@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corerp.local/schemas/m0/core-contract.schema.json",
+  "title": "CoreRP M0 Core Contract",
+  "description": "Review-draft exchange schema. It does not imply a runtime implementation.",
+  "oneOf": [
+    { "$ref": "#/$defs/command" },
+    { "$ref": "#/$defs/eventBatch" },
+    { "$ref": "#/$defs/packageManifest" }
+  ],
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "rfc3339": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_id", "principal_type"],
+      "properties": {
+        "principal_id": { "$ref": "#/$defs/opaqueId" },
+        "principal_type": {
+          "enum": ["player", "creator", "operator", "service", "agent"]
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance_id", "branch_id"],
+      "properties": {
+        "instance_id": { "$ref": "#/$defs/opaqueId" },
+        "branch_id": { "$ref": "#/$defs/opaqueId" },
+        "subject_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/opaqueId" },
+          "uniqueItems": true
+        },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability_id", "scope"],
+      "properties": {
+        "capability_id": { "$ref": "#/$defs/opaqueId" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "policy_version": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "command_id",
+        "command_type",
+        "instance_id",
+        "branch_id",
+        "actor_id",
+        "principal",
+        "capability",
+        "expected_head",
+        "idempotency_key",
+        "payload"
+      ],
+      "properties": {
+        "schema_version": { "const": "m0-draft-2026-09-22" },
+        "command_id": { "$ref": "#/$defs/opaqueId" },
+        "command_type": { "$ref": "#/$defs/opaqueId" },
+        "instance_id": { "$ref": "#/$defs/opaqueId" },
+        "branch_id": { "$ref": "#/$defs/opaqueId" },
+        "actor_id": { "$ref": "#/$defs/opaqueId" },
+        "principal": { "$ref": "#/$defs/principal" },
+        "capability": { "$ref": "#/$defs/capability" },
+        "expected_head": { "type": "integer", "minimum": 0 },
+        "idempotency_key": { "$ref": "#/$defs/opaqueId" },
+        "payload": { "type": "object" },
+        "submitted_at": { "$ref": "#/$defs/rfc3339" }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "event_sequence",
+        "batch_index",
+        "event_type",
+        "actor_id",
+        "world_time",
+        "payload"
+      ],
+      "properties": {
+        "event_id": { "$ref": "#/$defs/opaqueId" },
+        "event_sequence": { "type": "integer", "minimum": 1 },
+        "batch_index": { "type": "integer", "minimum": 0 },
+        "event_type": { "$ref": "#/$defs/opaqueId" },
+        "actor_id": { "$ref": "#/$defs/opaqueId" },
+        "world_time": { "$ref": "#/$defs/rfc3339" },
+        "causation_event_id": {
+          "oneOf": [
+            { "$ref": "#/$defs/opaqueId" },
+            { "type": "null" }
+          ]
+        },
+        "payload": { "type": "object" }
+      }
+    },
+    "eventBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "batch_id",
+        "command_id",
+        "attempt_id",
+        "instance_id",
+        "branch_id",
+        "epoch_id",
+        "ruleset_hash",
+        "expected_head",
+        "first_sequence",
+        "last_sequence",
+        "world_time",
+        "events"
+      ],
+      "properties": {
+        "schema_version": { "const": "m0-draft-2026-09-22" },
+        "batch_id": { "$ref": "#/$defs/opaqueId" },
+        "command_id": { "$ref": "#/$defs/opaqueId" },
+        "attempt_id": { "$ref": "#/$defs/opaqueId" },
+        "instance_id": { "$ref": "#/$defs/opaqueId" },
+        "branch_id": { "$ref": "#/$defs/opaqueId" },
+        "epoch_id": { "$ref": "#/$defs/opaqueId" },
+        "ruleset_hash": { "$ref": "#/$defs/hash" },
+        "expected_head": { "type": "integer", "minimum": 0 },
+        "first_sequence": { "type": "integer", "minimum": 1 },
+        "last_sequence": { "type": "integer", "minimum": 1 },
+        "world_time": { "$ref": "#/$defs/rfc3339" },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/event" }
+        },
+        "nondeterminism_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "result_hash"],
+            "properties": {
+              "kind": { "enum": ["random", "model", "external_input"] },
+              "result_hash": { "$ref": "#/$defs/hash" }
+            },
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/opaqueId" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "packageManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "id",
+        "kind",
+        "version",
+        "engine_api",
+        "requires",
+        "optional",
+        "capabilities",
+        "schema_hash",
+        "content_hash",
+        "content_files"
+      ],
+      "properties": {
+        "schema_version": { "const": "m0-draft-2026-09-22" },
+        "id": { "$ref": "#/$defs/opaqueId" },
+        "kind": { "enum": ["world", "system", "content", "narrative", "adapter"] },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+        "engine_api": { "type": "string", "minLength": 1 },
+        "requires": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "optional": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/opaqueId" },
+          "uniqueItems": true
+        },
+        "schema_hash": { "$ref": "#/$defs/hash" },
+        "content_hash": { "$ref": "#/$defs/hash" },
+        "content_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.).+$" },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

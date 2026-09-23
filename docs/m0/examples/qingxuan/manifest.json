@@ -1,0 +1,17 @@
+{
+  "schema_version": "m0-draft-2026-09-22",
+  "id": "world.qingxuan.minimal",
+  "kind": "world",
+  "version": "0.1.0",
+  "engine_api": "m0-draft-2026-09-22",
+  "requires": [
+    { "id": "system.economy.minimal", "version": "0.1.0" }
+  ],
+  "optional": [
+    { "id": "system.cultivation.minimal", "version": "0.1.0" }
+  ],
+  "capabilities": ["world.define", "world.genesis"],
+  "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+  "content_hash": "sha256:bf5b7540d637420bf44ec096b2b1cace78f14503fa1db919768b03dbeec6264f",
+  "content_files": ["world.json"]
+}

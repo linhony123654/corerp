@@ -1,0 +1,82 @@
+{
+  "schema_version": "m1-evidence-2026-09-22",
+  "source_contract": "../m0/test-vectors.json",
+  "status": "m1_release_candidate",
+  "vectors": [
+    {
+      "id": "T01",
+      "status": "passed",
+      "tests": [
+        "TestRepeatedWageAccrualDoesNotDuplicateObligationOrExpense",
+        "TestStrictWorldNinetyDaySettlement"
+      ],
+      "evidence": "One obligation and one accrual expense per contract period; a partial day-60 wage is later fully cleared on the same obligation by a retry."
+    },
+    {
+      "id": "T02",
+      "status": "passed",
+      "tests": ["TestStrictWorldNinetyDaySettlement"],
+      "evidence": "Zero-fund settlements commit WageArrearsRecorded and immutable failed settlement rows while the scheduler reaches day 90 without hidden cash creation."
+    },
+    {
+      "id": "T03",
+      "status": "passed",
+      "tests": ["TestStrictSchedulerIsIndependentOfInsertionOrder", "TestStrictWorldNinetyDaySettlement"],
+      "evidence": "Reverse physical insertion yields identical events and replay hash through delinquency; rent grace, failed settlement reason, and past-due state remain queryable."
+    },
+    {
+      "id": "T04",
+      "status": "passed",
+      "tests": ["TestConcurrentExpectedHeadAllowsExactlyOneCommit"],
+      "evidence": "Two funded buyers race the last authoritative stock unit; one complete write set commits and one receives BRANCH_VERSION_CONFLICT, with zero stock and no negative inventory."
+    },
+    {
+      "id": "T05",
+      "status": "passed",
+      "tests": ["TestPurchaseCommitReplayAndReopen"],
+      "evidence": "Same canonical request returns the original result with unchanged counts; changed payload returns IDEMPOTENCY_PAYLOAD_MISMATCH."
+    },
+    {
+      "id": "T06",
+      "status": "passed",
+      "tests": ["TestInjectedPreCommitFailureRollsBackEverything", "TestOutboxReopenAndPublishMarkCrashRecovery"],
+      "evidence": "Pre-COMMIT injection leaves no partial write; post-delivery/pre-mark crash survives reopen and redelivers while consumer dedupe applies one effect."
+    },
+    {
+      "id": "T07",
+      "status": "passed",
+      "tests": ["TestReplaySnapshotAndProjectionRecovery"],
+      "evidence": "Empty replay and snapshot continuation match; corruption is detected; projection repair leaves immutable event, Posting, and StockMovement counts unchanged."
+    },
+    {
+      "id": "T08",
+      "status": "passed",
+      "tests": ["TestControlledIssuanceAuthorizationLimitAccountingAndIdempotency"],
+      "evidence": "Unauthorized and over-limit requests write nothing; authorized 10000000 issuance records source, grant, policy usage, InterventionRecord, audit, balanced postings, event, and Outbox without changing price."
+    },
+    {
+      "id": "T09",
+      "status": "deferred_m2",
+      "tests": [],
+      "evidence": "Cohort materialization is outside the M1 exit scope."
+    },
+    {
+      "id": "T10",
+      "status": "passed_m1_backend_transport_m4_ui_deferred",
+      "tests": ["TestPrivateEconomicReadScopesAndOperatorRedaction", "TestVisibleEventsRespectPrincipalSubjectAndRedaction", "TestVisibleEventHTTPPaginationAuthorizationAndRedaction", "TestVisibleEventSSEReconnectsWithoutLeakingAuthoritySequence", "TestVisibleEventSSEHeartbeatsAfterCursorCatchesUp"],
+      "evidence": "The M1 backend query and transport boundary passes player self-scope, creator instance/branch scope, field escalation denial, operator redaction, opaque cursor pagination, cross-principal cursor rejection, hidden-event filtering, SSE reconnect, heartbeat, and cancellation over a real HTTP connection. M4 UI consumption remains deferred."
+    },
+    {
+      "id": "T11",
+      "status": "deferred_m3",
+      "tests": [],
+      "evidence": "Migration/schema epoch constraints remain, but runtime hot activation is explicitly deferred to M3."
+    },
+    {
+      "id": "T12",
+      "status": "not_applicable_single_currency_m1",
+      "tests": [],
+      "evidence": "The strict M1 world enables one integer currency and no FX feature; cross-currency settlement is not claimed."
+    }
+  ]
+}

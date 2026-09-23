@@ -1,0 +1,42 @@
+{
+  "schema_version": "m2-unattended-agent-evidence-2026-09-23",
+  "source_contract": "../m0/test-vectors.json#T09",
+  "status": "passed_t09_agent_and_30day_spatial_slices_full_m2_deferred",
+  "tests": [
+    "TestM2BootstrapIsAuthoritativeIsolatedAndIdempotent",
+    "TestMaterializeCohortConservesAllDimensionsAndReplays",
+    "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites",
+    "TestDematerializeCohortRestoresConservationAndSnapshotReplay",
+    "TestDematerializeAuthorizationAndHeadFailuresLeaveNoWrites",
+    "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack",
+    "TestM2PopulationProjectionDivergenceIsDetectedAndRepaired",
+    "TestCohortHTTPAuthorizationConservationAndRoundTrip",
+    "TestM2CLIBootstrapAndRoundTripAreRepeatable",
+    "TestM2AgentSetupIsAuthoritativeIdempotentAndDurable",
+    "TestM2AgentSchedulesUseStableOrderAndCreateOnlyCoLocatedKnowledge",
+    "TestM2AgentScheduleOrderIgnoresPhysicalInsertionOrder",
+    "TestM2AgentBudgetCheckpointResumesAfterReopen",
+    "TestM2AgentMovementRollbackAndAuthorizationFailuresLeaveNoWrites",
+    "TestM2AgentSetupConflictAndRollbackLeaveNoPartialState",
+    "TestM2AgentKnowledgeAndEncounterAreScopedStateBackedAndReadOnly",
+    "TestM2AgentReplaySnapshotAndProjectionRepair",
+    "TestAgentHTTPRunKnowledgeAndEncounterRemainScoped",
+    "TestM2CLIAgentLifeIsRepeatable",
+    "TestM2RoutineRunsThirtyDaysAndReplaysAfterReopen",
+    "TestM2RoutineAuthorizationLateDefinitionAndRollback",
+    "TestM2RoutineCannotFirstDeclareAfterNewDayHasStarted",
+    "TestM2DriverRequiresExplicitRoutineAndResumesAfterInterruption",
+    "TestAgentRoutineHTTPAuthorizationAndRepeat",
+    "TestM2CLIThirtyDayAgentRoutineIsRestartable",
+    "TestM2CLIOptInUnattendedDriver"
+  ],
+  "evidence": "T09 materializes and dematerializes an isolated authoritative Cohort through conserved population/economic facts, stable lineage, replay, scoped HTTP, idempotent CLI execution, and rollback. The Agent slice materializes two one-person entities, commits schedules and movements, creates co-location-only knowledge, and rebuilds projections. An additional explicit Event Batch defines 116 future Agent schedules, while the opt-in driver runs 120 spatial movements across 30 world days; cancellation, restart, replay, snapshot parity, authorization and repeatability are exercised. This is not the full M2 economy or scale gate.",
+  "deferred": [
+    "LLM decisions, narration, false beliefs, and semantic memory",
+    "production resident worker leases and broader autonomous Agent action selection",
+    "background LOD settlement",
+    "subjective status perception",
+    "complex supply-demand propagation",
+    "100-resident/10-store/30-day scale gate"
+  ]
+}

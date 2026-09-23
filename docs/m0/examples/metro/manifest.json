@@ -1,0 +1,17 @@
+{
+  "schema_version": "m0-draft-2026-09-22",
+  "id": "world.metro.minimal",
+  "kind": "world",
+  "version": "0.1.0",
+  "engine_api": "m0-draft-2026-09-22",
+  "requires": [
+    { "id": "system.economy.minimal", "version": "0.1.0" }
+  ],
+  "optional": [
+    { "id": "system.transit.minimal", "version": "0.1.0" }
+  ],
+  "capabilities": ["world.define", "world.genesis"],
+  "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+  "content_hash": "sha256:4d322ba6540fb58c1039dd77d4bd84e8201d915739b0087cd4ee8c8021a91cec",
+  "content_files": ["world.json"]
+}

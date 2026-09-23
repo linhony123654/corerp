@@ -1,0 +1,54 @@
+{
+  "schema_version": "m0-draft-2026-09-22",
+  "world_definition": {
+    "id": "world.qingxuan.minimal",
+    "version": "0.1.0",
+    "world_time_origin": "2026-03-01T06:00:00+08:00",
+    "default_currency_id": "currency.wen",
+    "region_id": "region.cangshan.village"
+  },
+  "currencies": [
+    { "currency_id": "currency.wen", "scale": 0, "symbol": "文" }
+  ],
+  "entities": [
+    { "entity_id": "org.forge", "archetype": "organization", "display_name": "一山铁匠铺" },
+    { "entity_id": "person.worker.1", "archetype": "person", "display_name": "林巧" },
+    { "entity_id": "person.worker.2", "archetype": "person", "display_name": "周石" },
+    { "entity_id": "person.worker.3", "archetype": "person", "display_name": "阿青" },
+    { "entity_id": "person.landlord", "archetype": "person", "display_name": "赵婉" },
+    { "entity_id": "org.store", "archetype": "store", "display_name": "近郊杂货铺" }
+  ],
+  "accounts": [
+    { "account_id": "account.forge.cash", "owner_id": "org.forge", "currency_id": "currency.wen", "opening_balance_minor": 12000, "overdraft_limit_minor": 0 },
+    { "account_id": "account.worker.1.cash", "owner_id": "person.worker.1", "currency_id": "currency.wen", "opening_balance_minor": 3200, "overdraft_limit_minor": 0 },
+    { "account_id": "account.worker.2.cash", "owner_id": "person.worker.2", "currency_id": "currency.wen", "opening_balance_minor": 2700, "overdraft_limit_minor": 0 },
+    { "account_id": "account.worker.3.cash", "owner_id": "person.worker.3", "currency_id": "currency.wen", "opening_balance_minor": 2500, "overdraft_limit_minor": 0 },
+    { "account_id": "account.landlord.cash", "owner_id": "person.landlord", "currency_id": "currency.wen", "opening_balance_minor": 16000, "overdraft_limit_minor": 0 },
+    { "account_id": "account.store.cash", "owner_id": "org.store", "currency_id": "currency.wen", "opening_balance_minor": 9000, "overdraft_limit_minor": 0 }
+  ],
+  "skus": [
+    { "sku_id": "sku.bread", "base_unit": "piece", "quantity_scale": 0 },
+    { "sku_id": "sku.iron_ingot", "base_unit": "jin", "quantity_scale": 0 }
+  ],
+  "inventory": [
+    { "location_id": "stock.store", "owner_id": "org.store", "sku_id": "sku.bread", "opening_quantity_minor": 40 },
+    { "location_id": "stock.forge", "owner_id": "org.forge", "sku_id": "sku.iron_ingot", "opening_quantity_minor": 120 }
+  ],
+  "employment_contracts": [
+    { "contract_id": "contract.worker.1", "employer_id": "org.forge", "employee_id": "person.worker.1", "gross_wage_minor": 1800, "currency_id": "currency.wen", "pay_period": "P1M" },
+    { "contract_id": "contract.worker.2", "employer_id": "org.forge", "employee_id": "person.worker.2", "gross_wage_minor": 1700, "currency_id": "currency.wen", "pay_period": "P1M" },
+    { "contract_id": "contract.worker.3", "employer_id": "org.forge", "employee_id": "person.worker.3", "gross_wage_minor": 1600, "currency_id": "currency.wen", "pay_period": "P1M" }
+  ],
+  "rent_contracts": [
+    { "contract_id": "rent.worker.1", "landlord_id": "person.landlord", "tenant_id": "person.worker.1", "rent_minor": 700, "currency_id": "currency.wen", "pay_period": "P1M" }
+  ],
+  "scheduler_seed": [
+    { "scheduler_item_id": "schedule.wage.worker.1", "phase_id": "obligation.due", "declared_priority": 100 },
+    { "scheduler_item_id": "schedule.rent.worker.1", "phase_id": "obligation.due", "declared_priority": 200 }
+  ],
+  "extensions": {
+    "world.qingxuan.minimal": {
+      "spiritual_ore_vein_id": "resource.cangshan.ore.1"
+    }
+  }
+}

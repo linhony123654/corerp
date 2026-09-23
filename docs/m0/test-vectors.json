@@ -1,0 +1,192 @@
+{
+  "schema_version": "m0-draft-2026-09-22",
+  "status": "defined_not_run",
+  "world_fixture": {
+    "enterprise_count": 1,
+    "employee_count": 3,
+    "landlord_count": 1,
+    "store_count": 1,
+    "strict_world_days": 90,
+    "llm_enabled": false
+  },
+  "vectors": [
+    {
+      "id": "T01",
+      "name": "工资计提与支付不重复确认费用",
+      "stage": "M1",
+      "status": "not_run",
+      "given": ["同一劳动合同", "一个工资周期", "雇主余额足够"],
+      "when": ["同周期到期任务重复投递", "首次支付一部分", "随后补发余额"],
+      "expect": [
+        "(contract_id, period_start, period_end) 只产生一个 WageObligation",
+        "工资费用只在计提时确认一次",
+        "支付和补发只冲销应付工资",
+        "所有 JournalEntry 按币种平衡"
+      ],
+      "failure_codes": ["IDEMPOTENCY_PAYLOAD_MISMATCH", "JOURNAL_UNBALANCED"]
+    },
+    {
+      "id": "T02",
+      "name": "余额不足形成欠薪而非造币或崩溃",
+      "stage": "M1",
+      "status": "not_run",
+      "given": ["工资到期", "雇主可用余额低于应付额", "无透支政策"],
+      "when": ["执行工资结算"],
+      "expect": [
+        "生成 PaymentFailed 或 WageArrearsRecorded 权威事件",
+        "保留未清偿 WageObligation",
+        "没有现金转移分录",
+        "没有隐形系统负余额",
+        "调度器继续运行"
+      ],
+      "failure_codes": ["INSUFFICIENT_FUNDS"]
+    },
+    {
+      "id": "T03",
+      "name": "同刻工资与房租使用稳定调度键",
+      "stage": "M1",
+      "status": "not_run",
+      "given": ["工资和房租 world_time 相同", "phase 注册表与 declared_priority 固定"],
+      "when": ["以相反数据库插入顺序装载调度项", "各运行一次严格结算"],
+      "expect": [
+        "两次调度顺序一致",
+        "事件序列和最终权威状态一致",
+        "宽限期与拒付原因可查询"
+      ],
+      "failure_codes": ["SCHEDULER_ORDER_UNSTABLE"]
+    },
+    {
+      "id": "T04",
+      "name": "两个买家竞争最后一件商品",
+      "stage": "M1",
+      "status": "not_run",
+      "given": ["普通库存余量为 1", "两个 Command 使用相同 expected_head"],
+      "when": ["两个最终事务竞争提交"],
+      "expect": [
+        "最多一个 Command 提交",
+        "另一个返回 BRANCH_VERSION_CONFLICT 或重新规划后的 INSUFFICIENT_STOCK",
+        "库存永不为负",
+        "成功交易的资金、StockMovement、Event 和 Outbox 同成同败"
+      ],
+      "failure_codes": ["BRANCH_VERSION_CONFLICT", "INSUFFICIENT_STOCK"]
+    },
+    {
+      "id": "T05",
+      "name": "幂等键相同负载与不同负载",
+      "stage": "M1",
+      "status": "not_run",
+      "given": ["一个已经提交的 Command"],
+      "when": ["以相同规范请求重试", "再以相同幂等键和不同 payload 重试"],
+      "expect": [
+        "相同请求返回原 CommitResult",
+        "不创建第二个 Event Batch 或经济分录",
+        "不同请求返回 IDEMPOTENCY_PAYLOAD_MISMATCH"
+      ],
+      "failure_codes": ["IDEMPOTENCY_PAYLOAD_MISMATCH"]
+    },
+    {
+      "id": "T06",
+      "name": "COMMIT 前后崩溃恢复",
+      "stage": "M1",
+      "status": "not_run",
+      "given": ["一个包含分录、库存和 Outbox 的交易"],
+      "when": ["在 COMMIT 前注入崩溃", "在 COMMIT 后且发布前注入崩溃"],
+      "expect": [
+        "COMMIT 前崩溃没有半提交",
+        "COMMIT 后世界事实保留",
+        "恢复器至少一次重发 Outbox",
+        "消费者按 outbox_id 去重",
+        "交易不重复记账"
+      ],
+      "failure_codes": ["OUTBOX_DELIVERY_FAILED"]
+    },
+    {
+      "id": "T07",
+      "name": "空历史重放、快照恢复与投影校验",
+      "stage": "M1",
+      "status": "not_run",
+      "given": ["完整权威记录", "一个经过校验的快照", "故意损坏的余额投影"],
+      "when": ["从序号 0 重放", "从快照高水位继续重放", "执行投影一致性检查"],
+      "expect": [
+        "两种恢复路径得到同一 state_hash",
+        "检测到故意损坏的投影",
+        "不反向修改历史 Event 或 Posting"
+      ],
+      "failure_codes": ["PROJECTION_DIVERGED", "SNAPSHOT_HASH_MISMATCH"]
+    },
+    {
+      "id": "T08",
+      "name": "创作者注入货币的权限与会计来源",
+      "stage": "M1_record_M2_market",
+      "status": "not_run",
+      "given": ["注入 10000000 最小货币单位的 PrivilegedCommand"],
+      "when": ["无 Capability 的玩家提交", "有 Scope 和发行政策的创作者提交"],
+      "expect": [
+        "无权限请求无任何写入",
+        "授权请求记录 InterventionRecord、发行事件、限额和会计腿",
+        "不使用无含义的无限负余额账户",
+        "余额增加本身不自动给全城商品统一乘价格倍率"
+      ],
+      "failure_codes": ["PERMISSION_DENIED", "ISSUANCE_LIMIT_EXCEEDED"]
+    },
+    {
+      "id": "T09",
+      "name": "Cohort 升格与降级守恒",
+      "stage": "M2",
+      "status": "not_run",
+      "given": ["一个带人口、资产、库存和债务的 Cohort"],
+      "when": ["升格具名 NPC", "崩溃后以相同 materialization_id 重试", "随后降级"],
+      "expect": [
+        "重试返回原结果",
+        "群体加个体的人口、资产、库存和债权债务合计守恒",
+        "不虚构与已提交群体历史矛盾的个人经历"
+      ],
+      "failure_codes": ["MATERIALIZATION_ID_CONFLICT", "CONSERVATION_FAILED"]
+    },
+    {
+      "id": "T10",
+      "name": "Inspector 与 SSE 权限隔离",
+      "stage": "M1_minimum_M4_UI",
+      "status": "not_run",
+      "given": ["隐藏资产", "私密 Agent 输入", "玩家/创作者/运维三个 Principal"],
+      "when": ["查询 Inspector", "断线后使用 SSE 游标重连"],
+      "expect": [
+        "玩家只收到感知和 Scope 允许的字段",
+        "创作者仅在授权实例/分支读取完整因果",
+        "运维视图执行 RBAC 与脱敏",
+        "过滤事件序号间隙不泄露隐藏载荷"
+      ],
+      "failure_codes": ["PERMISSION_DENIED"]
+    },
+    {
+      "id": "T11",
+      "name": "Rule Epoch 激活边界",
+      "stage": "M0_schema_M3_execution",
+      "status": "not_run",
+      "given": ["旧纪元 [1,13)", "事件序号 12 的 LawActivationEvent", "新纪元 [13,null)"],
+      "when": ["重放激活前、激活批次和激活后事件", "尝试插入跨越区间的 Batch"],
+      "expect": [
+        "激活事件属于旧纪元",
+        "序号 13 起引用新 ruleset_hash",
+        "区间不重叠且无空洞",
+        "跨越两个纪元的普通 Batch 被拒绝"
+      ],
+      "failure_codes": ["RULE_EPOCH_MISMATCH", "RULE_EPOCH_OVERLAP"]
+    },
+    {
+      "id": "T12",
+      "name": "跨币种、舍入和整数边界",
+      "stage": "M0_contract_M1_if_finance_enabled",
+      "status": "not_run",
+      "given": ["两种币种", "明确 FX 报价", "接近整数上限的金额"],
+      "when": ["执行兑换", "构造缺少兑换腿的分录", "触发加法溢出"],
+      "expect": [
+        "每个币种分别平衡",
+        "记录汇率、报价时间与尾差账户",
+        "不同币种不直接相加",
+        "溢出在提交前被拒绝且无写入"
+      ],
+      "failure_codes": ["JOURNAL_UNBALANCED", "INTEGER_OVERFLOW"]
+    }
+  ]
+}

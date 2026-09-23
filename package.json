@@ -1,0 +1,25 @@
+{
+  "name": "corerp-console",
+  "private": true,
+  "version": "0.3.1",
+  "type": "module",
+  "description": "CoreRP World Inspector / 因果观测台 — M0 契约可视化 demo",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "verify:m0": "node scripts/verify-m0.cjs",
+    "verify:m1-evidence": "node scripts/verify-m1-evidence.cjs",
+    "verify:m2-evidence": "node scripts/verify-m2-evidence.cjs"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "playwright": "^1.49.1",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7",
+    "vue-tsc": "^2.2.0"
+  }
+}
