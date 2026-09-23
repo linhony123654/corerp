@@ -1,6 +1,6 @@
 # RP-2 — 人物生命层
 
-Current: RP-2A provider integration and RP-2B life/relationships verified locally. RP-2C–E remain pending. The overall living-world goal continues through RP-8 and final 300-turn/30-day integration, strictly serially.
+Current: RP-2A provider integration, RP-2B life/relationships and [RP-2C background initialization](background.md) verified locally. RP-2D–E remain pending. The overall living-world goal continues through RP-8 and final 300-turn/30-day integration, strictly serially.
 
 ## Real DecisionProvider configuration
 

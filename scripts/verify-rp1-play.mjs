@@ -12,11 +12,13 @@ import { createServer } from 'node:http'
 // it verifies the adapter, not live model quality. Never inherit live model credentials.
 const fakeModel = process.argv.includes('--fake-model')
 const lifeScenario = process.argv.includes('--life')
+const emergentScenario = process.argv.includes('--emergent')
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp1-e2e-'))
 const database = join(temp, 'world.db')
 const credential = randomBytes(24).toString('hex')
-const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [credential]: 'principal_m2_rp_player' }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex') }
+const creatorCredential = randomBytes(24).toString('hex')
+const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [credential]: 'principal_m2_rp_player', ...(emergentScenario ? { [creatorCredential]: 'principal_creator' } : {}) }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex') }
 Object.assign(env, { CORERP_DECISION_PROVIDER: 'deterministic', CORERP_LLM_ENDPOINT: '', CORERP_LLM_MODEL: '', CORERP_LLM_API_KEY: '', CORERP_LLM_TIMEOUT: '', CORERP_LLM_ATTEMPTS: '' })
 const sql = query => execFileSync('sqlite3', [database, query], { encoding: 'utf8' }).trim()
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'pipe' })
@@ -161,6 +163,46 @@ try {
     assert.doesNotMatch(await page.locator('.presence').innerText(), /Cai/)
     assert.match(await page.locator('.reading').innerText(), /Cai 离开了/)
     assert.equal(Number(sql("SELECT COUNT(*) FROM agent_knowledge WHERE observer_agent_id='entity_m2_rp_cai' AND json_extract(claim_payload,'$.claim_type')='interpersonal_action'")), 3)
+  }
+  if (emergentScenario) {
+    const call = async (path, body, token = creatorCredential) => {
+      const response = await fetch(`http://127.0.0.1:8080/api/v1/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const result = await response.json()
+      assert.equal(response.status, 200, JSON.stringify(result))
+      return result.data
+    }
+    const worldTime = sql("SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main'")
+    const head = Number(sql("SELECT head_sequence FROM branches WHERE instance_id='inst_m2_t09' AND branch_id='br_main'"))
+    const scope = { instance_id: 'inst_m2_t09', branch_id: 'br_main' }
+    const entity = 'entity_browser_nora'
+    const materialized = await call('commands/materialize-cohort', { ...scope, command_id: 'cmd_browser_nora', materialization_id: 'mat_browser_nora', capability_id: 'world.cohort.materialize', idempotency_key: 'browser-nora', expected_head: head, world_time: worldTime, source_cohort_id: 'cohort_block_a', entity_id: entity, display_name: 'Nora', population_count: 1, asset_minor: 200, inventory_minor: 1, receivable_minor: 40, liability_minor: 30, allocation_algorithm_version: 'equal-share-v1' })
+    const at = hours => new Date(Date.parse(worldTime) + hours * 3600000).toISOString().replace('.000Z', 'Z')
+    const backgroundRequest = { ...scope, entity_id: entity, expected_head: materialized.last_sequence, idempotency_key: 'browser-nora-background', age_min: 25, age_max: 34, residence_place_id: 'place_m2_home_bo', initial_place_id: 'place_m2_cafe', schedule: [{ world_time: at(1), place_id: 'place_m2_home_bo', activity_code: 'home' }, { world_time: at(2), place_id: 'place_m2_cafe', activity_code: 'present' }] }
+    const background = await call('rp/background/materialize', backgroundRequest)
+    await page.getByRole('button', { name: '环顾四周' }).click()
+    await page.waitForFunction(() => document.querySelector('.presence').textContent.includes('Nora'))
+    await speak('你好，Nora。')
+    assert.match(await page.locator('.turn').last().innerText(), /Nora/)
+    for (const hours of [1, 2]) {
+      const view = await call('rp/observe', { session_id: session }, credential)
+      await call('rp/actions/wait', { session_id: session, expected_cursor: view.observation_cursor, target_world_time: at(hours), budget: 30, idempotency_key: `nora-wait-${hours}` }, credential)
+      await page.getByRole('button', { name: '环顾四周' }).click()
+      await page.waitForFunction(present => document.querySelector('.presence').textContent.includes('Nora') === present, hours === 2)
+    }
+    await speak('又见面了，Nora。')
+    await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/readyz')
+    await page.reload()
+    await page.getByLabel('玩家访问凭证').fill(credential)
+    await page.getByRole('button', { name: '继续这段生活' }).click()
+    await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
+    assert.match(await page.locator('.presence').innerText(), /Nora/)
+    const restored = await call('rp/background/materialize', backgroundRequest)
+    assert.equal(restored.replayed, true)
+    assert.deepEqual(restored.background, background.background)
+    assert.equal(Number(sql("SELECT COUNT(*) FROM materialized_entities WHERE entity_id='entity_browser_nora'")), 1)
+    assert.ok(Number(sql("SELECT COUNT(*) FROM agent_knowledge WHERE observer_agent_id='entity_browser_nora'")) >= 2)
+    assert.ok(!JSON.stringify(await context.storageState()).includes(creatorCredential), 'creator credential never enters browser storage')
+    console.log(JSON.stringify({ emergentScenario: 'PASS', checks: ['conserved Cohort materialization', 'minimal sourced background', 'RP interaction', 'schedule departure and re-encounter', 'restart stable identity and background'] }))
   }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile overflow')
   await page.screenshot({ path: join(temp, 'play-mobile.png'), fullPage: true })

@@ -47,6 +47,7 @@ type RPOwnEmployment struct {
 	SourceEventID  string `json:"source_event_id"`
 }
 type RPLifeContext struct {
+	Background             *RPBackground      `json:"background,omitempty"`
 	RoutineSourceEventID   string             `json:"routine_source_event_id"`
 	Disposition            RPDisposition      `json:"disposition"`
 	ReceivableMinor        int64              `json:"receivable_minor"`

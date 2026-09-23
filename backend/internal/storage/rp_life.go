@@ -23,6 +23,21 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 		return nil, classifyMissing(err, "NPC own life state")
 	}
 	life.Disposition = core.DeriveRPDisposition(input.NPCEntityID, origin)
+	var backgroundJSON string
+	err = conn.QueryRowContext(ctx, `SELECT e.payload FROM agent_profiles a JOIN events e ON e.event_id=a.definition_event_id
+	 WHERE a.agent_id=? AND a.instance_id=? AND a.branch_id=? AND e.event_type='RPBackgroundMaterialized'`, input.NPCEntityID, input.InstanceID, input.BranchID).Scan(&backgroundJSON)
+	if err == nil {
+		var background core.RPBackground
+		if err := json.Unmarshal([]byte(backgroundJSON), &background); err != nil {
+			return nil, err
+		}
+		if background.EntityID != input.NPCEntityID || background.MaterializationEventID != origin {
+			return nil, core.NewError(core.CodeProjectionDiverged, "own background lineage differs")
+		}
+		life.Background = &background
+	} else if err != sql.ErrNoRows {
+		return nil, err
+	}
 	// Projection last_event_sequence can change during rebuild without a new
 	// economic fact. Trace causal sources through immutable posted entries.
 	rows, err := conn.QueryContext(ctx, `WITH own_latest AS (
@@ -55,29 +70,10 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 		return nil, err
 	}
 
-	rows, err = conn.QueryContext(ctx, `SELECT c.contract_id,c.actor_id,c.unit_rate_minor,s.split_event_id
- FROM m2_wage_participation_splits s JOIN m2_cohort_contracts c ON c.contract_id=s.contract_id
- LEFT JOIN m2_wage_participation_returns r ON r.materialization_id=s.materialization_id
- WHERE s.entity_id=? AND s.effective_from<=? AND c.effective_from<=?
- AND (c.effective_until IS NULL OR c.effective_until>?) AND (r.effective_from IS NULL OR r.effective_from>?)
- UNION ALL SELECT contract_id,employer_entity_id,gross_wage_minor,definition_event_id FROM employment_contracts
- WHERE employee_entity_id=? AND status='active' ORDER BY contract_id`, input.NPCEntityID, input.WorldTime, input.WorldTime, input.WorldTime, input.WorldTime, input.NPCEntityID)
+	life.Employment, err = readRPOwnEmployment(ctx, conn, input.NPCEntityID, input.WorldTime)
 	if err != nil {
 		return nil, err
 	}
-	for rows.Next() {
-		var job core.RPOwnEmployment
-		if err := rows.Scan(&job.ContractID, &job.OrganizationID, &job.WageMinor, &job.SourceEventID); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		life.Employment = append(life.Employment, job)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, err
-	}
-	rows.Close()
 
 	// Repeat contact supports familiarity, not trust. Other dimensions remain
 	// neutral until there are explicit sourced interpersonal actions.
@@ -160,8 +156,34 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 	if err := applyRPSocialLife(ctx, conn, input.NPCEntityID, life); err != nil {
 		return nil, err
 	}
+	for _, job := range life.Employment {
+		life.Relationships = append(life.Relationships, core.RPRelationship{SubjectEntityID: job.OrganizationID, Role: "employee", SourceEventIDs: []string{job.SourceEventID}})
+	}
 	core.DeriveRPLifeGoals(input, life)
 	return life, nil
+}
+
+func readRPOwnEmployment(ctx context.Context, conn *sql.Conn, entityID, worldTime string) ([]core.RPOwnEmployment, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT c.contract_id,c.actor_id,c.unit_rate_minor,s.split_event_id
+ FROM m2_wage_participation_splits s JOIN m2_cohort_contracts c ON c.contract_id=s.contract_id AND c.kind='wage'
+ LEFT JOIN m2_wage_participation_returns r ON r.materialization_id=s.materialization_id
+ WHERE s.entity_id=? AND s.effective_from<=? AND c.effective_from<=?
+ AND (c.effective_until IS NULL OR c.effective_until>?) AND (r.effective_from IS NULL OR r.effective_from>?)
+ UNION ALL SELECT contract_id,employer_entity_id,gross_wage_minor,definition_event_id FROM employment_contracts
+ WHERE employee_entity_id=? AND status='active' ORDER BY contract_id`, entityID, worldTime, worldTime, worldTime, worldTime, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	jobs := []core.RPOwnEmployment{}
+	for rows.Next() {
+		var job core.RPOwnEmployment
+		if err := rows.Scan(&job.ContractID, &job.OrganizationID, &job.WageMinor, &job.SourceEventID); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+	return jobs, rows.Err()
 }
 
 func applyRPSocialLife(ctx context.Context, conn *sql.Conn, observer string, life *core.RPLifeContext) error {
