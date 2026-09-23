@@ -34,6 +34,7 @@ type RPVisibleEntity struct {
 }
 
 type RPObservation struct {
+	DecisionMode      string            `json:"decision_mode"`
 	SessionID         string            `json:"session_id"`
 	ControlledEntity  RPVisibleEntity   `json:"controlled_entity"`
 	WorldTime         string            `json:"world_time"`
@@ -225,6 +226,7 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		return RPObservation{}, core.NewError(core.CodeBranchConflict, "RP session is closed")
 	}
 	var view RPObservation
+	view.DecisionMode = "deterministic"
 	view.SessionID = session.SessionID
 	view.ControlledEntity.EntityID = session.ControlledEntityID
 	err = tx.conn.QueryRowContext(ctx, `

@@ -1,6 +1,6 @@
 # CoreRP Play — 本地运行
 
-默认 `/` 是真实 RP Play；`/demo` 是旧的静态 Story/Inspector 演示。当前 Play 固定使用 M2 切片中的 Lin，1 名玩家、3 名真实 NPC、5 个地点。人物采用确定性 Provider；外部模型 E2E 为 `REQUIRED_IF_AVAILABLE`，未配置、未伪造验证。
+默认 `/` 是真实 RP Play；`/demo` 是旧的静态 Story/Inspector 演示。当前 Play 固定使用 M2 切片中的 Lin，1 名玩家、3 名真实 NPC、5 个地点。人物默认采用确定性 Provider；RP-2A 已增加[真实模型接口配置](../rp2/README.md)。外部模型 E2E 为 `REQUIRED_IF_AVAILABLE`，未配置、未伪造验证。
 
 ## 启动
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"corerp.local/backend/internal/core"
+	"corerp.local/backend/internal/decision"
 	"corerp.local/backend/internal/storage"
 	"corerp.local/backend/internal/transport/httpapi"
 )
@@ -33,13 +34,22 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, *databasePath, *listenAddress, os.Getenv(tokenEnvironment), os.Getenv(cursorEnvironment), logger); err != nil {
+	provider, mode, err := decision.FromEnvironment(os.Getenv)
+	if err != nil {
+		logger.Error("invalid decision provider configuration", "error", err)
+		os.Exit(1)
+	}
+	if err := runWithProvider(ctx, *databasePath, *listenAddress, os.Getenv(tokenEnvironment), os.Getenv(cursorEnvironment), logger, provider, mode); err != nil {
 		logger.Error("server stopped with error", "error", err)
 		os.Exit(1)
 	}
 }
 
 func run(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecret string, logger *slog.Logger) error {
+	return runWithProvider(ctx, databasePath, listenAddress, tokenJSON, cursorSecret, logger, core.DeterministicRPDecisionProvider{}, "deterministic")
+}
+
+func runWithProvider(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecret string, logger *slog.Logger, provider core.RPDecisionProvider, mode string) error {
 	if strings.TrimSpace(databasePath) == "" {
 		return core.NewError(core.CodeInvalidArgument, "-db is required")
 	}
@@ -69,7 +79,11 @@ func run(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecr
 	if err := store.BootstrapDemo(ctx); err != nil {
 		return err
 	}
-	api, err := httpapi.New(store, authenticator, cursors)
+	service, err := storage.NewRPService(store, provider, mode)
+	if err != nil {
+		return err
+	}
+	api, err := httpapi.New(service, authenticator, cursors)
 	if err != nil {
 		return err
 	}

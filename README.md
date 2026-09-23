@@ -4,7 +4,7 @@
 技术栈遵循《CoreRP v0.3.1 · M0 工程审计版》§24.1：**Vue 3 + TypeScript + Vite**，
 不引入 UI 组件库，零运行时 CDN 依赖。
 
-> Play 已接入持久会话、同场发言/NPC 回应、移动、等待和重启恢复。人物使用确定性 Provider，未接入外部 LLM。`/demo` 仍全部是构造示例，不应作为真实世界状态。启动方式见 [Play 本地指南](docs/rp1/play.md)。
+> Play 已接入持久会话、同场发言/NPC 回应、移动、等待和重启恢复。默认使用确定性 Provider，也可[配置真实 LLM 兼容接口](docs/rp2/README.md)；live 模型验收仍待配置。`/demo` 仍全部是构造示例，不应作为真实世界状态。启动方式见 [Play 本地指南](docs/rp1/play.md)。
 
 ## M0 契约 RFC
 
@@ -31,6 +31,8 @@ npm run verify:m0
 [RP-1A–F](docs/rp1/README.md)在同一 M2 世界上提供真实玩家绑定、受限观察、移动、调度器等待、原子发言/听者认知、NPC 决策和连续回合，以及移动端 Play。本地切片经 T09 准备 1 名玩家、3 名 NPC、5 个地点。20 回合后端测试和真实浏览器/服务重启测试均已通过；未部署生产环境。`npm run verify:rp1-play` 可复现完整浏览器恢复场景。
 
 ## 历史 `/demo` 的两个工作空间
+
+RP-2～RP-8 长期目标正在按顺序推进；当前只实施 [RP-2 人物生命层](docs/rp2/README.md)，不把 RP-1 完成等同于长期目标完成。
 
 | | Story 叙事流 | Inspector 观测台 |
 |---|---|---|

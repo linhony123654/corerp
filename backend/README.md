@@ -45,6 +45,8 @@ The opt-in `rp-prepare` action reuses the M2 instance, T09 identities and Agent 
 
 ## Readiness and next backend scope
 
+RP-2A adds an operator-configured real Chat Completions DecisionProvider with strict local validation, bounded retries and safe silence fallback. Default remains deterministic. See [provider configuration and authority boundaries](../docs/rp2/README.md); live model verification is not claimed without configured credentials. RP-2B–E and later living-world stages remain pending.
+
 A future web, desktop, or mobile client can integrate without choosing a UI stack first: commands and queries use stable JSON envelopes, identity is injected at the HTTP boundary, and live visible events resume through standard SSE `Last-Event-ID`. The client must not connect to SQLite or infer authority from UI state.
 
 This is local-development backend readiness, not production readiness. Production operation still needs a real identity provider/session lifecycle, TLS and explicit origin policy, managed secret rotation, rate/abuse limits, persistent metrics/tracing, deployment/backup procedures, and a versioned generated client contract if desired.

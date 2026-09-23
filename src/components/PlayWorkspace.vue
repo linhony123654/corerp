@@ -4,6 +4,7 @@ import { computed, nextTick, ref } from 'vue'
 type Person = { entity_id: string; display_name: string }
 type Turn = { turn_run_id: string; narrative_lines: string[] }
 type Observation = {
+  decision_mode: 'deterministic' | 'chat_completions'
   session_id: string; controlled_entity: Person; world_time: string
   place_id: string; place_name: string; observation_cursor: number
   present_entities: Person[]; reachable_places: { place_id: string; display_name: string }[]
@@ -112,7 +113,7 @@ function wait(hours: number) {
   <div class="play">
     <header class="play-header">
       <span class="wordmark">Core<span>RP</span><small>生活，继续发生。</small></span>
-      <span class="mode">本地体验 · 确定性人物</span>
+      <span class="mode">{{ observation ? observation.decision_mode === 'chat_completions' ? 'AI 人物 · 受世界规则约束' : '本地体验 · 确定性人物' : '本地体验 · 持久世界' }}</span>
     </header>
 
     <main v-if="!observation" class="arrival">
@@ -123,7 +124,7 @@ function wait(hours: number) {
       <form class="entry" @submit.prevent="connect">
         <label for="credential">玩家访问凭证</label>
         <input id="credential" v-model="token" type="password" autocomplete="off" required placeholder="输入本地服务提供的凭证" :disabled="busy">
-        <p class="hint">凭证仅在当前页面使用。此体验使用规则驱动的人物回应，尚未配置语言模型。</p>
+        <p class="hint">凭证仅在当前页面使用。人物回应方式由本地服务配置，进入后可查看。</p>
         <button class="primary" :disabled="busy || !token.trim()">{{ busy ? '正在连接…' : bookmark.session ? '继续这段生活 →' : '进入世界 →' }}</button>
       </form>
       <p v-if="error" class="error" role="alert">{{ error }}</p>

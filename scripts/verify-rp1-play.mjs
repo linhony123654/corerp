@@ -6,19 +6,24 @@ import { join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
+import { createServer } from 'node:http'
 
-// Disposable real service/database; no mocks, external accounts or persisted credentials.
+// Real world/service/browser. --fake-model adds only a local model HTTP fixture;
+// it verifies the adapter, not live model quality. Never inherit live model credentials.
+const fakeModel = process.argv.includes('--fake-model')
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp1-e2e-'))
 const database = join(temp, 'world.db')
 const credential = randomBytes(24).toString('hex')
 const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [credential]: 'principal_m2_rp_player' }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex') }
+Object.assign(env, { CORERP_DECISION_PROVIDER: 'deterministic', CORERP_LLM_ENDPOINT: '', CORERP_LLM_MODEL: '', CORERP_LLM_API_KEY: '', CORERP_LLM_TIMEOUT: '', CORERP_LLM_ATTEMPTS: '' })
 const sql = query => execFileSync('sqlite3', [database, query], { encoding: 'utf8' }).trim()
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'pipe' })
 run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'server'), './cmd/corerp-server'], join(root, 'backend'))
 run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'setup'), './cmd/corerp-m2'], join(root, 'backend'))
 run(join(temp, 'setup'), ['-db', database, '-action', 'rp-travel-prepare'])
-let server, vite, browser
+let server, vite, browser, modelServer
+let modelCalls = 0
 const startServer = () => spawn(join(temp, 'server'), ['-db', database, '-listen', '127.0.0.1:8080'], { env, stdio: 'ignore' })
 async function ready(url) {
   for (let i = 0; i < 100; i++) {
@@ -28,6 +33,25 @@ async function ready(url) {
 }
 async function stop(child) { if (child && child.exitCode === null) { const exited = once(child, 'exit'); child.kill('SIGTERM'); await exited } }
 try {
+  if (fakeModel) {
+    modelServer = createServer(async (request, response) => {
+      try {
+        let raw = ''
+        for await (const chunk of request) raw += chunk
+        const body = JSON.parse(raw)
+        assert.equal(body.response_format.json_schema.strict, true)
+        const input = JSON.parse(body.messages[1].content).character
+        modelCalls++
+        let action = 'respond', text = '来自测试模型的问候。'
+        if (input.player_speech_text.includes('借') || input.own_asset_minor < 100) { action = 'refuse'; text = '测试模型：抱歉，我现在无法答应。' }
+        else if (input.next_schedule?.activity_code === 'work') { action = 'refuse'; text = '测试模型：我得先去工作，晚些再聊。' }
+        response.setHeader('Content-Type', 'application/json')
+        response.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ action, text, destination_place_id: '' }) } }] }))
+      } catch { response.writeHead(400); response.end() }
+    })
+    modelServer.listen(0, '127.0.0.1'); await once(modelServer, 'listening')
+    Object.assign(env, { CORERP_DECISION_PROVIDER: 'chat_completions', CORERP_LLM_ENDPOINT: `http://127.0.0.1:${modelServer.address().port}/v1/chat/completions`, CORERP_LLM_MODEL: 'test-http-model' })
+  }
   server = startServer()
   vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '4178', '--strictPort'], { cwd: root, stdio: 'ignore' })
   await Promise.all([ready('http://127.0.0.1:8080/api/v1/rp/observe'), ready('http://127.0.0.1:4178')])
@@ -41,6 +65,7 @@ try {
   await page.getByLabel('玩家访问凭证').fill(credential)
   await page.getByRole('button', { name: '进入世界' }).click()
   await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
+  assert.match(await page.locator('.mode').innerText(), fakeModel ? /AI 人物/ : /确定性人物/)
   assert.match(await page.locator('.presence').innerText(), /Cai/)
   const speak = async text => {
     const response = page.waitForResponse(r => r.url().endsWith('/rp/turns/run'))
@@ -87,6 +112,7 @@ try {
   await page.getByRole('button', { name: '说出' }).click()
   await page.getByRole('button', { name: '继续未完成的行动', exact: true }).waitFor()
   const counts = sql("SELECT (SELECT COUNT(*) FROM events) || ':' || (SELECT COUNT(*) FROM observation_records) || ':' || (SELECT COUNT(*) FROM rp_utterances)")
+  const callsBeforeRestart = modelCalls
   const state = await context.storageState()
   assert.ok(!JSON.stringify(state).includes(credential), 'credential must not persist')
   const session = JSON.parse(state.origins[0].localStorage.find(x => x.name === 'corerp.play.v1').value).session
@@ -102,9 +128,11 @@ try {
   await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).session), session)
   assert.equal(sql("SELECT (SELECT COUNT(*) FROM events) || ':' || (SELECT COUNT(*) FROM observation_records) || ':' || (SELECT COUNT(*) FROM rp_utterances)"), counts)
+  assert.equal(modelCalls, callsBeforeRestart, 'committed NPC effects must not call the model again')
   assert.match(await page.locator('.reading').innerText(), /重启以后，还记得/)
   assert.match(await page.locator('.reading').innerText(), /你前往了 Ada Home/)
   await speak('我们接着聊。')
+  if (fakeModel) { assert.ok(modelCalls > callsBeforeRestart); assert.match(await page.locator('.turn').last().innerText(), /来自测试模型的问候/) }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile overflow')
   await page.screenshot({ path: join(temp, 'play-mobile.png'), fullPage: true })
   await page.screenshot({ path: join(temp, 'play-mobile-viewport.png') })
@@ -113,8 +141,9 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.screenshot({ path: join(temp, 'play-desktop.png'), fullPage: true })
   assert.equal(errors.length, 0, errors.join('\n'))
-  console.log(JSON.stringify({ status: 'PASS', artifacts: temp, session, recoveryCountsUnchanged: counts, hearingCount, checks: ['real session', 'same-place refusal and hearing', 'legal move and offsite exclusion', 'schedule affects NPC reply', 'scheduler wait', 'lost-response plus process/browser restart', 'same-key no duplicate facts', 'server-backed history', 'continue after restart', 'mobile no overflow', 'no credential persistence', 'no browser errors'] }, null, 2))
+  console.log(JSON.stringify({ status: 'PASS', provider: fakeModel ? 'local HTTP fixture (not live LLM)' : 'deterministic', modelCalls, artifacts: temp, session, recoveryCountsUnchanged: counts, hearingCount, checks: ['real session', 'same-place refusal and hearing', 'legal move and offsite exclusion', 'schedule affects NPC reply', 'scheduler wait', 'lost-response plus process/browser restart', 'same-key no duplicate facts or model calls', 'server-backed history', 'continue after restart', 'mobile no overflow', 'no credential persistence', 'no browser errors'] }, null, 2))
 } finally {
   await browser?.close()
   await stop(server); await stop(vite)
+  if (modelServer) await new Promise(resolve => modelServer.close(resolve))
 }

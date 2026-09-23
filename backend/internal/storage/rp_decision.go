@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"corerp.local/backend/internal/core"
@@ -237,37 +236,7 @@ func (s *Store) DecideRP(ctx context.Context, request core.RPDecisionRequest, pr
 }
 
 func validateRPDecisionProposal(input core.RPDecisionInput, proposal core.RPDecisionProposal) error {
-	allowed := false
-	for _, action := range input.LegalActions {
-		if action == proposal.Action {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
-		return core.NewError(core.CodeInvalidArgument, "NPC proposal action is not legal in this scene")
-	}
-	switch proposal.Action {
-	case "respond", "refuse":
-		if strings.TrimSpace(proposal.Text) == "" || len([]rune(proposal.Text)) > 2000 || proposal.DestinationPlaceID != "" {
-			return core.NewError(core.CodeInvalidArgument, "NPC speech proposal requires only valid text")
-		}
-	case "leave":
-		if proposal.Text != "" {
-			return core.NewError(core.CodeInvalidArgument, "NPC leave proposal cannot include speech")
-		}
-		for _, placeID := range input.ReachablePlaceIDs {
-			if placeID == proposal.DestinationPlaceID {
-				return nil
-			}
-		}
-		return core.NewError(core.CodeInvalidArgument, "NPC leave destination is not reachable")
-	case "silence", "wait":
-		if proposal.Text != "" || proposal.DestinationPlaceID != "" {
-			return core.NewError(core.CodeInvalidArgument, "NPC no-op proposal cannot contain effects")
-		}
-	}
-	return nil
+	return core.ValidateRPDecisionProposal(input, proposal)
 }
 
 func (s *Store) auditRPDecision(ctx context.Context, input core.RPDecisionInput, result RPDecisionResult) error {
