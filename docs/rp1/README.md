@@ -1,6 +1,6 @@
 # CoreRP RP-1 实施记录
 
-RP-1 在现有 M2 世界/经济内核上增量实现 Play。RP-1A 提供会话、派生在场与玩家受限观察；RP-1B 增加玩家移动与等待。说话、NPC 决策、回合与前端仍未因此自动成立。
+RP-1 在现有 M2 世界/经济内核上增量实现 Play。RP-1A 提供会话、派生在场与玩家受限观察；RP-1B 增加玩家移动与等待；RP-1C 加入原子提交的玩家发言、实际听者认知与回合阶段。NPC 决策、连续回合与前端仍未因此自动成立。
 
 ## RP-1A 数据与权限边界
 
@@ -36,4 +36,10 @@ cd /home/ubuntu/corerp-console/backend
 
 等待使用 `/api/v1/rp/actions/wait`，提交 `session_id`、RFC3339 `target_world_time`、1–10000 的 `budget`、最新 `expected_cursor` 和 `idempotency_key`。迁移 022 的 `rp_wait_intents` 仅保存重试意图，不保存第二套时钟。请求先由既有 M2 scheduler 在预算内执行到期项；若还有到期项，返回 `budget_exhausted`、当前权威时间与剩余项数，用原请求/幂等键继续。清空后才由一条 `RPWaitCompleted` Event 原子推进 `world_clocks`、Branch Head、Outbox 并完成意图。完成后相同请求返回已提交结果；同键不同参数冲突。等待未完成时，同一会话的新移动被拒绝。
 
-阶段报告见 [RP-1A](phase-a.md) 和 [RP-1B](phase-b.md)。后续 RP-1C–F 尚待完成，不能把当前后端动作视作整个可玩 RP-1 闭环。
+## RP-1C 发言与认知边界
+
+`/api/v1/rp/actions/speak` 接收 `session_id`、非空 `text`、可选 `speech_act`（`statement` / `question` / `request`）、最新 `expected_cursor` 和 `idempotency_key`。后端只从真实位置推导同地活跃 Entity 为实际听者；此首版没有耳语、复杂声学或额外私密通道规则。异地角色不会获得该发言的知识。
+
+一笔事务提交 `RPSpeechAccepted` Event、迁移 023 的不可变已接受发言、同地听者的 `observation_records` / `agent_knowledge`、Session 的 `turn_cursor` / `speech_committed` 状态、Branch Head、clock lineage 与参加者限定的 Outbox。听者知识的 `claim_type=speaker_said` 只表示“这个人曾这样说”，不表示话的内容是真的。完整审计/Event 仍属世界权威，不能由可编辑 transcript 或向量索引替代。Outbox 通知可至少一次重试，消费者应按 `outbox_id` 去重；通知未送达不撤销已发生的发言与认知。
+
+阶段报告见 [RP-1A](phase-a.md)、[RP-1B](phase-b.md) 和 [RP-1C](phase-c.md)。后续 RP-1D–F 尚待完成，不能把当前后端行为视作整个可玩 RP-1 闭环。

@@ -37,7 +37,8 @@ const (
 	BankruptcySlotSchemaVersion     = "corerp-m2-bankruptcy-slot-claims-019-2026-09-23"
 	RPSessionSchemaVersion          = "corerp-rp1-sessions-020-2026-09-23"
 	RPRouteSchemaVersion            = "corerp-rp1-routes-021-2026-09-23"
-	SchemaVersion                   = "corerp-rp1-wait-intents-022-2026-09-23"
+	RPWaitSchemaVersion             = "corerp-rp1-wait-intents-022-2026-09-23"
+	SchemaVersion                   = "corerp-rp1-utterances-023-2026-09-23"
 )
 
 const (
@@ -170,7 +171,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		{BankruptcySlotSchemaVersion, "019_m2_bankruptcy_slot_claims.sql"},
 		{RPSessionSchemaVersion, "020_rp_sessions.sql"},
 		{RPRouteSchemaVersion, "021_rp_routes.sql"},
-		{SchemaVersion, "022_rp_wait_intents.sql"},
+		{RPWaitSchemaVersion, "022_rp_wait_intents.sql"},
+		{SchemaVersion, "023_rp_utterances.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

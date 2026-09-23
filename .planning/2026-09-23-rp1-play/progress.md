@@ -21,6 +21,10 @@
 - Resolved wait design: durable app intent before existing scheduler work, then a final event-backed world clock checkpoint only when all due work is settled. Budget exhaustion must remain partial and retryable.
 - RP-1B wait implemented with 022 migration/mirror, scheduler-backed budgeted execution, durable retry intent, one final `RPWaitCompleted` Event/clock/Outbox commit and HTTP route. Focused tests pass for no-due advance, budget exhaustion/reopen retry, precommit failure/retry, idempotency mismatch, auth and projection comparison. Pending wait prevents interleaving RP move/wait on its branch or closing its session.
 - RP-1B final full uncached Go suite, vet and related race passed after the last source/test change (storage 47.175s; race storage 19.327s). `npm run verify:m2-evidence` passed with 26 executable tests. Wrote `docs/rp1/phase-b.md`; checkpoint commit is next, then automatically begin RP-1C.
+- RP-1B checkpoint commit `8c8ed78` created after `git diff --cached --check` passed. Advanced to RP-1C design without waiting for separate approval.
+- RP-1C source mapping: `observation_records`/`agent_knowledge` already replay through existing Event lineage; `channel=co_location` is the current same-place evidence path. No acoustic/whisper rule exists. Chose an immutable accepted-utterance index plus existing attributed Knowledge projection, avoiding a second Knowledge authority or objective-truth promotion.
+- Implemented migration 023 and mirror, scoped player speech HTTP endpoint, same-transaction Event/turn/knowledge/Outbox writer, and tests for one/multiple hearers, offsite exclusion, false financial claim, idempotency, precommit rollback, postpublish/pre-mark crash, reopen/replay/rebuild, immutability and 022→023 upgrade. Focused tests passed. Full regression/race rerun after last upgrade test is in progress; vet already passed. Wrote `docs/rp1/phase-c.md` pending final gate result.
+- RP-1C final uncached Go suite passed after the added upgrade test (storage 48.456s; HTTP 4.621s); related race passed (storage 25.237s, HTTP 9.156s, CLI 4.826s); vet clean. `npm run verify:m2-evidence` passed with 26 executable tests. No frontend source changed. Stage checkpoint is next.
 
 ## Verification ledger
 | Check | Result | Evidence |
@@ -42,3 +46,8 @@
 | RP-1B final Go vet | PASS | `go vet ./...`; no findings |
 | RP-1B final related race | PASS | `go test -race ./internal/storage ./internal/transport/httpapi ./cmd/corerp-m2 -run 'TestRP\|TestM2CLIRP\|TestEmbeddedMigrationsMatchContracts\|TestM2WagePolicyMigrationUpgradesExistingSplitLineage' -count=1`; storage 19.327s, HTTP 7.264s, CLI 4.461s |
 | RP-1B M2 evidence | PASS | `npm run verify:m2-evidence`; 26 executable tests |
+| RP-1C focused speech/upgrade | PASS | `go test ./internal/storage ./internal/transport/httpapi -run 'TestRPSpeech\|TestEmbeddedMigrationsMatchContracts\|TestRPSchemaUpgradeFrom019' -count=1` |
+| RP-1C final full Go suite | PASS | `go test ./... -count=1`; storage 48.456s, HTTP 4.621s, other packages pass |
+| RP-1C final Go vet | PASS | `go vet ./...`; no findings |
+| RP-1C final related race | PASS | `go test -race ./internal/storage ./internal/transport/httpapi ./cmd/corerp-m2 -run 'TestRP\|TestM2CLIRP\|TestEmbeddedMigrationsMatchContracts\|TestM2WagePolicyMigrationUpgradesExistingSplitLineage' -count=1`; storage 25.237s, HTTP 9.156s, CLI 4.826s |
+| RP-1C M2 evidence | PASS | `npm run verify:m2-evidence`; 26 executable tests |

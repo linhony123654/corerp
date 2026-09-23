@@ -41,7 +41,7 @@ Initialize and exercise the isolated M2 T09 Cohort fixture without changing the 
 ```
 
 The schema, conservation boundary, evidence, and explicit broader-M2 deferrals are in [`../docs/m2/`](../docs/m2/).
-The opt-in `rp-prepare` action reuses the M2 instance, T09 identities and Agent positions to add a real player, a third NPC, and a player-scoped control grant. `rp-travel-prepare` adds event-backed routes without a second location table. Start the HTTP server against that same database and map a local development token to `principal_m2_rp_player`; the RP open/read/resume/close/observe/move/wait endpoints and their authority boundary are documented in [`../docs/rp1/`](../docs/rp1/README.md). No server startup implicitly prepares the fixture; speech, NPC decisions and Play frontend remain future stages.
+The opt-in `rp-prepare` action reuses the M2 instance, T09 identities and Agent positions to add a real player, a third NPC, and a player-scoped control grant. `rp-travel-prepare` adds event-backed routes without a second location table. Start the HTTP server against that same database and map a local development token to `principal_m2_rp_player`; the RP open/read/resume/close/observe/move/wait/speak endpoints and their authority boundary are documented in [`../docs/rp1/`](../docs/rp1/README.md). No server startup implicitly prepares the fixture; NPC decisions, continuous turn orchestration and the Play frontend remain future stages.
 
 ## Readiness and next backend scope
 

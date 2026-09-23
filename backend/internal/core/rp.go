@@ -93,6 +93,31 @@ func (r RPWaitRequest) Validate() error {
 	return nil
 }
 
+type RPSpeechRequest struct {
+	PrincipalID    string `json:"principal_id"`
+	SessionID      string `json:"session_id"`
+	Text           string `json:"text"`
+	SpeechAct      string `json:"speech_act,omitempty"`
+	ExpectedCursor int64  `json:"expected_cursor"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (r RPSpeechRequest) Validate() error {
+	if strings.TrimSpace(r.PrincipalID) == "" || strings.TrimSpace(r.SessionID) == "" || strings.TrimSpace(r.IdempotencyKey) == "" {
+		return NewError(CodeInvalidArgument, "principal_id, session_id and idempotency_key are required")
+	}
+	if len(r.IdempotencyKey) > 128 || r.ExpectedCursor < 1 {
+		return NewError(CodeInvalidArgument, "invalid RP speech key or observation cursor")
+	}
+	if strings.TrimSpace(r.Text) == "" || len([]rune(r.Text)) > 2000 {
+		return NewError(CodeInvalidArgument, "speech text must have 1–2000 characters")
+	}
+	if r.SpeechAct != "" && r.SpeechAct != "statement" && r.SpeechAct != "question" && r.SpeechAct != "request" {
+		return NewError(CodeInvalidArgument, "speech_act must be statement, question or request")
+	}
+	return nil
+}
+
 func (r RPSessionReadRequest) Validate() error {
 	if strings.TrimSpace(r.PrincipalID) == "" || strings.TrimSpace(r.SessionID) == "" {
 		return NewError(CodeInvalidArgument, "principal_id and session_id are required")

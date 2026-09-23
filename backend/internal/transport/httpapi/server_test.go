@@ -187,6 +187,43 @@ func TestRPWaitHTTPUsesPlayerAuthorizationAndCommittedClock(t *testing.T) {
 	}
 }
 
+func TestRPSpeechHTTPCommitsSamePlaceHearingAndRejectsWrongPrincipal(t *testing.T) {
+	ctx := context.Background()
+	store, handler := openHTTPTestServer(t, ctx, filepath.Join(t.TempDir(), "rp-speech-http.db"))
+	defer store.Close()
+	if _, err := store.PrepareRPTravel(ctx); err != nil {
+		t.Fatal(err)
+	}
+	response := performJSON(t, handler, "/api/v1/rp/sessions/open", rpPlayerToken, core.RPSessionOpenRequest{
+		InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID,
+		EntityID: storage.M2RPPlayerID, POV: "second_person", IdempotencyKey: "http-speech-session",
+	})
+	assertStatus(t, response, http.StatusOK)
+	session := decodeData[storage.RPSession](t, response)
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, core.RPSessionReadRequest{SessionID: session.SessionID})
+	assertStatus(t, response, http.StatusOK)
+	initial := decodeData[storage.RPObservation](t, response)
+	speech := core.RPSpeechRequest{SessionID: session.SessionID, Text: "你好，Cai。", ExpectedCursor: initial.ObservationCursor, IdempotencyKey: "http-greeting"}
+	response = performJSON(t, handler, "/api/v1/rp/actions/speak", creatorToken, speech)
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	response = performJSON(t, handler, "/api/v1/rp/actions/speak", rpPlayerToken, speech)
+	assertStatus(t, response, http.StatusOK)
+	first := decodeData[storage.RPSpeechResult](t, response)
+	if first.EventID == "" || len(first.ListenerIDs) != 1 || first.ListenerIDs[0] != storage.M2RPNPCID {
+		t.Fatalf("HTTP speech did not select real listener: %+v", first)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/actions/speak", rpPlayerToken, speech)
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPSpeechResult](t, response); !got.Replayed || got.EventID != first.EventID {
+		t.Fatalf("HTTP speech retry duplicated event: %+v", got)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, core.RPSessionReadRequest{SessionID: session.SessionID})
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPObservation](t, response); got.ObservationCursor != first.EventSequence {
+		t.Fatalf("HTTP speech did not advance world: %+v", got)
+	}
+}
+
 func TestHealthReadinessAndStrictRequestBoundary(t *testing.T) {
 	ctx := context.Background()
 	store, handler := openHTTPTestServer(t, ctx, filepath.Join(t.TempDir(), "boundary.db"))
