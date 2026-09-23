@@ -75,6 +75,24 @@ func TestM2CLIRPPrepareIsRepeatable(t *testing.T) {
 	}
 }
 
+func TestM2CLIRPTravelPrepareIsRepeatable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "m2-rp-travel-cli.db")
+	var output bytes.Buffer
+	if err := run(context.Background(), path, "rp-travel-prepare", &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), `"event_sequence": 8`) || !strings.Contains(output.String(), `"link_count": 8`) {
+		t.Fatalf("RP travel setup output was not authoritative: %s", output.String())
+	}
+	output.Reset()
+	if err := run(context.Background(), path, "rp-travel-prepare", &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), `"replayed": true`) || !strings.Contains(output.String(), `"event_sequence": 8`) {
+		t.Fatalf("RP travel setup retry changed authority: %s", output.String())
+	}
+}
+
 func TestM2CLIEconomyDayOneIsExplicitAndRestartable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "m2-economy-cli.db")
 	var output bytes.Buffer

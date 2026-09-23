@@ -195,10 +195,16 @@ func TestRPSchemaUpgradeFrom019PreservesExistingM2World(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "rp-upgrade.db")
 	store := openM2AgentStore(t, ctx, path, false)
+	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_wait_intents`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_place_links`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_sessions`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version = ?`, SchemaVersion); err != nil {
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version IN (?, ?, ?)`, SchemaVersion, RPRouteSchemaVersion, RPSessionSchemaVersion); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {

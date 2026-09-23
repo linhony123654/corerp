@@ -1033,13 +1033,13 @@ func TestM2WagePolicyMigrationUpgradesExistingSplitLineage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"rp_sessions", "m2_bankruptcy_slot_claims", "m2_wage_slot_receipts", "m2_wage_participation_returns", "m2_wage_claim_owner_transitions", "m2_wage_allocation_policies"} {
+	for _, table := range []string{"rp_wait_intents", "rp_place_links", "rp_sessions", "m2_bankruptcy_slot_claims", "m2_wage_slot_receipts", "m2_wage_participation_returns", "m2_wage_claim_owner_transitions", "m2_wage_allocation_policies"} {
 		if _, err := raw.ExecContext(ctx, `DROP TABLE `+table); err != nil {
 			raw.Close()
 			t.Fatal(err)
 		}
 	}
-	if _, err := raw.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version IN (?, ?, ?, ?)`, SchemaVersion, BankruptcySlotSchemaVersion, WageClaimOwnershipSchemaVersion, WageAllocationSchemaVersion); err != nil {
+	if _, err := raw.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version IN (?, ?, ?, ?, ?, ?)`, SchemaVersion, RPRouteSchemaVersion, RPSessionSchemaVersion, BankruptcySlotSchemaVersion, WageClaimOwnershipSchemaVersion, WageAllocationSchemaVersion); err != nil {
 		raw.Close()
 		t.Fatal(err)
 	}

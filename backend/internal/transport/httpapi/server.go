@@ -35,6 +35,8 @@ type Service interface {
 	ResumeRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
 	CloseRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
 	ObserveRPSession(context.Context, core.RPSessionReadRequest) (storage.RPObservation, error)
+	MoveRP(context.Context, core.RPMoveRequest) (storage.RPMoveResult, error)
+	WaitRP(context.Context, core.RPWaitRequest) (storage.RPWaitResult, error)
 	ReadDemoStateAuthorized(context.Context, core.StateReadRequest) (storage.State, error)
 	ListVisibleEvents(context.Context, core.VisibleEventRequest) (storage.VisibleEventPage, error)
 }
@@ -134,6 +136,10 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPSessionClose(response, request, requestID, principalID)
 	case "/api/v1/rp/observe":
 		s.handleRPObserve(response, request, requestID, principalID)
+	case "/api/v1/rp/actions/move":
+		s.handleRPMove(response, request, requestID, principalID)
+	case "/api/v1/rp/actions/wait":
+		s.handleRPWait(response, request, requestID, principalID)
 	case "/api/v1/state/query":
 		s.handleState(response, request, requestID, principalID)
 	case "/api/v1/events":
@@ -570,6 +576,48 @@ func (s *Server) handleRPObserve(response http.ResponseWriter, request *http.Req
 		return
 	}
 	result, err := s.service.ObserveRPSession(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPMove(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input core.RPMoveRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.MoveRP(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+func (s *Server) handleRPWait(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input core.RPWaitRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.WaitRP(request.Context(), input)
 	if err != nil {
 		writeError(response, requestID, err)
 		return

@@ -168,6 +168,13 @@ func (s *Store) CloseRPSession(ctx context.Context, request core.RPSessionReadRe
 	if session.Status == "closed" {
 		return session, nil
 	}
+	var pendingWaits int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_wait_intents WHERE session_id = ? AND status = 'pending'`, session.SessionID).Scan(&pendingWaits); err != nil {
+		return RPSession{}, core.WrapError(core.CodeStorageFailure, "check pending RP wait before close", err)
+	}
+	if pendingWaits != 0 {
+		return RPSession{}, core.NewError(core.CodeCommandInProgress, "RP wait must complete before closing the session")
+	}
 	if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_sessions SET status = 'closed' WHERE session_id = ? AND status = 'active'`, session.SessionID); err != nil {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "close RP session", err)
 	}

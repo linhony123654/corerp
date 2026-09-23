@@ -98,6 +98,95 @@ func TestRPHTTPPlayerSessionObservationAndRestart(t *testing.T) {
 	assertAPIError(t, response, http.StatusConflict, core.CodeBranchConflict)
 }
 
+func TestRPMoveHTTPValidatesRouteAndUsesCommittedPosition(t *testing.T) {
+	ctx := context.Background()
+	store, handler := openHTTPTestServer(t, ctx, filepath.Join(t.TempDir(), "rp-move-http.db"))
+	defer store.Close()
+	if _, err := store.PrepareRPTravel(ctx); err != nil {
+		t.Fatal(err)
+	}
+	response := performJSON(t, handler, "/api/v1/rp/sessions/open", rpPlayerToken, core.RPSessionOpenRequest{
+		InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID,
+		EntityID: storage.M2RPPlayerID, POV: "second_person", IdempotencyKey: "http-move-session",
+	})
+	assertStatus(t, response, http.StatusOK)
+	session := decodeData[storage.RPSession](t, response)
+	read := core.RPSessionReadRequest{SessionID: session.SessionID}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	initial := decodeData[storage.RPObservation](t, response)
+	move := core.RPMoveRequest{
+		SessionID: session.SessionID, FromPlaceID: storage.M2AgentCafeID,
+		ToPlaceID: "place_m2_home_ada", ExpectedCursor: initial.ObservationCursor,
+		IdempotencyKey: "http-move-home",
+	}
+	response = performJSON(t, handler, "/api/v1/rp/actions/move", creatorToken, move)
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	response = performJSON(t, handler, "/api/v1/rp/actions/move", rpPlayerToken, move)
+	assertStatus(t, response, http.StatusOK)
+	first := decodeData[storage.RPMoveResult](t, response)
+	if first.Replayed || first.EventSequence != initial.ObservationCursor+1 {
+		t.Fatalf("HTTP move did not commit one event: %+v", first)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/actions/move", rpPlayerToken, move)
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPMoveResult](t, response); !got.Replayed || got.EventID != first.EventID {
+		t.Fatalf("HTTP move retry duplicated world action: %+v", got)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	after := decodeData[storage.RPObservation](t, response)
+	if after.PlaceID != "place_m2_home_ada" || len(after.PresentEntities) != 1 || after.PresentEntities[0].EntityID != storage.M2AgentAdaID {
+		t.Fatalf("HTTP move observation did not follow world: %+v", after)
+	}
+	illegal := move
+	illegal.FromPlaceID = "place_m2_home_ada"
+	illegal.ToPlaceID = "place_m2_work_ada"
+	illegal.ExpectedCursor = after.ObservationCursor
+	illegal.IdempotencyKey = "http-illegal-shortcut"
+	response = performJSON(t, handler, "/api/v1/rp/actions/move", rpPlayerToken, illegal)
+	assertAPIError(t, response, http.StatusBadRequest, core.CodeInvalidArgument)
+}
+
+func TestRPWaitHTTPUsesPlayerAuthorizationAndCommittedClock(t *testing.T) {
+	ctx := context.Background()
+	store, handler := openHTTPTestServer(t, ctx, filepath.Join(t.TempDir(), "rp-wait-http.db"))
+	defer store.Close()
+	if _, err := store.PrepareRPTravel(ctx); err != nil {
+		t.Fatal(err)
+	}
+	response := performJSON(t, handler, "/api/v1/rp/sessions/open", rpPlayerToken, core.RPSessionOpenRequest{
+		InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID,
+		EntityID: storage.M2RPPlayerID, POV: "second_person", IdempotencyKey: "http-wait-session",
+	})
+	assertStatus(t, response, http.StatusOK)
+	session := decodeData[storage.RPSession](t, response)
+	read := core.RPSessionReadRequest{SessionID: session.SessionID}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	initial := decodeData[storage.RPObservation](t, response)
+	wait := core.RPWaitRequest{SessionID: session.SessionID, TargetWorldTime: "2026-09-22T03:00:00Z", Budget: 1,
+		ExpectedCursor: initial.ObservationCursor, IdempotencyKey: "http-quiet-hour"}
+	response = performJSON(t, handler, "/api/v1/rp/actions/wait", creatorToken, wait)
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	response = performJSON(t, handler, "/api/v1/rp/actions/wait", rpPlayerToken, wait)
+	assertStatus(t, response, http.StatusOK)
+	first := decodeData[storage.RPWaitResult](t, response)
+	if first.Status != "completed" || first.CurrentWorldTime != wait.TargetWorldTime || first.EventSequence != initial.ObservationCursor+1 {
+		t.Fatalf("HTTP wait did not commit world clock: %+v", first)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/actions/wait", rpPlayerToken, wait)
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPWaitResult](t, response); !got.Replayed || got.EventID != first.EventID {
+		t.Fatalf("HTTP wait retry duplicated event: %+v", got)
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	if got := decodeData[storage.RPObservation](t, response); got.WorldTime != wait.TargetWorldTime || got.ObservationCursor != first.EventSequence {
+		t.Fatalf("HTTP observation missed completed wait: %+v", got)
+	}
+}
+
 func TestHealthReadinessAndStrictRequestBoundary(t *testing.T) {
 	ctx := context.Background()
 	store, handler := openHTTPTestServer(t, ctx, filepath.Join(t.TempDir(), "boundary.db"))

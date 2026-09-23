@@ -237,6 +237,28 @@ func TestEmbeddedMigrationsMatchContracts(t *testing.T) {
 	if !bytes.Equal(embedded, contract) {
 		t.Fatal("embedded migration diverges from docs/rp1/schema-020-sessions.sql")
 	}
+	embedded, err = migrationFiles.ReadFile("migrations/021_rp_routes.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err = os.ReadFile(filepath.Join("..", "..", "..", "docs", "rp1", "schema-021-routes.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(embedded, contract) {
+		t.Fatal("embedded migration diverges from docs/rp1/schema-021-routes.sql")
+	}
+	embedded, err = migrationFiles.ReadFile("migrations/022_rp_wait_intents.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err = os.ReadFile(filepath.Join("..", "..", "..", "docs", "rp1", "schema-022-wait-intents.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(embedded, contract) {
+		t.Fatal("embedded migration diverges from docs/rp1/schema-022-wait-intents.sql")
+	}
 }
 
 func TestOpenMigratesExistingM0DatabaseToRecoverySchema(t *testing.T) {
