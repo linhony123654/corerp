@@ -55,21 +55,24 @@ type RPOwnEmployment struct {
 	SourceEventID        string   `json:"source_event_id"`
 }
 type RPLifeContext struct {
-	Unemployment           *RPUnemployment    `json:"unemployment,omitempty"`
-	Background             *RPBackground      `json:"background,omitempty"`
-	RoutineSourceEventID   string             `json:"routine_source_event_id"`
-	Disposition            RPDisposition      `json:"disposition"`
-	ReceivableMinor        int64              `json:"receivable_minor"`
-	LiabilityMinor         int64              `json:"liability_minor"`
-	RentDueMinor           int64              `json:"rent_due_minor"`
-	EconomicSourceEventIDs []string           `json:"economic_source_event_ids"`
-	Employment             []RPOwnEmployment  `json:"employment"`
-	Relationships          []RPRelationship   `json:"relationships"`
-	SalientMemories        []RPLifeMemory     `json:"salient_memories"`
-	RecentWork             []RPLifeMemory     `json:"recent_work"`
-	Needs                  []RPNeed           `json:"needs"`
-	Goals                  []RPGoal           `json:"goals"`
-	Commitments            []RPSocialEvidence `json:"commitments"`
+	LawCases               []RPLawCase            `json:"law_cases,omitempty"`
+	CultureAffiliations    []RPCultureAffiliation `json:"culture_affiliations,omitempty"`
+	CultureExperiences     []RPCultureExperience  `json:"culture_experiences,omitempty"`
+	Unemployment           *RPUnemployment        `json:"unemployment,omitempty"`
+	Background             *RPBackground          `json:"background,omitempty"`
+	RoutineSourceEventID   string                 `json:"routine_source_event_id"`
+	Disposition            RPDisposition          `json:"disposition"`
+	ReceivableMinor        int64                  `json:"receivable_minor"`
+	LiabilityMinor         int64                  `json:"liability_minor"`
+	RentDueMinor           int64                  `json:"rent_due_minor"`
+	EconomicSourceEventIDs []string               `json:"economic_source_event_ids"`
+	Employment             []RPOwnEmployment      `json:"employment"`
+	Relationships          []RPRelationship       `json:"relationships"`
+	SalientMemories        []RPLifeMemory         `json:"salient_memories"`
+	RecentWork             []RPLifeMemory         `json:"recent_work"`
+	Needs                  []RPNeed               `json:"needs"`
+	Goals                  []RPGoal               `json:"goals"`
+	Commitments            []RPSocialEvidence     `json:"commitments"`
 }
 
 type RPUnemployment struct {

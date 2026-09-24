@@ -220,7 +220,15 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	return append(append(differences, wages...), roles...), nil
+	culture, err := cultureGrantProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	institutions, err := institutionGrantProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(append(append(differences, wages...), roles...), culture...), institutions...), nil
 }
 
 func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID string) error {
@@ -339,6 +347,20 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 		return err
 	}
 	if err := repairCareerRoleProjections(ctx, tx.conn, instanceID, branchID, roles); err != nil {
+		return err
+	}
+	culture, err := cultureGrantProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairCultureGrantProjections(ctx, tx.conn, culture); err != nil {
+		return err
+	}
+	institutions, err := institutionGrantProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairInstitutionGrantProjections(ctx, tx.conn, institutions); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

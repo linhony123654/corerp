@@ -162,6 +162,14 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 	if err := applyRPSocialLife(ctx, conn, input.NPCEntityID, life); err != nil {
 		return nil, err
 	}
+	life.CultureAffiliations, err = readOwnCultureAffiliations(ctx, conn, input.NPCEntityID)
+	if err != nil {
+		return nil, err
+	}
+	life.LawCases, err = readOwnRPLawCases(ctx, conn, input.InstanceID, input.BranchID, input.NPCEntityID)
+	if err != nil {
+		return nil, err
+	}
 	for _, job := range life.Employment {
 		life.Relationships = append(life.Relationships, core.RPRelationship{SubjectEntityID: job.OrganizationID, Role: "employee", SourceEventIDs: []string{job.SourceEventID}})
 	}
@@ -201,9 +209,13 @@ func readRPOwnEmployment(ctx context.Context, conn *sql.Conn, entityID, worldTim
 }
 
 func applyRPSocialLife(ctx context.Context, conn *sql.Conn, observer string, life *core.RPLifeContext) error {
-	rows, err := conn.QueryContext(ctx, `SELECT subject_agent_id,source_event_id,learned_world_time,claim_payload FROM agent_knowledge
-	WHERE observer_agent_id=? AND json_extract(claim_payload,'$.claim_type')='interpersonal_action'
-	ORDER BY last_event_sequence,claim_key`, observer)
+	history, err := readOwnCultureHistory(ctx, conn, observer)
+	if err != nil {
+		return err
+	}
+	rows, err := conn.QueryContext(ctx, `SELECT k.subject_agent_id,k.source_event_id,k.learned_world_time,k.claim_payload,e.event_sequence FROM agent_knowledge k JOIN events e ON e.event_id=k.source_event_id
+	WHERE k.observer_agent_id=? AND json_extract(k.claim_payload,'$.claim_type')='interpersonal_action'
+	ORDER BY e.event_sequence,k.claim_key`, observer)
 	if err != nil {
 		return err
 	}
@@ -217,7 +229,8 @@ func applyRPSocialLife(ctx context.Context, conn *sql.Conn, observer string, lif
 	for rows.Next() {
 		var other, eventID, worldTime, raw string
 		var e core.RPSocialEvidence
-		if err := rows.Scan(&other, &eventID, &worldTime, &raw); err != nil {
+		var sequence int64
+		if err := rows.Scan(&other, &eventID, &worldTime, &raw, &sequence); err != nil {
 			return err
 		}
 		if err := json.Unmarshal([]byte(raw), &e); err != nil {
@@ -232,7 +245,20 @@ func applyRPSocialLife(ctx context.Context, conn *sql.Conn, observer string, lif
 			index[other] = i
 			life.Relationships = append(life.Relationships, core.RPRelationship{SubjectEntityID: other, Role: "acquaintance", SourceEventIDs: []string{}})
 		}
-		core.ApplyRPSocialEvidence(&life.Relationships[i], observer, eventID, e)
+		var evaluations []core.RPCultureEvaluation
+		if e.Action == "gift" && e.TargetEntityID == observer {
+			evaluations, err = evaluateOwnCultureAt(history, sequence, observer, e.Action)
+			if err != nil {
+				return err
+			}
+			if len(evaluations) > 0 {
+				life.CultureExperiences = append(life.CultureExperiences, core.RPCultureExperience{ActionEventID: eventID, ActorEntityID: other, Evaluations: evaluations, Conflicts: core.RPCultureConflicts(evaluations)})
+				if len(life.CultureExperiences) > 8 {
+					life.CultureExperiences = life.CultureExperiences[1:]
+				}
+			}
+		}
+		core.ApplyRPSocialEvidenceWithCulture(&life.Relationships[i], observer, eventID, e, evaluations)
 		if e.Action == "promise_meeting" {
 			e.PromiseEventID = eventID
 			promises[eventID] = e

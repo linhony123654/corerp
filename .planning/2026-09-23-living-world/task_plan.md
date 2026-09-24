@@ -8,10 +8,9 @@ Full-project DEFINE/DESIGN/BUILD/POLISH/local SHIP per stage. One large stage in
 
 ## Current phase
 
-RP-3 full local verification PASS. Storage race172/172 inventory tests PASS2832.907s, no missing/skipped tests; all other packages pass including the corrected server test's separate10x race run. The original full-race command exited1 for that old server-test attempt; do not erase its failure history. Full normal Go/vet and current browser life/provider checks pass. All processes terminal. Final audit/report are ready; authorized checkpoint and clean-tree verification are next, before RP-4 recon.
-RP-2 complete at `d68e10d`; clean tree verified before RP-3. RP-3 implementation and original-requirement audit are complete; final verification/SHIP is in progress. Scope includes recruitment, actual work/payroll, attendance, performance/regularization, leave, overtime, raises, grade/position/pay/role transitions, limited announcement propagation, actual exit/unemployment/reemployment, aggregate entitlement exits and supervisor/coworker-dependent voluntary work. Prior earned claims, personal appointments, population, and independently appointed authority survive.
+RP-3 COMPLETE at `186fb68`; post-commit clean worktree verified before RP-4 recon. Full normal/vet and browser checks pass; race coverage reconciles172/172 storage tests plus all other packages, including corrected server10x rerun. Original failed attempts remain disclosed in docs/rp2/phase-3-audit.md. No test processes remain live.
 
-Final normal/race checks include the latest career-event memory filter; no material speedup is claimed from the single266s versus271s comparison. No remote model configuration is available (presence-only check); local transport fixture is verified, not live quality. Acceptance map and report: docs/rp2/phase-3-audit.md and phase-3.md. Schema026 unchanged; overall goal remains active through RP-8/final integration.
+RP-4 implementation and targeted boundary evidence mapped to original A/B/C requirements in docs/rp4/phase-4-audit.md. Full normal Go/vet91916, browser life/provider89263 and full race66977 exited0; frontend build and bounded configured evidence scripts PASS. Race259/259 top-level tests passed, including187 storage tests; storage2918.728s, no failed/skipped individual tests or unfinished top-level runs. Final staging/security review, checkpoint and clean-tree confirmation pending before RP-5. Schema026 unchanged. Overall goal remains active through RP-8/final integration.
 
 ## Milestones
 - [x] RP-2A: real provider adapter, strict structured output/schema, timeout/retry/fallback, illegal rejection, configuration, targeted real HTTP/fake model tests, full gate and checkpoint.
@@ -19,7 +18,7 @@ Final normal/race checks include the latest career-event memory filter; no mater
 - [x] RP-2C: minimal materialization and evidence-consistent stable background; Cohort→NPC→RP→re-encounter.
 - [x] RP-2D: versioned scoped StyleProfile (default/world/session/scene/turn); decision/narrative separation and fact invariance.
 - [x] RP-2E:60 turns/five days, four NPC/five places, work unit, materialized NPC, economic/work/relationship chains, product initiative, quiet day, restart; four same-initial-world60-turn divergent runs with RNG/provider/state attribution. RP-2 local verification gate PASS; checkpoint/clean-tree transition follows.
-- [ ] RP-3: recruitment and all employment lifecycle transitions; career↔RP chains; verify/report/checkpoint.
+- [x] RP-3: recruitment and all employment lifecycle transitions; career↔RP chains; verified/reported/checkpoint186fb68, clean-tree transition confirmed.
 - [ ] RP-4: layered culture; institutions/law lifecycle, knowledge propagation, evaluation/rebellion/violation consequences; verify/report/checkpoint.
 - [ ] RP-5: sourced probability/cooldown opportunities, non-directorial event pressure, HOT/WARM/COLD/COHORT LOD, long-run substantive divergence; verify/report/checkpoint.
 - [ ] RP-6: immersive world-native information, narrative presets/custom/stream/regenerate without rollback, 100+ turn multiday Play/restart; verify/report/checkpoint.
@@ -43,4 +42,4 @@ Each completed stage: full uncached Go, vet, related race, applicable migrations
 - Existing `RPDecisionInput`/`RPDecisionProposal` and `RunRPTurn(provider)` are reusable. Current HTTP product wrappers hardcode deterministic; supply an immutable service-level provider wrapper rather than mutable per-request global state.
 
 ## Gates
-DEFINE PASS: requested phase order/scope/DoD captured, original goal remains full acceptance reference. RP-2A/B/C/D/E DESIGN/BUILD/POLISH/local verification PASS (live model REQUIRED_IF_AVAILABLE, unconfigured; local HTTP adapter verified). Prior checkpoints B `d694788`, C `66211c0`, D `4ded11d`, E/full RP-2 `d68e10d`. RP-3 DEFINE/DESIGN/BUILD/POLISH/local verification PASS; report complete, checkpoint/clean-tree transition next. RP-4–8/final implementation gates pending.
+DEFINE PASS: requested phase order/scope/DoD captured, original goal remains full acceptance reference. RP-2A/B/C/D/E DESIGN/BUILD/POLISH/local verification PASS (live model REQUIRED_IF_AVAILABLE, unconfigured; local HTTP adapter verified). Prior checkpoints B `d694788`, C `66211c0`, D `4ded11d`, E/full RP-2 `d68e10d`. RP-3 all local gates/checkpoint186fb68/clean-tree transition PASS. RP-4 DEFINE/DESIGN/BUILD/POLISH/local verification PASS with original A/B/C traceability and documented bounded behavior; final checkpoint/clean-tree transition pending. RP-5–8/final implementation gates pending.

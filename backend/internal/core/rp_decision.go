@@ -43,6 +43,7 @@ type RPDecisionSchedule struct {
 // RPDecisionInput is the only data boundary exposed to a replaceable provider.
 // No account identifiers, other people's finances, creator data or raw DB rows.
 type RPDecisionInput struct {
+	Law                  *RPLawContext             `json:"law,omitempty"`
 	Trigger              *RPDecisionTrigger        `json:"trigger,omitempty"`
 	Life                 *RPLifeContext            `json:"life,omitempty"`
 	InstanceID           string                    `json:"instance_id"`
@@ -83,6 +84,20 @@ type RPDecisionProvider interface {
 type DeterministicRPDecisionProvider struct{}
 
 func (DeterministicRPDecisionProvider) Propose(_ context.Context, input RPDecisionInput) (RPDecisionProposal, error) {
+	if input.Law != nil {
+		respond, silence := false, false
+		for _, action := range input.Law.LawfulActions {
+			if action == "respond" {
+				respond = true
+			}
+			if action == "silence" {
+				silence = true
+			}
+		}
+		if !respond && silence {
+			return RPDecisionProposal{Action: "silence"}, nil
+		}
+	}
 	if input.Trigger != nil {
 		return proposeRPInitiative(input)
 	}
@@ -128,6 +143,20 @@ func (DeterministicRPDecisionProvider) Propose(_ context.Context, input RPDecisi
 		return RPDecisionProposal{Action: "refuse", Text: "我得先去工作，晚些再聊。"}, nil
 	}
 	if input.Life != nil {
+		for i := len(input.Life.CultureExperiences) - 1; i >= 0; i-- {
+			experience := input.Life.CultureExperiences[i]
+			if experience.ActorEntityID != input.InterlocutorEntityID {
+				continue
+			}
+			score := 0
+			for _, evaluation := range experience.Evaluations {
+				score += evaluation.Score
+			}
+			if score < 0 {
+				return RPDecisionProposal{Action: "refuse", Text: "先前的赠礼让我不太舒服，我暂时不想继续聊。"}, nil
+			}
+			break
+		}
 		for _, relation := range input.Life.Relationships {
 			if relation.SubjectEntityID == input.InterlocutorEntityID && relation.Trust >= 2 {
 				return RPDecisionProposal{Action: "respond", Text: "我愿意相信你，接着说吧。"}, nil

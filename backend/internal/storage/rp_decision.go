@@ -205,6 +205,11 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 	if err != nil {
 		return core.RPDecisionInput{}, err
 	}
+	knownLaws, err := readKnownRPLaws(ctx, conn, input.InstanceID, input.BranchID, input.NPCEntityID)
+	if err != nil {
+		return core.RPDecisionInput{}, err
+	}
+	input.Law = core.BuildRPLawContext(knownLaws, input.WorldTime, input.PlaceID, input.LegalActions)
 	return input, nil
 }
 

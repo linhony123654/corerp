@@ -44,6 +44,25 @@ type Service interface {
 	DeclineCareerPositionChange(context.Context, core.CareerPositionDeclineRequest) (storage.CareerRecord, error)
 	AcceptCareerPositionChange(context.Context, core.CareerPositionAcceptRequest) (storage.CareerRecord, error)
 	SpeakCareerAnnouncement(context.Context, core.CareerAnnouncementRequest) (storage.CareerRecord, error)
+	DefineRPCulture(context.Context, storage.CultureDefinitionRequest) (storage.CultureRecord, error)
+	ReadOwnRPLawCases(context.Context, storage.LawCasesRequest) ([]core.RPLawCase, error)
+	DefineRPInstitution(context.Context, storage.InstitutionDefinitionRequest) (storage.InstitutionRecord, error)
+	ChangeRPInstitutionAuthority(context.Context, storage.InstitutionAuthorityRequest) (storage.InstitutionRecord, error)
+	ProposeRPLaw(context.Context, storage.LawProposalRequest) (storage.InstitutionRecord, error)
+	EnactRPLaw(context.Context, storage.LawEnactmentRequest) (storage.InstitutionRecord, error)
+	AnnounceRPLaw(context.Context, storage.LawAnnouncementRequest) (storage.InstitutionRecord, error)
+	RecordRPLawViolation(context.Context, storage.LawViolationRequest) (storage.InstitutionRecord, error)
+	EnforceRPLaw(context.Context, storage.LawEnforcementRequest) (storage.InstitutionRecord, error)
+	DisputeRPLaw(context.Context, storage.LawDisputeRequest) (storage.InstitutionRecord, error)
+	ForwardRPLawDispute(context.Context, storage.LawDisputeForwardRequest) (storage.InstitutionRecord, error)
+	ReviewRPLawDispute(context.Context, storage.LawReviewRequest) (storage.InstitutionRecord, error)
+	TransmitRPCulture(context.Context, storage.CultureTransmissionRequest) (storage.CultureRecord, error)
+	InternalizeRPCulture(context.Context, storage.CultureStanceRequest) (storage.CultureRecord, error)
+	AffiliateRPCulture(context.Context, storage.CultureAffiliationRequest) (storage.CultureRecord, error)
+	ProposeRPCulturalFamily(context.Context, storage.CultureFamilyProposalRequest) (storage.CultureRecord, error)
+	AcceptRPCulturalFamily(context.Context, storage.CultureFamilyAcceptRequest) (storage.CultureRecord, error)
+	DefineRPCultureTerritory(context.Context, storage.CultureTerritoryRequest) (storage.CultureRecord, error)
+	ChangeRPCultureAuthority(context.Context, storage.CultureAuthorityRequest) (storage.CultureRecord, error)
 	EndCareerEmployment(context.Context, core.CareerExitRequest) (storage.CareerRecord, error)
 	RequestCareerAggregateExit(context.Context, core.CareerAggregateExitRequest) (storage.CareerRecord, error)
 	PostCareerPosition(context.Context, core.CareerPostingRequest) (storage.CareerRecord, error)
@@ -180,6 +199,44 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPBackground(response, request, requestID, principalID)
 	case "/api/v1/career/organizations/define":
 		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOrganizationRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineCareerOrganization)
+	case "/api/v1/culture/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureDefinitionRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPCulture)
+	case "/api/v1/laws/cases/own":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawCasesRequest) *string { return &r.PrincipalID }, s.service.ReadOwnRPLawCases)
+	case "/api/v1/institutions/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.InstitutionDefinitionRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPInstitution)
+	case "/api/v1/institutions/authority":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.InstitutionAuthorityRequest) *string { return &r.Binding.PrincipalID }, s.service.ChangeRPInstitutionAuthority)
+	case "/api/v1/laws/propose":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawProposalRequest) *string { return &r.Binding.PrincipalID }, s.service.ProposeRPLaw)
+	case "/api/v1/laws/enact":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawEnactmentRequest) *string { return &r.Binding.PrincipalID }, s.service.EnactRPLaw)
+	case "/api/v1/laws/announce":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawAnnouncementRequest) *string { return &r.Binding.PrincipalID }, s.service.AnnounceRPLaw)
+	case "/api/v1/laws/violations/record":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawViolationRequest) *string { return &r.Binding.PrincipalID }, s.service.RecordRPLawViolation)
+	case "/api/v1/laws/enforce":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawEnforcementRequest) *string { return &r.Binding.PrincipalID }, s.service.EnforceRPLaw)
+	case "/api/v1/laws/dispute":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawDisputeRequest) *string { return &r.Binding.PrincipalID }, s.service.DisputeRPLaw)
+	case "/api/v1/laws/disputes/forward":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawDisputeForwardRequest) *string { return &r.Binding.PrincipalID }, s.service.ForwardRPLawDispute)
+	case "/api/v1/laws/review":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawReviewRequest) *string { return &r.Binding.PrincipalID }, s.service.ReviewRPLawDispute)
+	case "/api/v1/culture/territories/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureTerritoryRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPCultureTerritory)
+	case "/api/v1/culture/territories/authority":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureAuthorityRequest) *string { return &r.Binding.PrincipalID }, s.service.ChangeRPCultureAuthority)
+	case "/api/v1/culture/affiliate":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureAffiliationRequest) *string { return &r.Binding.PrincipalID }, s.service.AffiliateRPCulture)
+	case "/api/v1/culture/families/propose":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureFamilyProposalRequest) *string { return &r.Binding.PrincipalID }, s.service.ProposeRPCulturalFamily)
+	case "/api/v1/culture/families/accept":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureFamilyAcceptRequest) *string { return &r.Binding.PrincipalID }, s.service.AcceptRPCulturalFamily)
+	case "/api/v1/culture/transmit":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureTransmissionRequest) *string { return &r.Binding.PrincipalID }, s.service.TransmitRPCulture)
+	case "/api/v1/culture/internalize":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureStanceRequest) *string { return &r.Binding.PrincipalID }, s.service.InternalizeRPCulture)
 	case "/api/v1/career/positions/post":
 		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerPostingRequest) *string { return &r.Binding.PrincipalID }, s.service.PostCareerPosition)
 	case "/api/v1/career/grades/define":

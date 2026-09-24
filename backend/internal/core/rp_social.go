@@ -65,6 +65,13 @@ type RPSocialEvidence struct {
 // Relationship dimensions are one deterministic view of observed actions.
 // A gift cannot prove a claim true, and an apology cannot manufacture trust.
 func ApplyRPSocialEvidence(relation *RPRelationship, observer, eventID string, e RPSocialEvidence) {
+	ApplyRPSocialEvidenceWithCulture(relation, observer, eventID, e, nil)
+}
+
+// An observed gift may be unwelcome. With no sourced cultural evaluation the
+// legacy interpretation remains unchanged. Mixed norms retain separate evidence
+// and are averaged here only for this bounded relationship view.
+func ApplyRPSocialEvidenceWithCulture(relation *RPRelationship, observer, eventID string, e RPSocialEvidence, evaluations []RPCultureEvaluation) {
 	relation.Familiarity++
 	recipient := observer == e.TargetEntityID
 	switch e.Action {
@@ -72,8 +79,23 @@ func ApplyRPSocialEvidence(relation *RPRelationship, observer, eventID string, e
 		relation.Affinity++
 	case "gift":
 		if recipient {
-			relation.Trust++
-			relation.Affinity += 2
+			if len(evaluations) == 0 {
+				relation.Trust++
+				relation.Affinity += 2
+			} else {
+				score := 0
+				for _, evaluation := range evaluations {
+					score += evaluation.Score
+				}
+				score /= len(evaluations)
+				relation.Affinity += score
+				if score > 0 {
+					relation.Trust++
+				}
+				if score < 0 {
+					relation.Tension -= score
+				}
+			}
 		}
 	case "insult":
 		relation.Tension += 2

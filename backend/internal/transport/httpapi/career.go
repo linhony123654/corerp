@@ -8,6 +8,10 @@ import (
 )
 
 func handleCareerCommand[T any](s *Server, response http.ResponseWriter, request *http.Request, requestID, principalID string, principal func(*T) *string, execute func(context.Context, T) (storage.CareerRecord, error)) {
+	handleBoundCommand(s, response, request, requestID, principalID, principal, execute)
+}
+
+func handleBoundCommand[T, R any](s *Server, response http.ResponseWriter, request *http.Request, requestID, principalID string, principal func(*T) *string, execute func(context.Context, T) (R, error)) {
 	if !requireMethod(response, requestID, request, http.MethodPost) {
 		return
 	}
