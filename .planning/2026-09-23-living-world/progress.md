@@ -1,5 +1,8 @@
 # Living-world progress
 
+## 2026-09-24 — RP-6 checkpoint
+- Authorized source commit55faee5e2c0355ddcd25ee5d1bbcb07ac72b4acc created (83files), immediate git status porcelain empty. Final cached whitespace PASS; no live test handles. Schema026 unchanged, no deployment/push/world rollback. Git used existing automatic local committer identity and warned; no global config or history amendment performed. Stage report/verification/root README/plan follow-up records hash and PASS. Next onlyRP7 recon; full goal remains active.
+
 ## 2026-09-24 — RP-6 local gate passed
 - Original relevant race30674 terminal exit0 PASS storage1750.004s/HTTP24.635s after completing four60-turn snapshots and20-turn recovery/replay tests. No restarted or abandoned run; no live handles remain. Full normal/vet/fullHTTP race/core+narrative+server race/frontend/verifiers/current-source browser/104turn6D evidence retained. Final requirement audit and stage verification/report now PASS with explicit bounded-style, phone/map and unavailable-live-model limitations. Prepare authorized stage checkpoint, verify clean tree, then onlyRP7; overall goal not complete.
 

@@ -1,6 +1,6 @@
 # RP6 final local verification
 
-Current tree: RP6 changes on baseline364976f (source47c5d15); schema026 unchanged. No stage commit yet. This record is updated only from terminal command results; a running check is not a pass.
+Verified source checkpoint: `55faee5e2c0355ddcd25ee5d1bbcb07ac72b4acc`, post-commit clean tree confirmed; baseline364976f (RP5 source47c5d15), schema026 unchanged. This record is updated only from terminal command results; a running check is not a pass.
 
 | Required check | Command / evidence | Status |
 |---|---|---|
@@ -27,4 +27,4 @@ Inventory confirmed33storage and10HTTP top-level tests match the selected filter
 
 Pre-commit hygiene: modified/new Go files have no gofmt output; whitespace check passes; ignored local database/environment/build artifacts are absent from candidates. A bounded filename-only scan of new narrative/browser/UI/docs surfaces found no recognizable private-key or provider-key patterns; this is hygiene, not a general security certification.
 
-Overall RP6 local verification gate: **PASS**. All required applicable checks have terminal successful evidence; no live test handles remain. Requirements audit and report are finalized with explicit capability/live-model limits. Authorized checkpoint and clean-tree verification follow this report; no deployment or RP7 implementation yet.
+Overall RP6 local verification gate: **PASS**. All required applicable checks have terminal successful evidence; no live test handles remain. Requirements audit and report are finalized with explicit capability/live-model limits. Authorized source checkpoint and clean-tree verification completed; no deployment. Next stage is RP7 recon.

@@ -8,6 +8,8 @@ Full-project DEFINE/DESIGN/BUILD/POLISH/local SHIP per stage. One large stage in
 
 ## Current phase
 
+RP6 COMPLETE locally: source checkpoint55faee5e2c0355ddcd25ee5d1bbcb07ac72b4acc, clean tree verified after commit, schema026 unchanged. All required checks terminal PASS and no live handles. Metadata follow-up records that evidence. Current next stage is RP7 READ-ONLY recon: freeze minimum client protocol/permission-filtered context, thin SillyTavern adapter, MCP/RP skill, same-world cross-client E2E. Original RP7A–D remain intact; do not substitute documentation-only adapters or duplicate world/character ownership. Overall goal active throughRP8/final. Older gate-collection paragraphs below are historical.
+
 Current authoritative gate: RP6 local acceptance PASS;30674 terminal storage1750.004s/HTTP24.635s, all other required checks already PASS and all processes terminal. Final reports docs/rp6/{phase-6,verification,capability-audit,long-play}.md retain actual scope and limitations. Create authorized RP6 checkpoint and verify clean tree; then begin RP7 recon. Earlier collecting/pending paragraphs below are historical. Entire RP2→8/final goal remains active.
 
 Latest gate collection: fullHTTP race42392 terminal PASS131.893s; only relevant storage/HTTP race30674 remains live (PID2178671 confirmed computing at9m). Do not restart. Required normal/vet/build/verifiers/6D/browser checks passed; verification.md records actual selected coverage plus retained unchanged-source increment race. Next terminal result → final stage audit/report → authorized checkpoint/clean tree →RP7. No overall completion.

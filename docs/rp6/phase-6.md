@@ -1,10 +1,10 @@
 # RP-6 — playable narrative product
 
-Status: RP6 local acceptance PASS, authorized checkpoint pending. Personal views and narrative controls/streaming/context/recovery are implemented and verified, including independently configured constrained natural-language style planning. [Capability audit](capability-audit.md) retains bounded-style limitations. [Actual104-turn/128h browser journey](long-play.md), sourced memory/random behavior, midpoint restart and [full applicable stage verification](verification.md) all pass. All test processes terminal. Baseline source47c5d15, documentation364976f; schema026 unchanged. Full living-world goal continues through RP7/RP8/final integration. Follow-up sections below are chronological; current status and verification supersede earlier pending lists.
+Status: RP6 COMPLETE locally. Source checkpoint `55faee5e2c0355ddcd25ee5d1bbcb07ac72b4acc`, post-commit clean tree verified. Personal views and narrative controls/streaming/context/recovery are implemented and verified, including independently configured constrained natural-language style planning. [Capability audit](capability-audit.md) retains bounded-style limitations. [Actual104-turn/128h browser journey](long-play.md), sourced memory/random behavior, midpoint restart and [full applicable stage verification](verification.md) all pass. All test processes terminal. Baseline source47c5d15, documentation364976f; schema026 unchanged. Full living-world goal continues through RP7/RP8/final integration. Follow-up sections below are chronological; current status and verification supersede earlier pending lists.
 
 ## Acceptance and evidence
 
-Final verification results and any still-running checks are maintained in [verification.md](verification.md); complete source-to-requirement mapping is [capability-audit.md](capability-audit.md). The stage is not complete until that gate passes and the authorized checkpoint has a clean worktree.
+Final verification results are maintained in [verification.md](verification.md); complete source-to-requirement mapping is [capability-audit.md](capability-audit.md). The gate passed and the authorized source checkpoint has a verified clean worktree; this follow-up records its hash without changing runtime code.
 
 | Original requirement | Observable acceptance | Required evidence |
 |---|---|---|
