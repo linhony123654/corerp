@@ -1,6 +1,7 @@
 # Living-world progress
 
 ## 2026-09-24 — RP7 final gate and handoff
+- Source checkpoint c39af6b141b6898eb643799bf380c215c77a1957 created; post-commit status empty. Staged70 goal-owned files, ignored nested node_modules/env/db/dist confirmed. Git used existing auto identity; no global configuration altered. Schema027, recovery/deferred in phase report. Metadata handoff then RP8 recon.
 - Full backend+vet18487 terminal PASS (combined exit0): storage322.433s, HTTP21.773s, CLI8.321s, server0.282s, core0.208s, decision0.398s, narrative0.201s; m1 no tests. All relevant final checks now terminal, no live handles. Do not restart completed suites without changed code or unresolved concerns.
 - Reconciled7A–D against original goal and actual evidence; frozen minimum protocol, finalized verification/phase report and updated client/setup status. Actual SDK MCP is the permitted Codex/MCP branch, not nested model play. Relevant filtered race only, not full storage race. No production/global config/live LLM claim.
 - Next authorized checkpoint/hash/clean-tree, then RP8 read-only recon. Overall goal active through RP8 and Final300turn/30days; schema027. Prior “running/pending” lines below are historical.

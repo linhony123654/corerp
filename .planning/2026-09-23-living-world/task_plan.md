@@ -11,8 +11,9 @@ Full-project DEFINE/DESIGN/BUILD/POLISH/local SHIP per stage. One large stage in
 Current authoritative state: RP7 local stage gates PASS; final full backend+vet18487
 exit0 (storage322.433s/HTTP21.773s), relevant race22251, frontend44600, actual
 three-client49071 all terminal PASS. Frozen v1 and final7A–D audit in docs/rp7.
-Prepare authorized RP7 checkpoint, record hash and verify clean tree before RP8
-read-only recon. Schema027. No live test handles. RP8 and Final remain required;
+RP7 source checkpoint c39af6b141b6898eb643799bf380c215c77a1957 committed;
+post-commit clean tree verified. Next RP8 read-only recon after metadata handoff.
+Schema027. No live test handles. RP8 and Final remain required;
 older “Latest” entries below are historical progress, not current blockers.
 
 Latest: discovery+candidate protocol and actual MCP/RPskill now implemented. Current027. Discoveryrace61030 and fullHTTP/server/vet98373 PASS. Actual isolatedSDKserver/client2.1.0 stdio→GoSQLite11019 PASS `/tmp/corerp-rp7-mcp-BwQuXN`, legacy+explicit2026-07-28, processrestart/permission/partialwait and actualacceptedreplyloss recovery; two exact distinct speeches. Repo .agents/skills/corerp-rp validates; no globalsetup/nestedagent. docs/rp7/{protocol,mcp}.md. Next actual Play/SillyTavern/MCP same-instance7D, remaining protocol/security audit, then fullstagegates/checkpoint. Do not restart MCP prerequisite research; executable adapter exists. All listed processes terminal, noRP7completion.
@@ -111,7 +112,7 @@ Traffic follow-up: actual two-pending-appointment collision reproduced and corre
 - [x] RP-4: layered culture; institutions/law lifecycle, knowledge propagation, evaluation/rebellion/violation consequences; verified/reported/checkpoint53a5ac3 and clean-tree transition.
 - [x] RP-5: verified/reported/checkpoint47c5d15; clean-tree transition confirmed.
 - [x] RP-6: verified/reported/checkpoint55faee5, metadata879dbc0; clean-tree transition confirmed.
-- [ ] RP-7: stable protocol, thin SillyTavern adapter, MCP/Skill, same-world identity across clients; verify/report/checkpoint.
+- [x] RP-7: stable protocol, actual thin SillyTavern adapter, MCP/Skill, actual three-client shared world/restart; verified/reported/checkpoint c39af6b, clean-tree transition confirmed.
 - [ ] RP-8: optional real Studio/Inspector/Creator workflow with player/creator/ops permission separation; preserve extension registry; verify/report/checkpoint.
 - [ ] Final Integration: 5–10 NPC, Cohorts and all life/society systems, 300 turns / 30 days, multiple restarts/clients, emergent identity/economic/career/culture/law/relationship/quiet/rare-event chains; full DoD item audit and final report.
 

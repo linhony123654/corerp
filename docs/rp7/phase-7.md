@@ -2,7 +2,8 @@
 
 Status: RP7 local DEFINE/DESIGN/BUILD/POLISH/SHIP verification PASS. Baseline879dbc0
 (RP6 source55faee5), current schema027 `corerp-rp7-request-retirement-027-2026-09-24`.
-Checkpoint recording follows the authorized commit. No publication or live-model claim.
+Source checkpoint: `c39af6b141b6898eb643799bf380c215c77a1957`; post-commit
+`git status --porcelain` was empty. No publication or live-model claim.
 
 Delivered: [frozen client protocol/discovery](protocol.md), [authorized context](context.md),
 [events](events.md), [atomic request retirement](requests.md), actual thin
