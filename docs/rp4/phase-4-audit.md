@@ -1,6 +1,6 @@
 # RP-4 acceptance audit
 
-Status: implementation-to-requirement mapping inspected; full-stage test verification PASS. Final staging review/checkpoint and clean-tree confirmation remain pending before RP-5 transition. Overall goal still includes RP-5–8 and final300-turn/30-day integration.
+Status: RP-4 local acceptance PASS; checkpoint `53a5ac3`, post-commit clean worktree verified before RP-5 recon. Overall goal still includes RP-5–8 and final300-turn/30-day integration.
 
 ## Original section5 traceability
 
@@ -36,10 +36,10 @@ HTTP real-store coverage spans all ten authenticated write commands, own-case qu
 | Browser life/recovery and local model HTTP adapter | PASS; session89263 terminal. Life `/tmp/corerp-rp1-e2e-FsFfBr` (0 calls), local model `/tmp/corerp-rp1-e2e-Mtj3Ou` (15 calls); restart counts39:30:8 unchanged; mobile/error/privacy checks pass. Not live LLM. |
 | Live external model | REQUIRED_IF_AVAILABLE; no new external credentials inspected or live model claim. |
 | Diff/security/staging review | PASS; reviewed tracked integration diffs and all57 changed/untracked paths: intended source/tests/docs only, no DB/config/build artifacts. Scoped filename-only credential heuristic found no matches (not proof of absence of every possible secret). |
-| Phase report/commit/clean tree | NOT VERIFIED; intentionally uncommitted RP-4 changes. |
+| Phase report/commit/clean tree | PASS; checkpoint53a5ac37be6305cccb590b70e9da2dedc621ceeb; post-commit git status empty, rechecked before RP-5 recon. No push/deploy. |
 
 ## Handoff gate
 
-Full-stage test processes are now terminal PASS. Complete scoped staging/security review, checkpoint and clean-tree confirmation before moving to RP-5. No production deployment is requested.
+Full-stage test processes terminal PASS. Scoped staging/security review, checkpoint and clean-tree confirmation complete. RP-5 may proceed serially. No production deployment is requested.
 
 Final race reconciliation:259 top-level runs have259 matching passes;187 are storage tests. All six tested packages passed; cmd/corerp-m1 reports no tests. No failure records, skipped individual tests or unfinished top-level runs. This replaces earlier partial snapshots; no duplicate race run was started.

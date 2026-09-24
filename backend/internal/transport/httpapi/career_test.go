@@ -20,7 +20,7 @@ func TestCareerHTTPRecruitmentIdentityPrivacyAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := core.CareerBinding{InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID, ExpectedHead: setup.Routine.EventSequence, IdempotencyKey: "org-http"}
-	org := core.CareerOrganizationRequest{Binding: binding, Organization: core.CareerOrganizationDefinition{OrganizationID: "actor_m2_coop_employer", DisplayName: "Co-op", ManagerPrincipalID: storage.M2AgentBoPrincipal, WorkplaceID: "place_m2_work_ada"}}
+	org := core.CareerOrganizationRequest{Binding: binding, Organization: core.CareerOrganizationDefinition{OrganizationID: "actor_m2_coop_employer", DisplayName: "Co-op", ManagerPrincipalID: storage.M2AgentBoPrincipal, WorkplaceID: "place_m2_work_ada", LeaveReviewPolicy: &core.CareerLeaveReviewPolicy{MaxConcurrentEmployees: 1}}}
 	response := performJSON(t, handler, "/api/v1/career/organizations/define", "", org)
 	assertAPIError(t, response, http.StatusUnauthorized, core.CodeUnauthenticated)
 	response = performJSON(t, handler, "/api/v1/career/organizations/define", rpPlayerToken, org)
@@ -28,6 +28,9 @@ func TestCareerHTTPRecruitmentIdentityPrivacyAndRestart(t *testing.T) {
 	response = performJSON(t, handler, "/api/v1/career/organizations/define", creatorToken, org)
 	assertStatus(t, response, http.StatusOK)
 	defined := decodeData[storage.CareerRecord](t, response)
+	if defined.Fact.Organization.Definition.LeaveReviewPolicy == nil || defined.Fact.Organization.Definition.LeaveReviewPolicy.MaxConcurrentEmployees != 1 {
+		t.Fatal("organization HTTP installation lost authored leave policy")
+	}
 	binding.ExpectedHead, binding.IdempotencyKey = defined.EventSequence, "post-http"
 	posting := core.CareerPostingRequest{Binding: binding, Posting: core.CareerPostingDefinition{PositionID: "http_position", OrganizationID: org.Organization.OrganizationID, Title: "Assistant", OccupationID: "operations", Grade: "entry", Capacity: 1, DailyWageMinor: 12, RequiredQualifications: []string{}}}
 	forged := posting

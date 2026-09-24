@@ -132,6 +132,13 @@ func (s *Store) RunRPInitiative(ctx context.Context, r core.RPInitiativeRequest,
 		return RPInitiativeResult{NPCEntityID: r.NPCEntityID, Action: "silence", Status: "cooldown", EventSequence: input.HeadSequence}, nil
 	}
 	tx.Rollback(ctx)
+	if core.RPContactOpportunitySuppressed(input) {
+		inputHash, err := core.HashJSON(input)
+		if err != nil {
+			return empty, err
+		}
+		return s.commitRPInitiative(ctx, r, key, inputHash, core.RPDecisionProposal{Action: "silence"}, "opportunity_quiet")
+	}
 	if provider == nil {
 		return empty, core.NewError(core.CodeInvalidArgument, "initiative requires decision provider")
 	}

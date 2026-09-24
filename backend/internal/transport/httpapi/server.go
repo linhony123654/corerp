@@ -45,6 +45,10 @@ type Service interface {
 	AcceptCareerPositionChange(context.Context, core.CareerPositionAcceptRequest) (storage.CareerRecord, error)
 	SpeakCareerAnnouncement(context.Context, core.CareerAnnouncementRequest) (storage.CareerRecord, error)
 	DefineRPCulture(context.Context, storage.CultureDefinitionRequest) (storage.CultureRecord, error)
+	DefineRPOpportunityPolicy(context.Context, storage.OpportunityPolicyRequest) (storage.OpportunityPolicyRecord, error)
+	DefineRPEnvironmentSource(context.Context, storage.EnvironmentSourceRequest) (storage.EnvironmentSourceRecord, error)
+	DefineRPStorefrontSource(context.Context, storage.StorefrontSourceRequest) (storage.StorefrontSourceRecord, error)
+	DefineRPTransitWorks(context.Context, storage.TransitWorksRequest) (storage.TransitWorksRecord, error)
 	ReadOwnRPLawCases(context.Context, storage.LawCasesRequest) ([]core.RPLawCase, error)
 	DefineRPInstitution(context.Context, storage.InstitutionDefinitionRequest) (storage.InstitutionRecord, error)
 	ChangeRPInstitutionAuthority(context.Context, storage.InstitutionAuthorityRequest) (storage.InstitutionRecord, error)
@@ -201,6 +205,14 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerOrganizationRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineCareerOrganization)
 	case "/api/v1/culture/define":
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.CultureDefinitionRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPCulture)
+	case "/api/v1/opportunities/policy/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.OpportunityPolicyRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPOpportunityPolicy)
+	case "/api/v1/opportunities/environment/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.EnvironmentSourceRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPEnvironmentSource)
+	case "/api/v1/opportunities/storefront/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.StorefrontSourceRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPStorefrontSource)
+	case "/api/v1/opportunities/transit/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.TransitWorksRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPTransitWorks)
 	case "/api/v1/laws/cases/own":
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.LawCasesRequest) *string { return &r.PrincipalID }, s.service.ReadOwnRPLawCases)
 	case "/api/v1/institutions/define":

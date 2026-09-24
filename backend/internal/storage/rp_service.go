@@ -34,6 +34,12 @@ func (s *RPService) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPW
 	if err != nil || result.Status != "completed" {
 		return result, err
 	}
+	for _, npc := range result.WarmNPCIDs {
+		_, err := s.Store.runRPWarmDecision(ctx, core.RPInitiativeRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID, NPCEntityID: npc, TriggerEventID: result.EventID})
+		if err != nil && !core.HasCode(err, core.CodeBranchConflict) && !core.HasCode(err, core.CodeNotFound) && !core.HasCode(err, core.CodeCommandInProgress) {
+			return result, err
+		}
+	}
 	for _, npc := range result.InitiativeNPCIDs {
 		effect, err := s.Store.RunRPInitiative(ctx, core.RPInitiativeRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID, NPCEntityID: npc, TriggerEventID: result.EventID}, s.provider)
 		if err != nil {

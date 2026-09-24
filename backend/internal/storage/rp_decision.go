@@ -170,8 +170,20 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 	}
 	rows.Close()
 	var next core.RPDecisionSchedule
-	err = conn.QueryRowContext(ctx, `SELECT world_time, place_id, activity_code, definition_event_id FROM agent_schedule_entries WHERE agent_id = ? AND status = 'active' AND world_time >= ? ORDER BY world_time, declared_priority, scheduler_item_id LIMIT 1`, input.NPCEntityID, input.WorldTime).Scan(&next.WorldTime, &next.PlaceID, &next.ActivityCode, &next.SourceEventID)
+	var nextID, originalTime string
+	err = conn.QueryRowContext(ctx, `SELECT s.schedule_id,s.world_time,q.world_time, s.place_id, s.activity_code, s.definition_event_id FROM agent_schedule_entries s JOIN scheduler_items q ON q.scheduler_item_id=s.scheduler_item_id WHERE s.agent_id = ? AND s.status = 'active' AND q.status='pending' AND q.world_time >= ? ORDER BY q.world_time, s.declared_priority, s.scheduler_item_id LIMIT 1`, input.NPCEntityID, input.WorldTime).Scan(&nextID, &originalTime, &next.WorldTime, &next.PlaceID, &next.ActivityCode, &next.SourceEventID)
 	if err == nil {
+		if originalTime != next.WorldTime {
+			delay, err := readLatestRPTransitDelay(ctx, conn, input.InstanceID, input.BranchID, nextID)
+			if err != nil {
+				return core.RPDecisionInput{}, err
+			}
+			if delay == nil || delay.OriginalWorldTime != originalTime || delay.Retry.WorldTime != next.WorldTime || delay.AgentID != input.NPCEntityID {
+				return core.RPDecisionInput{}, core.NewError(core.CodeProjectionDiverged, "effective appointment lacks own delay evidence")
+			}
+			next.OriginalWorldTime = originalTime
+			next.DelaySourceEventID = "event_" + delay.Previous.ID
+		}
 		input.NextSchedule = &next
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC next schedule", err)
@@ -198,6 +210,17 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "iterate legal NPC destinations", err)
 	}
 	rows.Close()
+	openPlaces := input.ReachablePlaceIDs[:0]
+	for _, place := range input.ReachablePlaceIDs {
+		open, err := rpTransitAllowsImmediate(ctx, conn, input.InstanceID, input.BranchID, input.PlaceID, place, input.WorldTime)
+		if err != nil {
+			return core.RPDecisionInput{}, err
+		}
+		if open {
+			openPlaces = append(openPlaces, place)
+		}
+	}
+	input.ReachablePlaceIDs = openPlaces
 	if len(input.ReachablePlaceIDs) != 0 {
 		input.LegalActions = append(input.LegalActions, "leave")
 	}
@@ -210,6 +233,18 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 		return core.RPDecisionInput{}, err
 	}
 	input.Law = core.BuildRPLawContext(knownLaws, input.WorldTime, input.PlaceID, input.LegalActions)
+	input.Environment, err = readRPLocalEnvironment(ctx, conn, input.InstanceID, input.BranchID, input.PlaceID, input.WorldTime)
+	if err != nil {
+		return core.RPDecisionInput{}, err
+	}
+	input.Stores, err = readRPLocalStores(ctx, conn, input.InstanceID, input.BranchID, input.PlaceID)
+	if err != nil {
+		return core.RPDecisionInput{}, err
+	}
+	input.TransitWorks, err = readRPLocalTransitWorks(ctx, conn, input.InstanceID, input.BranchID, input.PlaceID, input.WorldTime)
+	if err != nil {
+		return core.RPDecisionInput{}, err
+	}
 	return input, nil
 }
 

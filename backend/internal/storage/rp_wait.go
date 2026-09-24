@@ -11,6 +11,7 @@ import (
 )
 
 type RPWaitResult struct {
+	WarmNPCIDs       []string             `json:"-"`
 	InitiativeNPCIDs []string             `json:"initiative_npc_ids,omitempty"`
 	Initiatives      []RPInitiativeResult `json:"initiatives,omitempty"`
 	IntentID         string               `json:"intent_id"`
@@ -26,12 +27,20 @@ type RPWaitResult struct {
 }
 
 type rpWaitEvent struct {
-	InitiativeNPCIDs []string `json:"initiative_npc_ids,omitempty"`
-	SessionID        string   `json:"session_id"`
-	EntityID         string   `json:"entity_id"`
-	FromWorldTime    string   `json:"from_world_time"`
-	TargetWorldTime  string   `json:"target_world_time"`
-	ProcessedItems   int      `json:"processed_items"`
+	VisitOpportunities     []rpVisitOpportunity     `json:"visit_opportunities,omitempty"`
+	CommunityOpportunities []rpCommunityOpportunity `json:"community_opportunities,omitempty"`
+	WarmCandidates         []rpWarmCandidate        `json:"warm_candidates,omitempty"`
+	OpportunityIntent      string                   `json:"opportunity_intent,omitempty"`
+	WorkOpportunities      []rpWorkOpportunity      `json:"work_opportunities,omitempty"`
+	StoreOpportunities     []rpStoreOpportunity     `json:"store_opportunities,omitempty"`
+	Environment            *rpEnvironmentCondition  `json:"environment,omitempty"`
+	ContactOpportunities   []rpContactOpportunity   `json:"contact_opportunities,omitempty"`
+	InitiativeNPCIDs       []string                 `json:"initiative_npc_ids,omitempty"`
+	SessionID              string                   `json:"session_id"`
+	EntityID               string                   `json:"entity_id"`
+	FromWorldTime          string                   `json:"from_world_time"`
+	TargetWorldTime        string                   `json:"target_world_time"`
+	ProcessedItems         int                      `json:"processed_items"`
 }
 
 // WaitRP stores only retry intent before invoking the existing M2 scheduler.
@@ -212,17 +221,43 @@ func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, re
 	if err := tx.conn.QueryRowContext(ctx, `SELECT place_id FROM agent_positions WHERE agent_id=?`, session.ControlledEntityID).Scan(&playerPlace); err != nil {
 		return RPWaitResult{}, err
 	}
-	npcs, err := rpCoLocatedEntityIDs(ctx, tx.conn, session.InstanceID, session.BranchID, playerPlace, session.ControlledEntityID)
+	npcs, err := readRPHotInitiativeRoster(ctx, tx.conn, session.InstanceID, session.BranchID, playerPlace, session.ControlledEntityID)
 	if err != nil {
 		return RPWaitResult{}, err
 	}
 	// A bounded nearby cohort for this request, not an unbounded background loop.
 	// Persist identities before calling providers so recovery cannot select a
 	// different scene after an earlier initiative has moved an actor.
-	if len(npcs) > 16 {
-		npcs = npcs[:16]
-	}
 	payload := rpWaitEvent{InitiativeNPCIDs: npcs, SessionID: session.SessionID, EntityID: session.ControlledEntityID, FromWorldTime: currentText, TargetWorldTime: request.TargetWorldTime, ProcessedItems: processed}
+	payload.OpportunityIntent = request.OpportunityIntent
+	payload.WarmCandidates, err = readRPWarmCandidates(ctx, tx.conn, session, playerPlace, request.TargetWorldTime)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	payload.Environment, err = materializeRPEnvironment(ctx, tx.conn, session.InstanceID, session.BranchID, playerPlace, request.TargetWorldTime, eventID)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	payload.ContactOpportunities, err = evaluateRPContactOpportunities(ctx, tx.conn, session, npcs, request.TargetWorldTime, payload)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	payload.StoreOpportunities, err = evaluateRPStoreOpportunities(ctx, tx.conn, session, npcs, request.TargetWorldTime, payload)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	payload.WorkOpportunities, err = evaluateRPWorkOpportunities(ctx, tx.conn, session, npcs, request.TargetWorldTime, payload)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	payload.CommunityOpportunities, err = evaluateRPCommunityOpportunities(ctx, tx.conn, session, npcs, request.TargetWorldTime, payload)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	payload.VisitOpportunities, err = evaluateRPVisitOpportunities(ctx, tx.conn, session, npcs, request.TargetWorldTime, payload)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
 	payloadJSON, err := core.CanonicalJSON(payload)
 	if err != nil {
 		return RPWaitResult{}, err
@@ -264,7 +299,20 @@ func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, re
 	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+commandID, "agent_decision", eventID, commandID, attemptID, request.TargetWorldTime, now, payloadJSON); err != nil {
 		return RPWaitResult{}, err
 	}
-	if err := insertAgentOutbox(ctx, tx.conn, "outbox_"+commandID, eventID, "rp.player.wait_completed", payloadJSON); err != nil {
+	publicPayload := payload
+	publicPayload.Environment = nil
+	publicPayload.ContactOpportunities = nil
+	publicPayload.StoreOpportunities = nil
+	publicPayload.WorkOpportunities = nil
+	publicPayload.CommunityOpportunities = nil
+	publicPayload.VisitOpportunities = nil
+	publicPayload.OpportunityIntent = ""
+	publicPayload.WarmCandidates = nil
+	publicJSON, err := core.CanonicalJSON(publicPayload)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	if err := insertAgentOutbox(ctx, tx.conn, "outbox_"+commandID, eventID, "rp.player.wait_completed", publicJSON); err != nil {
 		return RPWaitResult{}, err
 	}
 	if err := execAgentOne(ctx, tx.conn, "commit RP wait attempt", `UPDATE command_attempts SET status = 'committed', finished_at_utc = ? WHERE command_id = ? AND attempt_no = 1 AND status = 'ready'`, now, commandID); err != nil {
@@ -284,7 +332,7 @@ func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, re
 	if err := tx.Commit(ctx); err != nil {
 		return RPWaitResult{}, core.WrapError(core.CodeStorageFailure, "commit RP wait completion", err)
 	}
-	return RPWaitResult{InitiativeNPCIDs: npcs, IntentID: intentID, Status: "completed", TargetWorldTime: request.TargetWorldTime, CurrentWorldTime: request.TargetWorldTime, ProcessedItems: processed, CommandID: commandID, EventID: eventID, EventSequence: sequence}, nil
+	return RPWaitResult{WarmNPCIDs: rpWarmActorIDs(payload.WarmCandidates), InitiativeNPCIDs: npcs, IntentID: intentID, Status: "completed", TargetWorldTime: request.TargetWorldTime, CurrentWorldTime: request.TargetWorldTime, ProcessedItems: processed, CommandID: commandID, EventID: eventID, EventSequence: sequence}, nil
 }
 
 func loadRPWaitResult(ctx context.Context, conn *sql.Conn, intentID, commandID string, replayed bool) (RPWaitResult, error) {
@@ -304,5 +352,14 @@ func loadRPWaitResult(ctx context.Context, conn *sql.Conn, intentID, commandID s
 	result.CommandID = commandID
 	result.Replayed = replayed
 	result.InitiativeNPCIDs = payload.InitiativeNPCIDs
+	result.WarmNPCIDs = rpWarmActorIDs(payload.WarmCandidates)
 	return result, nil
+}
+
+func rpWarmActorIDs(candidates []rpWarmCandidate) []string {
+	var ids []string
+	for _, c := range candidates {
+		ids = append(ids, c.ActorID)
+	}
+	return ids
 }

@@ -287,6 +287,13 @@ func commitRPNPCMovement(ctx context.Context, conn *sql.Conn, instanceID, branch
 	if reachable != 1 {
 		return core.NewError(core.CodeBranchConflict, "NPC destination route is no longer valid")
 	}
+	open, err := rpTransitAllowsImmediate(ctx, conn, instanceID, branchID, fromPlaceID, toPlaceID, worldTime)
+	if err != nil {
+		return err
+	}
+	if !open {
+		return core.NewError(core.CodeBranchConflict, "NPC route is temporarily obstructed")
+	}
 	scheduleID, itemID := "schedule_rp_npc_"+suffix, "sched_rp_npc_"+suffix
 	itemPayloadJSON, err := core.CanonicalJSON(agentSchedulePayload{Kind: "agent_move", Day: int(currentDay), AgentID: npcID, ScheduleID: scheduleID, ToPlaceID: toPlaceID, ActivityCode: "rp_npc_leave"})
 	if err != nil {

@@ -14,16 +14,18 @@ type CareerCancelledSchedule struct {
 }
 
 type CareerLeaveFact struct {
-	ContractID          string                    `json:"contract_id"`
-	StartDay            int                       `json:"start_day"`
-	EndDay              int                       `json:"end_day"`
-	Reason              string                    `json:"reason"`
-	Status              string                    `json:"status"`
-	RequestEventID      string                    `json:"request_event_id"`
-	TermsEventID        string                    `json:"terms_event_id"`
-	ReviewerPrincipalID string                    `json:"reviewer_principal_id,omitempty"`
-	Notice              string                    `json:"notice,omitempty"`
-	CancelledSchedules  []CareerCancelledSchedule `json:"cancelled_schedules,omitempty"`
+	AutoReview          *CareerLeaveAutoReview       `json:"auto_review,omitempty"`
+	ReviewAssessment    *CareerLeaveReviewAssessment `json:"review_assessment,omitempty"`
+	ContractID          string                       `json:"contract_id"`
+	StartDay            int                          `json:"start_day"`
+	EndDay              int                          `json:"end_day"`
+	Reason              string                       `json:"reason"`
+	Status              string                       `json:"status"`
+	RequestEventID      string                       `json:"request_event_id"`
+	TermsEventID        string                       `json:"terms_event_id"`
+	ReviewerPrincipalID string                       `json:"reviewer_principal_id,omitempty"`
+	Notice              string                       `json:"notice,omitempty"`
+	CancelledSchedules  []CareerCancelledSchedule    `json:"cancelled_schedules,omitempty"`
 }
 
 func careerLeaveWindow(ctx context.Context, conn *sql.Conn, b core.CareerBinding, contract string, first, end int, worldTime string) (CareerEmploymentFact, string, error) {
@@ -94,7 +96,15 @@ func (s *Store) RequestCareerLeave(ctx context.Context, r core.CareerLeaveReques
 		if err != nil {
 			return CareerFact{}, nil, err
 		}
-		return CareerFact{Kind: "leave", RecordID: r.LeaveID, OrganizationID: job.OrganizationID, CandidateID: job.EmployeeID, AdoptedWorkScheduleIDs: adopted, Leave: &CareerLeaveFact{ContractID: job.ContractID, StartDay: r.StartDay, EndDay: r.EndDay, Reason: r.Reason, Status: "requested", RequestEventID: c.EventID, TermsEventID: source}}, nil, nil
+		auto, err := planCareerLeaveAutoReview(ctx, conn, b, job, c.EventID, c.WorldTime, r.StartDay)
+		if err != nil {
+			return CareerFact{}, nil, err
+		}
+		fact := CareerFact{Kind: "leave", RecordID: r.LeaveID, OrganizationID: job.OrganizationID, CandidateID: job.EmployeeID, AdoptedWorkScheduleIDs: adopted, Leave: &CareerLeaveFact{ContractID: job.ContractID, StartDay: r.StartDay, EndDay: r.EndDay, Reason: r.Reason, Status: "requested", RequestEventID: c.EventID, TermsEventID: source, AutoReview: auto}}
+		if auto == nil {
+			return fact, nil, nil
+		}
+		return fact, func() error { return queueCareerLeaveReview(ctx, conn, b, c.EventID, *auto) }, nil
 	})
 }
 
@@ -106,50 +116,65 @@ func (s *Store) ReviewCareerLeave(ctx context.Context, r core.CareerLeaveReviewR
 	return s.executeCareerCommand(ctx, b, "ReviewCareerLeave", r, func(conn *sql.Conn) error {
 		return authorizeCareerRecordManager(ctx, conn, b, "leave", r.LeaveID)
 	}, func(conn *sql.Conn, c careerCommandContext) (CareerFact, func() error, error) {
-		record, err := readCareerRecord(ctx, conn, b.InstanceID, b.BranchID, "leave", r.LeaveID)
-		if err != nil {
-			return CareerFact{}, nil, err
-		}
-		leave := record.Fact.Leave
-		if leave == nil || leave.Status != "requested" {
-			return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "leave request is no longer pending")
-		}
-		leave.ReviewerPrincipalID, leave.Notice = b.PrincipalID, r.Notice
-		if r.Decision == "reject" {
-			// Closing an expired request changes no past schedule or pay and
-			// must not leave its future days reserved forever.
-			leave.Status = "rejected"
-			return record.Fact, nil, nil
-		}
-		job, source, err := careerLeaveWindow(ctx, conn, b, leave.ContractID, leave.StartDay, leave.EndDay, c.WorldTime)
-		if err != nil {
-			return CareerFact{}, nil, err
-		}
-		leave.TermsEventID = source
-		overtime, err := careerAcceptedOvertime(ctx, conn, job.ContractID, leave.StartDay, leave.EndDay)
-		if err != nil {
-			return CareerFact{}, nil, err
-		}
-		if len(overtime) != 0 {
-			return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "cancel accepted overtime before approving leave")
-		}
-		leave.Status = "approved"
-		leave.CancelledSchedules, err = careerOwnedSchedules(ctx, conn, b, job, leave.StartDay, leave.EndDay, record.Fact.AdoptedWorkScheduleIDs)
-		if err != nil {
-			return CareerFact{}, nil, err
-		}
-		return record.Fact, func() error {
-			for _, schedule := range leave.CancelledSchedules {
-				if err := execAgentOne(ctx, conn, "cancel approved-leave work entry", `UPDATE agent_schedule_entries SET status='cancelled' WHERE schedule_id=? AND agent_id=? AND status='active'`, schedule.ScheduleID, job.EmployeeID); err != nil {
-					return err
-				}
-				if err := execAgentOne(ctx, conn, "cancel approved-leave scheduler item", `UPDATE scheduler_items SET status='cancelled' WHERE scheduler_item_id=? AND instance_id=? AND branch_id=? AND status='pending'`, schedule.SchedulerItemID, b.InstanceID, b.BranchID); err != nil {
-					return err
-				}
-			}
-			return nil
-		}, nil
+		return prepareCareerLeaveReview(ctx, conn, b, r.LeaveID, r.Decision, r.Notice, c.WorldTime)
 	})
+}
+
+func prepareCareerLeaveReview(ctx context.Context, conn *sql.Conn, b core.CareerBinding, leaveID, decision, notice, worldTime string) (CareerFact, func() error, error) {
+	record, err := readCareerRecord(ctx, conn, b.InstanceID, b.BranchID, "leave", leaveID)
+	if err != nil {
+		return CareerFact{}, nil, err
+	}
+	leave := record.Fact.Leave
+	if leave == nil || leave.Status != "requested" {
+		return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "leave request is no longer pending")
+	}
+	leave.ReviewerPrincipalID, leave.Notice = b.PrincipalID, notice
+	if decision == "consider" {
+		if _, _, err := careerLeaveWindow(ctx, conn, b, leave.ContractID, leave.StartDay, leave.EndDay, worldTime); err != nil {
+			return CareerFact{}, nil, err
+		}
+		assessment, err := considerCareerLeave(ctx, conn, b, record.Fact)
+		if err != nil {
+			return CareerFact{}, nil, err
+		}
+		leave.ReviewAssessment = &assessment
+		decision = assessment.Decision
+	}
+	if decision == "reject" {
+		// Closing an expired request changes no past schedule or pay and
+		// must not leave its future days reserved forever.
+		leave.Status = "rejected"
+		return record.Fact, nil, nil
+	}
+	job, source, err := careerLeaveWindow(ctx, conn, b, leave.ContractID, leave.StartDay, leave.EndDay, worldTime)
+	if err != nil {
+		return CareerFact{}, nil, err
+	}
+	leave.TermsEventID = source
+	overtime, err := careerAcceptedOvertime(ctx, conn, job.ContractID, leave.StartDay, leave.EndDay)
+	if err != nil {
+		return CareerFact{}, nil, err
+	}
+	if len(overtime) != 0 {
+		return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "cancel accepted overtime before approving leave")
+	}
+	leave.Status = "approved"
+	leave.CancelledSchedules, err = careerOwnedSchedules(ctx, conn, b, job, leave.StartDay, leave.EndDay, record.Fact.AdoptedWorkScheduleIDs)
+	if err != nil {
+		return CareerFact{}, nil, err
+	}
+	return record.Fact, func() error {
+		for _, schedule := range leave.CancelledSchedules {
+			if err := execAgentOne(ctx, conn, "cancel approved-leave work entry", `UPDATE agent_schedule_entries SET status='cancelled' WHERE schedule_id=? AND agent_id=? AND status='active'`, schedule.ScheduleID, job.EmployeeID); err != nil {
+				return err
+			}
+			if err := execAgentOne(ctx, conn, "cancel approved-leave scheduler item", `UPDATE scheduler_items SET status='cancelled' WHERE scheduler_item_id=? AND instance_id=? AND branch_id=? AND status='pending'`, schedule.SchedulerItemID, b.InstanceID, b.BranchID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, nil
 }
 
 func careerApprovedLeave(ctx context.Context, conn *sql.Conn, contract string, day int) (string, error) {

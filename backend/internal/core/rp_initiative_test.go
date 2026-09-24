@@ -45,3 +45,20 @@ func TestRPInitiativePolicyUsesSourcedLifeAndAllowsQuiet(t *testing.T) {
 		t.Fatal("initiative pretended player speech occurred")
 	}
 }
+
+func TestRPInitiativeTomorrowWorkDoesNotSuppressFreeTime(t *testing.T) {
+	in := RPDecisionInput{NPCEntityID: "npc", InterlocutorEntityID: "player", WorldTime: "2026-09-23T13:15:00Z", Trigger: &RPDecisionTrigger{Kind: "elapsed_time", SourceEventID: "wait"}, Life: &RPLifeContext{Disposition: RPDisposition{Sociability: 1}, Relationships: []RPRelationship{{SubjectEntityID: "player", Trust: 2, SourceEventIDs: []string{"friend"}}}}}
+	for _, tc := range []struct{ due, want string }{
+		{"2026-09-23T13:00:00Z", "silence"},
+		{"2026-09-23T14:15:00Z", "silence"},
+		{"2026-09-23T14:15:01Z", "respond"},
+		{"2026-09-24T08:00:00Z", "respond"},
+		{"invalid", "silence"},
+	} {
+		in.NextSchedule = &RPDecisionSchedule{WorldTime: tc.due, ActivityCode: "work", SourceEventID: "schedule"}
+		out, err := (DeterministicRPDecisionProvider{}).Propose(context.Background(), in)
+		if err != nil || out.Action != tc.want {
+			t.Fatalf("next work %s: %+v %v", tc.due, out, err)
+		}
+	}
+}

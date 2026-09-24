@@ -363,6 +363,10 @@ func (s *Store) ReadCareerRecruitmentRecord(ctx context.Context, principalID, in
 			}
 		}
 		record.Fact.PositionAssessment = nil
+		if record.Fact.Leave != nil {
+			// Other employees' leave approvals are manager-only evidence.
+			record.Fact.Leave.ReviewAssessment = nil
+		}
 	}
 	if record.Fact.Overtime != nil && record.Fact.Overtime.Choice != nil {
 		if err := authorizeCareerCandidate(ctx, tx.conn, b, careerRecordCandidate(record.Fact)); err != nil {

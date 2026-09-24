@@ -55,7 +55,11 @@ func TestRPWaitHTTPUsesConfiguredInitiativeProviderAndVisibleHistory(t *testing.
 	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
 	assertStatus(t, response, http.StatusOK)
 	view := decodeData[storage.RPObservation](t, response)
-	r := core.RPWaitRequest{SessionID: session.SessionID, ExpectedCursor: view.ObservationCursor, TargetWorldTime: "2026-09-22T03:00:00Z", Budget: 20, IdempotencyKey: "wait"}
+	r := core.RPWaitRequest{OpportunityIntent: "social", SessionID: session.SessionID, ExpectedCursor: view.ObservationCursor, TargetWorldTime: "2026-09-22T03:00:00Z", Budget: 20, IdempotencyKey: "wait"}
+	bad := r
+	bad.OpportunityIntent = "force_drama"
+	response = performJSON(t, handler, "/api/v1/rp/actions/wait", rpPlayerToken, bad)
+	assertAPIError(t, response, http.StatusBadRequest, core.CodeInvalidArgument)
 	response = performJSON(t, handler, "/api/v1/rp/actions/wait", creatorToken, r)
 	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
 	if calls != 0 {
@@ -72,6 +76,10 @@ func TestRPWaitHTTPUsesConfiguredInitiativeProviderAndVisibleHistory(t *testing.
 	if calls != 1 || !decodeData[storage.RPWaitResult](t, response).Initiatives[0].Replayed {
 		t.Fatal("wait retry repeated model")
 	}
+	bad = r
+	bad.OpportunityIntent = ""
+	response = performJSON(t, handler, "/api/v1/rp/actions/wait", rpPlayerToken, bad)
+	assertAPIError(t, response, http.StatusConflict, core.CodeIdempotencyMismatch)
 	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
 	assertStatus(t, response, http.StatusOK)
 	if !strings.Contains(response.Body.String(), "我想起一件事") {

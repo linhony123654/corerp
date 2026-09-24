@@ -22,7 +22,7 @@ func TestCareerHTTPReferralInterviewAssessmentOfferAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := core.CareerBinding{PrincipalID: "principal_creator", InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID, ExpectedHead: setup.Routine.EventSequence, IdempotencyKey: "org"}
-	org, err := s.DefineCareerOrganization(ctx, core.CareerOrganizationRequest{Binding: binding, Organization: core.CareerOrganizationDefinition{OrganizationID: "actor_m2_coop_employer", DisplayName: "Co-op", ManagerPrincipalID: storage.M2AgentBoPrincipal, WorkplaceID: "place_m2_work_ada"}})
+	org, err := s.DefineCareerOrganization(ctx, core.CareerOrganizationRequest{Binding: binding, Organization: core.CareerOrganizationDefinition{OrganizationID: "actor_m2_coop_employer", DisplayName: "Co-op", ManagerPrincipalID: storage.M2AgentBoPrincipal, WorkplaceID: "place_m2_work_ada", LeaveReviewPolicy: &core.CareerLeaveReviewPolicy{MaxConcurrentEmployees: 1}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,17 +246,25 @@ func TestCareerHTTPReferralInterviewAssessmentOfferAndRecovery(t *testing.T) {
 	response = performJSON(t, handler, "/api/v1/career/leave/request", adaAgentToken, leave)
 	assertStatus(t, response, http.StatusOK)
 	requestedLeave := decodeData[storage.CareerRecord](t, response)
-	approveLeave := core.CareerLeaveReviewRequest{Binding: core.CareerBinding{InstanceID: binding.InstanceID, BranchID: binding.BranchID, ExpectedHead: requestedLeave.EventSequence, IdempotencyKey: "approve-leave"}, LeaveID: leave.LeaveID, Decision: "approve", Notice: "Approved with base pay unchanged."}
+	approveLeave := core.CareerLeaveReviewRequest{Binding: core.CareerBinding{InstanceID: binding.InstanceID, BranchID: binding.BranchID, ExpectedHead: requestedLeave.EventSequence, IdempotencyKey: "approve-leave"}, LeaveID: leave.LeaveID, Decision: "consider", Notice: "Reviewed with base pay unchanged."}
 	response = performJSON(t, handler, "/api/v1/career/leave/review", adaAgentToken, approveLeave)
 	assertAPIError(t, response, http.StatusForbidden, core.CodeUnauthorized)
 	response = performJSON(t, handler, "/api/v1/career/leave/review", boAgentToken, approveLeave)
 	assertStatus(t, response, http.StatusOK)
 	approvedLeave := decodeData[storage.CareerRecord](t, response)
+	if approvedLeave.Fact.Leave.ReviewAssessment == nil || approvedLeave.Fact.Leave.ReviewAssessment.PolicySourceEventID != org.EventID {
+		t.Fatal("HTTP consideration omitted declared policy evidence")
+	}
 	if approvedLeave.Fact.Leave.Status != "approved" || len(approvedLeave.Fact.Leave.CancelledSchedules) != 2 {
 		t.Fatalf("HTTP leave lacked actual schedule cancellation: %+v", approvedLeave)
 	}
 	response = performJSON(t, handler, "/api/v1/career/records/read", rpPlayerToken, careerRecordRead{InstanceID: binding.InstanceID, BranchID: binding.BranchID, Kind: "leave", RecordID: leave.LeaveID})
 	assertAPIError(t, response, http.StatusForbidden, core.CodeUnauthorized)
+	response = performJSON(t, handler, "/api/v1/career/records/read", adaAgentToken, careerRecordRead{InstanceID: binding.InstanceID, BranchID: binding.BranchID, Kind: "leave", RecordID: leave.LeaveID})
+	assertStatus(t, response, http.StatusOK)
+	if decodeData[storage.CareerRecord](t, response).Fact.Leave.ReviewAssessment != nil {
+		t.Fatal("HTTP employee read exposed manager-only assessment")
+	}
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"corerp.local/backend/internal/core"
 	"database/sql"
+	"encoding/json"
+	"reflect"
 )
 
 // BuildRPInitiativeInput accepts only an actual completed wait in the caller's
@@ -39,9 +41,9 @@ func readRPInitiativeInput(ctx context.Context, conn *sql.Conn, r core.RPInitiat
 	if pending != 0 {
 		return empty, core.NewError(core.CodeCommandInProgress, "finish current RP action before initiative")
 	}
-	var at string
+	var at, triggerPayload string
 	var triggerSequence int64
-	if err := conn.QueryRowContext(ctx, `SELECT world_time,event_sequence FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPWaitCompleted' AND json_extract(payload,'$.session_id')=? AND json_extract(payload,'$.entity_id')=? AND EXISTS (SELECT 1 FROM json_each(events.payload,'$.initiative_npc_ids') WHERE value=?)`, r.TriggerEventID, session.InstanceID, session.BranchID, session.SessionID, session.ControlledEntityID, r.NPCEntityID).Scan(&at, &triggerSequence); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT world_time,event_sequence,payload FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPWaitCompleted' AND json_extract(payload,'$.session_id')=? AND json_extract(payload,'$.entity_id')=? AND EXISTS (SELECT 1 FROM json_each(events.payload,'$.initiative_npc_ids') WHERE value=?)`, r.TriggerEventID, session.InstanceID, session.BranchID, session.SessionID, session.ControlledEntityID, r.NPCEntityID).Scan(&at, &triggerSequence, &triggerPayload); err != nil {
 		return empty, classifyMissing(err, "own completed wait trigger")
 	}
 	input, err := readRPOwnDecisionContext(ctx, conn, core.RPDecisionInput{
@@ -66,11 +68,105 @@ func readRPInitiativeInput(ctx context.Context, conn *sql.Conn, r core.RPInitiat
 	}
 	// Only other initiative commits may intervene while draining one wait.
 	var intervening int
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence>? AND c.command_type<>'RPNPCInitiative'`, session.InstanceID, session.BranchID, triggerSequence).Scan(&intervening); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence>? AND NOT (c.command_type='RPNPCInitiative' OR (c.command_type='RPWarmDecision' AND COALESCE(json_extract(e.payload,'$.trigger_event_id'),'')=?))`, session.InstanceID, session.BranchID, triggerSequence, r.TriggerEventID).Scan(&intervening); err != nil {
 		return empty, err
 	}
 	if intervening != 0 {
 		return empty, core.NewError(core.CodeBranchConflict, "another world action superseded the initiative trigger")
+	}
+	var trigger rpWaitEvent
+	if err := json.Unmarshal([]byte(triggerPayload), &trigger); err != nil {
+		return empty, err
+	}
+	for _, receipt := range trigger.ContactOpportunities {
+		if receipt.ActorID != r.NPCEntityID || receipt.TargetID != session.ControlledEntityID {
+			continue
+		}
+		// Evidence was selected from own-known relationships at wait completion.
+		// Recheck that it still belongs to this actor's filtered relationship view.
+		known := false
+		if input.Life != nil {
+			for _, relation := range input.Life.Relationships {
+				if relation.SubjectEntityID != receipt.TargetID {
+					continue
+				}
+				for _, source := range relation.SourceEventIDs {
+					if source == receipt.SourceEventID {
+						known = true
+					}
+				}
+			}
+		}
+		if !known || input.ContactOpportunity != nil {
+			return empty, core.NewError(core.CodeProjectionDiverged, "invalid contact receipt knowledge")
+		}
+		input.ContactOpportunity = &core.RPContactOpportunityContext{SourceEventID: receipt.SourceEventID, Selected: receipt.Draw.Selected}
+	}
+	seenStores := map[string]bool{}
+	for _, receipt := range trigger.VisitOpportunities {
+		if receipt.ActorID != r.NPCEntityID {
+			continue
+		}
+		if input.VisitOpportunity != nil || receipt.Source.ActorID != r.NPCEntityID {
+			return empty, core.NewError(core.CodeProjectionDiverged, "invalid visit receipt actor")
+		}
+		sources, err := readRPVisitSources(ctx, conn, input, receipt.Source.RememberedWorldTime)
+		if err != nil {
+			return empty, err
+		}
+		known := false
+		for _, source := range sources {
+			known = known || source == receipt.Source
+		}
+		// An earlier same-Wait actor can cause a genuine new encounter. Keep
+		// the pinned draw, but do not act on a superseded remembered meeting.
+		input.VisitOpportunity = &core.RPVisitOpportunityContext{Source: receipt.Source, Selected: receipt.Draw.Selected && known}
+	}
+	for _, receipt := range trigger.CommunityOpportunities {
+		if receipt.ActorID != r.NPCEntityID {
+			continue
+		}
+		sources, err := readRPCommunityChangeSources(ctx, conn, session.InstanceID, session.BranchID, r.NPCEntityID, receipt.Source.AvailableSince, input.WorldTime)
+		if err != nil {
+			return empty, err
+		}
+		known := false
+		for _, source := range sources {
+			known = known || reflect.DeepEqual(source, receipt.Source)
+		}
+		if !known || input.CommunityOpportunity != nil {
+			return empty, core.NewError(core.CodeProjectionDiverged, "invalid community receipt knowledge")
+		}
+		input.CommunityOpportunity = &core.RPCommunityOpportunityContext{Law: receipt.Source.Law, Selected: receipt.Draw.Selected}
+	}
+	for _, receipt := range trigger.WorkOpportunities {
+		if receipt.ActorID != r.NPCEntityID {
+			continue
+		}
+		known := false
+		if input.Life != nil {
+			for _, memory := range input.Life.SalientMemories {
+				known = known || memory == receipt.Memory
+			}
+		}
+		if !known || !core.RPWorkChangeMemory(receipt.Memory, r.NPCEntityID) || input.WorkOpportunity != nil {
+			return empty, core.NewError(core.CodeProjectionDiverged, "invalid work receipt knowledge")
+		}
+		input.WorkOpportunity = &core.RPWorkOpportunityContext{Memory: receipt.Memory, Selected: receipt.Draw.Selected}
+	}
+	for _, receipt := range trigger.StoreOpportunities {
+		if receipt.ActorID != r.NPCEntityID {
+			continue
+		}
+		known := false
+		for _, shelf := range input.Stores {
+			known = known || shelf == receipt.Store
+		}
+		if !known || receipt.Store.Available || seenStores[receipt.Store.StorefrontSourceEventID] {
+			return empty, core.NewError(core.CodeProjectionDiverged, "invalid store receipt knowledge")
+		}
+		seenStores[receipt.Store.StorefrontSourceEventID] = true
+		input.StoreOpportunities = append(input.StoreOpportunities, core.RPStoreOpportunityContext{Store: receipt.Store, Selected: receipt.Draw.Selected})
 	}
 	return input, nil
 }

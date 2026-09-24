@@ -122,6 +122,13 @@ func (s *Store) MoveRP(ctx context.Context, request core.RPMoveRequest) (RPMoveR
 	if reachable != 1 {
 		return RPMoveResult{}, core.NewError(core.CodeInvalidArgument, "destination is not reachable from the current place")
 	}
+	open, err := rpTransitAllowsImmediate(ctx, tx.conn, session.InstanceID, session.BranchID, actualPlace, request.ToPlaceID, worldTime)
+	if err != nil {
+		return RPMoveResult{}, err
+	}
+	if !open {
+		return RPMoveResult{}, core.NewError(core.CodeBranchConflict, "route temporarily obstructed; wait or choose another route")
+	}
 	if err := ensureCohortTransitionChronology(ctx, tx.conn, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return RPMoveResult{}, err
 	}

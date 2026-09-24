@@ -18,10 +18,11 @@ type CareerBinding struct {
 }
 
 type CareerOrganizationDefinition struct {
-	OrganizationID     string `json:"organization_id"`
-	DisplayName        string `json:"display_name"`
-	ManagerPrincipalID string `json:"manager_principal_id"`
-	WorkplaceID        string `json:"workplace_id"`
+	LeaveReviewPolicy  *CareerLeaveReviewPolicy `json:"leave_review_policy,omitempty"`
+	OrganizationID     string                   `json:"organization_id"`
+	DisplayName        string                   `json:"display_name"`
+	ManagerPrincipalID string                   `json:"manager_principal_id"`
+	WorkplaceID        string                   `json:"workplace_id"`
 }
 
 type CareerOrganizationRequest struct {
@@ -72,6 +73,11 @@ func (r CareerOrganizationRequest) Validate() error {
 		return err
 	}
 	o := r.Organization
+	if o.LeaveReviewPolicy != nil {
+		if err := o.LeaveReviewPolicy.Validate(); err != nil {
+			return err
+		}
+	}
 	return validateCareerIDs(o.OrganizationID, o.DisplayName, o.ManagerPrincipalID, o.WorkplaceID)
 }
 

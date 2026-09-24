@@ -429,6 +429,15 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		}
 		return true, nil
 	}
+	if item.PhaseID == careerLeaveReviewPhase {
+		if err := s.executeCareerLeaveAutoReview(ctx, tx, item); err != nil {
+			return false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 	if item.PhaseID == careerPayrollPhase {
 		if err := s.executeCareerPayroll(ctx, tx, item); err != nil {
 			return false, err
@@ -460,8 +469,51 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 	).Scan(&scheduleWorldTime, &targetPlace, &activity, &scheduleStatus, &fromPlace, &positionVersion); err != nil {
 		return false, classifyMissing(err, "active Agent schedule")
 	}
-	if scheduleStatus != "active" || scheduleWorldTime != item.WorldTime || targetPlace != scheduled.ToPlaceID || activity != scheduled.ActivityCode {
+	effectiveTime := scheduleWorldTime
+	delay, err := readLatestRPTransitDelay(ctx, tx.conn, M2DemoInstanceID, M2DemoBranchID, scheduled.ScheduleID)
+	if err != nil {
+		return false, err
+	}
+	if delay != nil {
+		if delay.Retry.ID != item.SchedulerItemID || delay.OriginalWorldTime != scheduleWorldTime || delay.Retry.Payload != item.Payload || delay.Retry.PhaseID != item.PhaseID || delay.Retry.Priority != item.DeclaredPriority || delay.AgentID != scheduled.AgentID || delay.ToPlaceID != targetPlace || delay.ActivityCode != activity {
+			return false, core.NewError(core.CodeProjectionDiverged, "delayed schedule differs from accepted transit evidence")
+		}
+		effectiveTime = delay.Retry.WorldTime
+	}
+	if scheduleStatus != "active" || effectiveTime != item.WorldTime || targetPlace != scheduled.ToPlaceID || activity != scheduled.ActivityCode {
 		return false, core.NewError(core.CodeProjectionDiverged, "Agent schedule, position, and scheduler item do not agree")
+	}
+	if delay != nil {
+		superseded, err := s.supersedeRPDelayedTravel(ctx, tx, item, scheduled, *delay)
+		if err != nil {
+			return false, err
+		}
+		if superseded {
+			if s.beforeCommit != nil {
+				if err := s.beforeCommit(); err != nil {
+					return false, err
+				}
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+	delayed, err := s.delayRPAgentTransit(ctx, tx, item, scheduled, fromPlace, scheduleWorldTime)
+	if err != nil {
+		return false, err
+	}
+	if delayed {
+		if s.beforeCommit != nil {
+			if err := s.beforeCommit(); err != nil {
+				return false, err
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	eventType, outboxTopic := "AgentMoved", "agent.moved"
 	if fromPlace == targetPlace {

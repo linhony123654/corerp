@@ -72,15 +72,19 @@ func (r RPMoveRequest) Validate() error {
 }
 
 type RPWaitRequest struct {
-	PrincipalID     string `json:"principal_id"`
-	SessionID       string `json:"session_id"`
-	TargetWorldTime string `json:"target_world_time"`
-	Budget          int    `json:"budget"`
-	ExpectedCursor  int64  `json:"expected_cursor"`
-	IdempotencyKey  string `json:"idempotency_key"`
+	OpportunityIntent string `json:"opportunity_intent,omitempty"`
+	PrincipalID       string `json:"principal_id"`
+	SessionID         string `json:"session_id"`
+	TargetWorldTime   string `json:"target_world_time"`
+	Budget            int    `json:"budget"`
+	ExpectedCursor    int64  `json:"expected_cursor"`
+	IdempotencyKey    string `json:"idempotency_key"`
 }
 
 func (r RPWaitRequest) Validate() error {
+	if r.OpportunityIntent != "" && r.OpportunityIntent != "social" {
+		return NewError(CodeInvalidArgument, "opportunity_intent must be empty or social")
+	}
 	if strings.TrimSpace(r.PrincipalID) == "" || strings.TrimSpace(r.SessionID) == "" || strings.TrimSpace(r.IdempotencyKey) == "" {
 		return NewError(CodeInvalidArgument, "principal_id, session_id and idempotency_key are required")
 	}

@@ -20,6 +20,7 @@ const error = ref('')
 const notice = ref('')
 const draft = ref('')
 const travel = ref(false)
+const socialSeeking = ref(false)
 const bookmark = ref<Bookmark>({ session: '', openKey: crypto.randomUUID(), pending: null })
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || 'null')
@@ -84,6 +85,7 @@ async function finishPending() {
   // Keep intent until fresh world/history is loaded; even a failed observation is retry-safe.
   await refresh()
   bookmark.value.pending = null; save()
+  if (pending.path === 'actions/wait') socialSeeking.value = false
   if (pending.path === 'turns/run') draft.value = ''
   else notice.value = pending.path === 'actions/move' ? '你已抵达新的地点。' : '时间已经向前。'
   travel.value = false
@@ -105,7 +107,7 @@ function speak() {
 function wait(hours: number) {
   if (!observation.value) return
   const target = new Date(Date.parse(observation.value.world_time) + hours * 3600000).toISOString().replace('.000Z', 'Z')
-  void act('actions/wait', { target_world_time: target, budget: 100 })
+  void act('actions/wait', { target_world_time: target, budget: 100, ...(socialSeeking.value ? { opportunity_intent: 'social' } : {}) })
 }
 </script>
 
@@ -166,6 +168,10 @@ function wait(hours: number) {
             <button :disabled="locked" @click="wait(1)">等一小时</button>
             <button :disabled="locked" @click="wait(4)">等四小时</button>
           </nav>
+          <div class="wait-intent">
+            <label><input v-model="socialSeeking" type="checkbox" :disabled="locked" aria-describedby="wait-intent-hint">等待时，愿意和熟人聊聊</label>
+            <p id="wait-intent-hint">仅用于下一次等待，不保证有人回应，也不会替你说话。</p>
+          </div>
           <div v-if="travel" id="destinations" class="destinations">
             <p v-if="!observation.reachable_places.length">附近没有可以前往的地点。</p>
             <button v-for="place in observation.reachable_places" :key="place.place_id" :disabled="locked" @click="act('actions/move', { from_place_id: observation.place_id, to_place_id: place.place_id })">{{ place.display_name }} →</button>
@@ -183,6 +189,10 @@ function wait(hours: number) {
 </template>
 
 <style scoped>
+.wait-intent { margin: 4px 0 12px; font-size: 12px; }
+.wait-intent label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.wait-intent input { width: 18px; height: 18px; accent-color: var(--accent); flex: 0 0 auto; }
+.wait-intent p { margin: 0; color: var(--muted); line-height: 1.7; }
 .play { --paper: #f1eee5; --text: #343d35; --muted: #697065; --accent: #7e4935; min-height: 100dvh; background: var(--paper); color: var(--text); background-image: repeating-linear-gradient(0deg, transparent 0 3px, #484a3505 4px, transparent 5px); }
 .play-header { max-width: 1160px; margin: auto; padding: 28px 36px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #39493525; }
 .wordmark { font-family: Georgia, serif; font-size: 25px; letter-spacing: -.8px; }.wordmark > span { color: var(--accent); }.wordmark small { font-family: var(--font-body); font-size: 11px; margin-left: 22px; letter-spacing: 2px; color: var(--muted); }.mode { font-size: 11px; color: var(--muted); }

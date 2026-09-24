@@ -1,0 +1,1441 @@
+{
+  "originalAttempt": {
+    "command": "go test -race ./... -count=1 -timeout=120m",
+    "storage": "timeout at 7200.036s",
+    "http": "PASS 153.099s"
+  },
+  "replacementCommands": [
+    "go test -race ./internal/storage -count=1 -timeout=240m -json -run ^TestRPOpportunitySameWorldFortnightDivergenceAndReplay$",
+    "go test -race ./internal/storage -count=1 -timeout=240m -json -skip ^TestRPOpportunitySameWorldFortnightDivergenceAndReplay$"
+  ],
+  "expectedTopLevelTests": 226,
+  "coverage": "226 explicit passes; both partitions exited 0; no skips, failures, unexpected or duplicate top-level tests",
+  "partitions": [
+    {
+      "log": "fortnight.jsonl",
+      "packageResult": {
+        "Time": "2026-09-24T16:13:50.186420958+08:00",
+        "Action": "pass",
+        "Package": "corerp.local/backend/internal/storage",
+        "Elapsed": 5160.833
+      },
+      "tests": [
+        {
+          "name": "TestRPOpportunitySameWorldFortnightDivergenceAndReplay/a",
+          "elapsed": 1520.22
+        },
+        {
+          "name": "TestRPOpportunitySameWorldFortnightDivergenceAndReplay/b",
+          "elapsed": 1040.88
+        },
+        {
+          "name": "TestRPOpportunitySameWorldFortnightDivergenceAndReplay/c",
+          "elapsed": 1237.76
+        },
+        {
+          "name": "TestRPOpportunitySameWorldFortnightDivergenceAndReplay/a-repeated",
+          "elapsed": 1358.19
+        },
+        {
+          "name": "TestRPOpportunitySameWorldFortnightDivergenceAndReplay",
+          "elapsed": 5159.82
+        }
+      ]
+    },
+    {
+      "log": "remaining.jsonl",
+      "packageResult": {
+        "Time": "2026-09-24T15:55:28.074067091+08:00",
+        "Action": "pass",
+        "Package": "corerp.local/backend/internal/storage",
+        "Elapsed": 4058.708
+      },
+      "tests": [
+        {
+          "name": "TestM2DriverRequiresExplicitRoutineAndResumesAfterInterruption",
+          "elapsed": 7.88
+        },
+        {
+          "name": "TestM2DriverRejectsMissingCommittedRoutineItem",
+          "elapsed": 7.1
+        },
+        {
+          "name": "TestM2RoutineRunsThirtyDaysAndReplaysAfterReopen",
+          "elapsed": 8.01
+        },
+        {
+          "name": "TestM2RoutineAuthorizationLateDefinitionAndRollback",
+          "elapsed": 2.14
+        },
+        {
+          "name": "TestM2RoutineCannotFirstDeclareAfterNewDayHasStarted",
+          "elapsed": 1.35
+        },
+        {
+          "name": "TestM2AgentSetupIsAuthoritativeIdempotentAndDurable",
+          "elapsed": 1.64
+        },
+        {
+          "name": "TestM2AgentSchedulesUseStableOrderAndCreateOnlyCoLocatedKnowledge",
+          "elapsed": 1.44
+        },
+        {
+          "name": "TestM2RunnerDoesNotPassUnsupportedEarlierWorldTask",
+          "elapsed": 1.19
+        },
+        {
+          "name": "TestM2RunnerRejectsLateBackdatedWorldTask",
+          "elapsed": 1.37
+        },
+        {
+          "name": "TestM2AgentScheduleOrderIgnoresPhysicalInsertionOrder",
+          "elapsed": 2.9
+        },
+        {
+          "name": "TestM2AgentBudgetCheckpointResumesAfterReopen",
+          "elapsed": 1.66
+        },
+        {
+          "name": "TestM2AgentMovementRollbackAndAuthorizationFailuresLeaveNoWrites",
+          "elapsed": 1.14
+        },
+        {
+          "name": "TestM2AgentSetupConflictAndRollbackLeaveNoPartialState/rollback",
+          "elapsed": 1.42
+        },
+        {
+          "name": "TestM2AgentSetupConflictAndRollbackLeaveNoPartialState/conflicting_branch_history",
+          "elapsed": 1.22
+        },
+        {
+          "name": "TestM2AgentSetupConflictAndRollbackLeaveNoPartialState",
+          "elapsed": 2.64
+        },
+        {
+          "name": "TestM2AgentKnowledgeAndEncounterAreScopedStateBackedAndReadOnly",
+          "elapsed": 1.26
+        },
+        {
+          "name": "TestM2AgentReplaySnapshotAndProjectionRepair",
+          "elapsed": 1.66
+        },
+        {
+          "name": "TestCareerAggregateExitNoticeAuthorityRecoveryAndNoPrematureEffects",
+          "elapsed": 3
+        },
+        {
+          "name": "TestCareerAggregateAllWorkersExitWithoutLosingPopulation",
+          "elapsed": 61.71
+        },
+        {
+          "name": "TestCareerAggregateExitFinalWageAndIndependentEmployment",
+          "elapsed": 102.23
+        },
+        {
+          "name": "TestCareerAggregateNamedOnlyAllocation",
+          "elapsed": 0
+        },
+        {
+          "name": "TestCareerAggregateExitDemographicReturnDoesNotRestoreWage",
+          "elapsed": 4.82
+        },
+        {
+          "name": "TestCareerAggregateExitUnpaidFinalClaimSurvivesRecoveryAndLatePayment",
+          "elapsed": 27.19
+        },
+        {
+          "name": "TestCareerAnnouncementHearingPrivacyAndRecovery",
+          "elapsed": 10.04
+        },
+        {
+          "name": "TestCareerAnnouncementUsesCurrentNotPendingPosition",
+          "elapsed": 5.44
+        },
+        {
+          "name": "TestCareerAttendanceTracksActualRPDepartureAndRecovery/partial",
+          "elapsed": 5.39
+        },
+        {
+          "name": "TestCareerAttendanceTracksActualRPDepartureAndRecovery/no_recorded_work",
+          "elapsed": 5.24
+        },
+        {
+          "name": "TestCareerAttendanceTracksActualRPDepartureAndRecovery",
+          "elapsed": 10.63
+        },
+        {
+          "name": "TestCareerAttendanceUsesSamePlaceActivityAndAtomicAccrual",
+          "elapsed": 3.96
+        },
+        {
+          "name": "TestCareerRoleAuthorityPromotionDemotionAndRecovery/role-only",
+          "elapsed": 13.15
+        },
+        {
+          "name": "TestCareerRoleAuthorityPromotionDemotionAndRecovery/independent-appointment",
+          "elapsed": 13.05
+        },
+        {
+          "name": "TestCareerRoleAuthorityPromotionDemotionAndRecovery",
+          "elapsed": 26.2
+        },
+        {
+          "name": "TestCareerRoleAuthorityInitialHiringStartsAtBoundary",
+          "elapsed": 3.06
+        },
+        {
+          "name": "TestCareerRelationshipChangesActualOvertimeChoice",
+          "elapsed": 6.79
+        },
+        {
+          "name": "TestCareerKnownCoworkerRelationshipChangesActualOvertime",
+          "elapsed": 10.15
+        },
+        {
+          "name": "TestCareerAcceptanceRunsRealWorkAndPrivatePayroll",
+          "elapsed": 6.11
+        },
+        {
+          "name": "TestCareerPayrollSeparatesEarnedAndNextWorkTerms",
+          "elapsed": 5.6
+        },
+        {
+          "name": "TestCareerPayrollArrearsAndInterruptedAccrual",
+          "elapsed": 5.69
+        },
+        {
+          "name": "TestCareerAcceptanceRejectsSupersededAssessment",
+          "elapsed": 2.75
+        },
+        {
+          "name": "TestCareerAcceptanceCapacityAndAggregateWageGuard",
+          "elapsed": 3.72
+        },
+        {
+          "name": "TestCareerAcceptanceCreatesMissingWorkAppointments",
+          "elapsed": 3.87
+        },
+        {
+          "name": "TestCareerAcceptanceRollbackAndCandidateAuthority",
+          "elapsed": 3.12
+        },
+        {
+          "name": "TestCareerExitFinalEarningsVacancyAuthorityAndRecovery/resignation",
+          "elapsed": 12.48
+        },
+        {
+          "name": "TestCareerExitFinalEarningsVacancyAuthorityAndRecovery/termination",
+          "elapsed": 12.82
+        },
+        {
+          "name": "TestCareerExitFinalEarningsVacancyAuthorityAndRecovery/layoff",
+          "elapsed": 12.7
+        },
+        {
+          "name": "TestCareerExitFinalEarningsVacancyAuthorityAndRecovery",
+          "elapsed": 38
+        },
+        {
+          "name": "TestCareerExitArrearsPersistWithoutNewEarnings",
+          "elapsed": 6.59
+        },
+        {
+          "name": "TestCareerExitRequiresExplicitOvertimeResolutionAndRejectsPendingTerms",
+          "elapsed": 5.74
+        },
+        {
+          "name": "TestCareerGradeScaleAuthorityCompatibilityAndRecovery",
+          "elapsed": 3.21
+        },
+        {
+          "name": "TestCareerInterviewQualificationsOfferDeclineRecovery",
+          "elapsed": 3.26
+        },
+        {
+          "name": "TestCareerEvaluationSupersessionRequirementsAndOfferExpiry",
+          "elapsed": 3.46
+        },
+        {
+          "name": "TestCareerLeaveAutoReviewWaitAuthorityAndRecovery/automatic",
+          "elapsed": 4.74
+        },
+        {
+          "name": "TestCareerLeaveAutoReviewWaitAuthorityAndRecovery/manual-first",
+          "elapsed": 4.42
+        },
+        {
+          "name": "TestCareerLeaveAutoReviewWaitAuthorityAndRecovery/revoked",
+          "elapsed": 4.4
+        },
+        {
+          "name": "TestCareerLeaveAutoReviewWaitAuthorityAndRecovery",
+          "elapsed": 13.55
+        },
+        {
+          "name": "TestCareerLeaveLateRequestKeepsManualReview",
+          "elapsed": 3.17
+        },
+        {
+          "name": "TestCareerOrganizationLeaveConsiderationActualEffects/0",
+          "elapsed": 3.07
+        },
+        {
+          "name": "TestCareerOrganizationLeaveConsiderationActualEffects/1",
+          "elapsed": 9.8
+        },
+        {
+          "name": "TestCareerOrganizationLeaveConsiderationActualEffects/2",
+          "elapsed": 8.99
+        },
+        {
+          "name": "TestCareerOrganizationLeaveConsiderationActualEffects",
+          "elapsed": 21.86
+        },
+        {
+          "name": "TestCareerLeaveCancelsAdoptedWorkPreservesPayAndRecovers",
+          "elapsed": 7.37
+        },
+        {
+          "name": "TestCareerLeaveRejectionDoesNotCancelOrReserveWork",
+          "elapsed": 3.87
+        },
+        {
+          "name": "TestCareerOvertimeActualWorkPayAndRecovery/full",
+          "elapsed": 5.03
+        },
+        {
+          "name": "TestCareerOvertimeActualWorkPayAndRecovery/partial_round_down",
+          "elapsed": 5.78
+        },
+        {
+          "name": "TestCareerOvertimeActualWorkPayAndRecovery/no_work",
+          "elapsed": 5.75
+        },
+        {
+          "name": "TestCareerOvertimeActualWorkPayAndRecovery/arrears",
+          "elapsed": 4.89
+        },
+        {
+          "name": "TestCareerOvertimeActualWorkPayAndRecovery",
+          "elapsed": 21.45
+        },
+        {
+          "name": "TestCareerOvertimeConsentConflictsCancellationAndLeave",
+          "elapsed": 5.07
+        },
+        {
+          "name": "TestCareerPerformanceRegularizationEvidencePrivacyAndRecovery",
+          "elapsed": 20.73
+        },
+        {
+          "name": "TestCareerPerformanceSupersessionFutureTermsAndRevocation",
+          "elapsed": 12.06
+        },
+        {
+          "name": "TestCareerPositionAcceptanceActivationReservationsRecovery",
+          "elapsed": 10.66
+        },
+        {
+          "name": "TestCareerPositionAcceptanceDirectionsAndRevalidation/junior",
+          "elapsed": 5.28
+        },
+        {
+          "name": "TestCareerPositionAcceptanceDirectionsAndRevalidation/trainee",
+          "elapsed": 5.06
+        },
+        {
+          "name": "TestCareerPositionAcceptanceDirectionsAndRevalidation/superseded-review",
+          "elapsed": 4.28
+        },
+        {
+          "name": "TestCareerPositionAcceptanceDirectionsAndRevalidation/pending-raise",
+          "elapsed": 4.09
+        },
+        {
+          "name": "TestCareerPositionAcceptanceDirectionsAndRevalidation/expired",
+          "elapsed": 5.11
+        },
+        {
+          "name": "TestCareerPositionAcceptanceDirectionsAndRevalidation/revoked-manager",
+          "elapsed": 4.24
+        },
+        {
+          "name": "TestCareerPositionAcceptanceDirectionsAndRevalidation",
+          "elapsed": 28.07
+        },
+        {
+          "name": "TestCareerPositionOfferEvidencePrivacyDeclineRecovery",
+          "elapsed": 4.84
+        },
+        {
+          "name": "TestCareerPositionOfferDirectionsAndStaleReview/transfer",
+          "elapsed": 3.91
+        },
+        {
+          "name": "TestCareerPositionOfferDirectionsAndStaleReview/demotion",
+          "elapsed": 3.97
+        },
+        {
+          "name": "TestCareerPositionOfferDirectionsAndStaleReview/superseded-unfavorable-review",
+          "elapsed": 3.94
+        },
+        {
+          "name": "TestCareerPositionOfferDirectionsAndStaleReview",
+          "elapsed": 11.82
+        },
+        {
+          "name": "TestCareerRaiseEffectiveBoundaryOldWagesAndRecovery",
+          "elapsed": 8.36
+        },
+        {
+          "name": "TestCareerRaiseKeepsAlreadyEarnedArrears",
+          "elapsed": 6.5
+        },
+        {
+          "name": "TestCareerOrganizationPostingApplicationRecovery",
+          "elapsed": 3
+        },
+        {
+          "name": "TestCareerAuthorizationFreshnessAndRollback",
+          "elapsed": 2.65
+        },
+        {
+          "name": "TestCareerConcurrentRetryAndCompetingHead",
+          "elapsed": 2.66
+        },
+        {
+          "name": "TestCareerOrganizationRequiresRealWorkplaceAndSourceScope",
+          "elapsed": 2.39
+        },
+        {
+          "name": "TestCareerReferralNeedsKnownCandidateAndTheirOwnApplication",
+          "elapsed": 3.25
+        },
+        {
+          "name": "TestMaterializeCohortConservesAllDimensionsAndReplays",
+          "elapsed": 1.66
+        },
+        {
+          "name": "TestCohortTransitionsRejectBackdatingAndSkippedDueWork",
+          "elapsed": 2.17
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/unauthorized",
+          "elapsed": 1.18
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/stale_head",
+          "elapsed": 0.97
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/population",
+          "elapsed": 0.99
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/asset",
+          "elapsed": 1.07
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/inventory",
+          "elapsed": 1.09
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/receivable",
+          "elapsed": 1.02
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/liability",
+          "elapsed": 1.08
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/algorithm",
+          "elapsed": 1.16
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites/pre-commit_rollback",
+          "elapsed": 1.27
+        },
+        {
+          "name": "TestMaterializeCohortFailuresAndInjectedRollbackLeaveNoWrites",
+          "elapsed": 9.84
+        },
+        {
+          "name": "TestDematerializeCohortRestoresConservationAndSnapshotReplay",
+          "elapsed": 1.82
+        },
+        {
+          "name": "TestDematerializeAuthorizationAndHeadFailuresLeaveNoWrites/unauthorized",
+          "elapsed": 1.16
+        },
+        {
+          "name": "TestDematerializeAuthorizationAndHeadFailuresLeaveNoWrites/stale_head",
+          "elapsed": 1.08
+        },
+        {
+          "name": "TestDematerializeAuthorizationAndHeadFailuresLeaveNoWrites",
+          "elapsed": 2.25
+        },
+        {
+          "name": "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack/population",
+          "elapsed": 1.2
+        },
+        {
+          "name": "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack/asset",
+          "elapsed": 1.05
+        },
+        {
+          "name": "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack/receivable",
+          "elapsed": 1
+        },
+        {
+          "name": "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack/liability",
+          "elapsed": 1.15
+        },
+        {
+          "name": "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack/inventory",
+          "elapsed": 1.08
+        },
+        {
+          "name": "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack/pre-commit_rollback",
+          "elapsed": 1.23
+        },
+        {
+          "name": "TestDematerializeRejectsChangedNamedHoldingsAndRollsBack",
+          "elapsed": 6.69
+        },
+        {
+          "name": "TestM2PopulationProjectionDivergenceIsDetectedAndRepaired",
+          "elapsed": 1.13
+        },
+        {
+          "name": "TestEmploymentEarnedDebtSurvivesExitAndNewTerms",
+          "elapsed": 1.51
+        },
+        {
+          "name": "TestEmploymentAccrualExplicitCalendarAndRollback",
+          "elapsed": 1.09
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods/missing_contract",
+          "elapsed": 0
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods/negative_start",
+          "elapsed": 0
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods/empty_period",
+          "elapsed": 0
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods/reverse_period",
+          "elapsed": 0
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods/zero_amount",
+          "elapsed": 0
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods/negative_amount",
+          "elapsed": 0
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods/invalid_time",
+          "elapsed": 0
+        },
+        {
+          "name": "TestEmploymentAccrualRejectsInvalidPeriods",
+          "elapsed": 1.06
+        },
+        {
+          "name": "TestVisibleEventsRespectPrincipalSubjectAndRedaction",
+          "elapsed": 4.28
+        },
+        {
+          "name": "TestM2BootstrapIsAuthoritativeIsolatedAndIdempotent",
+          "elapsed": 1.8
+        },
+        {
+          "name": "TestM2WageIsFundedSettledInOrderAndRecoverable",
+          "elapsed": 2.56
+        },
+        {
+          "name": "TestM2PurchaseRollsBackAndRefusesProjectedStockShortage",
+          "elapsed": 2.22
+        },
+        {
+          "name": "TestM2ConsumptionRequiresCapabilityAndRollsBack",
+          "elapsed": 2.22
+        },
+        {
+          "name": "TestM2FiniteRestockRejectsCorruptStockAndRollsBack",
+          "elapsed": 33.69
+        },
+        {
+          "name": "TestM2LateWageUsesOriginalObligationAndRollsBack",
+          "elapsed": 15.55
+        },
+        {
+          "name": "TestM2MaintenanceServiceTrueShortageIsTypedRejection",
+          "elapsed": 1.65
+        },
+        {
+          "name": "TestM2WageRollsBackAndRejectsProjectionCorruption",
+          "elapsed": 2.3
+        },
+        {
+          "name": "TestM2WageContractPreventsUnsourcedPopulationChange",
+          "elapsed": 1.56
+        },
+        {
+          "name": "TestM2ActiveWageParticipationAccruesAndPaysNamedWorker",
+          "elapsed": 6.86
+        },
+        {
+          "name": "TestM2WageRoundRobinAllocationMonotoneAndConserved",
+          "elapsed": 0
+        },
+        {
+          "name": "TestM2LiveWageClaimTransfersAfterAccrualAndPaysCurrentOwner",
+          "elapsed": 3.5
+        },
+        {
+          "name": "TestM2WageClaimReturnAfterPartialAndRematerialize",
+          "elapsed": 23.45
+        },
+        {
+          "name": "TestM2SplitBankruptcyFreezesNamedCreditorsAndDefersDistribution",
+          "elapsed": 92.49
+        },
+        {
+          "name": "TestM2ConcurrentLiveClaimTransferCommitsOnce",
+          "elapsed": 6.39
+        },
+        {
+          "name": "TestM2ForgedExtraClaimTransitionCannotCreateAnotherCreditor",
+          "elapsed": 2.57
+        },
+        {
+          "name": "TestM2T09AfterUnsplitAccrualTransfersOnlyUnpaidClaim",
+          "elapsed": 2.03
+        },
+        {
+          "name": "TestM2OriginalNamedWorkerReturnPreservesEarnedCashAndUnpaidSlot",
+          "elapsed": 15.12
+        },
+        {
+          "name": "TestM2SplitWageArrearsCurePreservesClaimantsAfterRestart",
+          "elapsed": 14.79
+        },
+        {
+          "name": "TestM2SplitWageZeroAndMultipleLatePayments",
+          "elapsed": 14.72
+        },
+        {
+          "name": "TestM2WagePolicyMigrationUpgradesExistingSplitLineage",
+          "elapsed": 3.13
+        },
+        {
+          "name": "TestM2ThirtyDayFiniteEconomyRecordsPartialAndOverdue",
+          "elapsed": 69.4
+        },
+        {
+          "name": "TestM2InsolvencyOpeningRollsBackAndResumes",
+          "elapsed": 24.48
+        },
+        {
+          "name": "TestM2InsolvencyReviewNeedsRealDistress",
+          "elapsed": 1.51
+        },
+        {
+          "name": "TestM2PostTermClaimMaterializationConservesAndReturns",
+          "elapsed": 60.48
+        },
+        {
+          "name": "TestM2EstateDistributionRoutesPostedCashToClaimants/cohort",
+          "elapsed": 49.92
+        },
+        {
+          "name": "TestM2EstateDistributionRoutesPostedCashToClaimants/named",
+          "elapsed": 51.75
+        },
+        {
+          "name": "TestM2EstateDistributionRoutesPostedCashToClaimants",
+          "elapsed": 101.67
+        },
+        {
+          "name": "TestM2EstateDefersWhenDonorCashWasPostedAway",
+          "elapsed": 32.5
+        },
+        {
+          "name": "TestM2PostPaymentResidualClaimCanBeAssignedAndReturned/cohort_only_payout",
+          "elapsed": 60.78
+        },
+        {
+          "name": "TestM2PostPaymentResidualClaimCanBeAssignedAndReturned/prior_named_payout",
+          "elapsed": 62.37
+        },
+        {
+          "name": "TestM2PostPaymentResidualClaimCanBeAssignedAndReturned",
+          "elapsed": 123.15
+        },
+        {
+          "name": "TestM2RentRollbackAndProjectionRepair",
+          "elapsed": 1.94
+        },
+        {
+          "name": "TestM2WageClaimOriginIsSealedAndProjectionChecked/original",
+          "elapsed": 0.01
+        },
+        {
+          "name": "TestM2WageClaimOriginIsSealedAndProjectionChecked/different_current_workforce_and_rate",
+          "elapsed": 0.01
+        },
+        {
+          "name": "TestM2WageClaimOriginIsSealedAndProjectionChecked/changed_amount",
+          "elapsed": 0
+        },
+        {
+          "name": "TestM2WageClaimOriginIsSealedAndProjectionChecked/wrong_accrual_period",
+          "elapsed": 0
+        },
+        {
+          "name": "TestM2WageClaimOriginIsSealedAndProjectionChecked",
+          "elapsed": 1.71
+        },
+        {
+          "name": "TestM2WageReceiptHistoryUsesEarnedRate",
+          "elapsed": 2.59
+        },
+        {
+          "name": "TestM2SplitPaymentUsesAccruedRoster",
+          "elapsed": 2.68
+        },
+        {
+          "name": "TestM2UnsplitPaymentUsesAccruedTerms",
+          "elapsed": 1.83
+        },
+        {
+          "name": "TestRPBackgroundMaterializationEntersRPReencountersAndReopens",
+          "elapsed": 3.02
+        },
+        {
+          "name": "TestRPBackgroundRejectsUnauthorizedConflictAndRollsBack",
+          "elapsed": 1.63
+        },
+        {
+          "name": "TestRPBackgroundPreservesRealEmploymentAndCalendar",
+          "elapsed": 3.3
+        },
+        {
+          "name": "TestRPPlaySetupMaterializesPlayerAndThirdNPCInExistingWorld",
+          "elapsed": 1.86
+        },
+        {
+          "name": "TestRPCommunityOpportunityActualReactionPrivacyAndRecovery/false",
+          "elapsed": 8.14
+        },
+        {
+          "name": "TestRPCommunityOpportunityActualReactionPrivacyAndRecovery/true",
+          "elapsed": 8.48
+        },
+        {
+          "name": "TestRPCommunityOpportunityActualReactionPrivacyAndRecovery",
+          "elapsed": 16.63
+        },
+        {
+          "name": "TestRPCultureAffiliationDoesNotForceBeliefAndRecovers",
+          "elapsed": 4.95
+        },
+        {
+          "name": "TestRPCultureAuthorityRevocationAndReassignmentSurviveRepair",
+          "elapsed": 3.25
+        },
+        {
+          "name": "TestRPCultureEvolutionRequiresPropagationAndRetainsConflict",
+          "elapsed": 5.52
+        },
+        {
+          "name": "TestRPCulturalFamilyNeedsMutualSourceNotColocation",
+          "elapsed": 3.85
+        },
+        {
+          "name": "TestRPCultureGiftChangesRealNPCChoiceAndPreservesPrivateHistory/welcome",
+          "elapsed": 5.33
+        },
+        {
+          "name": "TestRPCultureGiftChangesRealNPCChoiceAndPreservesPrivateHistory/unwelcome",
+          "elapsed": 5.38
+        },
+        {
+          "name": "TestRPCultureGiftChangesRealNPCChoiceAndPreservesPrivateHistory",
+          "elapsed": 10.71
+        },
+        {
+          "name": "TestRPCultureOrganizationRequiresAuthorityAndEffectiveEmployment",
+          "elapsed": 4.19
+        },
+        {
+          "name": "TestRPCultureScopeGrantDamageDetectionAndRepair",
+          "elapsed": 3.35
+        },
+        {
+          "name": "TestRPCultureTerritoryAuthorityPlaceAndPropagation",
+          "elapsed": 4.01
+        },
+        {
+          "name": "TestRPCultureTransmissionStanceRecovery",
+          "elapsed": 3.4
+        },
+        {
+          "name": "TestRPNPCRefusalCommitsSpeechKnowledgeAndRetryAfterRollback",
+          "elapsed": 2.09
+        },
+        {
+          "name": "TestRPNPCLeaveAndSilenceAreCommittedWithoutInventingPlayerEffects/leave",
+          "elapsed": 1.89
+        },
+        {
+          "name": "TestRPNPCLeaveAndSilenceAreCommittedWithoutInventingPlayerEffects/silence",
+          "elapsed": 1.75
+        },
+        {
+          "name": "TestRPNPCLeaveAndSilenceAreCommittedWithoutInventingPlayerEffects/wait",
+          "elapsed": 1.82
+        },
+        {
+          "name": "TestRPNPCLeaveAndSilenceAreCommittedWithoutInventingPlayerEffects",
+          "elapsed": 5.46
+        },
+        {
+          "name": "TestRPNPCDecisionsForThreeListenersCommitSequentially",
+          "elapsed": 2.5
+        },
+        {
+          "name": "TestRPNPCDecision023UpgradePreservesTurnAndRetryMismatch",
+          "elapsed": 2
+        },
+        {
+          "name": "TestRPNPCDecisionRejectsStaleWorldBeforeCommit",
+          "elapsed": 1.65
+        },
+        {
+          "name": "TestRPDecisionInputIsNPCScopedAndProviderCannotCommitWorld",
+          "elapsed": 1.87
+        },
+        {
+          "name": "TestRPDeterministicDecisionCanRefuseUsingOwnEconomyAndSchedule",
+          "elapsed": 1.71
+        },
+        {
+          "name": "TestRPEnvironmentRainChangesCommittedMovementAndSurvivesRestart/rain-false",
+          "elapsed": 4.47
+        },
+        {
+          "name": "TestRPEnvironmentRainChangesCommittedMovementAndSurvivesRestart/rain-true",
+          "elapsed": 4.93
+        },
+        {
+          "name": "TestRPEnvironmentRainChangesCommittedMovementAndSurvivesRestart",
+          "elapsed": 9.4
+        },
+        {
+          "name": "TestRPEnvironmentSourceRequiresActualPlaceStreamAndAuthority",
+          "elapsed": 2.91
+        },
+        {
+          "name": "TestRPEnvironmentSharedAcrossActorsAndRestart",
+          "elapsed": 3.24
+        },
+        {
+          "name": "TestRPServiceWaitDrainsOriginalRosterAcrossPartialRestart",
+          "elapsed": 3.79
+        },
+        {
+          "name": "TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic/quiet",
+          "elapsed": 1.84
+        },
+        {
+          "name": "TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic/leave",
+          "elapsed": 1.69
+        },
+        {
+          "name": "TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic/illegal",
+          "elapsed": 1.9
+        },
+        {
+          "name": "TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic/unavailable",
+          "elapsed": 1.61
+        },
+        {
+          "name": "TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic",
+          "elapsed": 7.04
+        },
+        {
+          "name": "TestRPInitiativeCadenceSurvivesMidnight",
+          "elapsed": 1.83
+        },
+        {
+          "name": "TestRPInitiativeContextHasActualTimeTriggerWithoutPlayerSpeech/forged-trigger",
+          "elapsed": 0.01
+        },
+        {
+          "name": "TestRPInitiativeContextHasActualTimeTriggerWithoutPlayerSpeech/offsite",
+          "elapsed": 0.01
+        },
+        {
+          "name": "TestRPInitiativeContextHasActualTimeTriggerWithoutPlayerSpeech/player-as-npc",
+          "elapsed": 0
+        },
+        {
+          "name": "TestRPInitiativeContextHasActualTimeTriggerWithoutPlayerSpeech/wrong-owner",
+          "elapsed": 0
+        },
+        {
+          "name": "TestRPInitiativeContextHasActualTimeTriggerWithoutPlayerSpeech",
+          "elapsed": 4.05
+        },
+        {
+          "name": "TestRPInstitutionGrantDamageDetectionAndRepair",
+          "elapsed": 5.92
+        },
+        {
+          "name": "TestRPInstitutionProposalAndEnactmentRequireIndependentRoles",
+          "elapsed": 2.76
+        },
+        {
+          "name": "TestRPLawCareerAnnouncementHasRealConsequences",
+          "elapsed": 8.38
+        },
+        {
+          "name": "TestRPLawEvolutionPreservesHistoryAndIncompleteKnowledge",
+          "elapsed": 10.01
+        },
+        {
+          "name": "TestRPLawKnowledgeTimingAndExecutableNoncompliance/reverse",
+          "elapsed": 11.89
+        },
+        {
+          "name": "TestRPLawKnowledgeTimingAndExecutableNoncompliance/uphold",
+          "elapsed": 10.51
+        },
+        {
+          "name": "TestRPLawKnowledgeTimingAndExecutableNoncompliance/defendant-reviewer",
+          "elapsed": 11.59
+        },
+        {
+          "name": "TestRPLawKnowledgeTimingAndExecutableNoncompliance/enforcer-reviewer",
+          "elapsed": 9.92
+        },
+        {
+          "name": "TestRPLawKnowledgeTimingAndExecutableNoncompliance",
+          "elapsed": 43.91
+        },
+        {
+          "name": "TestRPLawSpeechEvidenceRequiresSpokenDomainFact",
+          "elapsed": 0
+        },
+        {
+          "name": "TestRPLifePreparationPaysNamedWagesAndRecovers",
+          "elapsed": 2.85
+        },
+        {
+          "name": "TestRPLifePreparationResumesInterruptedComposition",
+          "elapsed": 2.33
+        },
+        {
+          "name": "TestRPLifePreparationRejectsConvertingMinimalDemo",
+          "elapsed": 1.39
+        },
+        {
+          "name": "TestRPLifeSixtyTurnsAcrossFiveDaysWithEconomyMemoryAndRecovery",
+          "elapsed": 327.23
+        },
+        {
+          "name": "TestRPLifeSameSnapshotDivergentSixtyTurnRuns/seed-one",
+          "elapsed": 333.43
+        },
+        {
+          "name": "TestRPLifeSameSnapshotDivergentSixtyTurnRuns/seed-two",
+          "elapsed": 334.86
+        },
+        {
+          "name": "TestRPLifeSameSnapshotDivergentSixtyTurnRuns/deterministic-quiet",
+          "elapsed": 524.65
+        },
+        {
+          "name": "TestRPLifeSameSnapshotDivergentSixtyTurnRuns/deterministic-conflict",
+          "elapsed": 355.69
+        },
+        {
+          "name": "TestRPLifeSameSnapshotDivergentSixtyTurnRuns",
+          "elapsed": 1550.98
+        },
+        {
+          "name": "TestRPLifeUsesOwnFactsAndRemembersRepeatedContactAcrossReopen",
+          "elapsed": 3.19
+        },
+        {
+          "name": "TestRPHotActualOverCapacityFairnessAndRestart",
+          "elapsed": 20.29
+        },
+        {
+          "name": "TestRPLODTiersAcrossWeekAndRestart",
+          "elapsed": 88.9
+        },
+        {
+          "name": "TestRPHotRosterUsesActualDecisionsAndRecovers",
+          "elapsed": 4.11
+        },
+        {
+          "name": "TestRPMoveUsesRealRouteMovementKnowledgeAndRetry",
+          "elapsed": 1.9
+        },
+        {
+          "name": "TestRPOpportunityBusyUsesActualEmploymentSchedule",
+          "elapsed": 5.16
+        },
+        {
+          "name": "TestRPOpportunityContactHitAndMissCommitDifferentConsequences/selected-false",
+          "elapsed": 2.43
+        },
+        {
+          "name": "TestRPOpportunityContactHitAndMissCommitDifferentConsequences/selected-true",
+          "elapsed": 3.15
+        },
+        {
+          "name": "TestRPOpportunityContactHitAndMissCommitDifferentConsequences",
+          "elapsed": 5.58
+        },
+        {
+          "name": "TestRPOpportunityCommunityDefaultPreservesPolicyHash",
+          "elapsed": 0
+        },
+        {
+          "name": "TestRPOpportunityVisitPolicyBoundsAndHash",
+          "elapsed": 0
+        },
+        {
+          "name": "TestRPOpportunityPolicyAuthorityRollbackAndRecovery",
+          "elapsed": 2.53
+        },
+        {
+          "name": "TestRPOpportunityMajorPressureUsesOwnJobLossNotice",
+          "elapsed": 5.29
+        },
+        {
+          "name": "TestRPOpportunityQuietWindowMaturesWithoutEventGuarantee/0",
+          "elapsed": 2.8
+        },
+        {
+          "name": "TestRPOpportunityQuietWindowMaturesWithoutEventGuarantee/1000",
+          "elapsed": 2.98
+        },
+        {
+          "name": "TestRPOpportunityQuietWindowMaturesWithoutEventGuarantee",
+          "elapsed": 5.78
+        },
+        {
+          "name": "TestRPOpportunityExplicitSocialIntentChangesChanceNotDrawIdentity/intent-",
+          "elapsed": 2.83
+        },
+        {
+          "name": "TestRPOpportunityExplicitSocialIntentChangesChanceNotDrawIdentity/intent-social",
+          "elapsed": 2.83
+        },
+        {
+          "name": "TestRPOpportunityExplicitSocialIntentChangesChanceNotDrawIdentity",
+          "elapsed": 5.66
+        },
+        {
+          "name": "TestRPOpportunitySameWaitContactSuppressesWork",
+          "elapsed": 6.23
+        },
+        {
+          "name": "TestRPOpportunitySharedPressureDeduplicatesAndExpiresOriginalReceipts",
+          "elapsed": 0
+        },
+        {
+          "name": "TestRPOpportunityColocationDoesNotInventFriendship",
+          "elapsed": 1.71
+        },
+        {
+          "name": "TestRPOpportunityWaitPrivateReceiptsRecoverWithoutReroll",
+          "elapsed": 3.32
+        },
+        {
+          "name": "TestRPPlayObservationRestoresScopedHistoryAndLegalDestinations",
+          "elapsed": 2.37
+        },
+        {
+          "name": "TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel",
+          "elapsed": 1.98
+        },
+        {
+          "name": "TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence/unavailable",
+          "elapsed": 1.68
+        },
+        {
+          "name": "TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence/illegal",
+          "elapsed": 1.85
+        },
+        {
+          "name": "TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence/schema",
+          "elapsed": 1.85
+        },
+        {
+          "name": "TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence/timeout",
+          "elapsed": 1.88
+        },
+        {
+          "name": "TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence",
+          "elapsed": 7.26
+        },
+        {
+          "name": "TestRPTravelRoutesAreEventBackedIdempotentAndRecoverable",
+          "elapsed": 1.62
+        },
+        {
+          "name": "TestRPEarlyWorkArrivalDoesNotBlockLaterSchedule",
+          "elapsed": 3.81
+        },
+        {
+          "name": "TestRPEarlyArrivalDoesNotAcceptCorruptedPosition",
+          "elapsed": 1.1
+        },
+        {
+          "name": "TestRPSessionFirstSliceDerivesPresenceAndResumesAfterReopen",
+          "elapsed": 1.68
+        },
+        {
+          "name": "TestRPSessionRejectsInvalidBindingAndIdempotencyMismatch",
+          "elapsed": 1.19
+        },
+        {
+          "name": "TestRPSessionCloseAndPrecommitFailureLeaveNoWorldEffect",
+          "elapsed": 1.35
+        },
+        {
+          "name": "TestRPSchemaUpgradeFrom019PreservesExistingM2World",
+          "elapsed": 1.95
+        },
+        {
+          "name": "TestRPSocialGiftCreatesRealEconomicNeedGoalDecisionAndReplay",
+          "elapsed": 2.24
+        },
+        {
+          "name": "TestRPSocialExperiencedConflictChangesLaterActionAndSurvivesRestart",
+          "elapsed": 2.25
+        },
+        {
+          "name": "TestRPSocialMeetingObligationTrustAndMemoryRequireActualFulfillment",
+          "elapsed": 2.35
+        },
+        {
+          "name": "TestRPSocialRejectsOffsiteUnfundedStaleAndConflictingRequests",
+          "elapsed": 1.65
+        },
+        {
+          "name": "TestRPSpeechAcceptedHearersKnowAttributionWithoutMakingClaimTrue",
+          "elapsed": 1.92
+        },
+        {
+          "name": "TestRPSpeechTwoSamePlaceListenersAndPrecommitRollback",
+          "elapsed": 2
+        },
+        {
+          "name": "TestRPSpeechSchemaUpgradeFrom022PreservesSessionAndWorld",
+          "elapsed": 1.72
+        },
+        {
+          "name": "TestRPStoreOpportunityShortageReactionHistoryAndRecovery/selected-false",
+          "elapsed": 93.68
+        },
+        {
+          "name": "TestRPStoreOpportunityShortageReactionHistoryAndRecovery/selected-true",
+          "elapsed": 123.48
+        },
+        {
+          "name": "TestRPStoreOpportunityShortageReactionHistoryAndRecovery",
+          "elapsed": 217.16
+        },
+        {
+          "name": "TestRPStorefrontFiniteShortageRestockAndRecovery",
+          "elapsed": 50.78
+        },
+        {
+          "name": "TestRPStyleScopedSettingsPinnedRecoveryAndReadOnlyVariants",
+          "elapsed": 1.89
+        },
+        {
+          "name": "TestRPStyleUpgrade025PinsLegacyAndRetainsWorld",
+          "elapsed": 2.31
+        },
+        {
+          "name": "TestRPStyleRevisionAuthorizationRollbackAndSceneIsolation",
+          "elapsed": 1.58
+        },
+        {
+          "name": "TestRPTransitRepeatedDelayPreservesChainAndRecovery",
+          "elapsed": 3.8
+        },
+        {
+          "name": "TestRPTransitMidnightDelayRetainsOriginalAppointmentAndAdvancesDay",
+          "elapsed": 3.01
+        },
+        {
+          "name": "TestRPTransitDoesNotExtendCareerDeadlinesOrRewriteEarnedPay/leave",
+          "elapsed": 5.71
+        },
+        {
+          "name": "TestRPTransitDoesNotExtendCareerDeadlinesOrRewriteEarnedPay/resignation",
+          "elapsed": 5.81
+        },
+        {
+          "name": "TestRPTransitDoesNotExtendCareerDeadlinesOrRewriteEarnedPay",
+          "elapsed": 11.53
+        },
+        {
+          "name": "TestRPTransitScheduledDelayRepairsQueueAndArrivesOnce",
+          "elapsed": 4.56
+        },
+        {
+          "name": "TestRPTransitLateArrivalDoesNotUndoLaterScheduledActivity",
+          "elapsed": 3.46
+        },
+        {
+          "name": "TestRPTransitPendingAppointmentsUseOriginalChronology",
+          "elapsed": 3.96
+        },
+        {
+          "name": "TestRPTransitPerceptionIsCurrentAdjacentAndShared",
+          "elapsed": 2.06
+        },
+        {
+          "name": "TestRPTransitWorksSourceAuthorityIntervalAndRecovery",
+          "elapsed": 2.86
+        },
+        {
+          "name": "TestRPTurnRunsTwentyDeterministicTurnsWithTimeMoveRestartAndReplay",
+          "elapsed": 13.36
+        },
+        {
+          "name": "TestRPTurnProviderFailureSettlesSilenceWithoutPromotingFalseClaim",
+          "elapsed": 1.9
+        },
+        {
+          "name": "TestRPTurnSchemaUpgradeFrom024PreservesCommittedSpeechAndNPC",
+          "elapsed": 2.25
+        },
+        {
+          "name": "TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects/turn_open",
+          "elapsed": 2.02
+        },
+        {
+          "name": "TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects/player_event_committed",
+          "elapsed": 1.92
+        },
+        {
+          "name": "TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects/player_committed",
+          "elapsed": 1.88
+        },
+        {
+          "name": "TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects/npc_effect_committed",
+          "elapsed": 1.97
+        },
+        {
+          "name": "TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects/npc_effects_committed",
+          "elapsed": 2.05
+        },
+        {
+          "name": "TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects/narrative_ready",
+          "elapsed": 2.11
+        },
+        {
+          "name": "TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects",
+          "elapsed": 11.94
+        },
+        {
+          "name": "TestRPVisitOpportunityActualMovementAndRecovery/rare=false/hit=false/blocked=false",
+          "elapsed": 3.63
+        },
+        {
+          "name": "TestRPVisitOpportunityActualMovementAndRecovery/rare=false/hit=true/blocked=false",
+          "elapsed": 5.05
+        },
+        {
+          "name": "TestRPVisitOpportunityActualMovementAndRecovery/rare=false/hit=true/blocked=true",
+          "elapsed": 4.08
+        },
+        {
+          "name": "TestRPVisitOpportunityActualMovementAndRecovery/rare=true/hit=false/blocked=false",
+          "elapsed": 4.2
+        },
+        {
+          "name": "TestRPVisitOpportunityActualMovementAndRecovery/rare=true/hit=true/blocked=false",
+          "elapsed": 5.59
+        },
+        {
+          "name": "TestRPVisitOpportunityActualMovementAndRecovery/rare=true/hit=true/blocked=true",
+          "elapsed": 4.88
+        },
+        {
+          "name": "TestRPVisitOpportunityActualMovementAndRecovery",
+          "elapsed": 27.43
+        },
+        {
+          "name": "TestRPVisitSourcesActualMemoryNotFriendsCurrentPosition",
+          "elapsed": 3.93
+        },
+        {
+          "name": "TestRPWaitNoDueAdvancesAuthorityOnceAndSurvivesRestart",
+          "elapsed": 1.87
+        },
+        {
+          "name": "TestRPWaitBudgetExhaustionRetriesDueSchedulerBeforeFinalClock",
+          "elapsed": 2
+        },
+        {
+          "name": "TestRPWaitFinalCommitFailureLeavesRecoverableIntent",
+          "elapsed": 1.47
+        },
+        {
+          "name": "TestRPWarmRejectsInterveningActionAndAdvancedClock/same-time-action",
+          "elapsed": 3.6
+        },
+        {
+          "name": "TestRPWarmRejectsInterveningActionAndAdvancedClock/advanced-clock",
+          "elapsed": 3.58
+        },
+        {
+          "name": "TestRPWarmRejectsInterveningActionAndAdvancedClock",
+          "elapsed": 7.17
+        },
+        {
+          "name": "TestRPWarmImportantRelationshipRespectsClosureAndSameWaitHOT/false",
+          "elapsed": 5.13
+        },
+        {
+          "name": "TestRPWarmImportantRelationshipRespectsClosureAndSameWaitHOT/true",
+          "elapsed": 6.37
+        },
+        {
+          "name": "TestRPWarmImportantRelationshipRespectsClosureAndSameWaitHOT",
+          "elapsed": 11.5
+        },
+        {
+          "name": "TestRPWarmActualPreparationCadencePrivacyAndRecovery",
+          "elapsed": 5.23
+        },
+        {
+          "name": "TestRPWorkOpportunityOwnNoticeHistoryPrivacyAndRecovery/false",
+          "elapsed": 10.61
+        },
+        {
+          "name": "TestRPWorkOpportunityOwnNoticeHistoryPrivacyAndRecovery/true",
+          "elapsed": 10.65
+        },
+        {
+          "name": "TestRPWorkOpportunityOwnNoticeHistoryPrivacyAndRecovery",
+          "elapsed": 21.26
+        },
+        {
+          "name": "TestEmbeddedMigrationsMatchContracts",
+          "elapsed": 0.02
+        },
+        {
+          "name": "TestOpenMigratesExistingM0DatabaseToRecoverySchema",
+          "elapsed": 1.22
+        },
+        {
+          "name": "TestBootstrapRejectsLegacyProjectionOnlyDemo",
+          "elapsed": 0.99
+        },
+        {
+          "name": "TestBootstrapIsDurableAndIdempotent",
+          "elapsed": 1.63
+        },
+        {
+          "name": "TestPurchaseCommitReplayAndReopen",
+          "elapsed": 1.48
+        },
+        {
+          "name": "TestReplaySnapshotAndProjectionRecovery",
+          "elapsed": 1.29
+        },
+        {
+          "name": "TestOutboxReopenAndPublishMarkCrashRecovery",
+          "elapsed": 1.35
+        },
+        {
+          "name": "TestOutboxFailureRecordsRetryWithoutRollingBackWorld",
+          "elapsed": 1.12
+        },
+        {
+          "name": "TestStrictWorldSeedAndStableSchedulerOrder",
+          "elapsed": 1.09
+        },
+        {
+          "name": "TestStrictSchedulerIsIndependentOfInsertionOrder",
+          "elapsed": 9.59
+        },
+        {
+          "name": "TestStrictSchedulerBudgetCheckpointResumesAfterReopen",
+          "elapsed": 5.65
+        },
+        {
+          "name": "TestStrictWorldNinetyDaySettlement",
+          "elapsed": 7.12
+        },
+        {
+          "name": "TestRepeatedWageAccrualDoesNotDuplicateObligationOrExpense",
+          "elapsed": 2.33
+        },
+        {
+          "name": "TestHouseholdFoodBudgetRejectsSpendBeyondLimit",
+          "elapsed": 5.92
+        },
+        {
+          "name": "TestControlledIssuanceAuthorizationLimitAccountingAndIdempotency",
+          "elapsed": 1.33
+        },
+        {
+          "name": "TestPrivateEconomicReadScopesAndOperatorRedaction",
+          "elapsed": 4.34
+        },
+        {
+          "name": "TestConcurrentExpectedHeadAllowsExactlyOneCommit",
+          "elapsed": 2.89
+        },
+        {
+          "name": "TestPurchasePolicyFailuresLeaveNoWrites/unauthorized",
+          "elapsed": 1.04
+        },
+        {
+          "name": "TestPurchasePolicyFailuresLeaveNoWrites/insufficient_funds",
+          "elapsed": 1.09
+        },
+        {
+          "name": "TestPurchasePolicyFailuresLeaveNoWrites/insufficient_stock",
+          "elapsed": 1.16
+        },
+        {
+          "name": "TestPurchasePolicyFailuresLeaveNoWrites/integer_overflow",
+          "elapsed": 1.16
+        },
+        {
+          "name": "TestPurchasePolicyFailuresLeaveNoWrites",
+          "elapsed": 4.45
+        },
+        {
+          "name": "TestInjectedPreCommitFailureRollsBackEverything",
+          "elapsed": 1.41
+        },
+        {
+          "name": "TestErrorCodesRemainInspectable",
+          "elapsed": 0
+        }
+      ]
+    }
+  ]
+}

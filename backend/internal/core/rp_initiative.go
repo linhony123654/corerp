@@ -1,6 +1,9 @@
 package core
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // A time-triggered choice does not imply any player speech or hearing evidence.
 type RPDecisionTrigger struct {
@@ -29,6 +32,9 @@ func proposeRPInitiative(input RPDecisionInput) (RPDecisionProposal, error) {
 		return RPDecisionProposal{}, NewError(CodeInvalidArgument, "initiative cannot pretend a player speech occurred")
 	}
 	quiet := RPDecisionProposal{Action: "silence"}
+	if RPContactOpportunitySuppressed(input) {
+		return quiet, nil
+	}
 	if input.Life == nil {
 		return quiet, nil
 	}
@@ -45,8 +51,23 @@ func proposeRPInitiative(input RPDecisionInput) (RPDecisionProposal, error) {
 			return RPDecisionProposal{Action: "respond", Text: "我得先处理一下手头的开销。"}, nil
 		}
 	}
-	if input.ActivityCode == "work" || input.NextSchedule != nil && input.NextSchedule.ActivityCode == "work" {
+	if home := RPWeatherHomeDestination(input); home != "" {
+		return RPDecisionProposal{Action: "leave", DestinationPlaceID: home}, nil
+	}
+	if rpInitiativeWorkIsImminent(input) {
 		return quiet, nil
+	}
+	if destination := RPSelectedVisitDestination(input); destination != "" {
+		return RPDecisionProposal{Action: "leave", DestinationPlaceID: destination}, nil
+	}
+	if RPSelectedStoreShortage(input) && input.Life.Disposition.Sociability > 0 {
+		return RPDecisionProposal{Action: "respond", Text: "这家店有东西缺货了。"}, nil
+	}
+	if RPSelectedWorkChange(input) && input.Life.Disposition.Sociability > 0 {
+		return RPDecisionProposal{Action: "respond", Text: "工作上有些变化，我还得安排一下。"}, nil
+	}
+	if RPSelectedCommunityChange(input) && input.Life.Disposition.Sociability > 0 {
+		return RPDecisionProposal{Action: "respond", Text: "这里的规矩有了变化，得重新留意一下。"}, nil
 	}
 	if input.Life.Disposition.Sociability > 0 {
 		for _, r := range input.Life.Relationships {
@@ -56,4 +77,19 @@ func proposeRPInitiative(input RPDecisionInput) (RPDecisionProposal, error) {
 		}
 	}
 	return quiet, nil
+}
+
+func rpInitiativeWorkIsImminent(input RPDecisionInput) bool {
+	if input.ActivityCode == "work" {
+		return true
+	}
+	if input.NextSchedule == nil || input.NextSchedule.ActivityCode != "work" {
+		return false
+	}
+	at, err := time.Parse(time.RFC3339, input.WorldTime)
+	if err != nil {
+		return true
+	}
+	due, err := time.Parse(time.RFC3339, input.NextSchedule.WorldTime)
+	return err != nil || !due.After(at.Add(time.Hour))
 }

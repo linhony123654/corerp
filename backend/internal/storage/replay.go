@@ -228,7 +228,15 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	return append(append(append(append(differences, wages...), roles...), culture...), institutions...), nil
+	transit, err := transitProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	leaveQueues, err := careerLeaveQueueDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(append(append(append(append(differences, wages...), roles...), culture...), institutions...), transit...), leaveQueues...), nil
 }
 
 func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID string) error {
@@ -361,6 +369,20 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 		return err
 	}
 	if err := repairInstitutionGrantProjections(ctx, tx.conn, institutions); err != nil {
+		return err
+	}
+	transit, err := transitProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairTransitProjections(ctx, tx.conn, instanceID, branchID, transit); err != nil {
+		return err
+	}
+	leaveQueues, err := careerLeaveQueueDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairCareerLeaveQueues(ctx, tx.conn, instanceID, branchID, leaveQueues); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

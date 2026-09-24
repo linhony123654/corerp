@@ -34,17 +34,20 @@ type RPVisibleEntity struct {
 }
 
 type RPObservation struct {
-	DecisionMode      string            `json:"decision_mode"`
-	SessionID         string            `json:"session_id"`
-	ControlledEntity  RPVisibleEntity   `json:"controlled_entity"`
-	WorldTime         string            `json:"world_time"`
-	PlaceID           string            `json:"place_id"`
-	PlaceName         string            `json:"place_name"`
-	PlaceKind         string            `json:"place_kind"`
-	PresentEntities   []RPVisibleEntity `json:"present_entities"`
-	ObservationCursor int64             `json:"observation_cursor"`
-	ReachablePlaces   []RPVisiblePlace  `json:"reachable_places"`
-	RecentTurns       []RPHistoryTurn   `json:"recent_turns"`
+	Environment       *core.RPLocalEnvironment   `json:"environment,omitempty"`
+	Stores            []core.RPStoreAvailability `json:"stores,omitempty"`
+	TransitWorks      []core.RPLocalTransitWorks `json:"transit_works,omitempty"`
+	DecisionMode      string                     `json:"decision_mode"`
+	SessionID         string                     `json:"session_id"`
+	ControlledEntity  RPVisibleEntity            `json:"controlled_entity"`
+	WorldTime         string                     `json:"world_time"`
+	PlaceID           string                     `json:"place_id"`
+	PlaceName         string                     `json:"place_name"`
+	PlaceKind         string                     `json:"place_kind"`
+	PresentEntities   []RPVisibleEntity          `json:"present_entities"`
+	ObservationCursor int64                      `json:"observation_cursor"`
+	ReachablePlaces   []RPVisiblePlace           `json:"reachable_places"`
+	RecentTurns       []RPHistoryTurn            `json:"recent_turns"`
 }
 
 type RPVisiblePlace struct {
@@ -341,6 +344,18 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		return RPObservation{}, err
 	}
 	rows.Close()
+	view.Environment, err = readRPLocalEnvironment(ctx, tx.conn, session.InstanceID, session.BranchID, view.PlaceID, view.WorldTime)
+	if err != nil {
+		return RPObservation{}, err
+	}
+	view.Stores, err = readRPLocalStores(ctx, tx.conn, session.InstanceID, session.BranchID, view.PlaceID)
+	if err != nil {
+		return RPObservation{}, err
+	}
+	view.TransitWorks, err = readRPLocalTransitWorks(ctx, tx.conn, session.InstanceID, session.BranchID, view.PlaceID, view.WorldTime)
+	if err != nil {
+		return RPObservation{}, err
+	}
 	if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_sessions SET observation_cursor = ? WHERE session_id = ?`, view.ObservationCursor, session.SessionID); err != nil {
 		return RPObservation{}, core.WrapError(core.CodeStorageFailure, "advance RP observation cursor", err)
 	}

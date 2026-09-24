@@ -34,39 +34,49 @@ type RPDecisionKnowledge struct {
 }
 
 type RPDecisionSchedule struct {
-	SourceEventID string `json:"source_event_id,omitempty"`
-	WorldTime     string `json:"world_time"`
-	PlaceID       string `json:"place_id"`
-	ActivityCode  string `json:"activity_code"`
+	OriginalWorldTime  string `json:"original_world_time,omitempty"`
+	DelaySourceEventID string `json:"delay_source_event_id,omitempty"`
+	SourceEventID      string `json:"source_event_id,omitempty"`
+	WorldTime          string `json:"world_time"`
+	PlaceID            string `json:"place_id"`
+	ActivityCode       string `json:"activity_code"`
 }
 
 // RPDecisionInput is the only data boundary exposed to a replaceable provider.
 // No account identifiers, other people's finances, creator data or raw DB rows.
 type RPDecisionInput struct {
-	Law                  *RPLawContext             `json:"law,omitempty"`
-	Trigger              *RPDecisionTrigger        `json:"trigger,omitempty"`
-	Life                 *RPLifeContext            `json:"life,omitempty"`
-	InstanceID           string                    `json:"instance_id"`
-	BranchID             string                    `json:"branch_id"`
-	HeadSequence         int64                     `json:"head_sequence"`
-	TurnID               string                    `json:"turn_id"`
-	SpeechEventID        string                    `json:"speech_event_id"`
-	NPCEntityID          string                    `json:"npc_entity_id"`
-	InterlocutorEntityID string                    `json:"interlocutor_entity_id"`
-	NPCName              string                    `json:"npc_name"`
-	WorldTime            string                    `json:"world_time"`
-	PlaceID              string                    `json:"place_id"`
-	PlaceName            string                    `json:"place_name"`
-	ActivityCode         string                    `json:"activity_code"`
-	GoalCode             string                    `json:"goal_code"`
-	OwnAssetMinor        int64                     `json:"own_asset_minor"`
-	CurrencyID           string                    `json:"currency_id"`
-	VisibleEntities      []RPDecisionVisibleEntity `json:"visible_entities"`
-	Knowledge            []RPDecisionKnowledge     `json:"knowledge"`
-	NextSchedule         *RPDecisionSchedule       `json:"next_schedule,omitempty"`
-	PlayerSpeechText     string                    `json:"player_speech_text"`
-	LegalActions         []string                  `json:"legal_actions"`
-	ReachablePlaceIDs    []string                  `json:"reachable_place_ids"`
+	VisitOpportunity     *RPVisitOpportunityContext     `json:"visit_opportunity,omitempty"`
+	CommunityOpportunity *RPCommunityOpportunityContext `json:"community_opportunity,omitempty"`
+	WorkOpportunity      *RPWorkOpportunityContext      `json:"work_opportunity,omitempty"`
+	Environment          *RPLocalEnvironment            `json:"environment,omitempty"`
+	Stores               []RPStoreAvailability          `json:"stores,omitempty"`
+	StoreOpportunities   []RPStoreOpportunityContext    `json:"store_opportunities,omitempty"`
+	TransitWorks         []RPLocalTransitWorks          `json:"transit_works,omitempty"`
+	ContactOpportunity   *RPContactOpportunityContext   `json:"contact_opportunity,omitempty"`
+	Law                  *RPLawContext                  `json:"law,omitempty"`
+	Trigger              *RPDecisionTrigger             `json:"trigger,omitempty"`
+	Life                 *RPLifeContext                 `json:"life,omitempty"`
+	InstanceID           string                         `json:"instance_id"`
+	BranchID             string                         `json:"branch_id"`
+	HeadSequence         int64                          `json:"head_sequence"`
+	TurnID               string                         `json:"turn_id"`
+	SpeechEventID        string                         `json:"speech_event_id"`
+	NPCEntityID          string                         `json:"npc_entity_id"`
+	InterlocutorEntityID string                         `json:"interlocutor_entity_id"`
+	NPCName              string                         `json:"npc_name"`
+	WorldTime            string                         `json:"world_time"`
+	PlaceID              string                         `json:"place_id"`
+	PlaceName            string                         `json:"place_name"`
+	ActivityCode         string                         `json:"activity_code"`
+	GoalCode             string                         `json:"goal_code"`
+	OwnAssetMinor        int64                          `json:"own_asset_minor"`
+	CurrencyID           string                         `json:"currency_id"`
+	VisibleEntities      []RPDecisionVisibleEntity      `json:"visible_entities"`
+	Knowledge            []RPDecisionKnowledge          `json:"knowledge"`
+	NextSchedule         *RPDecisionSchedule            `json:"next_schedule,omitempty"`
+	PlayerSpeechText     string                         `json:"player_speech_text"`
+	LegalActions         []string                       `json:"legal_actions"`
+	ReachablePlaceIDs    []string                       `json:"reachable_place_ids"`
 }
 
 type RPDecisionProposal struct {

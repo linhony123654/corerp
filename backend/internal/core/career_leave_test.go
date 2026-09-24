@@ -27,3 +27,48 @@ func TestCareerLeaveInputBoundaries(t *testing.T) {
 		t.Fatal("invalid review action accepted")
 	}
 }
+
+func TestCareerLeaveConsiderPolicyBoundaries(t *testing.T) {
+	for _, delay := range []int{-1, 1441} {
+		if !HasCode((CareerLeaveReviewPolicy{MaxConcurrentEmployees: 1, AutoReviewDelayMinutes: delay}).Validate(), CodeInvalidArgument) {
+			t.Fatalf("invalid automatic review delay %d", delay)
+		}
+	}
+	for _, limit := range []int{-1, 0, 101} {
+		if !HasCode((CareerLeaveReviewPolicy{MaxConcurrentEmployees: limit}).Validate(), CodeInvalidArgument) {
+			t.Fatalf("invalid capacity %d", limit)
+		}
+	}
+	for _, limit := range []int{1, 100} {
+		if err := (CareerLeaveReviewPolicy{MaxConcurrentEmployees: limit}).Validate(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := CareerLeaveReviewRequest{Binding: CareerBinding{PrincipalID: "manager", InstanceID: "world", BranchID: "main", ExpectedHead: 1, IdempotencyKey: "consider"}, LeaveID: "leave", Decision: "consider", Notice: "Policy review"}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCareerOrganizationWithoutLeavePolicyRetainsHash(t *testing.T) {
+	legacy := struct {
+		OrganizationID     string `json:"organization_id"`
+		DisplayName        string `json:"display_name"`
+		ManagerPrincipalID string `json:"manager_principal_id"`
+		WorkplaceID        string `json:"workplace_id"`
+	}{"org", "Co-op", "manager", "work"}
+	current := CareerOrganizationDefinition{OrganizationID: "org", DisplayName: "Co-op", ManagerPrincipalID: "manager", WorkplaceID: "work"}
+	before, err := HashJSON(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := HashJSON(current)
+	if err != nil || before != after {
+		t.Fatalf("default-off policy changed old hash: %s %s %v", before, after, err)
+	}
+	current.LeaveReviewPolicy = &CareerLeaveReviewPolicy{MaxConcurrentEmployees: 1}
+	enabled, err := HashJSON(current)
+	if err != nil || enabled == before {
+		t.Fatalf("policy not bound to source hash: %v", err)
+	}
+}

@@ -108,6 +108,22 @@ func TestRPLawEvolutionPreservesHistoryAndIncompleteKnowledge(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	community := func(start, at string) []rpCommunityChangeSource {
+		t.Helper()
+		conn, err := s.db.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := readRPCommunityChangeSources(ctx, conn, M2DemoInstanceID, M2DemoBranchID, M2RPNPCID, start, at)
+		conn.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := community(careerTime(0, 0, 0), M2AgentNoonTime); len(got) != 0 {
+		t.Fatalf("unheard community changes exposed: %+v", got)
+	}
 	checkBelief := func(wantID string) {
 		t.Helper()
 		input := readCareerTestContext(t, s, M2RPNPCID)
@@ -129,6 +145,12 @@ func TestRPLawEvolutionPreservesHistoryAndIncompleteKnowledge(t *testing.T) {
 	checkBelief(v1.EventID) // Authoritative amendment/repeal do not reveal themselves.
 	announce("hear2", v2.EventID)
 	checkBelief(v2.EventID)
+	var firstV2Knowledge string
+	for _, law := range readCareerTestContext(t, s, M2RPNPCID).Law.KnownLaws {
+		if law.EnactmentEventID == v2.EventID {
+			firstV2Knowledge = law.KnowledgeEventID
+		}
+	}
 	announce("hear-repeal", repeal.EventID)
 	checkBelief("")
 	announce("hear-old-again", v1.EventID)
@@ -198,8 +220,31 @@ func TestRPLawEvolutionPreservesHistoryAndIncompleteKnowledge(t *testing.T) {
 		return committed.EventID
 	}
 	oldAct := speakAt("old-law", "2026-09-23T13:00:00Z", false)
+	if got := community(careerTime(0, 0, 0), careerTime(1, 13, 0)); len(got) != 0 {
+		t.Fatalf("future/initial rule treated as community revision: %+v", got)
+	}
 	newAct := speakAt("new-law", "2026-09-23T14:00:00Z", false)
+	if got := community(careerTime(0, 0, 0), careerTime(1, 14, 0)); len(got) != 1 || got[0].Law.EnactmentEventID != v2.EventID || got[0].Law.KnowledgeEventID != firstV2Knowledge || got[0].AvailableSince != careerTime(1, 14, 0) {
+		t.Fatalf("actual local revision source: %+v", got)
+	}
+	view, err := s.ObserveRPSession(ctx, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.WaitRP(ctx, core.RPWaitRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, ExpectedCursor: view.ObservationCursor, TargetWorldTime: careerTime(1, 14, 30), Budget: 1000, IdempotencyKey: "repeat-news-clock"}); err != nil {
+		t.Fatal(err)
+	}
+	announce("repeat-change", v2.EventID)
+	if got := community(careerTime(1, 14, 15), careerTime(1, 14, 30)); len(got) != 0 {
+		t.Fatalf("repeat announcement refreshed expired change: %+v", got)
+	}
+	if got := community(careerTime(0, 0, 0), careerTime(1, 14, 30)); len(got) != 1 || got[0].Law.KnowledgeEventID != firstV2Knowledge {
+		t.Fatalf("first knowledge identity changed: %+v", got)
+	}
 	freeAct := speakAt("repealed-law", "2026-09-23T15:00:00Z", true)
+	if got := community(careerTime(0, 0, 0), careerTime(1, 15, 0)); len(got) != 1 || got[0].Law.EnactmentEventID != repeal.EventID || !got[0].Law.Repealed {
+		t.Fatalf("repeal lost as real community change: %+v", got)
+	}
 	charge := func(key, action, version string) (InstitutionRecord, error) {
 		return s.RecordRPLawViolation(ctx, LawViolationRequest{Binding: careerTestBinding(t, s, M2AgentBoPrincipal, key), InstitutionID: "council", EnforcerID: M2AgentBoID, EnactmentEventID: version, ActionEventID: action})
 	}
@@ -256,6 +301,9 @@ func TestRPLawEvolutionPreservesHistoryAndIncompleteKnowledge(t *testing.T) {
 	}
 	checkHistory()
 	checkBelief("")
+	if got := community(careerTime(0, 0, 0), careerTime(1, 15, 0)); len(got) != 1 || got[0].Law.EnactmentEventID != repeal.EventID || got[0].AvailableSince != careerTime(1, 15, 0) {
+		t.Fatalf("community source changed on recovery: %+v", got)
+	}
 	if readCareerTestContext(t, s, M2RPNPCID).OwnAssetMinor != before-7 {
 		t.Fatal("historical penalties lost after rebuild")
 	}
