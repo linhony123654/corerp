@@ -16,6 +16,7 @@ type RPOpportunityPolicy struct {
 	RareVisitBasisPoints int    `json:"rare_visit_basis_points,omitempty"`
 	CommunityBasisPoints int    `json:"community_basis_points,omitempty"`
 	WarmEnabled          bool   `json:"warm_enabled,omitempty"`
+	WarmVisitsEnabled    bool   `json:"warm_visits_enabled,omitempty"`
 	WorkBasisPoints      int    `json:"work_basis_points,omitempty"`
 	StreamSeed           string `json:"stream_seed"`
 	ContactBasisPoints   int    `json:"contact_basis_points"`
@@ -24,6 +25,9 @@ type RPOpportunityPolicy struct {
 }
 
 func (p RPOpportunityPolicy) validate() error {
+	if p.WarmVisitsEnabled && !p.WarmEnabled {
+		return core.NewError(core.CodeInvalidArgument, "WARM visits require WARM processing")
+	}
 	if _, err := core.RPOpportunityProbability(p.VisitBasisPoints, false, core.RPOpportunityPressure{}); err != nil {
 		return err
 	}

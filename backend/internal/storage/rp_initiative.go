@@ -103,24 +103,8 @@ func readRPInitiativeInput(ctx context.Context, conn *sql.Conn, r core.RPInitiat
 		input.ContactOpportunity = &core.RPContactOpportunityContext{SourceEventID: receipt.SourceEventID, Selected: receipt.Draw.Selected}
 	}
 	seenStores := map[string]bool{}
-	for _, receipt := range trigger.VisitOpportunities {
-		if receipt.ActorID != r.NPCEntityID {
-			continue
-		}
-		if input.VisitOpportunity != nil || receipt.Source.ActorID != r.NPCEntityID {
-			return empty, core.NewError(core.CodeProjectionDiverged, "invalid visit receipt actor")
-		}
-		sources, err := readRPVisitSources(ctx, conn, input, receipt.Source.RememberedWorldTime)
-		if err != nil {
-			return empty, err
-		}
-		known := false
-		for _, source := range sources {
-			known = known || source == receipt.Source
-		}
-		// An earlier same-Wait actor can cause a genuine new encounter. Keep
-		// the pinned draw, but do not act on a superseded remembered meeting.
-		input.VisitOpportunity = &core.RPVisitOpportunityContext{Source: receipt.Source, Selected: receipt.Draw.Selected && known}
+	if _, err := attachRPVisitReceipt(ctx, conn, &input, trigger.VisitOpportunities); err != nil {
+		return empty, err
 	}
 	for _, receipt := range trigger.CommunityOpportunities {
 		if receipt.ActorID != r.NPCEntityID {

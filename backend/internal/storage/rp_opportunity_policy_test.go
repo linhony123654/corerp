@@ -10,6 +10,37 @@ import (
 	"corerp.local/backend/internal/core"
 )
 
+func TestRPOpportunityWarmVisitsRequireProcessingAndPinPolicy(t *testing.T) {
+	p := RPOpportunityPolicy{StreamSeed: "warm-visits", WarmEnabled: true, CooldownHours: 6, HistoryHours: 240}
+	legacy := struct {
+		WarmEnabled        bool   `json:"warm_enabled,omitempty"`
+		StreamSeed         string `json:"stream_seed"`
+		ContactBasisPoints int    `json:"contact_basis_points"`
+		CooldownHours      int    `json:"cooldown_hours"`
+		HistoryHours       int    `json:"history_hours"`
+	}{true, "warm-visits", 0, 6, 240}
+	before, err := core.HashJSON(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := core.HashJSON(p)
+	if err != nil || before != after {
+		t.Fatalf("legacy WARM hash changed: %v", err)
+	}
+	p.WarmVisitsEnabled = true
+	if err := p.validate(); err != nil {
+		t.Fatal(err)
+	}
+	enabled, err := core.HashJSON(p)
+	if err != nil || enabled == before {
+		t.Fatalf("WARM visit flag not pinned: %v", err)
+	}
+	p.WarmEnabled = false
+	if err := p.validate(); !core.HasCode(err, core.CodeInvalidArgument) {
+		t.Fatalf("visits without processing: %v", err)
+	}
+}
+
 func TestRPOpportunityCommunityDefaultPreservesPolicyHash(t *testing.T) {
 	legacy := struct {
 		StreamSeed         string `json:"stream_seed"`

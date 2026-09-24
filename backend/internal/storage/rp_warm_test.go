@@ -25,7 +25,7 @@ func TestRPWarmImportantRelationshipRespectsClosureAndSameWaitHOT(t *testing.T) 
 					t.Fatal(err)
 				}
 			}
-			if _, err := s.DefineRPOpportunityPolicy(ctx, OpportunityPolicyRequest{Binding: careerTestBinding(t, s, "principal_creator", "warm-policy"), Policy: RPOpportunityPolicy{StreamSeed: "relations", WarmEnabled: true, CooldownHours: 1, HistoryHours: 24}}); err != nil {
+			if _, err := s.DefineRPOpportunityPolicy(ctx, OpportunityPolicyRequest{Binding: careerTestBinding(t, s, "principal_creator", "warm-policy"), Policy: RPOpportunityPolicy{StreamSeed: "relations", WarmEnabled: true, WarmVisitsEnabled: true, VisitBasisPoints: 5000, CooldownHours: 1, HistoryHours: 24}}); err != nil {
 				t.Fatal(err)
 			}
 			session, err := s.OpenRPSession(ctx, core.RPSessionOpenRequest{PrincipalID: M2RPPlayerPrincipal, InstanceID: M2DemoInstanceID, BranchID: M2DemoBranchID, EntityID: M2RPPlayerID, POV: "second_person", IdempotencyKey: "warm-rel-session"})

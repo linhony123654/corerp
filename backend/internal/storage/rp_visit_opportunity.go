@@ -24,6 +24,31 @@ type rpVisitOpportunity struct {
 	Draw                      core.RPOpportunityDraw `json:"draw"`
 }
 
+// Both HOT and WARM consume the committed draw; neither may redraw or replace
+// a superseded memory with a newly eligible source during execution.
+func attachRPVisitReceipt(ctx context.Context, conn *sql.Conn, input *core.RPDecisionInput, receipts []rpVisitOpportunity) (*rpVisitOpportunity, error) {
+	var pinned *rpVisitOpportunity
+	for _, receipt := range receipts {
+		if receipt.ActorID != input.NPCEntityID {
+			continue
+		}
+		if input.VisitOpportunity != nil || receipt.Source.ActorID != input.NPCEntityID {
+			return nil, core.NewError(core.CodeProjectionDiverged, "invalid visit receipt actor")
+		}
+		sources, err := readRPVisitSources(ctx, conn, *input, receipt.Source.RememberedWorldTime)
+		if err != nil {
+			return nil, err
+		}
+		known := false
+		for _, source := range sources {
+			known = known || source == receipt.Source
+		}
+		input.VisitOpportunity = &core.RPVisitOpportunityContext{Source: receipt.Source, Selected: receipt.Draw.Selected && known}
+		pinned = &receipt
+	}
+	return pinned, nil
+}
+
 func evaluateRPVisitOpportunities(ctx context.Context, conn *sql.Conn, session RPSession, npcs []string, target string, pending ...rpWaitEvent) ([]rpVisitOpportunity, error) {
 	policy, err := readRPOpportunityPolicy(ctx, conn, session.InstanceID, session.BranchID)
 	if errors.Is(err, sql.ErrNoRows) {

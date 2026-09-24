@@ -26,6 +26,25 @@ func TestM2CLIRPLifePreparationIsExplicitAndRepeatable(t *testing.T) {
 	}
 }
 
+func TestM2CLIFinalCohortPreparationIsRepeatable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "final-cohorts-cli.db")
+	var output bytes.Buffer
+	for attempt := 0; attempt < 2; attempt++ {
+		output.Reset()
+		if err := run(context.Background(), path, "rp-final-cohorts-prepare", &output); err != nil {
+			t.Fatal(err)
+		}
+		for _, expected := range []string{`"cohort_id": "cohort_final_block_b"`, `"cohort_id": "cohort_final_block_c"`, `"population_count": 4`} {
+			if !strings.Contains(output.String(), expected) {
+				t.Fatalf("missing %s: %s", expected, output.String())
+			}
+		}
+		if attempt == 1 && strings.Count(output.String(), `"replayed": true`) != 2 {
+			t.Fatalf("not replayed: %s", output.String())
+		}
+	}
+}
+
 func TestM2CLIBootstrapAndRoundTripAreRepeatable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "m2-cli.db")
 	var output bytes.Buffer

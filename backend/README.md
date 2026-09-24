@@ -12,11 +12,19 @@ The workspace Go installation is currently available at `/usr/local/go/bin/go`:
 
 ```bash
 cd /home/ubuntu/corerp-console/backend
-/usr/local/go/bin/go test ./...
+/usr/local/go/bin/go test ./... -timeout=30m
 /usr/local/go/bin/go run ./cmd/corerp-m1 -db /tmp/corerp-m1.db -action purchase
 /usr/local/go/bin/go run ./cmd/corerp-m1 -db /tmp/corerp-m1-90.db -action simulate90
 /usr/local/go/bin/go run ./cmd/corerp-m1 -db /tmp/corerp-m1.db -action inspect
 ```
+
+The suite now includes the [Final month mechanics probe](../docs/final/acceptance.md):
+304 settled turns over32.55 world days. Measured normal runs of that test took
+847s and1023s; the latest complete normal suite took1529s for storage. The explicit
+normal-suite timeout accommodates this integration test on the verified host. Race runs
+of long simulations are substantially more expensive: use an explicit timeout
+and the relevant stage's documented scope, and do not treat a focused race pass
+as evidence that all long-run scenarios passed under race instrumentation.
 
 Run the local HTTP/SSE process:
 
@@ -44,6 +52,12 @@ The schema, conservation boundary, evidence, and explicit broader-M2 deferrals a
 The opt-in `rp-prepare` action reuses the M2 instance, T09 identities and Agent positions to add a real player, a third NPC, and a player-scoped control grant. `rp-travel-prepare` adds event-backed routes without a second location table. Start the HTTP server against that same database and map a local development token to `principal_m2_rp_player`; the RP open/read/resume/close/observe/move/wait/speak and durable turn run/resume endpoints are documented in [`../docs/rp1/`](../docs/rp1/README.md). NPC decision/commit remains an internal backend API owned by the turn orchestrator, not an unscoped HTTP endpoint. No server startup implicitly prepares the fixture. The default frontend now connects these APIs through player-only Play; see [local Play setup and recovery](../docs/rp1/play.md). Observation includes current legal destinations and session-scoped committed history, never a raw event stream.
 
 ## Readiness and next backend scope
+
+The optional opportunity policy `warm_visits_enabled` requires `warm_enabled`
+and defaults off. It permits source-backed offstage actors to consume existing
+Wait-pinned visit draws, with own-work priority and normal movement permissions.
+Old policy hashes/behavior remain unchanged; existing immutable policies are
+not resettable. See [Final integration boundaries](../docs/final/acceptance.md).
 
 RP-2A adds an operator-configured real Chat Completions DecisionProvider with strict local validation, bounded retries and safe silence fallback. Default remains deterministic. RP-2B adds sourced Life Context and interpersonal actions; RP-2C adds [minimal background initialization](../docs/rp2/background.md) for real materialized individuals, with existing identity/employment evidence and stable re-encounters. RP-2D adds [scoped narrative styles](../docs/rp2/style.md), immutable per-turn style pins and same-event read-only variants (schema026). See [configuration and authority boundaries](../docs/rp2/README.md); live model verification is not claimed without configured credentials. Current incremental product work is tracked in [RP6](../docs/rp6/phase-6.md). Its independent optional [natural-language style planner](../docs/rp6/custom-style.md) uses separate `CORERP_NARRATIVE_*` configuration and cannot rewrite world facts; arbitrary literary expansion is not supported.
 

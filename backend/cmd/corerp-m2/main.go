@@ -17,7 +17,7 @@ import (
 
 func main() {
 	databasePath := flag.String("db", "corerp-m2.db", "SQLite database path")
-	action := flag.String("action", "bootstrap", "action: bootstrap, materialize, roundtrip, agents, rp-prepare, rp-travel-prepare, rp-life-prepare, agents30-prepare, agents30, agents30-drive, economy-day1, or economy30")
+	action := flag.String("action", "bootstrap", "action: bootstrap, materialize, roundtrip, agents, rp-prepare, rp-travel-prepare, rp-life-prepare, rp-final-cohorts-prepare, agents30-prepare, agents30, agents30-drive, economy-day1, or economy30")
 	interval := flag.Duration("interval", time.Second, "opt-in Agent driver interval (agents30-drive only)")
 	batch := flag.Int("batch", 4, "Agent movements per driver tick (agents30-drive only)")
 	flag.Parse()
@@ -61,6 +61,16 @@ func run(ctx context.Context, databasePath, action string, output io.Writer) err
 			return err
 		}
 		return encoder.Encode(setup)
+	}
+	if action == "rp-final-cohorts-prepare" {
+		if _, err := store.PrepareRPLifeDemo(ctx); err != nil {
+			return err
+		}
+		cohorts, err := store.PrepareRPFinalCohorts(ctx)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(cohorts)
 	}
 	if action == "rp-prepare" {
 		setup, err := store.BootstrapRPPlayDemo(ctx)

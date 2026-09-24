@@ -42,6 +42,8 @@ RP-7 已提供[酒馆扩展](clients/sillytavern/README.md)、[MCP 适配器与�
 
 [104 回合、多日世界、重启及记忆/随机行为浏览器验收](docs/rp6/long-play.md)已通过；[阶段验证记录](docs/rp6/verification.md)区分已通过和仍在运行的检查。这些是本地服务证据，不是生产部署或 live 模型质量认证。
 
+[Final Integration 验收](docs/final/acceptance.md)已通过本地验证：9 名 NPC、1 名玩家、3 个人口群体的同一世界完成真实 Play／MCP 308 回合、32.48 世界日、四次重启，串联职业、文化、临时法律、关系变化和两次罕见探访。全量后端 406 项测试与同库重建／事件不改写审计通过。多群体初始化为显式本地命令，不会自动扩充既有世界；不代表生产部署或真实模型语言质量认证。
+
 ## 历史 `/demo` 的两个工作空间
 
 | | Story 叙事流 | Inspector 观测台 |

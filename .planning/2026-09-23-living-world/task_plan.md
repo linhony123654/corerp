@@ -8,6 +8,178 @@ Full-project DEFINE/DESIGN/BUILD/POLISH/local SHIP per stage. One large stage in
 
 ## Current phase
 
+LATEST: actualclient34349 terminal LONG_CLIENT_PASS308turns/32.477083days/
+4recoveries/2raremovements. Same ORIGINAL NODLns DB audit60725 PASS23.373s,
+Nora sourcedtrust31, all projections/identity/culture/knowledge/narrative-source
+checks match before/after rebuild; every Event column digest06c02158...23949
+unchanged. Backup/auditlog in /tmp/corerp-final-audit-7BpsdA, serverportsclosed.
+All tests terminal; no live handles. Final production review and complete
+chronology/screenshot review passed with deterministic/live-quality limits.
+Finish section18report and authorized Finalcheckpoint/clean-tree handoff, then
+completion audit/update_goal. Do not rerun client or passed fullsuite.
+
+LATEST actualclient34349 day30:280additional/288totalturns,112waits/84quiet/
+28gifts,266rare receipts/4selected/2movements/THREE successful full recoveries.
+WorldtimeOct22 18:30 is beyond30elapsed days. Remaining20turns/day31–32 and
+finalfourthrestart, then serverstop/current sameDB audit/report/checkpoint.
+Only34349 live; fullnormal21619/inventory43661 terminalPASS retained.
+
+AUTHORITATIVE: fullnormal21619 terminal PASS/storage1529.058s/HTTP15.104s;
+inventory43661 PASS406expected/406runs/406passes, nofailed/skipped/missingtests.
+RP5four-stream currenttest PASS130.36s. Only34349 client remains live, day28:
+260additional/268totalturns,104waits/78quiet/26gifts,254rare receipts/4selected/
+2movements/2restarts. Next complete sameclientday32/308total/fourrestarts, confirm
+serverstopped, run CURRENT TestFinalClientWorldAudit against NODLns/world.db,
+then final source/narrative/requirement audit/report/checkpoint. No Finalcommit.
+
+Latest34349 day27:250additional/258totalturns,100waits/75quiet/25gifts,
+246rare receipts/3selected/2movements/2restarts. Fullnormal21619 passed all Final
+Store tests (month1023.37s/rare150s/story1.79s/composition1.22s/law1.40s),
+now running RP5 same-world fortnight divergence/replay after RP2 long-life tests.
+Both processes live; no fullsuite or actualclient terminal PASS yet. Next poll
+34349/21619, then SAME completedDB audit afterserverstop and remainingFinalgate.
+
+Latest34349 day24:220additional/228totalturns,88waits/66quiet/22gifts,
+222rare receipts/3selected/2actualmovements/2restarts;21619 monthmechanicsday25
+still RUNNING. Added exact all-column Event digest equality across final audit/
+rebuild, closing gap beyond projection agreement. Flagless compile/scopedvet
+13819 PASS0.010s/exit0 and actual readonly snapshot SQL succeeds; actual complete
+DB audit NOT VERIFIED. Current test source newer than fullnormal binary only in
+opt-in digest helper. Poll34349/21619, do not restart; afterward compile/run
+TestFinalClientWorldAudit on SAME NODLns/world.db after server stops.
+
+Newest live checkpoint34349 day21:190additional/198totalturns,76waits/57quiet/
+19gifts,198rare receipts/2selected/2actualmovements/2restarts. Replacement21619
+has all non-storage tested packages PASS inclHTTP15.104s; storage stillrunning.
+
+Latest: fullnormal43110 TERMINATED exit143, causeunknown/no Go failureoutput,
+no orphan Go/storage.test processes. Replacement21619 RUNNING same fullsuite
+with -json -count=1 -timeout=30m and durable log
+/tmp/corerp-final-regression-M3Q0G6/tests.jsonl. Actualclient34349 remains live,
+day20:180additional/188totalturns,72waits/54quiet/18gifts,188rare receipts,
+1selection/1movement/TWO successful process+browser+MCP restarts. Screenshot
+day-20-top.png inspected from realday20 image. Only poll34349/21619 now.
+Do not treat earlier43110 as live or passed. Same-DB audit still pending.
+
+Latest resume: actualclient34349 RUNNINGday19,170additional/178totalturns,
+68waits/51quiet/17gifts,176rare receipts/1selected/1movement/1restart; fullnormal
+43110 also confirmed live. Added same-turn quote/style/knowledge/rare-movement
+checks to existing postrun audit, before AND after rebuild. Flagless compile33588
+PASS0.013s and scopedstoragevet61959 PASS; this is NOT actual audit acceptance.
+Only test-only audit source changed after earlier fullnormal/race launched.
+Next collect34349/43110, ensure serverstopped, run current TestFinalClientWorldAudit
+against /tmp/corerp-final-clients-NODLns/world.db, finish original Final report/gates.
+
+Relevant current-Final race12452 now terminal PASS(core1.078s/storage208.372s/
+CLI4.826s); wholebackend vet79372 PASS. Only client34349/fullnormal43110 remain
+live. Postrun actual-DB audit and original narrative/knowledge checks still open.
+
+Resume checkpoint: client34349 remains RUNNING atday17,150additional/158total
+turns,60waits/45quiet/15gifts,152rare receipts/1selection/1movement/1restart.
+Fullnormal43110 remains RUNNING. Relevant current-Final race12452 is RUNNING;
+core PASS1.078s, storage/CLI pending. Collect these exact three handles; do not
+relaunch. Actual same-DB postrun audit remains NOT VERIFIED until completion.
+
+Latest authoritative: combined real-client --long IMPLEMENTED and RUNNING34349,
+latest live day13:110additional/118totalturns,44waits/11gifts,104rare receipts,
+one selected AND one actual sourced movement; one verified restart. No reroll.
+artifact /tmp/corerp-final-clients-NODLns. Day12 checkpoint100additionalturns
+(108total),40waits/10gifts/88rare receipts/zero selected, one verified day10
+server/browser/MCP restart. Fixedseed/chance unchanged; readonly receipt sample
+all fourfriends chance100bp. Do NOT relaunch while handlelive. Full backend normal
+43110 also RUNNING (`go test ./... -count=1 -timeout=30m`), early packages green;
+storage/HTTP terminal results pending. Test-only final-client-audit-db added for
+post-run308turn/derivedtrust/source/rebuild on SAME existing DB afterserverstops;
+not yet run against completedworld. Default opt-in22208PASS0.003s/scopedvetPASS,
+syntax/diffcheckclean. First6022day0failedstalePlaycursor afterMCPpromises, fixed
+explicitrefresh; no eligibleraredraw existed then. Currentruntime was compiled
+before newpost-run audit helper (no production changes afterward); rebuild test
+binary via go test when invoking audit. Next collect both handles, then audit
+actualDB, narrative/knowledge/originalFinalcriteria and remainingrace/report/
+checkpoint. No Finalpass, no stagecommit; goalACTIVE.
+
+Latest authoritative: --story actual-client32370 PASS, eight settledturns through
+day3 00:01; same Play/MCP world, real actor HTTP career/culture/temporarylaw chain,
+work14400s/pay12, witnessedfine2, no telepathic repeal update/privateinterviewleak.
+Finalclient views/history/cursor and balances/positions/identity survive full
+process/browser/MCP restart; originalMCPspeech retries without newEvent. Artifact
+/tmp/corerp-final-clients-NrdgtK, screenshot inspected, syntax/diffcheckclean,
+ports4198/4199closed; all handles terminal. New final-client-story.mjs composes
+existing APIs, testexport lawfutureday2, no production source edits. Initial
+wire-code mismatches49414/7727 fixed in assertions only. Next extend THIS runner
+with four conserved oldfriends/fixedrarepolicy + actualkeptpromises before
+separation, dailyrelationship/economiclife and300turns/30days/multiplerecovery,
+then narrative/knowledgeaudit/fullbackend/race/recovery/report/checkpoint. Not
+Final E2E yet; goalACTIVE, no stagecommit.
+
+Latest authoritative: first real Final client slice implemented in
+scripts/verify-final-clients.mjs plus test-only exclusive fresh DB exporter
+final_client_fixture_test.go, reusing prepareFinalWorld. Actual83210 SMOKE_PASS:
+Play Vue+MCP stdio, two independent Lin sessions, two settled turns/shared history,
+server/browser/MCP restart, same identity and original-key replay/no extraEvent;
+existingDBexport denied/no mutation, credentials notpersisted/no browsererror.
+Artifacts /tmp/corerp-final-clients-NLkCja; screenshot inspected. First83916 failed
+arrowless exact locator, corrected actual label. Frontend77791 typecheck/build
+PASS1.94s, syntax/whitespaceclean; ports4198/4199 closed; all handles terminal.
+Next extend this actual-client runner with combined sourced career/culture/law
+repeal/rare/relationship story and300turn/30days/multiple restarts, then full
+backend/race/recovery/report/checkpoint. Only2turn smoke, NOT Final E2E; goalACTIVE.
+
+Latest authoritative: optional default-off WARM visits implemented through the
+existing private Wait receipt/source validator and atomic movement owner. No
+schema, stream, NPC-control or player-knowledge expansion. Normal96214 PASS0.963s;
+expanded Warm/Visit/Opportunity/law22944 PASSstorage123.596s/core0.004s;
+focusedrace2661 PASS69.254s; wholebackendvet53200 PASS. Fixed separated-friend
+scenario84394 PASS136.623s:9NPC+Lin/3cohorts, real mutual kept promises,30days,
+three reopens/rebuilds,291rare receipts/2selected/1actual Faye visit to remembered
+Cafe while Lin elsewhere. Seed final-separated-friends-v1 unchanged; rare≤100bp,
+no quiet bonus. This is same-composition Store/service evidence, not the combined
+actual-client300turn/30day acceptance. Temporary-law31335 PASS now also covered
+by expanded normal/race. All tool processes terminal. Next compose real
+Play/external-client long run with career/culture/temporary-law/rare/relationship
+story, narrative/knowledge audit, then full Final regressions/report/checkpoint.
+No fullmonthrace/fullsuite/frontend run claimed this increment; goal ACTIVE.
+
+Latest authoritative: Final same-world causal chain implemented in shared
+prepareFinalWorld + final_story_test.go. Pressure/cultural refusal/changed stance,
+relationship consequences, actual aggregate exit→independent job→4h work/12pay,
+heard law/Nora silence/Lin witnessed question/fine2, private evaluation denial and
+two reopens/rebuild verified normal38970 PASS1.632s, race27899 PASS63.177s with
+composition; wholevet53566 PASS. No product implementation edits this increment.
+Month normal84449 terminal PASS847.361s:304settledturns/32.55elapsed days,
+twoStore sessions (not realclients), five totalreopens, finalprojectioncomparison,
+30dailygifts/trust31. Quiet240/240 is only an initiative metric; persistentquietlaw
+does not prove varied ordinary RP. Rare0draws/0hits is uncovered, not a pass:
+daily meetings violate7day old-friend condition. All handles terminal. Next actual
+separation/mutual-trust rare scenario and sourced law repeal/announcement, then
+actual Play/externalclient long-run harness, narrative/knowledge audit and final
+regressions. Existing ProposeRPLaw PreviousEnactmentEventID+Repealed/Enact/Announce
+supports temporary-law history without new subsystem. Full normal should use
+30m timeout: newmonth alone exceedsGo10m default. No fullmonth race/fullsuite or
+frontend run claimed this increment. No Final checkpoint yet; goal ACTIVE.
+
+Latest authoritative: Final multi-cohort local opening implemented. Opt-in CLI
+rp-final-cohorts-prepare uses source Events and population creation for B/C (4each),
+finite600cash/5stock transfers each from Block A, totalpopulation28/cash10000/stock100.
+No new issuance, schema, HTTP route, startup hook or runtime immigration claim.
+Three-cohort/five-NPC composition now materializes Eli from B; normal91812 PASS
+storage2.698s/CLI0.284s including rollback/partial-reopen/retry, real roundtrip,
+projection corruption/rebuild and late/revoked/corrupt setup denial. Final race
+27389 PASSstorage38.037s/CLI6.347s plus wholevet; existing cohort/StudioAccess
+regression71176 PASS3.371s. Real CLI/readonlySQL verified3cohorts/28initialpeople;
+all handles terminal, no stage commit. Next same-world
+causal story (career, economy, culture/law, relationship, rare production event),
+then actual Play/external-client300turn/30day harness. No Final stage checkpoint.
+
+Latest authoritative: Final Integration BUILD initial composition slice. Acceptance
+map in docs/final/acceptance.md retains every original requirement. Added real
+storage probe combining five NPCs plus Lin, conserved materialization/background,
+Career organization/posting, regional culture, independent institution roles and
+future law. Ten settled turns, reopen, one-day Wait and projection reconstruction.
+Only one scoped cohort still exists: resolve source-backed initial multi-cohort
+declaration next, then same-world causal story and actual client300/30 harness.
+No Final completion/checkpoint claim; RP8 remains the last completed stage.
+
 Latest authoritative: RP8 COMPLETE at source checkpoint
 86ca6f96d39e4a026f2ff73e48f5823a318cdb34, git porcelain empty after commit, schema030.
 No owned test/service processes running. All verification evidence/report in

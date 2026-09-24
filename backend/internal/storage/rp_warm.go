@@ -17,6 +17,7 @@ type rpWarmFact struct {
 	Decision            core.RPWarmDecision `json:"decision"`
 	WorkPath            []string            `json:"work_path,omitempty"`
 	RouteSourceEventIDs []string            `json:"route_source_event_ids,omitempty"`
+	VisitOpportunity    *rpVisitOpportunity `json:"visit_opportunity,omitempty"`
 }
 
 func readRPWarmTrigger(ctx context.Context, conn *sql.Conn, session RPSession, r core.RPInitiativeRequest) (rpWarmCandidate, string, int64, error) {
@@ -137,6 +138,27 @@ func (s *Store) runRPWarmDecision(ctx context.Context, r core.RPInitiativeReques
 		if err != nil {
 			return no, nil, err
 		}
+		// Only this actor's already-pinned receipt is available. No player
+		// location enters destination selection, and own work keeps priority.
+		var trigger rpWaitEvent
+		var triggerRaw string
+		if err := conn.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=? AND instance_id=? AND branch_id=?`, r.TriggerEventID, current.InstanceID, current.BranchID).Scan(&triggerRaw); err != nil {
+			return no, nil, err
+		}
+		if err := json.Unmarshal([]byte(triggerRaw), &trigger); err != nil {
+			return no, nil, err
+		}
+		visit, err := attachRPVisitReceipt(ctx, conn, &input, trigger.VisitOpportunities)
+		if err != nil {
+			return no, nil, err
+		}
+		if decision.Action == "wait" && decision.Reason == "ordinary_routine" {
+			if destination := core.RPSelectedVisitDestination(input); destination != "" {
+				decision.Action = "leave"
+				decision.Reason = "sourced_visit"
+				decision.ToPlaceID = destination
+			}
+		}
 		if decision.Action == "leave" && input.Law != nil {
 			lawful := false
 			for _, action := range input.Law.LawfulActions {
@@ -151,7 +173,7 @@ func (s *Store) runRPWarmDecision(ctx context.Context, r core.RPInitiativeReques
 		if err := core.ValidateRPDecisionProposal(input, core.RPDecisionProposal{Action: decision.Action, DestinationPlaceID: decision.ToPlaceID}); err != nil {
 			return no, nil, err
 		}
-		fact := rpWarmFact{Version: "corerp.warm.v1", SessionID: r.SessionID, TriggerEventID: r.TriggerEventID, Selection: selection, Decision: decision, WorkPath: own.WorkPath, RouteSourceEventIDs: own.RouteSourceEventIDs}
+		fact := rpWarmFact{Version: "corerp.warm.v1", SessionID: r.SessionID, TriggerEventID: r.TriggerEventID, Selection: selection, Decision: decision, WorkPath: own.WorkPath, RouteSourceEventIDs: own.RouteSourceEventIDs, VisitOpportunity: visit}
 		return fact, func() error {
 			if decision.Action != "leave" {
 				return nil

@@ -274,7 +274,24 @@ func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, re
 	if err != nil {
 		return RPWaitResult{}, err
 	}
-	payload.VisitOpportunities, err = evaluateRPVisitOpportunities(ctx, tx.conn, session, npcs, request.TargetWorldTime, payload)
+	visitActors := append([]string(nil), npcs...)
+	policy, policyErr := readRPOpportunityPolicy(ctx, tx.conn, session.InstanceID, session.BranchID)
+	if policyErr != nil && !errors.Is(policyErr, sql.ErrNoRows) {
+		return RPWaitResult{}, policyErr
+	}
+	if policyErr == nil && policy.Fact.Policy.WarmVisitsEnabled {
+		seen := make(map[string]bool, len(visitActors))
+		for _, actor := range visitActors {
+			seen[actor] = true
+		}
+		for _, candidate := range payload.WarmCandidates {
+			if !seen[candidate.ActorID] {
+				visitActors = append(visitActors, candidate.ActorID)
+				seen[candidate.ActorID] = true
+			}
+		}
+	}
+	payload.VisitOpportunities, err = evaluateRPVisitOpportunities(ctx, tx.conn, session, visitActors, request.TargetWorldTime, payload)
 	if err != nil {
 		return RPWaitResult{}, err
 	}

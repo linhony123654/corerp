@@ -130,7 +130,7 @@ func executePrivateFactCommand[T any](s *Store, ctx context.Context, b core.Care
 		}
 	}
 	auditType := "agent_decision"
-	if commandType == "ConfigureStudioAccessLocal" {
+	if commandType == "ConfigureStudioAccessLocal" || commandType == "PrepareRPFinalCohortLocal" {
 		auditType = "runtime_diagnostic"
 	}
 	if err := s.insertScopedAudit(ctx, tx.conn, b.InstanceID, b.BranchID, "audit_"+commandID, auditType, c.EventID, commandID, attemptID, worldTime, nowText, encoded); err != nil {
