@@ -1,6 +1,6 @@
 # RP-5 — sourced opportunities, event pressure and LOD
 
-Status: RP-5 implementation and local verification complete; checkpoint creation is the remaining handoff step. Baseline recovery point is RP-4 `53a5ac3`, schema026. Increment notes below are historical; this final report and phase-5-audit.md supersede their old open-item statements.
+Status: RP-5 complete locally. Checkpoint `47c5d15403b8fdb1e4c8dd7dad4289caff9c215b` created and post-commit worktree verified clean. Previous recovery point is RP-4 `53a5ac3`; schema remains026. Increment notes below are historical; this final report and phase-5-audit.md supersede their old open-item statements.
 
 Final gate: original RP-5A–D traceability is in [phase-5-audit.md](phase-5-audit.md). All required local checks passed: full normal/vet, migrations/replay/recovery, frontend typecheck/build, configured evidence verifiers and both deterministic/HTTP-fixture browser recovery. Full storage race coverage is proven by226 explicit top-level passes across exhaustive complementary partitions; all other packages passed in the original run. The original storage120m timeout remains recorded, not relabeled as success. See [race-verification.json](race-verification.json).
 
@@ -11,7 +11,8 @@ Final gate: original RP-5A–D traceability is in [phase-5-audit.md](phase-5-aud
 - Acceptance: actual over-capacity HOT fairness/recovery; actual week-long four-tier integration; same-snapshot three production streams and exact repeat,112 Waits/14days each, substantive movement→gift/cash/trust differences with111 quiet Waits, daily conservation/projection checks and day7 restart. Detailed causal evidence is in [long-run-evidence.md](long-run-evidence.md).
 - Verification: full normal/vet PASS; storage race partitions PASS5160.833s/4058.708s; all226 names reconciled with no omissions/skips/duplicates/failures. Frontend build/typecheck and configured M0/M1/M2 checks PASS; both Play recovery browser runs PASS. No configured standalone frontend lint/unit suite.
 - Limits/deferred: no existing health owner, so conditional illness/fatigue is N/A; no live LLM configured. Richer off-scene visits, perpetual authored routines, additional organization/neighborhood kinds and thousand-person throughput are not claimed. Fixture rare misses are not a population-frequency estimate. No publication/deployment.
-- Next: record authorized checkpoint hash and verify clean worktree, then RP-6 read-only recon. RP-6/7/8 and final300-turn/30-day integration remain required by the active goal; this is not goal completion.
+- Checkpoint/recovery: `47c5d15403b8fdb1e4c8dd7dad4289caff9c215b`;113 intended files, staged whitespace PASS, no database/environment/build files, filename-only credential-pattern check had no hits (not a universal secret audit). Post-commit Git status empty. No push/deploy or global Git identity changes; existing inferred committer identity retained.
+- Next: RP-6 read-only recon. RP-6/7/8 and final300-turn/30-day integration remain required by the active goal; this is not goal completion.
 
 ## LOD HOT scheduling increment
 

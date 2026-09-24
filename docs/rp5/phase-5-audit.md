@@ -1,6 +1,6 @@
 # RP-5 acceptance audit
 
-Status: RP-5 functional and local verification gates PASS; checkpoint/clean-tree handoff pending. This audit maps the original goal's RP-5A–D requirements, not just implemented files. Full normal/vet, frontend/browser and complete race coverage passed. Original goal explicitly requires a stage checkpoint after green checks; this audit alone does not authorize publication. Baseline recovery point: `53a5ac3`, schema026; no schema migration added in RP-5.
+Status: RP-5 local acceptance PASS; checkpoint `47c5d15403b8fdb1e4c8dd7dad4289caff9c215b`, post-commit worktree verified clean. This audit maps the original goal's RP-5A–D requirements, not just implemented files. Full normal/vet, frontend/browser and complete race coverage passed. No publication/deployment. Previous recovery point: `53a5ac3`, schema026; no schema migration added in RP-5.
 
 ## Functional traceability
 
@@ -42,6 +42,6 @@ Current read-only compatibility review: RP-5 changes neither `store.go` schema r
 - FAIL (timeout): unfiltered `go test -race ./... -count=1 -timeout=120m`, terminal87737 exit1. Storage hit7200.036s during the fourth fortnight stream; runnable SQLite query stack and advancing Wait counters show active work, not evidence of a deadlock. No race report or assertion failure was emitted, but storage is NOT VERIFIED. HTTP PASS153.099s; CLI/server/core/decision passes retained.
 - PASS replacement storage race gate: exact complementary partitions of all226 top-level tests, unchanged code/assertions, using anchored `-run` / `-skip` with `-race -count=1 -timeout=240m -json`. Fortnight51276 exit0/PASS5160.833s includes all four streams and final parent assertions; remaining60108 exit0/PASS4058.708s includes225 explicit top-level passes. `check-coverage.mjs --require-complete` exit0 reconciles all226 names with no missing/duplicate/unexpected/skipped/failed items. Durable results: [race-verification.json](race-verification.json); raw logs/inventory: `/tmp/corerp-rp5-race-SUCIOm/`. No shortened simulations or reduced race coverage.
 - PASS: current frontend typecheck/build (combined `npm run build`), configured M0/M1/M2 verifiers, targeted Play initiative/deterministic `/tmp/corerp-rp1-e2e-gDJ8cb` and local-HTTP-provider `/tmp/corerp-rp1-e2e-OKaXzc` browser recovery (19 model fixture calls). No standalone frontend lint/unit-test script is configured.
-- REVIEWED: source/privacy/legacy-hash boundary above; no new migration. Phase report complete; checkpoint/clean-tree handoff remains before RP-6.
+- PASS: source/privacy/legacy-hash review, phase report, scoped staging/security review, authorized checkpoint47c5d15 and post-commit clean tree. Schema026 unchanged. RP-6 may proceed serially; full goal remains active.
 
 Previously passed increment checks remain evidence for those increments, not substitutes for this final stage gate. Live LLM is not configured/proven by fixture tests; no deployment or external publication is claimed.
