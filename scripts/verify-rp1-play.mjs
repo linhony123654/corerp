@@ -7,6 +7,16 @@ import { randomBytes } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
 import { createServer } from 'node:http'
+import { checkWallet } from './rp6-wallet-checks.mjs'
+import { checkStyle } from './rp6-style-checks.mjs'
+import { checkRegenerate } from './rp6-regenerate-checks.mjs'
+import { checkTurnStream } from './rp6-turn-stream-checks.mjs'
+import { checkContextBudget } from './rp6-budget-checks.mjs'
+import { checkContacts } from './rp6-contacts-checks.mjs'
+import { checkWork } from './rp6-work-checks.mjs'
+import { checkMap, checkMapWorks } from './rp6-map-checks.mjs'
+import { checkMessages } from './rp6-messages-checks.mjs'
+import { checkCustomStyle, startStylePlannerFixture } from './rp6-custom-style-checks.mjs'
 
 // Real world/service/browser. --fake-model adds only a local model HTTP fixture;
 // it verifies the adapter, not live model quality. Never inherit live model credentials.
@@ -15,19 +25,30 @@ const lifeScenario = process.argv.includes('--life')
 const emergentScenario = process.argv.includes('--emergent')
 const styleScenario = process.argv.includes('--style')
 const initiativeScenario = process.argv.includes('--initiative')
+const walletScenario = process.argv.includes('--wallet')
+const styleUIScenario = process.argv.includes('--style-ui')
+const regenerateScenario = process.argv.includes('--regenerate')
+const turnStreamScenario = process.argv.includes('--turn-stream')
+const contextBudgetScenario = process.argv.includes('--context-budget')
+const contactsScenario = process.argv.includes('--contacts')
+const workScenario = process.argv.includes('--work')
+const mapScenario = process.argv.includes('--map')
+const messagesScenario = process.argv.includes('--messages')
+const customStyleScenario = process.argv.includes('--custom-style')
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp1-e2e-'))
 const database = join(temp, 'world.db')
 const credential = randomBytes(24).toString('hex')
 const creatorCredential = randomBytes(24).toString('hex')
-const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [credential]: 'principal_m2_rp_player', ...(emergentScenario || initiativeScenario ? { [creatorCredential]: 'principal_creator' } : {}) }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex') }
+const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [credential]: 'principal_m2_rp_player', ...(emergentScenario || initiativeScenario || mapScenario ? { [creatorCredential]: 'principal_creator' } : {}) }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex') }
 Object.assign(env, { CORERP_DECISION_PROVIDER: 'deterministic', CORERP_LLM_ENDPOINT: '', CORERP_LLM_MODEL: '', CORERP_LLM_API_KEY: '', CORERP_LLM_TIMEOUT: '', CORERP_LLM_ATTEMPTS: '' })
+Object.assign(env, { CORERP_NARRATIVE_PROVIDER: 'deterministic', CORERP_NARRATIVE_ENDPOINT: '', CORERP_NARRATIVE_MODEL: '', CORERP_NARRATIVE_API_KEY: '', CORERP_NARRATIVE_TIMEOUT: '', CORERP_NARRATIVE_ATTEMPTS: '' })
 const sql = query => execFileSync('sqlite3', [database, query], { encoding: 'utf8' }).trim()
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'pipe' })
 run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'server'), './cmd/corerp-server'], join(root, 'backend'))
 run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'setup'), './cmd/corerp-m2'], join(root, 'backend'))
 run(join(temp, 'setup'), ['-db', database, '-action', 'rp-travel-prepare'])
-let server, vite, browser, modelServer
+let server, vite, browser, modelServer, stylePlannerFixture
 let modelCalls = 0
 const startServer = () => spawn(join(temp, 'server'), ['-db', database, '-listen', '127.0.0.1:8080'], { env, stdio: 'ignore' })
 async function ready(url) {
@@ -38,6 +59,10 @@ async function ready(url) {
 }
 async function stop(child) { if (child && child.exitCode === null) { const exited = once(child, 'exit'); child.kill('SIGTERM'); await exited } }
 try {
+  if (customStyleScenario) {
+    stylePlannerFixture = await startStylePlannerFixture()
+    Object.assign(env, stylePlannerFixture.env)
+  }
   if (fakeModel) {
     modelServer = createServer(async (request, response) => {
       try {
@@ -78,6 +103,11 @@ try {
   await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
   assert.match(await page.locator('.mode').innerText(), fakeModel ? /AI 人物/ : /确定性人物/)
   assert.match(await page.locator('.presence').innerText(), /Cai/)
+  if (walletScenario) await checkWallet({ page, sql, temp, stage: 'entry' })
+  if (contactsScenario) await checkContacts({ page, sql, temp, stage: 'entry' })
+  if (workScenario) await checkWork({ page, sql, temp, stage: 'entry', expectedJobs: 0 })
+  if (mapScenario) await checkMap({ page, sql, temp, stage: 'entry' })
+  if (messagesScenario) await checkMessages({ page, sql, temp, stage: 'entry' })
   const speak = async text => {
     const response = page.waitForResponse(r => r.url().endsWith('/rp/turns/run'))
     await page.getByLabel('你想说的话').fill(text)
@@ -292,6 +322,16 @@ try {
     assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)||':'||(SELECT COUNT(*) FROM rp_utterances)"), sameFactsBefore)
     console.log(JSON.stringify({ styleScenario: 'PASS', checks: ['session style applies to actual Play turn', 'lost-response restart preserves pinned style despite changed settings', 'next turn uses new style', 'same-event read-only variant'] }))
   }
+  if (walletScenario) await checkWallet({ page, sql, temp, stage: 'restarted' })
+  if (contactsScenario) await checkContacts({ page, sql, temp, stage: 'restarted' })
+  if (workScenario) await checkWork({ page, sql, temp, stage: 'restarted', expectedJobs: 0 })
+  if (messagesScenario) await checkMessages({ page, sql, temp, stage: 'restarted' })
+  if (styleUIScenario) await checkStyle({ page, sql, temp, credential, speak, restart: async () => { await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/api/v1/rp/observe') } })
+  if (regenerateScenario) await checkRegenerate({ page, sql, temp, credential, getModelCalls: () => modelCalls })
+  if (turnStreamScenario) await checkTurnStream({ page, sql, temp, credential, getModelCalls: () => modelCalls, restart: async () => { await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/api/v1/rp/observe') } })
+  if (contextBudgetScenario) await checkContextBudget({ page, sql, credential, getModelCalls: () => modelCalls, restart: async () => { await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/api/v1/rp/observe') } })
+  if (mapScenario) await checkMapWorks({ page, sql, temp, credential, creatorCredential, restart: async () => { await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/readyz') } })
+  if (customStyleScenario) await checkCustomStyle({ page, sql, temp, credential, speak, fixture: stylePlannerFixture, getModelCalls: () => modelCalls, restart: async () => { await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/readyz') } })
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile overflow')
   await page.screenshot({ path: join(temp, 'play-mobile.png'), fullPage: true })
   await page.screenshot({ path: join(temp, 'play-mobile-viewport.png') })
@@ -305,4 +345,5 @@ try {
   await browser?.close()
   await stop(server); await stop(vite)
   if (modelServer) await new Promise(resolve => modelServer.close(resolve))
+  await stylePlannerFixture?.close()
 }

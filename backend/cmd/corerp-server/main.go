@@ -17,6 +17,7 @@ import (
 
 	"corerp.local/backend/internal/core"
 	"corerp.local/backend/internal/decision"
+	"corerp.local/backend/internal/narrative"
 	"corerp.local/backend/internal/storage"
 	"corerp.local/backend/internal/transport/httpapi"
 )
@@ -39,7 +40,12 @@ func main() {
 		logger.Error("invalid decision provider configuration", "error", err)
 		os.Exit(1)
 	}
-	if err := runWithProvider(ctx, *databasePath, *listenAddress, os.Getenv(tokenEnvironment), os.Getenv(cursorEnvironment), logger, provider, mode); err != nil {
+	narrator, _, err := narrative.FromEnvironment(os.Getenv)
+	if err != nil {
+		logger.Error("invalid narrative provider configuration", "error", err)
+		os.Exit(1)
+	}
+	if err := runWithProviders(ctx, *databasePath, *listenAddress, os.Getenv(tokenEnvironment), os.Getenv(cursorEnvironment), logger, provider, mode, narrator); err != nil {
 		logger.Error("server stopped with error", "error", err)
 		os.Exit(1)
 	}
@@ -50,6 +56,10 @@ func run(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecr
 }
 
 func runWithProvider(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecret string, logger *slog.Logger, provider core.RPDecisionProvider, mode string) error {
+	return runWithProviders(ctx, databasePath, listenAddress, tokenJSON, cursorSecret, logger, provider, mode, core.DeterministicRPNarrativeProvider{})
+}
+
+func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecret string, logger *slog.Logger, provider core.RPDecisionProvider, mode string, narrator core.RPStreamingNarrativeProvider) error {
 	if strings.TrimSpace(databasePath) == "" {
 		return core.NewError(core.CodeInvalidArgument, "-db is required")
 	}
@@ -79,7 +89,7 @@ func runWithProvider(ctx context.Context, databasePath, listenAddress, tokenJSON
 	if err := store.BootstrapDemo(ctx); err != nil {
 		return err
 	}
-	service, err := storage.NewRPService(store, provider, mode)
+	service, err := storage.NewRPServiceWithNarrative(store, provider, mode, narrator)
 	if err != nil {
 		return err
 	}

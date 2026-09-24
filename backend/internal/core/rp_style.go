@@ -2,14 +2,17 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
 const RPStyleVersion = "corerp.style.v1"
+const DefaultRPNarrativeContextBudgetBytes = 64 * 1024
 
 // Presentation only. These fields never enter a DecisionProvider context.
 type RPStyleProfile struct {
+	ContextBudgetBytes   int      `json:"context_budget_bytes,omitempty"`
 	Version              string   `json:"version"`
 	POV                  string   `json:"pov"`
 	Tense                string   `json:"tense"`
@@ -24,6 +27,7 @@ type RPStyleProfile struct {
 
 // nil inherits a setting; an explicit zero/empty value replaces it.
 type RPStylePatch struct {
+	ContextBudgetBytes   *int     `json:"context_budget_bytes,omitempty"`
 	POV                  *string  `json:"pov,omitempty"`
 	Tense                *string  `json:"tense,omitempty"`
 	Verbosity            *string  `json:"verbosity,omitempty"`
@@ -48,6 +52,9 @@ func OverlayRPStyle(s RPStyleProfile, layers ...RPStylePatch) (RPStyleProfile, e
 		return RPStyleProfile{}, err
 	}
 	for _, p := range layers {
+		if p.ContextBudgetBytes != nil {
+			s.ContextBudgetBytes = *p.ContextBudgetBytes
+		}
 		if p.POV != nil {
 			s.POV = *p.POV
 		}
@@ -83,6 +90,9 @@ func OverlayRPStyle(s RPStyleProfile, layers ...RPStylePatch) (RPStyleProfile, e
 }
 
 func (s RPStyleProfile) Validate() error {
+	if s.ContextBudgetBytes != 0 && (s.ContextBudgetBytes < 4096 || s.ContextBudgetBytes > 256*1024) {
+		return NewError(CodeInvalidArgument, "narrative context budget must be zero (default) or 4096–262144 bytes")
+	}
 	if s.Version != RPStyleVersion {
 		return NewError(CodeInvalidArgument, "unsupported style version")
 	}
@@ -131,6 +141,27 @@ type RPNarrativeInput struct {
 	Facts              []RPNarrativeFact `json:"committed_facts"`
 }
 
+// ValidateReadBudget bounds the complete serialized presentation input, not
+// model tokens, decision context, or saved world facts. Never truncate facts.
+// Canonical turn settlement must remain independent of this read preference.
+func (in RPNarrativeInput) ValidateReadBudget() error {
+	if err := in.Style.Validate(); err != nil {
+		return err
+	}
+	limit := in.Style.ContextBudgetBytes
+	if limit == 0 {
+		limit = DefaultRPNarrativeContextBudgetBytes
+	}
+	encoded, err := json.Marshal(in)
+	if err != nil {
+		return WrapError(CodeInvalidArgument, "encode narrative context", err)
+	}
+	if len(encoded) > limit {
+		return NewError(CodeInvalidArgument, fmt.Sprintf("叙述上下文为 %d 字节，超过 %d 字节预算；未删减事实。可读取已保存原叙述，或提高预算后重新生成。", len(encoded), limit))
+	}
+	return nil
+}
+
 type RPNarrativeView struct {
 	Lines    []string `json:"lines"`
 	EventIDs []string `json:"event_ids"`
@@ -140,11 +171,31 @@ type RPNarrativeView struct {
 type RPNarrativeProvider interface {
 	Render(context.Context, RPNarrativeInput) (RPNarrativeView, error)
 }
+
+// Streaming is a presentation capability, never a DecisionProvider method.
+// Implementations receive only the already-authorized committed narrative input.
+type RPStreamingNarrativeProvider interface {
+	RPNarrativeProvider
+	RenderStream(context.Context, RPNarrativeInput, func(RPNarrativeChunk) error) (RPNarrativeView, error)
+}
+type RPNarrativeChunk struct {
+	Index   int    `json:"index"`
+	EventID string `json:"event_id"`
+	Line    string `json:"line"`
+}
 type DeterministicRPNarrativeProvider struct{}
+
+func (DeterministicRPNarrativeProvider) NarrativeMode() string { return "deterministic" }
 
 // Literal rendering changes presentation only. Even a requested zero dialogue
 // ratio or forbidden phrase cannot erase/rewrite accepted speech or an action.
-func (DeterministicRPNarrativeProvider) Render(_ context.Context, in RPNarrativeInput) (RPNarrativeView, error) {
+func (p DeterministicRPNarrativeProvider) Render(ctx context.Context, in RPNarrativeInput) (RPNarrativeView, error) {
+	return p.RenderStream(ctx, in, nil)
+}
+
+// RenderStream emits each attributed line when rendered, without synthetic
+// delays. The caller must not treat a partial stream as a completed variant.
+func (DeterministicRPNarrativeProvider) RenderStream(ctx context.Context, in RPNarrativeInput, emit func(RPNarrativeChunk) error) (RPNarrativeView, error) {
 	view := RPNarrativeView{Lines: []string{}, EventIDs: []string{}, Warnings: []string{}}
 	if err := in.Style.Validate(); err != nil {
 		return view, err
@@ -153,6 +204,9 @@ func (DeterministicRPNarrativeProvider) Render(_ context.Context, in RPNarrative
 		view.Warnings = append(view.Warnings, "deterministic renderer does not interpret free-form prose instructions")
 	}
 	for _, fact := range in.Facts {
+		if err := ctx.Err(); err != nil {
+			return RPNarrativeView{}, err
+		}
 		if fact.EventID == "" || fact.ActorName == "" {
 			return RPNarrativeView{}, NewError(CodeProjectionDiverged, "narrative requires attributed committed evidence")
 		}
@@ -222,6 +276,11 @@ func (DeterministicRPNarrativeProvider) Render(_ context.Context, in RPNarrative
 		}
 		view.Lines = append(view.Lines, line)
 		view.EventIDs = append(view.EventIDs, fact.EventID)
+		if emit != nil {
+			if err := emit(RPNarrativeChunk{Index: len(view.Lines) - 1, EventID: fact.EventID, Line: line}); err != nil {
+				return RPNarrativeView{}, err
+			}
+		}
 	}
 	return view, nil
 }

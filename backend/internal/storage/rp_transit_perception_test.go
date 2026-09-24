@@ -26,6 +26,7 @@ func TestRPTransitPerceptionIsCurrentAdjacentAndShared(t *testing.T) {
 	if err != nil || len(view.TransitWorks) != 0 {
 		t.Fatalf("future works visible: %+v %v", view.TransitWorks, err)
 	}
+	assertRPMapRoute(t, view, "place_m2_work_ada", true)
 	wait, err := s.WaitRP(ctx, core.RPWaitRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, ExpectedCursor: view.ObservationCursor, TargetWorldTime: "2026-09-22T03:15:00Z", Budget: 100, IdempotencyKey: "works-start"})
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +35,8 @@ func TestRPTransitPerceptionIsCurrentAdjacentAndShared(t *testing.T) {
 	if err != nil || len(view.TransitWorks) != 1 || view.TransitWorks[0].SourceEventID != works.EventID || view.TransitWorks[0].FromPlaceID != view.PlaceID || view.TransitWorks[0].EndsAt != "2026-09-22T04:00:00Z" {
 		t.Fatalf("local works: %+v %v", view.TransitWorks, err)
 	}
+	assertRPMapRoute(t, view, "place_m2_work_ada", false)
+	assertRPMapRoute(t, view, "place_m2_home_bo", true)
 	input, err := s.BuildRPInitiativeInput(ctx, core.RPInitiativeRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, NPCEntityID: M2RPNPCID, TriggerEventID: wait.EventID})
 	if err != nil || len(input.TransitWorks) != 1 || input.TransitWorks[0] != view.TransitWorks[0] {
 		t.Fatalf("NPC/player works differ: %+v %v", input.TransitWorks, err)
@@ -68,4 +71,18 @@ func TestRPTransitPerceptionIsCurrentAdjacentAndShared(t *testing.T) {
 	if err != nil || len(view.TransitWorks) != 0 {
 		t.Fatalf("expired works visible: %+v %v", view.TransitWorks, err)
 	}
+	assertRPMapRoute(t, view, "place_m2_work_ada", true)
+}
+
+func assertRPMapRoute(t *testing.T, view RPObservation, target string, allowed bool) {
+	t.Helper()
+	for _, place := range view.ReachablePlaces {
+		if place.PlaceID == target {
+			if place.CanMoveNow != allowed {
+				t.Fatalf("map route disagrees with current transit: %+v", place)
+			}
+			return
+		}
+	}
+	t.Fatalf("map route missing: %s", target)
 }

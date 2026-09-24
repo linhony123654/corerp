@@ -70,7 +70,7 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 		return nil, err
 	}
 
-	life.Employment, err = readRPOwnEmployment(ctx, conn, input.NPCEntityID, input.WorldTime)
+	life.Employment, err = readRPOwnEmployment(ctx, conn, input.InstanceID, input.BranchID, input.NPCEntityID, input.WorldTime)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 	return life, nil
 }
 
-func readRPOwnEmployment(ctx context.Context, conn *sql.Conn, entityID, worldTime string) ([]core.RPOwnEmployment, error) {
+func readRPOwnEmployment(ctx context.Context, conn *sql.Conn, instanceID, branchID, entityID, worldTime string) ([]core.RPOwnEmployment, error) {
 	rows, err := conn.QueryContext(ctx, `SELECT c.contract_id,c.actor_id,c.unit_rate_minor,s.split_event_id
  FROM m2_wage_participation_splits s JOIN m2_cohort_contracts c ON c.contract_id=s.contract_id AND c.kind='wage'
  LEFT JOIN m2_wage_participation_returns r ON r.materialization_id=s.materialization_id
@@ -185,7 +185,7 @@ func readRPOwnEmployment(ctx context.Context, conn *sql.Conn, entityID, worldTim
  AND (c.effective_until IS NULL OR c.effective_until>?) AND (r.effective_from IS NULL OR r.effective_from>?)
  AND NOT EXISTS (SELECT 1 FROM events ended WHERE ended.instance_id=? AND ended.branch_id=? AND ended.event_type='CareerAggregateExitActivated' AND json_extract(ended.payload,'$.materialization_id')=s.materialization_id AND ended.world_time<=?)
  UNION ALL SELECT contract_id,employer_entity_id,gross_wage_minor,definition_event_id FROM employment_contracts
- WHERE employee_entity_id=? AND status='active' ORDER BY contract_id`, entityID, worldTime, worldTime, worldTime, worldTime, M2DemoInstanceID, M2DemoBranchID, worldTime, entityID)
+ WHERE employee_entity_id=? AND status='active' ORDER BY contract_id`, entityID, worldTime, worldTime, worldTime, worldTime, instanceID, branchID, worldTime, entityID)
 	if err != nil {
 		return nil, err
 	}

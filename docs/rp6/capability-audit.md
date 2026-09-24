@@ -1,0 +1,25 @@
+# RP6 capability audit
+
+Scope: original RP6A–D, with the RP2D fact-preservation rule retained. This is an implementation/evidence audit, not a completed stage gate. Prior increment commands/results remain in the linked contracts and planning progress.
+
+| Requirement | Implemented behavior and evidence | Boundary / remaining acceptance |
+|---|---|---|
+| 6A immersive Play | Default `src/main.ts` selects PlayWorkspace; scene, time/place/presence, recent50 entries and composer; engineering inspector remains `/demo`. Prior real desktop/mobile browser inspections pass. | Continuous usability beyond50entries needs the new long-play run; this is not full historical browsing. |
+| 6B wallet | Own authorized exact decimal amount, current read/error/retry, no account IDs. [Wallet contract](phase-6.md#wallet-read-contract). | Balance, not a banking/payment service. |
+| 6B work | Accepted current jobs, declared wage/period, own upcoming sourced appointments. [Work evidence](work.md). | Legacy contracts explicitly lack a pay period; wages are not asserted paid merely because a job is listed. |
+| 6B contacts | Own actual encounters/heard speech, paged names and learned time. [Contacts evidence](contacts.md). | No directory, remote whereabouts or hidden relationship scores. |
+| 6B phone | Own historical Career transaction notices with pagination/recovery. [Phone evidence](messages.md). | Not fabricated SMS delivery or a send/chat service. |
+| 6B map | Known current adjacency and actual immediate-travel availability, source-bound works and durable departure. [Map evidence](map.md). | Connectivity diagram, not coordinates or distance; no distant NPC locations. |
+| 6C presets / POV | Three actual presets; first/second/third-person labels, present/past framing. Same accepted quotes, actions, attribution and original record. | Person changes presentation labels, not character ownership or knowledge. |
+| 6C custom style | Explicit independent `style_planner` HTTP configuration interprets free instructions into validated presentation controls; actual HTTP-fixture UI/restart evidence. [Custom-style contract](custom-style.md). | Default deterministic mode only saves freeform instructions and discloses no execution. Planner supports bounded controls, not arbitrary literary prose; live general-language quality unverified. |
+| 6C density / dialogue ratio | Verbosity selects framing/timestamps; positive description density adds known place when not terse; built-in dialogue pack or terse+ratio≥75 gives separate dialogue lines. | Numeric preferences do **not** promise measured prose percentages or100distinct visual levels. Real speech is never deleted to meet a ratio; detailed mode does not invent sensory facts. |
+| 6C context budget | Complete UTF-8 JSON input measured before provider/emission,4–256KiB or64KiB default; saved-original fallback after committed action. [Budget evidence](narrative-budget.md). | Byte budget, not model tokens and not decision-context truncation. |
+| 6C streaming / retry | Actual attributed NDJSON lines and terminal boundary; unfinished preview never replaces completed presentation; exact durable command versus committed read-only recovery. [Stream evidence](narrative-stream.md). | Per-fact stream, not generated token streaming; style planning completes before rendering. |
+| 6C regenerate | Current-style read of fixed committed facts; pinned retry; page-only variants, restore original and reload original. | No rollback, new decision or replacement of persisted canonical narrative. |
+| 6D actual long play | Extended `verify-rp6-work-life.mjs --long-play` passed104UI speeches/26waits/128h, actual sourced reencounter memory and selected spontaneous contact with quiet intervals, midpoint restart and desktop/mobile inspection. [Exact evidence](long-play.md). | Initial gifts/source definitions are declared fixture setup, not player-UI evidence. Not live-model or statistical randomness proof. |
+
+## Audit decision
+
+6A–C have concrete implementations and scoped evidence, with the limits above. The original requirements list custom style and density/ratio controls; they do not require arbitrary generated prose, exact prose percentages or token-level streaming. The constrained implementation therefore addresses those listed controls, but it must not be described as unrestricted prose generation or live-model quality verification. These are explicit capability boundaries, not evidence that every natural-language preference succeeds.
+
+6D local journey is **PASS**, with the documented fixture and capability boundaries. The full-stage local regression gate is **PASS**: full normal/vet, relevant core/narrative/server/storage race, unfiltered HTTP race, build/typecheck, configured verifiers and actual browser recovery all completed successfully; exact commands/results are in [verification.md](verification.md). No live model was available, so no live-language quality claim. Create the authorized checkpoint and verify a clean tree before RP7 implementation.

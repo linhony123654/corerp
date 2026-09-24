@@ -30,6 +30,8 @@ type RPStyleSetResult struct {
 type RPResolvedStyle struct {
 	Profile core.RPStyleProfile `json:"profile"`
 	Sources []string            `json:"sources"`
+	// Read metadata only; absent from pinned-turn and narrative variant styles.
+	SessionRevision *int64 `json:"session_revision,omitempty"`
 }
 
 func styleBindingID(instance, branch, scope, session, place string) (string, error) {
@@ -223,7 +225,21 @@ func (s *Store) ReadRPStyle(ctx context.Context, r core.RPSessionReadRequest) (R
 	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPResolvedStyle{}, err
 	}
-	return resolveRPStyle(ctx, tx.conn, session, nil)
+	result, err := resolveRPStyle(ctx, tx.conn, session, nil)
+	if err != nil {
+		return RPResolvedStyle{}, err
+	}
+	binding, err := styleBindingID(session.InstanceID, session.BranchID, "session", session.SessionID, "")
+	if err != nil {
+		return RPResolvedStyle{}, err
+	}
+	var revision int64
+	err = tx.conn.QueryRowContext(ctx, `SELECT r.revision FROM rp_style_bindings b JOIN rp_style_revisions r ON r.revision_id=b.revision_id WHERE b.binding_id=?`, binding).Scan(&revision)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return RPResolvedStyle{}, err
+	}
+	result.SessionRevision = &revision
+	return result, nil
 }
 
 func (s *Store) loadRPTurnStyle(ctx context.Context, runID string) (RPResolvedStyle, error) {
@@ -255,6 +271,16 @@ type RPNarrativeReadResult struct {
 // Render a variant of the same settled facts. No retry of the decision model,
 // no transcript rewrite, and no rollback/command/world mutation.
 func (s *Store) ReadRPNarrative(ctx context.Context, r RPNarrativeReadRequest) (RPNarrativeReadResult, error) {
+	return s.StreamRPNarrative(ctx, r, nil)
+}
+
+// Authorization and immutable input gathering finish before the first emission.
+// No database connection is retained while the client consumes the stream.
+func (s *Store) StreamRPNarrative(ctx context.Context, r RPNarrativeReadRequest, emit func(core.RPNarrativeChunk) error) (RPNarrativeReadResult, error) {
+	return s.streamRPNarrativeWithProvider(ctx, r, emit, core.DeterministicRPNarrativeProvider{})
+}
+
+func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrativeReadRequest, emit func(core.RPNarrativeChunk) error, provider core.RPStreamingNarrativeProvider) (RPNarrativeReadResult, error) {
 	var empty RPNarrativeReadResult
 	if r.TurnRunID == "" {
 		return empty, core.NewError(core.CodeInvalidArgument, "turn_run_id required")
@@ -286,6 +312,14 @@ func (s *Store) ReadRPNarrative(ctx context.Context, r RPNarrativeReadRequest) (
 			return empty, err
 		}
 	}
-	view, err := s.renderRPTurnStyled(ctx, r.SessionID, playerTurnID, playerEventID, style.Profile)
+	input, err := s.readRPNarrativeInput(ctx, r.SessionID, playerTurnID, playerEventID)
+	if err != nil {
+		return empty, err
+	}
+	input.Style = style.Profile
+	if err := input.ValidateReadBudget(); err != nil {
+		return empty, err
+	}
+	view, err := provider.RenderStream(ctx, input, emit)
 	return RPNarrativeReadResult{Style: style, View: view}, err
 }

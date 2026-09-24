@@ -9,15 +9,32 @@ import (
 // surface. Store still owns validation, transactions and durable recovery.
 type RPService struct {
 	*Store
-	provider core.RPDecisionProvider
-	mode     string
+	provider  core.RPDecisionProvider
+	mode      string
+	narrative core.RPStreamingNarrativeProvider
 }
 
 func NewRPService(store *Store, provider core.RPDecisionProvider, mode string) (*RPService, error) {
+	return NewRPServiceWithNarrative(store, provider, mode, core.DeterministicRPNarrativeProvider{})
+}
+
+// The operator supplies immutable, independent decision and presentation
+// providers. Requests/styles cannot select a remote endpoint or credentials.
+// Canonical settlement always keeps its original deterministic record.
+func NewRPServiceWithNarrative(store *Store, provider core.RPDecisionProvider, mode string, narrative core.RPStreamingNarrativeProvider) (*RPService, error) {
 	if store == nil || provider == nil || (mode != "deterministic" && mode != "chat_completions") {
 		return nil, core.NewError(core.CodeInvalidArgument, "RP store, provider and supported mode are required")
 	}
-	return &RPService{Store: store, provider: provider, mode: mode}, nil
+	if narrative == nil {
+		return nil, core.NewError(core.CodeInvalidArgument, "RP narrative provider is required")
+	}
+	return &RPService{Store: store, provider: provider, mode: mode, narrative: narrative}, nil
+}
+func (s *RPService) ReadRPNarrative(ctx context.Context, r RPNarrativeReadRequest) (RPNarrativeReadResult, error) {
+	return s.StreamRPNarrative(ctx, r, nil)
+}
+func (s *RPService) StreamRPNarrative(ctx context.Context, r RPNarrativeReadRequest, emit func(core.RPNarrativeChunk) error) (RPNarrativeReadResult, error) {
+	return s.Store.streamRPNarrativeWithProvider(ctx, r, emit, s.narrative)
 }
 func (s *RPService) PlayRPTurn(ctx context.Context, request core.RPSpeechRequest) (RPTurnResult, error) {
 	return s.Store.RunRPTurn(ctx, request, s.provider)
@@ -58,5 +75,9 @@ func (s *RPService) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPW
 func (s *RPService) ObserveRPSession(ctx context.Context, request core.RPSessionReadRequest) (RPObservation, error) {
 	observation, err := s.Store.ObserveRPSession(ctx, request)
 	observation.DecisionMode = s.mode
+	observation.NarrativeMode = "custom"
+	if mode, ok := s.narrative.(interface{ NarrativeMode() string }); ok {
+		observation.NarrativeMode = mode.NarrativeMode()
+	}
 	return observation, err
 }

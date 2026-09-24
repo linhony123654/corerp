@@ -163,7 +163,7 @@ func (s *Store) MaterializeRPBackground(ctx context.Context, r core.RPBackground
 		// event defines the individual's initial work appointment/site. It does
 		// not claim the organization owns the place or create a new job.
 		if item.ActivityCode == "work" {
-			jobs, err := readRPOwnEmployment(ctx, tx.conn, r.EntityID, item.WorldTime)
+			jobs, err := readRPOwnEmployment(ctx, tx.conn, r.InstanceID, r.BranchID, r.EntityID, item.WorldTime)
 			if err != nil {
 				return empty, err
 			}

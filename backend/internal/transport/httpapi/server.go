@@ -91,7 +91,12 @@ type Service interface {
 	ReadCareerRecruitmentRecord(context.Context, string, string, string, string, string) (storage.CareerRecord, error)
 	SetRPStyle(context.Context, storage.RPStyleSetRequest) (storage.RPStyleSetResult, error)
 	ReadRPStyle(context.Context, core.RPSessionReadRequest) (storage.RPResolvedStyle, error)
+	ReadRPWallet(context.Context, core.RPSessionReadRequest) (storage.RPWallet, error)
+	ReadRPContacts(context.Context, storage.RPContactsReadRequest) (storage.RPContacts, error)
+	ReadRPMessages(context.Context, storage.RPMessagesReadRequest) (storage.RPMessages, error)
+	ReadRPWork(context.Context, core.RPSessionReadRequest) (storage.RPWork, error)
 	ReadRPNarrative(context.Context, storage.RPNarrativeReadRequest) (storage.RPNarrativeReadResult, error)
+	StreamRPNarrative(context.Context, storage.RPNarrativeReadRequest, func(core.RPNarrativeChunk) error) (storage.RPNarrativeReadResult, error)
 	WaitRP(context.Context, core.RPWaitRequest) (storage.RPWaitResult, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
@@ -307,8 +312,18 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPStyleSet(response, request, requestID, principalID)
 	case "/api/v1/rp/style/read":
 		s.handleRPStyleRead(response, request, requestID, principalID)
+	case "/api/v1/rp/wallet/read":
+		s.handleRPWalletRead(response, request, requestID, principalID)
+	case "/api/v1/rp/contacts/read":
+		s.handleRPContactsRead(response, request, requestID, principalID)
+	case "/api/v1/rp/messages/read":
+		s.handleRPMessagesRead(response, request, requestID, principalID)
+	case "/api/v1/rp/work/read":
+		s.handleRPWorkRead(response, request, requestID, principalID)
 	case "/api/v1/rp/narrative/render":
 		s.handleRPNarrativeRead(response, request, requestID, principalID)
+	case "/api/v1/rp/narrative/stream":
+		s.handleRPNarrativeStream(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/wait":
 		s.handleRPWait(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/speak":

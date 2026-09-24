@@ -38,6 +38,7 @@ type RPObservation struct {
 	Stores            []core.RPStoreAvailability `json:"stores,omitempty"`
 	TransitWorks      []core.RPLocalTransitWorks `json:"transit_works,omitempty"`
 	DecisionMode      string                     `json:"decision_mode"`
+	NarrativeMode     string                     `json:"narrative_mode"`
 	SessionID         string                     `json:"session_id"`
 	ControlledEntity  RPVisibleEntity            `json:"controlled_entity"`
 	WorldTime         string                     `json:"world_time"`
@@ -53,11 +54,13 @@ type RPObservation struct {
 type RPVisiblePlace struct {
 	PlaceID     string `json:"place_id"`
 	DisplayName string `json:"display_name"`
+	CanMoveNow  bool   `json:"can_move_now"`
 }
 
 type RPHistoryTurn struct {
 	TurnRunID      string   `json:"turn_run_id"`
 	NarrativeLines []string `json:"narrative_lines"`
+	CanRegenerate  bool     `json:"can_regenerate"`
 }
 
 func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenRequest) (RPSession, error) {
@@ -230,6 +233,7 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	}
 	var view RPObservation
 	view.DecisionMode = "deterministic"
+	view.NarrativeMode = "deterministic"
 	view.SessionID = session.SessionID
 	view.ControlledEntity.EntityID = session.ControlledEntityID
 	err = tx.conn.QueryRowContext(ctx, `
@@ -298,23 +302,32 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		return RPObservation{}, err
 	}
 	rows.Close()
+	// Topological adjacency is not proof of immediate travel. Use the move
+	// owner's physical route check, including alternate paths, in this snapshot.
+	for i := range view.ReachablePlaces {
+		place := &view.ReachablePlaces[i]
+		place.CanMoveNow, err = rpTransitAllowsImmediate(ctx, tx.conn, session.InstanceID, session.BranchID, view.PlaceID, place.PlaceID, view.WorldTime)
+		if err != nil {
+			return RPObservation{}, err
+		}
+	}
 	// Only this authenticated session's settled view, never raw events or NPC private state.
 	view.RecentTurns = make([]RPHistoryTurn, 0)
-	rows, err = tx.conn.QueryContext(ctx, `SELECT turn_run_id, narrative_json FROM
-		(SELECT turn_run_id, narrative_json, settled_sequence FROM rp_turn_runs
+	rows, err = tx.conn.QueryContext(ctx, `SELECT turn_run_id, narrative_json, can_regenerate FROM
+		(SELECT turn_run_id, narrative_json, settled_sequence, 1 AS can_regenerate FROM rp_turn_runs
 		 WHERE session_id = ? AND status = 'settled'
 		 UNION ALL
 		 SELECT e.event_id, json_array(CASE e.event_type
 		 WHEN 'RPPlayerMoved' THEN '你前往了 ' || p.display_name || '。'
 		 WHEN 'RPInterpersonalAction' THEN json_extract(e.payload,'$.description')
-		 ELSE '你等待至 ' || json_extract(e.payload, '$.target_world_time') || '。' END), e.event_sequence
+		 ELSE '你等待至 ' || json_extract(e.payload, '$.target_world_time') || '。' END), e.event_sequence, 0
 		 FROM events e LEFT JOIN agent_places p ON p.place_id = json_extract(e.payload, '$.to_place_id')
 		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ?
 		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction') AND json_extract(e.payload, '$.session_id') = ?
 		 UNION ALL
 		 SELECT e.event_id,json_array(CASE e.event_type
 		 WHEN 'RPSpeechAccepted' THEN n.display_name || '说：“' || u.speech_text || '”'
-		 ELSE n.display_name || '前往了 ' || p.display_name || '。' END),e.event_sequence
+		 ELSE n.display_name || '前往了 ' || p.display_name || '。' END),e.event_sequence,0
 		 FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id
 		 JOIN materialized_entities n ON n.entity_id=e.actor_id
 		 LEFT JOIN rp_utterances u ON u.event_id=e.event_id
@@ -329,7 +342,7 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	for rows.Next() {
 		var turn RPHistoryTurn
 		var raw string
-		if err := rows.Scan(&turn.TurnRunID, &raw); err != nil {
+		if err := rows.Scan(&turn.TurnRunID, &raw, &turn.CanRegenerate); err != nil {
 			rows.Close()
 			return RPObservation{}, err
 		}

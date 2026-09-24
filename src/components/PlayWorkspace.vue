@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import PlayWallet from './PlayWallet.vue'
+import PlayContacts from './PlayContacts.vue'
+import PlayWork from './PlayWork.vue'
+import PlayMap from './PlayMap.vue'
+import PlayMessages from './PlayMessages.vue'
+import type { LocalMap, MapMove } from '../lib/localMap'
+import PlayStyle from './PlayStyle.vue'
+import PlayRegenerate from './PlayRegenerate.vue'
+import { readNarrativeStream } from '../lib/narrativeStream'
+import { pendingStyleKey } from '../lib/narrativeStyle'
+import type { StyleScope } from '../lib/narrativeStyle'
+import type { WalletSnapshot } from '../lib/wallet'
 
 type Person = { entity_id: string; display_name: string }
-type Turn = { turn_run_id: string; narrative_lines: string[] }
-type Observation = {
+type Turn = { turn_run_id: string; narrative_lines: string[]; can_regenerate: boolean }
+type Observation = LocalMap & {
   decision_mode: 'deterministic' | 'chat_completions'
-  session_id: string; controlled_entity: Person; world_time: string
-  place_id: string; place_name: string; observation_cursor: number
-  present_entities: Person[]; reachable_places: { place_id: string; display_name: string }[]
+  narrative_mode: 'deterministic' | 'style_planner' | 'custom'
+  session_id: string; controlled_entity: Person
+  present_entities: Person[]
   recent_turns: Turn[]
 }
-type Pending = { path: string; body: Record<string, unknown> }
+type Pending = { path: string; body: Record<string, unknown>; narrative_turn_id?: string }
 type Bookmark = { session: string; openKey: string; pending: Pending | null }
 const storageKey = 'corerp.play.v1'
 const token = ref('') // Credentials deliberately live only in this page's memory.
@@ -20,6 +32,21 @@ const error = ref('')
 const notice = ref('')
 const draft = ref('')
 const travel = ref(false)
+const walletOpen = ref(false)
+const contactsOpen = ref(false)
+const workOpen = ref(false)
+const mapOpen = ref(false)
+const messagesOpen = ref(false)
+const styleOpen = ref(false), stylePending = ref(false)
+const sessionScope = ref<StyleScope | null>(null)
+const variants = ref<Record<string, string[]>>({})
+const turnPreview = ref<string[] | null>(null)
+let turnStreamController: AbortController | null = null
+onBeforeUnmount(() => turnStreamController?.abort())
+function setVariant(turn: string, lines: string[] | null) {
+  if (lines === null) delete variants.value[turn]
+  else variants.value[turn] = lines
+}
 const socialSeeking = ref(false)
 const bookmark = ref<Bookmark>({ session: '', openKey: crypto.randomUUID(), pending: null })
 try {
@@ -28,7 +55,7 @@ try {
 } catch { /* A malformed bookmark cannot become world state. */ }
 const clock = computed(() => observation.value?.world_time.slice(11, 16) || '—')
 const date = computed(() => observation.value?.world_time.slice(0, 10) || '')
-const locked = computed(() => busy.value || !!bookmark.value.pending)
+const locked = computed(() => busy.value || !!bookmark.value.pending || stylePending.value)
 
 function save() {
   // Persist intent BEFORE sending, so a lost response can be retried with the same key.
@@ -40,11 +67,39 @@ async function api<T>(path: string, body: Record<string, unknown>): Promise<T> {
     body: JSON.stringify(body), signal: AbortSignal.timeout(45000)
   })
   const envelope = await response.json()
-  if (!response.ok) throw new Error(envelope.error?.message || `连接失败 (${response.status})`)
+  if (!response.ok) throw Object.assign(new Error(envelope.error?.message || `连接失败 (${response.status})`), { code: envelope.error?.code })
   return envelope.data as T
 }
 async function refresh() {
   observation.value = await api<Observation>('observe', { session_id: bookmark.value.session })
+  const visible = new Set(observation.value.recent_turns.map(turn => turn.turn_run_id))
+  for (const id of Object.keys(variants.value)) if (!visible.has(id)) delete variants.value[id]
+}
+async function streamNarrative(body: Record<string, unknown>, preview: (lines: string[]) => void, signal: AbortSignal) {
+  const response = await fetch('/api/v1/rp/narrative/stream', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.value}` },
+    body: JSON.stringify(body), signal: AbortSignal.any([signal, AbortSignal.timeout(45000)])
+  })
+  return readNarrativeStream(response, preview)
+}
+function readWallet() {
+  return api<WalletSnapshot>('wallet/read', { session_id: bookmark.value.session })
+}
+function readContacts(after: string) {
+  return api<{ contacts: { entity_id: string; display_name: string; last_known_world_time: string }[]; next_after_entity_id?: string; world_time: string }>('contacts/read', { session_id: bookmark.value.session, after_entity_id: after })
+}
+function readWork() {
+  return api<{ jobs: { contract_id: string; employer_name: string; status: string; workplace_name: string; wage_minor: string; pay_period_days: number; currency_id: string; currency_scale: number; currency_symbol: string }[]; appointments: { schedule_id: string; world_time: string; original_world_time?: string; place_name: string; activity: string }[]; more_appointments: boolean; world_time: string }>('work/read', { session_id: bookmark.value.session })
+}
+function readMap() {
+  return api<Observation>('observe', { session_id: bookmark.value.session })
+}
+function readMessages(before: number) {
+  return api<{ messages: { message_id: string; sequence: number; world_time: string; kind: string; title: string; body: string }[]; next_before_sequence?: number; world_time: string }>('messages/read', { session_id: bookmark.value.session, before_sequence: before })
+}
+function moveFromMap(request: MapMove) {
+  mapOpen.value = false
+  void act('actions/move', request)
 }
 async function guarded(work: () => Promise<void>) {
   if (busy.value) return
@@ -57,14 +112,16 @@ async function connect() {
   await guarded(async () => {
     save()
     if (bookmark.value.session) {
-      await api('sessions/resume', { session_id: bookmark.value.session })
+      sessionScope.value = await api<StyleScope>('sessions/resume', { session_id: bookmark.value.session })
     } else {
-      const session = await api<{ session_id: string }>('sessions/open', {
+      const session = await api<StyleScope>('sessions/open', {
         instance_id: 'inst_m2_t09', branch_id: 'br_main', entity_id: 'entity_m2_rp_lin',
         pov: 'second_person', idempotency_key: bookmark.value.openKey
       })
       bookmark.value.session = session.session_id; save()
+      sessionScope.value = session
     }
+    stylePending.value = !!localStorage.getItem(pendingStyleKey(bookmark.value.session))
     if (bookmark.value.pending) await finishPending()
     else await refresh()
     await scrollToEnd()
@@ -72,22 +129,56 @@ async function connect() {
 }
 async function scrollToEnd() { await nextTick(); window.scrollTo({ top: document.documentElement.scrollHeight }) }
 function readableLine(line: string) {
-  return line.startsWith('你等待至 ') ? line.replace(/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}Z/g, '$1 $2') : line
+  return line.replace(/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}Z/g, '$1 $2')
 }
-async function finishPending() {
+async function finishPending(useSavedNarrative = false) {
   const pending = bookmark.value.pending
   if (!pending) return
-  const result = await api<{ status?: string }>(pending.path, pending.body)
-  if (result.status === 'budget_exhausted') {
-    notice.value = '时间正在推进，点击“继续未完成的行动”即可接着等待。'
-    await refresh(); return
+  if (useSavedNarrative && !pending.narrative_turn_id) return
+  let completedPresentation: { lines: string[]; warnings: string[] } | null = null
+  if (!pending.narrative_turn_id) {
+    const result = await api<{ status?: string; turn_run_id?: string }>(pending.path, pending.body)
+    if (result.status === 'budget_exhausted') {
+      notice.value = '时间正在推进，点击“继续未完成的行动”即可接着等待。'
+      await refresh(); return
+    }
+    if (pending.path === 'turns/run') {
+      if (result.status !== 'settled' || !result.turn_run_id) throw new Error('回合尚未确认结束，请继续原行动。')
+      pending.narrative_turn_id = result.turn_run_id
+      // This durable transition prevents a stream retry from rerunning actions.
+      save()
+    }
+  }
+  if (pending.narrative_turn_id && !useSavedNarrative) {
+    turnPreview.value = []; turnStreamController = new AbortController()
+    await scrollToEnd()
+    try {
+      // No override: the settled turn's pinned style owns its original narrative.
+      const rendered = await streamNarrative({ session_id: bookmark.value.session, turn_run_id: pending.narrative_turn_id }, lines => {
+        turnPreview.value = lines
+        void scrollToEnd()
+      }, turnStreamController.signal)
+      completedPresentation = rendered.view
+    } catch (cause) {
+      // On reconnect, expose the saved-original recovery even when presentation
+      // fails before this page has loaded its first observation.
+      if (!observation.value) {
+        try { await refresh() } catch { /* Original stream error stays actionable on reconnect. */ }
+      }
+      throw cause
+    } finally {
+      turnPreview.value = null; turnStreamController = null
+    }
   }
   // Keep intent until fresh world/history is loaded; even a failed observation is retry-safe.
   await refresh()
+  if (completedPresentation && pending.narrative_turn_id) setVariant(pending.narrative_turn_id, completedPresentation.lines)
   bookmark.value.pending = null; save()
+  if (useSavedNarrative) notice.value = '已读取保存的原叙述，没有重做行动或调整世界事实。'
   if (pending.path === 'actions/wait') socialSeeking.value = false
   if (pending.path === 'turns/run') draft.value = ''
   else notice.value = pending.path === 'actions/move' ? '你已抵达新的地点。' : '时间已经向前。'
+  if (completedPresentation?.warnings.length) notice.value = '叙述器提示：' + completedPresentation.warnings.join('；')
   travel.value = false
   await scrollToEnd()
 }
@@ -153,16 +244,30 @@ function wait(hours: number) {
         </div>
         <article v-for="(turn, index) in observation.recent_turns" :key="turn.turn_run_id" class="turn">
           <span class="turn-mark" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
-          <p v-for="(line, i) in turn.narrative_lines" :key="i" :class="{ 'your-words': i === 0 }">{{ readableLine(line) }}</p>
+          <p v-for="(line, i) in (variants[turn.turn_run_id] || turn.narrative_lines)" :key="i" :class="{ 'your-words': i === 0 }">{{ readableLine(line) }}</p>
+          <PlayRegenerate v-if="turn.can_regenerate" :session="bookmark.session" :turn="turn.turn_run_id" :disabled="locked" :api="api" :stream="streamNarrative" @variant="setVariant(turn.turn_run_id, $event)" />
         </article>
+        <section v-if="turnPreview !== null" class="turn incoming" aria-label="当前回合叙述流" aria-busy="true">
+          <span class="turn-mark" aria-hidden="true">…</span>
+          <p class="stream-note" role="status">行动已提交 · 正在接收叙述，尚未读完</p>
+          <p v-for="(line, i) in turnPreview" :key="i" :class="{ 'your-words': i === 0 }">{{ readableLine(line) }}</p>
+        </section>
       </main>
 
       <footer class="composer">
         <div class="composer-inner">
-          <p v-if="error" class="error" role="alert">暂未完成：{{ error }}。已保留原行动，可安全重试。</p>
+          <p v-if="error" class="error" role="alert">暂未完成：{{ error }}。{{ bookmark.pending?.narrative_turn_id ? '行动已经提交，继续只会读取叙述，不会重做行动。' : '已保留原行动，可安全重试。' }}</p>
           <p v-if="notice" class="notice" role="status">{{ notice }}</p>
-          <button v-if="bookmark.pending" class="recover" :disabled="busy" @click="guarded(finishPending)">{{ busy ? '正在继续…' : '继续未完成的行动' }}</button>
+          <p v-if="stylePending" class="notice" role="status">叙事设置尚未确认，请打开“叙事设置”继续保存，再开始新行动。</p>
+          <button v-if="bookmark.pending" class="recover" :disabled="busy" @click="guarded(finishPending)">{{ busy ? '正在继续…' : bookmark.pending.narrative_turn_id ? '继续读取叙述' : '继续未完成的行动' }}</button>
+          <button v-if="bookmark.pending?.narrative_turn_id && !busy" class="recover" @click="guarded(() => finishPending(true))">读取已保存原叙述</button>
           <nav class="actions" aria-label="场景行动">
+            <button :disabled="locked" aria-haspopup="dialog" @click="walletOpen = true">钱包</button>
+            <button :disabled="locked" aria-haspopup="dialog" @click="contactsOpen = true">通讯录</button>
+            <button :disabled="locked" aria-haspopup="dialog" @click="workOpen = true">工作信息</button>
+            <button :disabled="locked" aria-haspopup="dialog" @click="mapOpen = true">地图</button>
+            <button :disabled="locked" aria-haspopup="dialog" @click="messagesOpen = true">手机</button>
+            <button :disabled="busy || !!bookmark.pending" aria-haspopup="dialog" @click="styleOpen = true">叙事设置</button>
             <button :disabled="locked" @click="guarded(refresh)">环顾四周</button>
             <button :disabled="locked" :aria-expanded="travel" aria-controls="destinations" @click="travel = !travel">去别处 ↗</button>
             <button :disabled="locked" @click="wait(1)">等一小时</button>
@@ -184,11 +289,18 @@ function wait(hours: number) {
           <p class="footnote"><span>{{ busy ? '世界正在回应…' : '此处输入会作为你说出的话' }}</span><span>Ctrl / ⌘ + Enter</span></p>
         </div>
       </footer>
+      <PlayWallet v-if="walletOpen" :owner="observation.controlled_entity.display_name" :read="readWallet" @close="walletOpen = false" />
+      <PlayContacts v-if="contactsOpen" :read="readContacts" @close="contactsOpen = false" />
+      <PlayWork v-if="workOpen" :read="readWork" @close="workOpen = false" />
+      <PlayMap v-if="mapOpen" :read="readMap" @close="mapOpen = false" @move="moveFromMap" />
+      <PlayMessages v-if="messagesOpen" :read="readMessages" @close="messagesOpen = false" />
+      <PlayStyle v-if="styleOpen && sessionScope" :scope="{ session_id: sessionScope.session_id, instance_id: sessionScope.instance_id, branch_id: sessionScope.branch_id }" :narrative-mode="observation.narrative_mode" :api="api" @close="styleOpen = false" @pending="stylePending = $event" />
     </template>
   </div>
 </template>
 
 <style scoped>
+.turn .stream-note { font: 12px/1.8 var(--font-body); color: var(--muted); }
 .wait-intent { margin: 4px 0 12px; font-size: 12px; }
 .wait-intent label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
 .wait-intent input { width: 18px; height: 18px; accent-color: var(--accent); flex: 0 0 auto; }

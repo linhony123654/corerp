@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict'
+
+export async function checkContextBudget({ page, sql, credential, restart, getModelCalls }) {
+  const settings = page.getByRole('dialog', { name: '叙事设置', exact: true })
+  async function setBudget(value) {
+    await page.getByRole('button', { name: '叙事设置', exact: true }).click()
+    await settings.getByLabel('叙述上下文预算').selectOption(value)
+    await settings.getByRole('button', { name: '保存叙事设置', exact: true }).click()
+    await settings.getByText('已保存。用于之后的新段落，不改写已发生的事。', { exact: true }).waitFor()
+    assert.equal(await settings.getByLabel('叙述上下文预算').inputValue(), value)
+    await settings.getByRole('button', { name: '关闭叙事设置' }).click()
+    await settings.waitFor({ state: 'hidden' })
+  }
+  await setBudget('4096')
+  const longSpeech = '你'.repeat(1800)
+  await page.getByLabel('你想说的话').fill(longSpeech)
+  await page.getByRole('button', { name: '说出' }).click()
+  await page.getByRole('button', { name: '读取已保存原叙述', exact: true }).waitFor()
+  assert.match(await page.getByRole('alert').innerText(), /超过 4096 字节预算.*未删减事实/)
+  const facts = () => sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)||':'||(SELECT COUNT(*) FROM rp_utterances)")
+  const committed = facts(), calls = getModelCalls()
+  let commandRequests = 0
+  const count = request => { if (request.url().endsWith('/rp/turns/run')) commandRequests++ }
+  page.on('request', count)
+  await restart()
+  await page.reload()
+  await page.getByLabel('玩家访问凭证').fill(credential)
+  await page.getByRole('button', { name: '继续这段生活' }).click()
+  await page.getByRole('button', { name: '读取已保存原叙述', exact: true }).waitFor()
+  await page.getByRole('button', { name: '读取已保存原叙述', exact: true }).click()
+  await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
+  assert.ok((await page.locator('.turn').last().innerText()).includes(longSpeech), 'saved original preserves the entire accepted speech')
+  assert.equal(commandRequests, 0, 'budget recovery never resends a command')
+  assert.equal(facts(), committed)
+  assert.equal(getModelCalls(), calls)
+  await setBudget('65536')
+  const turn = page.locator('.turn').last()
+  await turn.locator('summary').click()
+  await turn.getByRole('button', { name: '按当前设置重新生成' }).click()
+  await turn.getByText('展示已更新，世界事件和原始记录未改变。', { exact: true }).waitFor()
+  assert.ok((await turn.locator(':scope > p').allTextContents()).join('\n').includes(longSpeech))
+  assert.equal(facts(), committed)
+  assert.equal(getModelCalls(), calls)
+  page.off('request', count)
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  console.log(JSON.stringify({ contextBudget: 'PASS', unit: 'UTF-8 JSON bytes (not model tokens)', checks: ['real persisted setting', 'oversized actual accepted speech', 'settlement remains valid', 'budget error before stream', 'restart and saved-original recovery', 'larger explicit regeneration budget', 'no truncation or repeated world/model work'] }))
+}

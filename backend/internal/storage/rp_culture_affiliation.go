@@ -75,7 +75,7 @@ func (s *Store) AffiliateRPCulture(ctx context.Context, r CultureAffiliationRequ
 			affiliation.EligibilityEventID = source
 		}
 		if r.Decision == "join" && definition.Definition.ScopeKind == "organization" {
-			jobs, err := readRPOwnEmployment(ctx, conn, r.EntityID, c.WorldTime)
+			jobs, err := readRPOwnEmployment(ctx, conn, r.Binding.InstanceID, r.Binding.BranchID, r.EntityID, c.WorldTime)
 			if err != nil {
 				return CultureFact{}, nil, err
 			}
