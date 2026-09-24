@@ -1,5 +1,9 @@
 # Living-world progress
 
+## 2026-09-25 — RP8 checkpoint closure
+- Source86ca6f96d39e4a026f2ff73e48f5823a318cdb34 committed only after final full backend15968, relevant race, vet, build, migration/recovery, actual browser and report gates. Git porcelain empty immediately after commit, schema030, no verification service ports listening. No push/deploy/global Git config change. Follow-up records this source hash/status only.
+- RP2–RP8 now checkpointed; next Final Integration DEFINE/DESIGN retains original300turn/30days, named world ingredients/scenarios, multiple clients/restarts and entire final DoD. No final simulation acceptance run claimed yet; whole goal active.
+
 ## 2026-09-25 — RP8 historical rule provenance and full-suite reconciliation
 - Final full15968 PASS all packages, storage311.224s/HTTP18.745s, terminal exit0. Finalvet43859 PASS. Relevant economic/scope race26859 PASS53.681s; build+Inspector41293 PASS. Configured M0(52)/M1/M2 bounded verifiers PASS, migration028/029/030 SQL mirrors identical, whitespace clean, bounded secret-pattern scan no matches. All tests/processes terminal. No source changes afterward; docs only. Original8A/B/C acceptance mapped with honest supported limits; phase report and verification table prepared. Next authorized stage checkpoint/clean tree/schema030, then Final300turn/30days, not whole-goal completion.
 - Previous turn classified progress. Audited original8A/B/C: optional module list is not mandatory empty dashboards; missing effective installed rule provenance was concrete8B gap. Extracted shared explicitly selected epoch pin validator, ReadStudioEvent creator-only exact immutable bundles/source lock with preparation/legacy/redacted states; no current-head substitution. Validates installation precedes activation, no new schema. Studio extends existing evidence section with expandable JSON and keyboard source navigation; operators reject unexpected package body at frontend too.

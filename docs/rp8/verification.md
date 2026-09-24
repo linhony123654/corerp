@@ -1,6 +1,7 @@
 # RP8 stage verification
 
-Status: local implementation/verification gates PASS; checkpoint metadata pending.
+Status: RP8 implementation/verification/checkpoint PASS. Source commit
+`86ca6f96d39e4a026f2ff73e48f5823a318cdb34`; clean tree verified after commit.
 Original authority: `/tmp/0d1b0723-9876-4319-912d-c780b0c66aea.md`, sections9/12/13.
 Current schema030. RP7 recovery checkpoint `7de4b10616a1a7adaa3f1fe973590828737f966b`.
 No production deploy, external publication, real-account use or live-model test.
@@ -16,7 +17,7 @@ No production deploy, external publication, real-account use or live-model test.
 |8C create/settings/install/Narrative/System/save/Play|Actual initial creator form uses conserved genesis/participants/spatial +validated package install/activation +sourced ready player grant; real independent player actions.|PASS for supported initial template|
 |8C recovery|Seven-stage fault/reopen, frozen request hash, concurrent exact retry, UI lost save/open response, runtime/browser restart, original archive recovery, unchanged other-world head.|PASS|
 |No second authority or registry rewrite|Existing cohort/ledger/population/location/clock/Event/session owners reused; installation records are immutable Events, not executable plugin code or a parallel world database.|Verified source and replay tests|
-|Stage checkpoint/clean tree|Must follow full tests and final phase report.|Pending checkpoint metadata|
+|Stage checkpoint/clean tree|Source86ca6f96d39e4a026f2ff73e48f5823a318cdb34 after all gates/report, git porcelain empty; schema030.|PASS|
 |Final300turn/30days and original DoD|Separate serial phase after RP8 checkpoint.|NOT VERIFIED: not started as Final acceptance|
 
 Optional8A module names are not interpreted as mandatory empty dashboards. The

@@ -1,7 +1,12 @@
 # RP8 phase report
 
-Status: implementation and applicable verification PASS; checkpoint metadata pending. Full scope and serial ordering
+Status: RP8 COMPLETE, locally verified and checkpointed. Full scope and serial ordering
 remain the original goal, not just the creator or inspector increment.
+
+Source checkpoint: `86ca6f96d39e4a026f2ff73e48f5823a318cdb34`.
+`git status --porcelain=v1` empty immediately after commit; schema030; no owned
+Runtime/Vite/browser verification processes left running. No push/deployment.
+This report's status/hash recording is a separate documentation-only follow-up.
 
 ## Delivered
 

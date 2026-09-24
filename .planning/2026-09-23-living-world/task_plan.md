@@ -8,6 +8,15 @@ Full-project DEFINE/DESIGN/BUILD/POLISH/local SHIP per stage. One large stage in
 
 ## Current phase
 
+Latest authoritative: RP8 COMPLETE at source checkpoint
+86ca6f96d39e4a026f2ff73e48f5823a318cdb34, git porcelain empty after commit, schema030.
+No owned test/service processes running. All verification evidence/report in
+docs/rp8/{verification,phase-report}.md. This status is documentation-only metadata.
+Current next phase: Final Integration DEFINE/DESIGN. Preserve original section16
+world requirements and every300turn/30day/restart/multi-client/materialization/career/
+economy/culture-law/relationship/ordinary/rare-event scenario plus section17 DoD.
+Do not replace Final with already-passed RP8 browser tests; goal remains ACTIVE.
+
 Latest authoritative: RP8 original8A/B/C implemented and applicable final gates PASS.
 Historical rule provenance closed the remaining8B gap: exact recorded epoch→source
 activation→immutable installation contents, creator-only, current epoch isolation,

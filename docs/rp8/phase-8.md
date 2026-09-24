@@ -1,6 +1,8 @@
 # RP8 — optional Studio, Creator and Inspector
 
-Status: locally verified / SHIP checkpoint pending; original8A/B/C functional
+Status: COMPLETE / local SHIP. Source checkpoint
+`86ca6f96d39e4a026f2ff73e48f5823a318cdb34`, clean tree verified, schema030;
+original8A/B/C functional
 acceptance and final full-backend15968 PASS are reconciled in
 [verification.md](verification.md) and [phase-report.md](phase-report.md). RP7 source checkpoint
 `c39af6b141b6898eb643799bf380c215c77a1957`, metadata
@@ -11,8 +13,8 @@ and [actual Studio UI/recovery](studio-ui.md) implemented and increment-verified
 Creator/Play and historical package inspection are implemented and browser verified.
 The initial recon/design notes below preserve then-open gaps; current implementation
 and resolved dependencies are documented in creator-design.md, creator-api.md,
-creator-ui.md and inspector-acceptance.md. Source checkpoint and clean-tree metadata
-will close the stage before Final Integration begins.
+creator-ui.md and inspector-acceptance.md. Stage verification and checkpoint are
+complete; Final Integration remains the next serial phase, not completed by RP8.
 
 ## Original acceptance retained
 
