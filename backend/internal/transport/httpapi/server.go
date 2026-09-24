@@ -19,6 +19,11 @@ import (
 const defaultMaxBodyBytes int64 = 1 << 20
 
 type Service interface {
+	CreateStudioWorld(context.Context, storage.StudioCreateRequest) (storage.StudioCreateResult, error)
+	ReadStudioEvent(context.Context, storage.StudioEventRequest) (storage.StudioEventEvidence, error)
+	ListStudioScopes(context.Context, storage.StudioScopeRequest) (storage.StudioScopes, error)
+	ListStudioEvents(context.Context, storage.StudioTimelineRequest) (storage.StudioTimeline, error)
+	ReadStudioExplanation(context.Context, storage.StudioExplanationRequest) (storage.StudioExplanation, error)
 	Ready(context.Context) error
 	Purchase(context.Context, core.PurchaseCommand) (core.PurchaseResult, error)
 	IssueCurrency(context.Context, core.IssueCurrencyCommand) (core.IssueCurrencyResult, error)
@@ -176,6 +181,16 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 	switch request.URL.Path {
 	case "/api/v1/commands/purchase":
 		s.handlePurchase(response, request, requestID, principalID)
+	case "/api/v1/studio/events/read":
+		s.handleStudioEvent(response, request, requestID, principalID)
+	case "/api/v1/studio/worlds/create":
+		s.handleStudioCreate(response, request, requestID, principalID)
+	case "/api/v1/studio/scopes/list":
+		s.handleStudioScopes(response, request, requestID, principalID)
+	case "/api/v1/studio/events/list":
+		s.handleStudioTimeline(response, request, requestID, principalID)
+	case "/api/v1/studio/events/explain":
+		s.handleStudioExplanation(response, request, requestID, principalID)
 	case "/api/v1/commands/issue-currency":
 		s.handleIssuance(response, request, requestID, principalID)
 	case "/api/v1/commands/materialize-cohort":

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import PlayWallet from './PlayWallet.vue'
 import PlayContacts from './PlayContacts.vue'
 import PlayWork from './PlayWork.vue'
@@ -23,9 +23,19 @@ type Observation = LocalMap & {
   recent_turns: Turn[]
 }
 type Pending = { path: string; body: Record<string, unknown>; narrative_turn_id?: string }
-type Bookmark = { session: string; openKey: string; pending: Pending | null }
+type Binding = { instance_id: string; branch_id: string; entity_id: string }
+type AvailableBinding = Binding & { display_name: string }
+type Discovery = { bindings: AvailableBinding[]; next_after?: Binding }
+type Session = StyleScope & { controlled_entity_id: string }
+type Bookmark = { session: string; openKey: string; pending: Pending | null; binding?: Binding; opening?: boolean }
 const storageKey = 'corerp.play.v1'
 const token = ref('') // Credentials deliberately live only in this page's memory.
+const bindings = ref<AvailableBinding[]>([])
+const nextBinding = ref<Binding | undefined>()
+const discovered = ref(false)
+const choosingWorld = ref(false)
+const preferWorldPicker = ref(new URLSearchParams(location.search).get('choose_world') === '1')
+watch(token, () => { bindings.value = []; nextBinding.value = undefined; discovered.value = false })
 const observation = ref<Observation | null>(null)
 const busy = ref(false)
 const error = ref('')
@@ -53,18 +63,24 @@ try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || 'null')
   if (saved && typeof saved.session === 'string' && typeof saved.openKey === 'string') bookmark.value = saved
 } catch { /* A malformed bookmark cannot become world state. */ }
+try { stylePending.value = !!bookmark.value.session && !!localStorage.getItem(pendingStyleKey(bookmark.value.session)) }
+catch { error.value = '浏览器本地存储不可用，无法安全保存恢复请求。' }
 const clock = computed(() => observation.value?.world_time.slice(11, 16) || '—')
 const date = computed(() => observation.value?.world_time.slice(0, 10) || '')
 const locked = computed(() => busy.value || !!bookmark.value.pending || stylePending.value)
+const canChooseWorld = computed(() => !locked.value && !bookmark.value.opening && (!bookmark.value.session || !!bookmark.value.binding))
+const bindingKey = (binding: Binding) => JSON.stringify([binding.instance_id, binding.branch_id, binding.entity_id])
+const archiveKey = (binding: Binding) => `${storageKey}.binding.${bindingKey(binding)}`
 
 function save() {
   // Persist intent BEFORE sending, so a lost response can be retried with the same key.
   localStorage.setItem(storageKey, JSON.stringify(bookmark.value))
+  if (bookmark.value.binding) localStorage.setItem(archiveKey(bookmark.value.binding), JSON.stringify(bookmark.value))
 }
 async function api<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const response = await fetch(`/api/v1/rp/${path}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.value}` },
-    body: JSON.stringify(body), signal: AbortSignal.timeout(45000)
+    body: JSON.stringify(body), signal: AbortSignal.timeout(45000), credentials: 'omit', redirect: 'error', cache: 'no-store'
   })
   const envelope = await response.json()
   if (!response.ok) throw Object.assign(new Error(envelope.error?.message || `连接失败 (${response.status})`), { code: envelope.error?.code })
@@ -108,23 +124,74 @@ async function guarded(work: () => Promise<void>) {
     error.value = e instanceof Error ? e.message : '暂时无法连接世界，请重试。'
   } finally { busy.value = false }
 }
-async function connect() {
-  await guarded(async () => {
+async function discoverBindings(more = false) {
+  const result = await api<Discovery>('bindings/list', { limit: 20, ...(more && nextBinding.value ? { after: nextBinding.value } : {}) })
+  bindings.value = more ? [...bindings.value, ...result.bindings] : result.bindings
+  nextBinding.value = result.next_after
+  discovered.value = true
+}
+async function enterWorld() {
     save()
     if (bookmark.value.session) {
-      sessionScope.value = await api<StyleScope>('sessions/resume', { session_id: bookmark.value.session })
+      const session = await api<Session>('sessions/resume', { session_id: bookmark.value.session })
+      sessionScope.value = session
+      bookmark.value.binding = { instance_id: session.instance_id, branch_id: session.branch_id, entity_id: session.controlled_entity_id }
+      save()
     } else {
-      const session = await api<StyleScope>('sessions/open', {
-        instance_id: 'inst_m2_t09', branch_id: 'br_main', entity_id: 'entity_m2_rp_lin',
+      if (!bookmark.value.binding) throw new Error('请先选择获授权的世界与人物。')
+      // Freeze the binding and key before the request: a lost response must
+      // never let the same key be reused for a different world.
+      bookmark.value.opening = true; save()
+      const session = await api<Session>('sessions/open', {
+        ...bookmark.value.binding,
         pov: 'second_person', idempotency_key: bookmark.value.openKey
       })
-      bookmark.value.session = session.session_id; save()
+      bookmark.value.session = session.session_id; bookmark.value.opening = false; save()
       sessionScope.value = session
     }
     stylePending.value = !!localStorage.getItem(pendingStyleKey(bookmark.value.session))
     if (bookmark.value.pending) await finishPending()
     else await refresh()
+    choosingWorld.value = false
+    preferWorldPicker.value = false
     await scrollToEnd()
+}
+async function selectBinding(binding: Binding) {
+  binding = { instance_id: binding.instance_id, branch_id: binding.branch_id, entity_id: binding.entity_id }
+  if (bookmark.value.binding && bindingKey(bookmark.value.binding) === bindingKey(binding)) {
+    await enterWorld(); return
+  }
+  if (bookmark.value.pending || bookmark.value.opening || stylePending.value) throw new Error('请先恢复未完成的会话或行动，再切换世界。')
+  save()
+  let saved: Bookmark | null = null
+  try { saved = JSON.parse(localStorage.getItem(archiveKey(binding)) || 'null') } catch { /* Ignore malformed local data. */ }
+  bookmark.value = saved && typeof saved.session === 'string' && typeof saved.openKey === 'string' && saved.binding && bindingKey(saved.binding) === bindingKey(binding)
+    ? saved : { session: '', openKey: crypto.randomUUID(), pending: null, binding }
+  observation.value = null; variants.value = {}; sessionScope.value = null
+  draft.value = ''; socialSeeking.value = false; travel.value = false
+  await enterWorld()
+}
+async function chooseWorld() {
+  if (!canChooseWorld.value) return
+  choosingWorld.value = true
+  await guarded(() => discoverBindings())
+}
+async function connect() {
+  await guarded(async () => {
+    if (preferWorldPicker.value && !bookmark.value.pending && !bookmark.value.opening && !stylePending.value) {
+      // Upgrade a legacy bookmark before archiving it. Never silently overwrite
+      // an old session whose binding has not yet been confirmed by the server.
+      if (bookmark.value.session && !bookmark.value.binding) {
+        const session = await api<Session>('sessions/resume', { session_id: bookmark.value.session })
+        bookmark.value.binding = { instance_id: session.instance_id, branch_id: session.branch_id, entity_id: session.controlled_entity_id }; save()
+      }
+      await discoverBindings()
+      if (bindings.value.length === 1 && !nextBinding.value) await selectBinding(bindings.value[0]!)
+      return
+    }
+    if (bookmark.value.session || bookmark.value.opening) { await enterWorld(); return }
+    await discoverBindings()
+    if (bindings.value.length === 1 && !nextBinding.value) await selectBinding(bindings.value[0]!)
   })
 }
 async function scrollToEnd() { await nextTick(); window.scrollTo({ top: document.documentElement.scrollHeight }) }
@@ -209,7 +276,7 @@ function wait(hours: number) {
       <span class="mode">{{ observation ? observation.decision_mode === 'chat_completions' ? 'AI 人物 · 受世界规则约束' : '本地体验 · 确定性人物' : '本地体验 · 持久世界' }}</span>
     </header>
 
-    <main v-if="!observation" class="arrival">
+    <main v-if="!observation || choosingWorld" class="arrival">
       <div class="chapter-mark" aria-hidden="true">◌</div>
       <p class="eyebrow">一段生活 · 从这里开始</p>
       <h1>回到世界里。</h1>
@@ -219,7 +286,22 @@ function wait(hours: number) {
         <input id="credential" v-model="token" type="password" autocomplete="off" required placeholder="输入本地服务提供的凭证" :disabled="busy">
         <p class="hint">凭证仅在当前页面使用。人物回应方式由本地服务配置，进入后可查看。</p>
         <button class="primary" :disabled="busy || !token.trim()">{{ busy ? '正在连接…' : bookmark.session ? '继续这段生活 →' : '进入世界 →' }}</button>
+        <button v-if="bookmark.session && bookmark.binding" type="button" :disabled="!canChooseWorld || !token.trim()" @click="chooseWorld">选择其他世界</button>
       </form>
+      <section v-if="discovered" class="world-picker" aria-label="获授权的世界与人物">
+        <h2>选择一段生活</h2>
+        <p class="hint">仅列出这份玩家凭证获授权的人物。进入时仍会重新检查权限；创建者凭证不能代替玩家凭证。</p>
+        <p v-if="!bindings.length" role="status">暂时没有可进入的人物。请确认世界已保存，并为该玩家授予控制权限。</p>
+        <ul>
+          <li v-for="binding in bindings" :key="bindingKey(binding)">
+            <button :disabled="busy || !!bookmark.pending || !!bookmark.opening || stylePending" @click="guarded(() => selectBinding(binding))">
+              <strong>{{ binding.display_name }}</strong><span>{{ binding.instance_id }} / {{ binding.branch_id }}</span><small>{{ binding.entity_id }}</small>
+            </button>
+          </li>
+        </ul>
+        <button v-if="nextBinding" :disabled="busy" @click="guarded(() => discoverBindings(true))">加载更多人物</button>
+      </section>
+      <p v-if="bookmark.opening" class="hint" role="status">已保留上次进入世界的请求。点击“进入世界”只会重试原请求，不会重复创建会话。</p>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
     </main>
 
@@ -262,6 +344,7 @@ function wait(hours: number) {
           <button v-if="bookmark.pending" class="recover" :disabled="busy" @click="guarded(finishPending)">{{ busy ? '正在继续…' : bookmark.pending.narrative_turn_id ? '继续读取叙述' : '继续未完成的行动' }}</button>
           <button v-if="bookmark.pending?.narrative_turn_id && !busy" class="recover" @click="guarded(() => finishPending(true))">读取已保存原叙述</button>
           <nav class="actions" aria-label="场景行动">
+            <button :disabled="!canChooseWorld" @click="chooseWorld">切换世界</button>
             <button :disabled="locked" aria-haspopup="dialog" @click="walletOpen = true">钱包</button>
             <button :disabled="locked" aria-haspopup="dialog" @click="contactsOpen = true">通讯录</button>
             <button :disabled="locked" aria-haspopup="dialog" @click="workOpen = true">工作信息</button>
@@ -300,6 +383,12 @@ function wait(hours: number) {
 </template>
 
 <style scoped>
+.world-picker { margin-top: 28px; border-top: 1px solid #39493535; }
+.world-picker h2 { font: 24px/1.5 var(--font-serif); font-weight: 400; color: var(--text); }
+.world-picker ul { list-style: none; padding: 0; }
+.world-picker li { border-bottom: 1px solid #39493525; }
+.world-picker li button { display: grid; gap: 6px; width: 100%; text-align: left; overflow-wrap: anywhere; }
+.world-picker span, .world-picker small { font: 12px/1.6 var(--font-mono); color: var(--muted); }
 .turn .stream-note { font: 12px/1.8 var(--font-body); color: var(--muted); }
 .wait-intent { margin: 4px 0 12px; font-size: 12px; }
 .wait-intent label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }

@@ -61,11 +61,15 @@ func queueCareerLeaveReview(ctx context.Context, conn *sql.Conn, b core.CareerBi
 }
 
 func (s *Store) executeCareerLeaveAutoReview(ctx context.Context, tx *immediateTx, item SchedulerItem) error {
+	instanceID, branchID, scopeErr := recordedSchedulerScope(ctx, tx.conn, item)
+	if scopeErr != nil {
+		return scopeErr
+	}
 	var payload scheduledPayload
 	if err := json.Unmarshal([]byte(item.Payload), &payload); err != nil {
 		return err
 	}
-	b := core.CareerBinding{InstanceID: M2DemoInstanceID, BranchID: M2DemoBranchID}
+	b := core.CareerBinding{InstanceID: instanceID, BranchID: branchID}
 	var raw, requestedAt string
 	if err := tx.conn.QueryRowContext(ctx, `SELECT payload,world_time FROM events WHERE instance_id=? AND branch_id=? AND event_id=? AND event_type='RPCareerFactRecorded'`, b.InstanceID, b.BranchID, payload.SubjectID).Scan(&raw, &requestedAt); err != nil {
 		return err

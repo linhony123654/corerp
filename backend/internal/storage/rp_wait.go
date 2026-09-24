@@ -43,7 +43,7 @@ type rpWaitEvent struct {
 	ProcessedItems         int                      `json:"processed_items"`
 }
 
-// WaitRP stores only retry intent before invoking the existing M2 scheduler.
+// WaitRP stores only retry intent before invoking the existing scoped scheduler.
 // The final clock and event are one authority commit after all due work drains.
 func (s *Store) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPWaitResult, error) {
 	if err := request.Validate(); err != nil {
@@ -59,7 +59,11 @@ func (s *Store) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPWaitR
 	if err != nil || replayed {
 		return intent, err
 	}
-	run, err := s.RunAgentLife(ctx, request.TargetWorldTime, request.Budget)
+	session, err := loadRPSession(ctx, s.db, request.PrincipalID, request.SessionID)
+	if err != nil {
+		return RPWaitResult{}, err
+	}
+	run, err := s.runAgentLifeForScope(ctx, session.InstanceID, session.BranchID, request.TargetWorldTime, request.Budget)
 	if err != nil {
 		return RPWaitResult{}, err
 	}
@@ -87,7 +91,20 @@ func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitReque
 		return RPWaitResult{}, false, err
 	}
 	if session.InstanceID != M2DemoInstanceID || session.BranchID != M2DemoBranchID {
-		return RPWaitResult{}, false, core.NewError(core.CodeNotFound, "bounded M2 RP world not found")
+		packages, err := readStudioActivePackages(ctx, tx.conn, session.InstanceID, session.BranchID)
+		if err != nil {
+			return RPWaitResult{}, false, err
+		}
+		if packages == nil {
+			return RPWaitResult{}, false, core.NewError(core.CodeNotFound, "supported RP world not found")
+		}
+		var unsupported int
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE instance_id=? AND branch_id=? AND status='pending' AND world_time<=? AND phase_id<>?`, session.InstanceID, session.BranchID, request.TargetWorldTime, packages.Lock.Phase).Scan(&unsupported); err != nil {
+			return RPWaitResult{}, false, err
+		}
+		if unsupported != 0 {
+			return RPWaitResult{}, false, core.NewError(core.CodeInvalidArgument, "world has unsupported due scheduler phases")
+		}
 	}
 	var intentID, existingHash, status string
 	if err := checkRPRequestRetirement(ctx, tx.conn, request.PrincipalID, "wait", session.SessionID, request.IdempotencyKey); err != nil {

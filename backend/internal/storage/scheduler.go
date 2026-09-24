@@ -259,7 +259,28 @@ func (s *Store) commitScheduledMutation(ctx context.Context, tx *immediateTx, it
 	return s.commitScheduledMutationForBranch(ctx, tx, item, payload, mutation, DemoInstanceID, DemoBranchID)
 }
 
+func recordedSchedulerScope(ctx context.Context, conn *sql.Conn, item SchedulerItem) (string, string, error) {
+	var instance, branch string
+	if item.Status != "pending" {
+		return "", "", core.NewError(core.CodeProjectionDiverged, "scheduler item is not pending")
+	}
+	err := conn.QueryRowContext(ctx, `SELECT instance_id,branch_id FROM scheduler_items WHERE scheduler_item_id=? AND world_time=? AND phase_id=? AND declared_priority=? AND status='pending' AND payload=?`, item.SchedulerItemID, item.WorldTime, item.PhaseID, item.DeclaredPriority, item.Payload).Scan(&instance, &branch)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", core.NewError(core.CodeProjectionDiverged, "scheduler input differs from recorded queue")
+	}
+	return instance, branch, err
+}
+
 func (s *Store) commitScheduledMutationForBranch(ctx context.Context, tx *immediateTx, item SchedulerItem, payload scheduledPayload, mutation scheduledMutation, instanceID, branchID string) error {
+	// A handler's requested destination must match the persisted queue owner.
+	// Check before any journal, Event, projection or queue-state mutation.
+	var matches int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE scheduler_item_id=? AND instance_id=? AND branch_id=? AND world_time=? AND phase_id=? AND declared_priority=? AND status='pending' AND payload=?`, item.SchedulerItemID, instanceID, branchID, item.WorldTime, item.PhaseID, item.DeclaredPriority, item.Payload).Scan(&matches); err != nil {
+		return err
+	}
+	if matches != 1 || item.Status != "pending" {
+		return core.NewError(core.CodeProjectionDiverged, "scheduled commit differs from persisted queue scope or content")
+	}
 	var head int64
 	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&head); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "read scheduler branch head", err)

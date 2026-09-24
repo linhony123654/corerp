@@ -14,6 +14,9 @@ import (
 // due scheduler boundary. Check instants, not lexical RFC3339 strings: callers
 // may express the same instant with different UTC offsets.
 func ensureCohortTransitionChronology(ctx context.Context, conn *sql.Conn, instanceID, branchID, worldTime string) error {
+	if err := requireStudioWriteRules(ctx, conn, instanceID, branchID); err != nil {
+		return err
+	}
 	requested, err := time.Parse(time.RFC3339, worldTime)
 	if err != nil {
 		return core.WrapError(core.CodeInvalidArgument, "invalid Cohort transition world time", err)

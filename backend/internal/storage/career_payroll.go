@@ -12,12 +12,28 @@ import (
 const careerPayrollPhase = "career_daily_payroll"
 
 func queueCareerPayrollItem(ctx context.Context, conn *sql.Conn, subject string, day, minute int, kind string) error {
+	// Follow immutable ownership instead of assigning every future payroll to M2.
+	var instanceID, branchID string
+	var scopeQuery string
+	switch kind {
+	case "career_terms_effective":
+		scopeQuery = `SELECT instance_id,branch_id FROM events WHERE event_id=? AND event_type='RPCareerFactRecorded' AND json_extract(payload,'$.employment.contract_id') IS NOT NULL`
+	case "career_wage_accrue", "career_wage_pay":
+		scopeQuery = `SELECT e.instance_id,e.branch_id FROM employment_contracts c JOIN events e ON e.event_id=c.definition_event_id WHERE c.contract_id=?`
+	case "career_wage_retry":
+		scopeQuery = `SELECT e.instance_id,e.branch_id FROM wage_obligations w JOIN employment_contracts c ON c.contract_id=w.contract_id JOIN events e ON e.event_id=c.definition_event_id WHERE w.obligation_id=?`
+	default:
+		return core.NewError(core.CodeInvalidArgument, "unsupported career payroll queue kind")
+	}
+	if err := conn.QueryRowContext(ctx, scopeQuery, subject).Scan(&instanceID, &branchID); err != nil {
+		return classifyMissing(err, "career queue source")
+	}
 	payload, err := core.CanonicalJSON(scheduledPayload{Kind: kind, Day: day, SubjectID: subject})
 	if err != nil {
 		return err
 	}
 	id := fmt.Sprintf("%s_%s_%d", kind, subject, day)
-	_, err = conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id,instance_id,branch_id,world_time,phase_id,declared_priority,status,payload) VALUES (?,?,?,?,?,0,'pending',?)`, id, M2DemoInstanceID, M2DemoBranchID, careerTime(day, 0, minute), careerPayrollPhase, string(payload))
+	_, err = conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id,instance_id,branch_id,world_time,phase_id,declared_priority,status,payload) VALUES (?,?,?,?,?,0,'pending',?)`, id, instanceID, branchID, careerTime(day, 0, minute), careerPayrollPhase, string(payload))
 	return err
 }
 
@@ -29,6 +45,10 @@ func queueCareerPayroll(ctx context.Context, conn *sql.Conn, contractID string, 
 }
 
 func (s *Store) executeCareerPayroll(ctx context.Context, tx *immediateTx, item SchedulerItem) error {
+	instanceID, branchID, err := recordedSchedulerScope(ctx, tx.conn, item)
+	if err != nil {
+		return err
+	}
 	var payload scheduledPayload
 	if err := json.Unmarshal([]byte(item.Payload), &payload); err != nil {
 		return err
@@ -62,7 +82,7 @@ func (s *Store) executeCareerPayroll(ctx context.Context, tx *immediateTx, item 
 	}
 	var status, employerCash, employeeCash, currency string
 	var starts int
-	if err := tx.conn.QueryRowContext(ctx, `SELECT c.status,c.starts_on_day,c.employer_account_id,c.employee_account_id,c.currency_id FROM employment_contracts c JOIN events e ON e.event_id=c.definition_event_id WHERE c.contract_id=? AND e.instance_id=? AND e.branch_id=? AND json_extract(e.payload,'$.employment.contract_id')=c.contract_id`, contractID, M2DemoInstanceID, M2DemoBranchID).Scan(&status, &starts, &employerCash, &employeeCash, &currency); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT c.status,c.starts_on_day,c.employer_account_id,c.employee_account_id,c.currency_id FROM employment_contracts c JOIN events e ON e.event_id=c.definition_event_id WHERE c.contract_id=? AND e.instance_id=? AND e.branch_id=? AND json_extract(e.payload,'$.employment.contract_id')=c.contract_id`, contractID, instanceID, branchID).Scan(&status, &starts, &employerCash, &employeeCash, &currency); err != nil {
 		return classifyMissing(err, "scoped career payroll contract")
 	}
 	ledger, err := readObligationLedger(ctx, tx.conn, "wage", contractID)
@@ -70,7 +90,7 @@ func (s *Store) executeCareerPayroll(ctx context.Context, tx *immediateTx, item 
 		return err
 	}
 	for _, id := range []string{employerCash, employeeCash, ledger.ExpenseAccountID, ledger.PayableAccountID, ledger.ReceivableAccountID, ledger.IncomeAccountID} {
-		if err := verifyM2AccountProjection(ctx, tx.conn, id, currency); err != nil {
+		if err := verifyScopedAccountProjection(ctx, tx.conn, instanceID, branchID, id, currency); err != nil {
 			return err
 		}
 	}
@@ -189,7 +209,7 @@ func (s *Store) executeCareerPayroll(ctx context.Context, tx *immediateTx, item 
 		}
 	}
 	mutation.Private = true
-	if err := s.commitScheduledMutationForBranch(ctx, tx, item, payload, mutation, M2DemoInstanceID, M2DemoBranchID); err != nil {
+	if err := s.commitScheduledMutationForBranch(ctx, tx, item, payload, mutation, instanceID, branchID); err != nil {
 		return err
 	}
 	if s.beforeCommit != nil {

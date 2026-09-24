@@ -65,11 +65,15 @@ func (s *Store) RaiseCareerWage(ctx context.Context, r core.CareerRaiseRequest) 
 }
 
 func (s *Store) executeCareerTermActivation(ctx context.Context, tx *immediateTx, item SchedulerItem, payload scheduledPayload) error {
+	instanceID, branchID, scopeErr := recordedSchedulerScope(ctx, tx.conn, item)
+	if scopeErr != nil {
+		return scopeErr
+	}
 	if payload.Day < 1 || item.WorldTime != careerTime(payload.Day, 0, 0) {
 		return core.NewError(core.CodeProjectionDiverged, "career term activation time differs")
 	}
 	var raw string
-	if err := tx.conn.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded'`, payload.SubjectID, M2DemoInstanceID, M2DemoBranchID).Scan(&raw); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded'`, payload.SubjectID, instanceID, branchID).Scan(&raw); err != nil {
 		return classifyMissing(err, "career term source")
 	}
 	var fact CareerFact
@@ -95,10 +99,10 @@ func (s *Store) executeCareerTermActivation(ctx context.Context, tx *immediateTx
 	if !initial {
 		previousSource = fact.EmploymentChange.PreviousTermsEventID
 	}
-	if err := tx.conn.QueryRowContext(ctx, `SELECT json_extract(payload,'$.employment.daily_wage_minor'),json_extract(payload,'$.employment.position_key') FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND json_extract(payload,'$.employment.contract_id')=?`, previousSource, M2DemoInstanceID, M2DemoBranchID, job.ContractID).Scan(&previous, &previousPosition); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT json_extract(payload,'$.employment.daily_wage_minor'),json_extract(payload,'$.employment.position_key') FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND json_extract(payload,'$.employment.contract_id')=?`, previousSource, instanceID, branchID, job.ContractID).Scan(&previous, &previousPosition); err != nil {
 		return classifyMissing(err, "previous wage terms")
 	}
-	roleGrant, err := prepareCareerRoleGrant(ctx, tx.conn, *job)
+	roleGrant, err := prepareCareerRoleGrant(ctx, tx.conn, instanceID, branchID, *job)
 	if err != nil {
 		return err
 	}
@@ -106,7 +110,7 @@ func (s *Store) executeCareerTermActivation(ctx context.Context, tx *immediateTx
 	var cancelled []CareerCancelledSchedule
 	if exiting {
 		status = "ended"
-		cancelled, err = careerOwnedSchedules(ctx, tx.conn, core.CareerBinding{InstanceID: M2DemoInstanceID, BranchID: M2DemoBranchID}, *job, payload.Day, 0, fact.AdoptedWorkScheduleIDs)
+		cancelled, err = careerOwnedSchedules(ctx, tx.conn, core.CareerBinding{InstanceID: instanceID, BranchID: branchID}, *job, payload.Day, 0, fact.AdoptedWorkScheduleIDs)
 		if err != nil {
 			return err
 		}
@@ -128,16 +132,16 @@ func (s *Store) executeCareerTermActivation(ctx context.Context, tx *immediateTx
 			if err := execAgentOne(ctx, conn, "cancel ended employment work", `UPDATE agent_schedule_entries SET status='cancelled' WHERE schedule_id=? AND agent_id=? AND status='active'`, schedule.ScheduleID, job.EmployeeID); err != nil {
 				return err
 			}
-			if err := execAgentOne(ctx, conn, "cancel ended employment schedule item", `UPDATE scheduler_items SET status='cancelled' WHERE scheduler_item_id=? AND instance_id=? AND branch_id=? AND status='pending'`, schedule.SchedulerItemID, M2DemoInstanceID, M2DemoBranchID); err != nil {
+			if err := execAgentOne(ctx, conn, "cancel ended employment schedule item", `UPDATE scheduler_items SET status='cancelled' WHERE scheduler_item_id=? AND instance_id=? AND branch_id=? AND status='pending'`, schedule.SchedulerItemID, instanceID, branchID); err != nil {
 				return err
 			}
 		}
 		if roleGrant != nil {
-			return applyCareerRoleGrant(ctx, conn, M2DemoInstanceID, M2DemoBranchID, eventID, *roleGrant)
+			return applyCareerRoleGrant(ctx, conn, instanceID, branchID, eventID, *roleGrant)
 		}
 		return nil
 	}}
-	if err := s.commitScheduledMutationForBranch(ctx, tx, item, payload, mutation, M2DemoInstanceID, M2DemoBranchID); err != nil {
+	if err := s.commitScheduledMutationForBranch(ctx, tx, item, payload, mutation, instanceID, branchID); err != nil {
 		return err
 	}
 	if s.beforeCommit != nil {

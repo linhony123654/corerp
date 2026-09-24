@@ -43,7 +43,10 @@ const (
 	RPTurnSchemaVersion             = "corerp-rp1-turn-runs-025-2026-09-23"
 	RPStyleSchemaVersion            = "corerp-rp2-styles-026-2026-09-23"
 	RPRequestSchemaVersion          = "corerp-rp7-request-retirement-027-2026-09-24"
-	SchemaVersion                   = RPRequestSchemaVersion
+	StudioPackageSchemaVersion      = "corerp-rp8-package-content-028-2026-09-24"
+	StudioActivationSchemaVersion   = "corerp-rp8-package-activation-029-2026-09-24"
+	StudioReadySchemaVersion        = "corerp-rp8-world-ready-030-2026-09-24"
+	SchemaVersion                   = StudioReadySchemaVersion
 )
 
 const (
@@ -183,6 +186,9 @@ func (s *Store) migrate(ctx context.Context) error {
 		{RPTurnSchemaVersion, "025_rp_turn_runs.sql"},
 		{RPStyleSchemaVersion, "026_rp_styles.sql"},
 		{RPRequestSchemaVersion, "027_rp_request_retirement.sql"},
+		{StudioPackageSchemaVersion, "028_studio_package_content.sql"},
+		{StudioActivationSchemaVersion, "029_studio_package_activation.sql"},
+		{StudioReadySchemaVersion, "030_studio_world_ready.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

@@ -149,6 +149,14 @@ func resolveRPStyle(ctx context.Context, conn *sql.Conn, session RPSession, over
 	// The legacy session POV supplies an unconfigured default; explicit new
 	// world/session/scene layers then follow their documented precedence.
 	result.Profile.POV = session.POV
+	packages, err := readStudioActivePackages(ctx, conn, session.InstanceID, session.BranchID)
+	if err != nil {
+		return result, err
+	}
+	if packages != nil {
+		result.Profile = *packages.Narrative.Content.NarrativeStyle
+		result.Sources = append(result.Sources, packages.Lock.Narrative.InstallEventID)
+	}
 	var place string
 	if err := conn.QueryRowContext(ctx, `SELECT place_id FROM agent_positions WHERE agent_id=?`, session.ControlledEntityID).Scan(&place); err != nil {
 		return result, err

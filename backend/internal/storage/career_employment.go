@@ -40,7 +40,7 @@ func careerTime(day, hour, minute int) string {
 
 func readCareerEmploymentTerms(ctx context.Context, conn *sql.Conn, contractID string, day int) (CareerEmploymentFact, string, error) {
 	var raw, source string
-	err := conn.QueryRowContext(ctx, `SELECT e.payload,e.event_id FROM events e WHERE e.instance_id=? AND e.branch_id=? AND e.event_type='RPCareerFactRecorded' AND json_extract(e.payload,'$.employment.contract_id')=? AND json_extract(e.payload,'$.employment.effective_from_day')<=? ORDER BY e.event_sequence DESC LIMIT 1`, M2DemoInstanceID, M2DemoBranchID, contractID, day).Scan(&raw, &source)
+	err := conn.QueryRowContext(ctx, `SELECT e.payload,e.event_id FROM employment_contracts c JOIN events origin ON origin.event_id=c.definition_event_id JOIN events e ON e.instance_id=origin.instance_id AND e.branch_id=origin.branch_id WHERE c.contract_id=? AND e.event_type='RPCareerFactRecorded' AND json_extract(e.payload,'$.employment.contract_id')=c.contract_id AND json_extract(e.payload,'$.employment.effective_from_day')<=? ORDER BY e.event_sequence DESC LIMIT 1`, contractID, day).Scan(&raw, &source)
 	if err != nil {
 		return CareerEmploymentFact{}, "", classifyMissing(err, "effective career employment terms")
 	}

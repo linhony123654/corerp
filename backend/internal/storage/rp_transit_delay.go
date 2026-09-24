@@ -50,6 +50,10 @@ func readLatestRPTransitDelay(ctx context.Context, q replayQuerier, instance, br
 }
 
 func (s *Store) supersedeRPDelayedTravel(ctx context.Context, tx *immediateTx, item SchedulerItem, scheduled agentSchedulePayload, delay rpTransitDelay) (bool, error) {
+	instanceID, branchID, scopeErr := recordedSchedulerScope(ctx, tx.conn, item)
+	if scopeErr != nil {
+		return false, scopeErr
+	}
 	var later string
 	// Actual arrival time is not appointment chronology: an older delayed
 	// arrival must never supersede a newer original intent.
@@ -57,7 +61,7 @@ func (s *Store) supersedeRPDelayedTravel(ctx context.Context, tx *immediateTx, i
 		JOIN agent_schedule_entries a ON a.schedule_id=json_extract(e.payload,'$.schedule_id') AND a.agent_id=e.actor_id
 		WHERE e.instance_id=? AND e.branch_id=? AND e.event_type IN ('AgentMoved','AgentActivityStarted')
 		AND e.actor_id=? AND a.world_time>? AND a.world_time<=? AND e.world_time<=?
-		AND a.schedule_id<>? ORDER BY a.world_time DESC,e.event_sequence DESC LIMIT 1`, M2DemoInstanceID, M2DemoBranchID, scheduled.AgentID, delay.OriginalWorldTime, item.WorldTime, item.WorldTime, scheduled.ScheduleID).Scan(&later)
+		AND a.schedule_id<>? ORDER BY a.world_time DESC,e.event_sequence DESC LIMIT 1`, instanceID, branchID, scheduled.AgentID, delay.OriginalWorldTime, item.WorldTime, item.WorldTime, scheduled.ScheduleID).Scan(&later)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
@@ -75,7 +79,7 @@ func (s *Store) supersedeRPDelayedTravel(ctx context.Context, tx *immediateTx, i
 			AND q.instance_id=e.instance_id AND q.branch_id=e.branch_id
 			AND json_extract(e.payload,'$.original_world_time')>? AND json_extract(e.payload,'$.original_world_time')<=?
 			AND e.event_sequence=(SELECT MAX(n.event_sequence) FROM events n WHERE n.instance_id=e.instance_id AND n.branch_id=e.branch_id AND n.event_type='AgentTravelDelayed' AND json_extract(n.payload,'$.schedule_id')=a.schedule_id)
-			ORDER BY json_extract(e.payload,'$.original_world_time') DESC,e.event_sequence DESC LIMIT 1`, M2DemoInstanceID, M2DemoBranchID, scheduled.AgentID, scheduled.AgentID, delay.OriginalWorldTime, item.WorldTime).Scan(&laterDelayID, &raw, &laterScheduleID, &original, &place, &activity, &definition, &queueID, &queueTime, &phase, &priority, &payload)
+			ORDER BY json_extract(e.payload,'$.original_world_time') DESC,e.event_sequence DESC LIMIT 1`, instanceID, branchID, scheduled.AgentID, scheduled.AgentID, delay.OriginalWorldTime, item.WorldTime).Scan(&laterDelayID, &raw, &laterScheduleID, &original, &place, &activity, &definition, &queueID, &queueTime, &phase, &priority, &payload)
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
@@ -101,7 +105,7 @@ func (s *Store) supersedeRPDelayedTravel(ctx context.Context, tx *immediateTx, i
 	mutation := scheduledMutation{Private: true, EventType: "AgentTravelSuperseded", EventPayload: event, ApplyDomainRows: func(ctx context.Context, conn *sql.Conn, _ string, _ int64) error {
 		return execAgentOne(ctx, conn, "supersede delayed appointment", `UPDATE agent_schedule_entries SET status='cancelled' WHERE schedule_id=? AND scheduler_item_id=? AND status='active'`, scheduled.ScheduleID, item.SchedulerItemID)
 	}}
-	if err := s.commitScheduledMutationForBranch(ctx, tx, item, scheduledPayload{Day: scheduled.Day}, mutation, M2DemoInstanceID, M2DemoBranchID); err != nil {
+	if err := s.commitScheduledMutationForBranch(ctx, tx, item, scheduledPayload{Day: scheduled.Day}, mutation, instanceID, branchID); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -110,17 +114,21 @@ func (s *Store) supersedeRPDelayedTravel(ctx context.Context, tx *immediateTx, i
 // Original appointment time/identity is retained. Only its current execution
 // queue pointer changes; original and retry queue metadata are replayable facts.
 func (s *Store) delayRPAgentTransit(ctx context.Context, tx *immediateTx, item SchedulerItem, scheduled agentSchedulePayload, from, originalTime string) (bool, error) {
+	instanceID, branchID, scopeErr := recordedSchedulerScope(ctx, tx.conn, item)
+	if scopeErr != nil {
+		return false, scopeErr
+	}
 	if from == scheduled.ToPlaceID {
 		return false, nil
 	}
 	var configured int
-	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPTransitWorksDefined' AND json_extract(payload,'$.window.ends_at')>?`, M2DemoInstanceID, M2DemoBranchID, item.WorldTime).Scan(&configured); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPTransitWorksDefined' AND json_extract(payload,'$.window.ends_at')>?`, instanceID, branchID, item.WorldTime).Scan(&configured); err != nil {
 		return false, err
 	}
 	if configured == 0 {
 		return false, nil
 	}
-	arrival, err := readRPTransitArrival(ctx, tx.conn, M2DemoInstanceID, M2DemoBranchID, from, scheduled.ToPlaceID, item.WorldTime)
+	arrival, err := readRPTransitArrival(ctx, tx.conn, instanceID, branchID, from, scheduled.ToPlaceID, item.WorldTime)
 	if err != nil {
 		return false, err
 	}
@@ -129,7 +137,7 @@ func (s *Store) delayRPAgentTransit(ctx context.Context, tx *immediateTx, item S
 	if !arrival.Reachable || arrival.WorldTime == item.WorldTime {
 		return false, nil
 	}
-	hash, err := core.HashJSON([]string{M2DemoInstanceID, M2DemoBranchID, item.SchedulerItemID, arrival.WorldTime})
+	hash, err := core.HashJSON([]string{instanceID, branchID, item.SchedulerItemID, arrival.WorldTime})
 	if err != nil {
 		return false, err
 	}
@@ -151,12 +159,12 @@ func (s *Store) delayRPAgentTransit(ctx context.Context, tx *immediateTx, item S
 		return false, err
 	}
 	mutation := scheduledMutation{Private: true, EventType: "AgentTravelDelayed", EventPayload: delay, ApplyDomainRows: func(ctx context.Context, conn *sql.Conn, _ string, _ int64) error {
-		if err := execAgentOne(ctx, conn, "queue delayed arrival", `INSERT INTO scheduler_items(scheduler_item_id,instance_id,branch_id,world_time,phase_id,declared_priority,status,payload) VALUES (?,?,?,?,?,?,'pending',?)`, delay.Retry.ID, M2DemoInstanceID, M2DemoBranchID, delay.Retry.WorldTime, delay.Retry.PhaseID, delay.Retry.Priority, delay.Retry.Payload); err != nil {
+		if err := execAgentOne(ctx, conn, "queue delayed arrival", `INSERT INTO scheduler_items(scheduler_item_id,instance_id,branch_id,world_time,phase_id,declared_priority,status,payload) VALUES (?,?,?,?,?,?,'pending',?)`, delay.Retry.ID, instanceID, branchID, delay.Retry.WorldTime, delay.Retry.PhaseID, delay.Retry.Priority, delay.Retry.Payload); err != nil {
 			return err
 		}
 		return execAgentOne(ctx, conn, "bind delayed appointment queue", `UPDATE agent_schedule_entries SET scheduler_item_id=? WHERE schedule_id=? AND scheduler_item_id=? AND world_time=? AND status='active'`, delay.Retry.ID, delay.ScheduleID, delay.Previous.ID, originalTime)
 	}}
-	if err := s.commitScheduledMutationForBranch(ctx, tx, item, scheduledPayload{Day: scheduled.Day}, mutation, M2DemoInstanceID, M2DemoBranchID); err != nil {
+	if err := s.commitScheduledMutationForBranch(ctx, tx, item, scheduledPayload{Day: scheduled.Day}, mutation, instanceID, branchID); err != nil {
 		return false, err
 	}
 	return true, nil

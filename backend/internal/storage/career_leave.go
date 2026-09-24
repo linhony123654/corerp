@@ -179,7 +179,7 @@ func prepareCareerLeaveReview(ctx context.Context, conn *sql.Conn, b core.Career
 
 func careerApprovedLeave(ctx context.Context, conn *sql.Conn, contract string, day int) (string, error) {
 	var event string
-	err := conn.QueryRowContext(ctx, `SELECT event_id FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='leave' AND json_extract(payload,'$.leave.contract_id')=? AND json_extract(payload,'$.leave.status')='approved' AND json_extract(payload,'$.leave.start_day')<=? AND json_extract(payload,'$.leave.end_day')>? ORDER BY event_sequence DESC LIMIT 1`, M2DemoInstanceID, M2DemoBranchID, contract, day, day).Scan(&event)
+	err := conn.QueryRowContext(ctx, `SELECT e.event_id FROM employment_contracts c JOIN events origin ON origin.event_id=c.definition_event_id JOIN events e ON e.instance_id=origin.instance_id AND e.branch_id=origin.branch_id WHERE c.contract_id=? AND e.event_type='RPCareerFactRecorded' AND json_extract(e.payload,'$.kind')='leave' AND json_extract(e.payload,'$.leave.contract_id')=c.contract_id AND json_extract(e.payload,'$.leave.status')='approved' AND json_extract(e.payload,'$.leave.start_day')<=? AND json_extract(e.payload,'$.leave.end_day')>? ORDER BY e.event_sequence DESC LIMIT 1`, contract, day, day).Scan(&event)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}

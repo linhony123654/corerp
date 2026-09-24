@@ -958,12 +958,17 @@ func TestM2SplitWageZeroAndMultipleLatePayments(t *testing.T) {
 	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM m2_arrears_cases WHERE obligation_id = 'obligation_m2_wage_day_8' AND status = 'open'`, nil, 1)
 	// Test-only, posted transfer from existing landlord cash; no money is issued.
 	const itemID = "sched_m2_test_wage_bridge_day_8"
+	payload := scheduledPayload{Kind: "test_wage_bridge", Day: 8, SubjectID: m2EconomyContractID}
+	payloadJSON, err := core.CanonicalJSON(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tx, err := beginImmediate(ctx, store.db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id, instance_id, branch_id, world_time, phase_id, declared_priority, status, payload) VALUES (?, ?, ?, ?, ?, 0, 'pending', '{}')`, itemID, M2DemoInstanceID, M2DemoBranchID, m2WageTime(8, 7, 8), m2ServicePhase); err != nil {
+	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id, instance_id, branch_id, world_time, phase_id, declared_priority, status, payload) VALUES (?, ?, ?, ?, ?, 0, 'pending', ?)`, itemID, M2DemoInstanceID, M2DemoBranchID, m2WageTime(8, 7, 8), m2ServicePhase, string(payloadJSON)); err != nil {
 		t.Fatal(err)
 	}
 	from, err := m2EstateAccount(ctx, tx.conn, m2EconomyLandlordCash, -30)
@@ -977,8 +982,7 @@ func TestM2SplitWageZeroAndMultipleLatePayments(t *testing.T) {
 	if from.NewBalance < 0 {
 		t.Fatal("test donor has insufficient cash")
 	}
-	item := SchedulerItem{SchedulerItemID: itemID, WorldTime: m2WageTime(8, 7, 8), PhaseID: m2ServicePhase}
-	payload := scheduledPayload{Kind: "test_wage_bridge", Day: 8, SubjectID: m2EconomyContractID}
+	item := SchedulerItem{SchedulerItemID: itemID, WorldTime: m2WageTime(8, 7, 8), PhaseID: m2ServicePhase, Status: "pending", Payload: string(payloadJSON)}
 	mutation := scheduledMutation{EventType: "M2TestWageBridge", EventPayload: struct {
 		Amount int64 `json:"amount_minor"`
 	}{30}, Postings: []scheduledPosting{{m2EconomyLandlordCash, M2DemoCurrencyID, -30, "test wage funding"}, {m2EconomyEmployerCash, M2DemoCurrencyID, 30, "test wage funding"}}, Balances: []balanceMutation{from, to}}
@@ -1511,7 +1515,11 @@ func TestM2EstateDefersWhenDonorCashWasPostedAway(t *testing.T) {
 	defer tx.Rollback(ctx)
 	const itemID = "sched_m2_test_landlord_gift_day_30"
 	payload := scheduledPayload{Kind: "test_landlord_gift", Day: 30, SubjectID: "actor_m2_landlord"}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id, instance_id, branch_id, world_time, phase_id, declared_priority, status, payload) VALUES (?, ?, ?, ?, ?, 0, 'pending', '{}')`, itemID, M2DemoInstanceID, M2DemoBranchID, m2WageTime(30, 12, 0), m2EstateContributionPhase); err != nil {
+	payloadJSON, err := core.CanonicalJSON(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id, instance_id, branch_id, world_time, phase_id, declared_priority, status, payload) VALUES (?, ?, ?, ?, ?, 0, 'pending', ?)`, itemID, M2DemoInstanceID, M2DemoBranchID, m2WageTime(30, 12, 0), m2EstateContributionPhase, string(payloadJSON)); err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyM2AccountProjection(ctx, tx.conn, m2EconomyLandlordCash, M2DemoCurrencyID); err != nil {
@@ -1537,7 +1545,7 @@ func TestM2EstateDefersWhenDonorCashWasPostedAway(t *testing.T) {
 	}{gift},
 		Postings: []scheduledPosting{{m2EconomyLandlordCash, M2DemoCurrencyID, -gift, "test landlord gift"}, {M2DemoCohortAssetAccountID, M2DemoCurrencyID, gift, "test Cohort gift"}},
 		Balances: []balanceMutation{donorUpdate, cohortUpdate}}
-	if err := store.commitScheduledMutationForBranch(ctx, tx, SchedulerItem{SchedulerItemID: itemID, WorldTime: m2WageTime(30, 12, 0), PhaseID: m2EstateContributionPhase}, payload, mutation, M2DemoInstanceID, M2DemoBranchID); err != nil {
+	if err := store.commitScheduledMutationForBranch(ctx, tx, SchedulerItem{SchedulerItemID: itemID, WorldTime: m2WageTime(30, 12, 0), PhaseID: m2EstateContributionPhase, Status: "pending", Payload: string(payloadJSON)}, payload, mutation, M2DemoInstanceID, M2DemoBranchID); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {

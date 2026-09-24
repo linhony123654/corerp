@@ -19,17 +19,25 @@ type careerAggregateActivation struct {
 }
 
 func queueCareerAggregateExit(ctx context.Context, conn *sql.Conn, source string, day int) error {
+	var instanceID, branchID string
+	if err := conn.QueryRowContext(ctx, `SELECT instance_id,branch_id FROM events WHERE event_id=? AND event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='aggregate_exit_notice'`, source).Scan(&instanceID, &branchID); err != nil {
+		return classifyMissing(err, "aggregate exit source")
+	}
 	payload, err := core.CanonicalJSON(scheduledPayload{Kind: "career_aggregate_exit", SubjectID: source, Day: day})
 	if err != nil {
 		return err
 	}
-	_, err = conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id,instance_id,branch_id,world_time,phase_id,declared_priority,status,payload) VALUES (?,?,?,?,?,0,'pending',?)`, "career_aggregate_exit_"+source, M2DemoInstanceID, M2DemoBranchID, careerTime(day, 7, 2), careerPayrollPhase, string(payload))
+	_, err = conn.ExecContext(ctx, `INSERT INTO scheduler_items(scheduler_item_id,instance_id,branch_id,world_time,phase_id,declared_priority,status,payload) VALUES (?,?,?,?,?,0,'pending',?)`, "career_aggregate_exit_"+source, instanceID, branchID, careerTime(day, 7, 2), careerPayrollPhase, string(payload))
 	return err
 }
 
 func (s *Store) executeCareerAggregateExit(ctx context.Context, tx *immediateTx, item SchedulerItem, payload scheduledPayload) error {
+	instanceID, branchID, scopeErr := recordedSchedulerScope(ctx, tx.conn, item)
+	if scopeErr != nil {
+		return scopeErr
+	}
 	var raw string
-	if err := tx.conn.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded'`, payload.SubjectID, M2DemoInstanceID, M2DemoBranchID).Scan(&raw); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded'`, payload.SubjectID, instanceID, branchID).Scan(&raw); err != nil {
 		return err
 	}
 	var source CareerFact
@@ -49,7 +57,7 @@ func (s *Store) executeCareerAggregateExit(ctx context.Context, tx *immediateTx,
 	if completed != 1 {
 		return core.NewError(core.CodeProjectionDiverged, "aggregate final period has not settled")
 	}
-	rows, err := tx.conn.QueryContext(ctx, `SELECT s.schedule_id,s.scheduler_item_id FROM agent_schedule_entries s JOIN scheduler_items q ON q.scheduler_item_id=s.scheduler_item_id JOIN events d ON d.event_id=s.definition_event_id WHERE s.agent_id=? AND s.status='active' AND s.activity_code='work' AND s.world_time>=? AND q.status='pending' AND q.instance_id=? AND q.branch_id=? AND d.instance_id=q.instance_id AND d.branch_id=q.branch_id AND d.event_type='RPBackgroundMaterialized' AND json_extract(d.payload,'$.entity_id')=s.agent_id AND EXISTS (SELECT 1 FROM json_each(d.payload,'$.initial_schedule') owned WHERE json_extract(owned.value,'$.employment_contract_id')=? AND json_extract(owned.value,'$.world_time')=s.world_time AND json_extract(owned.value,'$.place_id')=s.place_id AND json_extract(owned.value,'$.activity_code')='work') ORDER BY s.world_time,s.schedule_id`, source.CandidateID, item.WorldTime, M2DemoInstanceID, M2DemoBranchID, n.ContractID)
+	rows, err := tx.conn.QueryContext(ctx, `SELECT s.schedule_id,s.scheduler_item_id FROM agent_schedule_entries s JOIN scheduler_items q ON q.scheduler_item_id=s.scheduler_item_id JOIN events d ON d.event_id=s.definition_event_id WHERE s.agent_id=? AND s.status='active' AND s.activity_code='work' AND s.world_time>=? AND q.status='pending' AND q.instance_id=? AND q.branch_id=? AND d.instance_id=q.instance_id AND d.branch_id=q.branch_id AND d.event_type='RPBackgroundMaterialized' AND json_extract(d.payload,'$.entity_id')=s.agent_id AND EXISTS (SELECT 1 FROM json_each(d.payload,'$.initial_schedule') owned WHERE json_extract(owned.value,'$.employment_contract_id')=? AND json_extract(owned.value,'$.world_time')=s.world_time AND json_extract(owned.value,'$.place_id')=s.place_id AND json_extract(owned.value,'$.activity_code')='work') ORDER BY s.world_time,s.schedule_id`, source.CandidateID, item.WorldTime, instanceID, branchID, n.ContractID)
 	if err != nil {
 		return err
 	}
@@ -75,13 +83,13 @@ func (s *Store) executeCareerAggregateExit(ctx context.Context, tx *immediateTx,
 			if err := execAgentOne(ctx, conn, "cancel sourced aggregate work", `UPDATE agent_schedule_entries SET status='cancelled' WHERE schedule_id=? AND agent_id=? AND status='active'`, schedule.ScheduleID, source.CandidateID); err != nil {
 				return err
 			}
-			if err := execAgentOne(ctx, conn, "cancel sourced aggregate work task", `UPDATE scheduler_items SET status='cancelled' WHERE scheduler_item_id=? AND instance_id=? AND branch_id=? AND status='pending'`, schedule.SchedulerItemID, M2DemoInstanceID, M2DemoBranchID); err != nil {
+			if err := execAgentOne(ctx, conn, "cancel sourced aggregate work task", `UPDATE scheduler_items SET status='cancelled' WHERE scheduler_item_id=? AND instance_id=? AND branch_id=? AND status='pending'`, schedule.SchedulerItemID, instanceID, branchID); err != nil {
 				return err
 			}
 		}
 		return nil
 	}}
-	if err := s.commitScheduledMutationForBranch(ctx, tx, item, payload, mutation, M2DemoInstanceID, M2DemoBranchID); err != nil {
+	if err := s.commitScheduledMutationForBranch(ctx, tx, item, payload, mutation, instanceID, branchID); err != nil {
 		return err
 	}
 	if s.beforeCommit != nil {

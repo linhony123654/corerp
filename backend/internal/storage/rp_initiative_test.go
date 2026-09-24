@@ -5,6 +5,7 @@ import (
 	"corerp.local/backend/internal/core"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -22,11 +23,9 @@ func TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			ctx := context.Background()
-			s, err := Open(ctx, filepath.Join(t.TempDir(), "initiative.db"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer s.Close()
+			path := filepath.Join(t.TempDir(), "initiative.db")
+			s := openBootstrappedStore(t, ctx, path)
+			defer func() { s.Close() }()
 			session, _, view := newRPWaitTestSession(t, ctx, s)
 			wait, err := s.WaitRP(ctx, core.RPWaitRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID, ExpectedCursor: view.ObservationCursor, TargetWorldTime: "2026-09-22T03:00:00Z", Budget: 10, IdempotencyKey: "initiative"})
 			if err != nil {
@@ -43,6 +42,20 @@ func TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic(t *testing.T) {
 			if err != nil || out.Action != scenario.wantAction || out.Status != scenario.wantStatus {
 				t.Fatalf("result %+v %v", out, err)
 			}
+			wantReason := map[string]string{"illegal": "destination_not_reachable", "unavailable": "provider_failure"}[scenario.name]
+			if out.ReasonCode != wantReason {
+				t.Fatalf("reason %q want %q", out.ReasonCode, wantReason)
+			}
+			var recorded string
+			if err := s.db.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=?`, out.EventID).Scan(&recorded); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(recorded, "private provider failure") || strings.Contains(recorded, "invented-place") {
+				t.Fatal("unsafe rejected candidate/provider detail persisted")
+			}
+			if wantReason == "" && strings.Contains(recorded, `"reason_code"`) {
+				t.Fatal("empty reason changed legacy payload encoding")
+			}
 			assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_utterances`, nil, 0)
 			if scenario.wantAction == "leave" {
 				assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM agent_positions WHERE agent_id=? AND place_id='place_m2_home_ada'`, []any{M2RPNPCID}, 1)
@@ -50,11 +63,44 @@ func TestRPInitiativeMovementQuietAndProviderFailureRemainAtomic(t *testing.T) {
 				assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM outbox WHERE event_id=?`, []any{out.EventID}, 0)
 			}
 			retry, err := s.RunRPInitiative(ctx, r, nil)
-			if err != nil || !retry.Replayed || retry.EventID != out.EventID {
+			if err != nil || !retry.Replayed || retry.EventID != out.EventID || retry.ReasonCode != wantReason {
 				t.Fatalf("retry %+v %v", retry, err)
 			}
 			if diff, err := s.CompareProjections(ctx, M2DemoInstanceID, M2DemoBranchID); err != nil || len(diff) > 0 {
 				t.Fatalf("projection mismatch %v %v", diff, err)
+			}
+			_, err = s.ConfigureStudioAccessLocal(ctx, StudioAccessRequest{Explain: true, Binding: core.CareerBinding{PrincipalID: "principal_operator", InstanceID: M2DemoInstanceID, BranchID: M2DemoBranchID, ExpectedHead: out.EventSequence, IdempotencyKey: "initiative-inspector"}, TargetPrincipalID: "principal_creator", Status: "active"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			query := StudioExplanationRequest{PrincipalID: "principal_creator", InstanceID: M2DemoInstanceID, BranchID: M2DemoBranchID, EventID: out.EventID}
+			explained, err := s.ReadStudioExplanation(ctx, query)
+			if err != nil || explained.CommittedDecision == nil {
+				t.Fatal("initiative explanation missing", err)
+			}
+			c := explained.CommittedDecision
+			wantExplanationReason := wantReason
+			if wantExplanationReason == "" {
+				wantExplanationReason = "not_recorded"
+			}
+			if c.SourceKind != "npc_initiative_command" || c.TriggerEventID != wait.EventID || c.Action != scenario.wantAction || c.Status != scenario.wantStatus || c.ReasonCode != wantExplanationReason {
+				t.Fatal(c)
+			}
+			if err := s.RebuildProjections(ctx, M2DemoInstanceID, M2DemoBranchID); err != nil {
+				t.Fatal(err)
+			}
+			s.Close()
+			s, err = Open(ctx, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			recovered, err := s.ReadStudioExplanation(ctx, query)
+			if err != nil || recovered.CommittedDecision == nil || *recovered.CommittedDecision != *c {
+				t.Fatal("initiative lineage changed after recovery", err)
+			}
+			retry, err = s.RunRPInitiative(ctx, r, nil)
+			if err != nil || retry.ReasonCode != wantReason || !retry.Replayed {
+				t.Fatal("reason lost on reopened retry", retry, err)
 			}
 		})
 	}

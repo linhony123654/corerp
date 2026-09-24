@@ -17,15 +17,15 @@ type CareerRoleGrant struct {
 	Status         string `json:"status"`
 }
 
-func prepareCareerRoleGrant(ctx context.Context, conn *sql.Conn, job CareerEmploymentFact) (*CareerRoleGrant, error) {
+func prepareCareerRoleGrant(ctx context.Context, conn *sql.Conn, instanceID, branchID string, job CareerEmploymentFact) (*CareerRoleGrant, error) {
 	if len(job.Capabilities) > 1 || (len(job.Capabilities) == 1 && job.Capabilities[0] != core.CareerPositionManageCapability) {
 		return nil, core.NewError(core.CodeProjectionDiverged, "unsupported position authority")
 	}
 	var principal string
-	if err := conn.QueryRowContext(ctx, `SELECT principal_id FROM agent_profiles WHERE agent_id=? AND instance_id=? AND branch_id=?`, job.EmployeeID, M2DemoInstanceID, M2DemoBranchID).Scan(&principal); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT principal_id FROM agent_profiles WHERE agent_id=? AND instance_id=? AND branch_id=?`, job.EmployeeID, instanceID, branchID).Scan(&principal); err != nil {
 		return nil, classifyMissing(err, "position principal")
 	}
-	hash, err := core.HashJSON([]string{M2DemoInstanceID, M2DemoBranchID, principal, job.OrganizationID})
+	hash, err := core.HashJSON([]string{instanceID, branchID, principal, job.OrganizationID})
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func prepareCareerRoleGrant(ctx context.Context, conn *sql.Conn, job CareerEmplo
 		grant.Status = "active"
 	}
 	var exists int
-	if err := conn.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM capability_grants WHERE grant_id=?) + (SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='CareerEmploymentTermsActivated' AND json_extract(payload,'$.role_grant.grant_id')=?)`, grant.GrantID, M2DemoInstanceID, M2DemoBranchID, grant.GrantID).Scan(&exists); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM capability_grants WHERE grant_id=?) + (SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='CareerEmploymentTermsActivated' AND json_extract(payload,'$.role_grant.grant_id')=?)`, grant.GrantID, instanceID, branchID, grant.GrantID).Scan(&exists); err != nil {
 		return nil, err
 	}
 	if grant.Status == "revoked" && exists == 0 {

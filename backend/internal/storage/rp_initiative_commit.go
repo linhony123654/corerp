@@ -11,6 +11,7 @@ import (
 )
 
 type RPInitiativeResult struct {
+	ReasonCode    string `json:"reason_code,omitempty"`
 	EventID       string `json:"event_id,omitempty"`
 	EventSequence int64  `json:"event_sequence"`
 	NPCEntityID   string `json:"npc_entity_id"`
@@ -22,6 +23,7 @@ type RPInitiativeResult struct {
 // Keep accepted speech at the usual top-level fields. CanonicalJSON deliberately
 // does not flatten embedded Go structs; authority payloads use explicit fields.
 type rpInitiativeEvent struct {
+	ReasonCode      string                  `json:"reason_code,omitempty"`
 	SessionID       string                  `json:"session_id"`
 	TurnID          string                  `json:"turn_id,omitempty"`
 	UtteranceID     string                  `json:"utterance_id,omitempty"`
@@ -73,6 +75,7 @@ func readCommittedRPInitiative(ctx context.Context, conn *sql.Conn, r core.RPIni
 		return out, false, core.NewError(core.CodeProjectionDiverged, "initiative identity differs from committed request")
 	}
 	out.NPCEntityID, out.Action, out.Status, out.Replayed = event.NPCEntityID, event.Action, event.Status, true
+	out.ReasonCode = event.ReasonCode
 	return out, true, nil
 }
 
@@ -96,6 +99,13 @@ func rpInitiativeEligible(ctx context.Context, conn *sql.Conn, input core.RPDeci
 	}
 	if err := conn.QueryRowContext(ctx, `SELECT action_budget_per_day FROM agent_profiles WHERE agent_id=?`, input.NPCEntityID).Scan(&budget); err != nil {
 		return false, err
+	}
+	packages, err := readStudioActivePackages(ctx, conn, input.InstanceID, input.BranchID)
+	if err != nil {
+		return false, err
+	}
+	if packages != nil {
+		budget = packages.System.Content.SystemRules.NPCDailyActionBudget
 	}
 	return recent == 0 && daily < budget, nil
 }
@@ -137,14 +147,20 @@ func (s *Store) RunRPInitiative(ctx context.Context, r core.RPInitiativeRequest,
 		if err != nil {
 			return empty, err
 		}
-		return s.commitRPInitiative(ctx, r, key, inputHash, core.RPDecisionProposal{Action: "silence"}, "opportunity_quiet")
+		return s.commitRPInitiative(ctx, r, key, inputHash, core.RPDecisionProposal{Action: "silence"}, "opportunity_quiet", "contact_opportunity_suppressed")
 	}
 	if provider == nil {
 		return empty, core.NewError(core.CodeInvalidArgument, "initiative requires decision provider")
 	}
 	proposal, providerErr := provider.Propose(ctx, input)
 	status := "validated"
-	if providerErr != nil || core.ValidateRPDecisionProposal(input, proposal) != nil {
+	reason := ""
+	if providerErr != nil {
+		reason = "provider_failure"
+	} else {
+		reason, _ = core.ValidateRPDecisionProposalEvidence(input, proposal)
+	}
+	if reason != "" {
 		proposal = core.RPDecisionProposal{Action: "silence"}
 		status = "provider_fallback"
 	}
@@ -152,10 +168,10 @@ func (s *Store) RunRPInitiative(ctx context.Context, r core.RPInitiativeRequest,
 	if err != nil {
 		return empty, err
 	}
-	return s.commitRPInitiative(ctx, r, key, inputHash, proposal, status)
+	return s.commitRPInitiative(ctx, r, key, inputHash, proposal, status, reason)
 }
 
-func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeRequest, key, inputHash string, proposal core.RPDecisionProposal, status string) (RPInitiativeResult, error) {
+func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeRequest, key, inputHash string, proposal core.RPDecisionProposal, status, reason string) (RPInitiativeResult, error) {
 	empty := RPInitiativeResult{}
 	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
@@ -201,7 +217,7 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 	suffix := key[7:]
 	commandID, attemptID, batchID, eventID := "cmd_rp_initiative_"+suffix, "attempt_rp_initiative_"+suffix, "batch_rp_initiative_"+suffix, "event_rp_initiative_"+suffix
 	eventType := "RPNPCDecisionRecorded"
-	event := rpInitiativeEvent{SessionID: r.SessionID, NPCEntityID: r.NPCEntityID, TriggerEventID: r.TriggerEventID, InputHash: inputHash, Proposal: proposal, Action: proposal.Action, Status: status}
+	event := rpInitiativeEvent{ReasonCode: reason, SessionID: r.SessionID, NPCEntityID: r.NPCEntityID, TriggerEventID: r.TriggerEventID, InputHash: inputHash, Proposal: proposal, Action: proposal.Action, Status: status}
 	if proposal.Action == "respond" {
 		eventType = "RPSpeechAccepted"
 		listeners, err := rpCoLocatedEntityIDs(ctx, tx.conn, input.InstanceID, input.BranchID, input.PlaceID, r.NPCEntityID)
@@ -300,5 +316,5 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 	if err := tx.Commit(ctx); err != nil {
 		return empty, err
 	}
-	return RPInitiativeResult{EventID: eventID, EventSequence: sequence, NPCEntityID: r.NPCEntityID, Action: proposal.Action, Status: status}, nil
+	return RPInitiativeResult{ReasonCode: reason, EventID: eventID, EventSequence: sequence, NPCEntityID: r.NPCEntityID, Action: proposal.Action, Status: status}, nil
 }

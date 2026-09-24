@@ -48,23 +48,65 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 	if err := command.Validate(); err != nil {
 		return core.CohortTransitionResult{}, err
 	}
-	requestHash, err := core.MaterializeCohortRequestHash(command)
-	if err != nil {
-		return core.CohortTransitionResult{}, err
-	}
 	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "begin Cohort materialization", err)
 	}
 	defer tx.Rollback(ctx)
+	result, err := s.materializeCohortInTransaction(ctx, tx.conn, command, func() (string, error) {
+		return authorizeCohortMaterialization(ctx, tx.conn, command)
+	})
+	if err != nil || result.Replayed {
+		return result, err
+	}
+	if s.beforeCommit != nil {
+		if err := s.beforeCommit(); err != nil {
+			return core.CohortTransitionResult{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "commit Cohort materialization", err)
+	}
+	return result, nil
+}
 
-	if result, found, err := lookupCohortCommandResult(ctx, tx.conn, command.InstanceID, command.BranchID, core.MaterializeCohortCommandType, command.IdempotencyKey, requestHash); err != nil {
+func authorizeCohortMaterialization(ctx context.Context, conn *sql.Conn, command core.MaterializeCohortCommand) (string, error) {
+	var grantID string
+	if err := conn.QueryRowContext(ctx, `
+		SELECT g.grant_id FROM capability_grants g JOIN principals p ON p.principal_id = g.principal_id
+		WHERE g.principal_id = ? AND p.status = 'active' AND g.capability_id = ?
+		  AND g.instance_id = ? AND g.branch_id = ? AND g.subject_id IN (?, '*') AND g.status = 'active'
+		ORDER BY CASE WHEN g.subject_id = ? THEN 0 ELSE 1 END, g.grant_id LIMIT 1`,
+		command.PrincipalID, command.CapabilityID, command.InstanceID, command.BranchID,
+		command.SourceCohortID, command.SourceCohortID,
+	).Scan(&grantID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", core.NewError(core.CodeUnauthorized, "principal lacks Cohort materialization scope")
+		}
+		return "", core.WrapError(core.CodeStorageFailure, "read Cohort materialization grant", err)
+	}
+
+	return fmt.Sprintf(`{"authorization":"scoped-capability","grant_id":%q}`, grantID), nil
+}
+
+// The caller owns the transaction and supplies the authority appropriate to its
+// workflow. Public materialization still checks its original scoped grant;
+// Studio genesis binds only declared participants to a freshly authorized source.
+func (s *Store) materializeCohortInTransaction(ctx context.Context, conn *sql.Conn, command core.MaterializeCohortCommand, authorize func() (string, error)) (core.CohortTransitionResult, error) {
+	if err := command.Validate(); err != nil {
+		return core.CohortTransitionResult{}, err
+	}
+	requestHash, err := core.MaterializeCohortRequestHash(command)
+	if err != nil {
+		return core.CohortTransitionResult{}, err
+	}
+	if result, found, err := lookupCohortCommandResult(ctx, conn, command.InstanceID, command.BranchID, core.MaterializeCohortCommandType, command.IdempotencyKey, requestHash); err != nil {
 		return core.CohortTransitionResult{}, err
 	} else if found {
 		return result, nil
 	}
 	var materializeCommandID, materializationHash string
-	err = tx.conn.QueryRowContext(ctx, `
+	err = conn.QueryRowContext(ctx, `
 		SELECT m.materialize_command_id, c.request_hash
 		FROM cohort_materializations m JOIN commands c ON c.command_id = m.materialize_command_id
 		WHERE m.materialization_id = ?`, command.MaterializationID,
@@ -73,7 +115,7 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 		if materializationHash != requestHash {
 			return core.CohortTransitionResult{}, core.NewError(core.CodeMaterializationConflict, "materialization_id was already used with a different request")
 		}
-		result, err := loadCohortTransitionResult(ctx, tx.conn, materializeCommandID, command.MaterializationID)
+		result, err := loadCohortTransitionResult(ctx, conn, materializeCommandID, command.MaterializationID)
 		if err != nil {
 			return core.CohortTransitionResult{}, err
 		}
@@ -85,33 +127,23 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 	}
 
 	var head int64
-	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, command.InstanceID, command.BranchID).Scan(&head); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, command.InstanceID, command.BranchID).Scan(&head); err != nil {
 		return core.CohortTransitionResult{}, classifyMissing(err, "materialization branch")
 	}
 	if head != command.ExpectedHead {
 		return core.CohortTransitionResult{}, core.NewError(core.CodeBranchConflict, fmt.Sprintf("expected head %d, current head %d", command.ExpectedHead, head))
 	}
-	if err := ensureCohortTransitionChronology(ctx, tx.conn, command.InstanceID, command.BranchID, command.WorldTime); err != nil {
+	if err := ensureCohortTransitionChronology(ctx, conn, command.InstanceID, command.BranchID, command.WorldTime); err != nil {
 		return core.CohortTransitionResult{}, err
 	}
 	sequence := head + 1
 	var epochID string
-	if err := tx.conn.QueryRowContext(ctx, `SELECT epoch_id FROM rule_epochs WHERE instance_id = ? AND branch_id = ? AND start_sequence <= ? AND (end_sequence IS NULL OR ? < end_sequence)`, command.InstanceID, command.BranchID, sequence, sequence).Scan(&epochID); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT epoch_id FROM rule_epochs WHERE instance_id = ? AND branch_id = ? AND start_sequence <= ? AND (end_sequence IS NULL OR ? < end_sequence)`, command.InstanceID, command.BranchID, sequence, sequence).Scan(&epochID); err != nil {
 		return core.CohortTransitionResult{}, classifyMissing(err, "materialization Rule Epoch")
 	}
-	var grantID string
-	if err := tx.conn.QueryRowContext(ctx, `
-		SELECT g.grant_id FROM capability_grants g JOIN principals p ON p.principal_id = g.principal_id
-		WHERE g.principal_id = ? AND p.status = 'active' AND g.capability_id = ?
-		  AND g.instance_id = ? AND g.branch_id = ? AND g.subject_id IN (?, '*') AND g.status = 'active'
-		ORDER BY CASE WHEN g.subject_id = ? THEN 0 ELSE 1 END, g.grant_id LIMIT 1`,
-		command.PrincipalID, command.CapabilityID, command.InstanceID, command.BranchID,
-		command.SourceCohortID, command.SourceCohortID,
-	).Scan(&grantID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return core.CohortTransitionResult{}, core.NewError(core.CodeUnauthorized, "principal lacks Cohort materialization scope")
-		}
-		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "read Cohort materialization grant", err)
+	policyDocument, err := authorize()
+	if err != nil {
+		return core.CohortTransitionResult{}, err
 	}
 
 	type cohortProjection struct {
@@ -121,7 +153,7 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 		currencyID, skuID, algorithmVersion, status                             string
 	}
 	var cohort cohortProjection
-	if err := tx.conn.QueryRowContext(ctx, `
+	if err := conn.QueryRowContext(ctx, `
 		SELECT c.population_count, c.projection_version,
 		       c.asset_account_id, ab.balance_minor, ab.projection_version,
 		       c.receivable_account_id, rb.balance_minor, rb.projection_version,
@@ -157,22 +189,22 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 		newPopulation < 0 || newAsset < 0 || newReceivable < 0 || newLiability > 0 || newInventory < 0 {
 		return core.CohortTransitionResult{}, core.NewError(core.CodeConservationFailed, "Cohort allocation exceeds a conserved balance")
 	}
-	wageSplit, err := planM2WageParticipation(ctx, tx.conn, command, cohort.population, newPopulation)
+	wageSplit, err := planM2WageParticipation(ctx, conn, command, cohort.population, newPopulation)
 	if err != nil {
 		return core.CohortTransitionResult{}, err
 	}
 	var wageTransfers []m2WageClaimTransition
 	if wageSplit != nil {
-		wageTransfers, err = planM2WageClaimSlotTransfer(ctx, tx.conn, command)
+		wageTransfers, err = planM2WageClaimSlotTransfer(ctx, conn, command)
 		if err != nil {
 			return core.CohortTransitionResult{}, err
 		}
 	}
-	if err := ensureM2ContractsPermitPopulationTransition(ctx, tx.conn, command.SourceCohortID, command.WorldTime, newPopulation, wageSplit != nil, ""); err != nil {
+	if err := ensureM2ContractsPermitPopulationTransition(ctx, conn, command.SourceCohortID, command.WorldTime, newPopulation, wageSplit != nil, ""); err != nil {
 		return core.CohortTransitionResult{}, err
 	}
 	var entityCount int
-	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM materialized_entities WHERE entity_id = ?`, command.EntityID).Scan(&entityCount); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM materialized_entities WHERE entity_id = ?`, command.EntityID).Scan(&entityCount); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "check stable entity identity", err)
 	}
 	if entityCount != 0 {
@@ -180,7 +212,7 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 	}
 	var claimShares []m2ClaimShare
 	if wageSplit == nil {
-		claimShares, err = planM2ClaimAllocation(ctx, tx.conn, command.SourceCohortID, cohort.population, command.PopulationCount, command.ReceivableMinor)
+		claimShares, err = planM2ClaimAllocation(ctx, conn, command.SourceCohortID, cohort.population, command.PopulationCount, command.ReceivableMinor)
 		if err != nil {
 			return core.CohortTransitionResult{}, err
 		}
@@ -259,7 +291,6 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 	entityLiabilityAccount := "account_" + command.MaterializationID + "_liability"
 	entityIncomeAccount := "account_" + command.MaterializationID + "_wage_income"
 	entityLocation := "location_" + command.MaterializationID
-	policyDocument := fmt.Sprintf(`{"authorization":"scoped-capability","grant_id":%q}`, grantID)
 
 	statements := []struct {
 		name, query string
@@ -283,52 +314,52 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 		}{"materialized wage income account", `INSERT INTO accounts(account_id, owner_id, currency_id, account_type, overdraft_limit_minor, opened_by_event_id) VALUES (?, ?, ?, 'income', 0, ?)`, []any{entityIncomeAccount, command.EntityID, cohort.currencyID, eventID}})
 	}
 	for _, statement := range statements {
-		if _, err := tx.conn.ExecContext(ctx, statement.query, statement.args...); err != nil {
+		if _, err := conn.ExecContext(ctx, statement.query, statement.args...); err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert "+statement.name, err)
 		}
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO stock_locations(location_id, owner_id, location_kind) VALUES (?, ?, 'holder')`, entityLocation, command.EntityID); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO stock_locations(location_id, owner_id, location_kind) VALUES (?, ?, 'holder')`, entityLocation, command.EntityID); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialized inventory location", err)
 	}
 	for _, balance := range []struct {
 		accountID string
 		amount    int64
 	}{{entityAssetAccount, command.AssetMinor}, {entityReceivableAccount, command.ReceivableMinor}, {entityLiabilityAccount, -command.LiabilityMinor}} {
-		if _, err := tx.conn.ExecContext(ctx, `INSERT INTO account_balances(account_id, balance_minor, projection_version, last_event_sequence) VALUES (?, ?, 1, ?)`, balance.accountID, balance.amount, sequence); err != nil {
+		if _, err := conn.ExecContext(ctx, `INSERT INTO account_balances(account_id, balance_minor, projection_version, last_event_sequence) VALUES (?, ?, 1, ?)`, balance.accountID, balance.amount, sequence); err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialized account projection", err)
 		}
 	}
 	if wageSplit != nil {
-		if _, err := tx.conn.ExecContext(ctx, `INSERT INTO account_balances(account_id, balance_minor, projection_version, last_event_sequence) VALUES (?, 0, 1, ?)`, entityIncomeAccount, sequence); err != nil {
+		if _, err := conn.ExecContext(ctx, `INSERT INTO account_balances(account_id, balance_minor, projection_version, last_event_sequence) VALUES (?, 0, 1, ?)`, entityIncomeAccount, sequence); err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "initialize named wage income", err)
 		}
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO inventory_balances(location_id, sku_id, quantity_minor, projection_version, last_event_sequence) VALUES (?, ?, ?, 1, ?)`, entityLocation, cohort.skuID, command.InventoryMinor, sequence); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO inventory_balances(location_id, sku_id, quantity_minor, projection_version, last_event_sequence) VALUES (?, ?, ?, 1, ?)`, entityLocation, cohort.skuID, command.InventoryMinor, sequence); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialized inventory projection", err)
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO materialized_entities(entity_id, source_cohort_id, materialization_id, display_name, population_count, asset_account_id, receivable_account_id, liability_account_id, inventory_location_id, currency_id, sku_id, status, projection_version, last_event_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`, command.EntityID, command.SourceCohortID, command.MaterializationID, command.DisplayName, command.PopulationCount, entityAssetAccount, entityReceivableAccount, entityLiabilityAccount, entityLocation, cohort.currencyID, cohort.skuID, sequence); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO materialized_entities(entity_id, source_cohort_id, materialization_id, display_name, population_count, asset_account_id, receivable_account_id, liability_account_id, inventory_location_id, currency_id, sku_id, status, projection_version, last_event_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`, command.EntityID, command.SourceCohortID, command.MaterializationID, command.DisplayName, command.PopulationCount, entityAssetAccount, entityReceivableAccount, entityLiabilityAccount, entityLocation, cohort.currencyID, cohort.skuID, sequence); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialized entity projection", err)
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO cohort_materializations(materialization_id, source_cohort_id, entity_id, allocation_algorithm_version, materialize_command_id, materialize_event_id, materialize_sequence, population_count, asset_minor, inventory_minor, receivable_minor, liability_minor, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`, command.MaterializationID, command.SourceCohortID, command.EntityID, command.AllocationAlgorithmVersion, command.CommandID, eventID, sequence, command.PopulationCount, command.AssetMinor, command.InventoryMinor, command.ReceivableMinor, command.LiabilityMinor); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO cohort_materializations(materialization_id, source_cohort_id, entity_id, allocation_algorithm_version, materialize_command_id, materialize_event_id, materialize_sequence, population_count, asset_minor, inventory_minor, receivable_minor, liability_minor, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`, command.MaterializationID, command.SourceCohortID, command.EntityID, command.AllocationAlgorithmVersion, command.CommandID, eventID, sequence, command.PopulationCount, command.AssetMinor, command.InventoryMinor, command.ReceivableMinor, command.LiabilityMinor); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert Cohort materialization lineage", err)
 	}
 	if wageSplit != nil {
-		if err := execAgentOne(ctx, tx.conn, "record named wage participation", `INSERT INTO m2_wage_participation_splits(materialization_id, contract_id, cohort_id, entity_id, worker_count, effective_from, income_account_id, split_event_id, split_event_sequence) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`, command.MaterializationID, wageSplit.ContractID, command.SourceCohortID, command.EntityID, wageSplit.EffectiveFrom, entityIncomeAccount, eventID, sequence); err != nil {
+		if err := execAgentOne(ctx, conn, "record named wage participation", `INSERT INTO m2_wage_participation_splits(materialization_id, contract_id, cohort_id, entity_id, worker_count, effective_from, income_account_id, split_event_id, split_event_sequence) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`, command.MaterializationID, wageSplit.ContractID, command.SourceCohortID, command.EntityID, wageSplit.EffectiveFrom, entityIncomeAccount, eventID, sequence); err != nil {
 			return core.CohortTransitionResult{}, err
 		}
-		if err := recordM2WageClaimTransitions(ctx, tx.conn, command.MaterializationID, eventID, sequence, "materialize", wageTransfers); err != nil {
+		if err := recordM2WageClaimTransitions(ctx, conn, command.MaterializationID, eventID, sequence, "materialize", wageTransfers); err != nil {
 			return core.CohortTransitionResult{}, err
 		}
 	}
-	if err := recordM2ClaimAllocation(ctx, tx.conn, command.MaterializationID, command.EntityID, eventID, sequence, claimShares); err != nil {
+	if err := recordM2ClaimAllocation(ctx, conn, command.MaterializationID, command.EntityID, eventID, sequence, claimShares); err != nil {
 		return core.CohortTransitionResult{}, err
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO population_movements(movement_id, event_id, materialization_id, from_owner_kind, from_owner_id, to_owner_kind, to_owner_id, population_count, movement_kind, reason_code) VALUES (?, ?, ?, 'cohort', ?, 'entity', ?, ?, 'materialize', 'cohort_materialization')`, populationMovementID, eventID, command.MaterializationID, command.SourceCohortID, command.EntityID, command.PopulationCount); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO population_movements(movement_id, event_id, materialization_id, from_owner_kind, from_owner_id, to_owner_kind, to_owner_id, population_count, movement_kind, reason_code) VALUES (?, ?, ?, 'cohort', ?, 'entity', ?, ?, 'materialize', 'cohort_materialization')`, populationMovementID, eventID, command.MaterializationID, command.SourceCohortID, command.EntityID, command.PopulationCount); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialization population movement", err)
 	}
 
 	if command.AssetMinor+command.ReceivableMinor+command.LiabilityMinor > 0 {
-		if _, err := tx.conn.ExecContext(ctx, `INSERT INTO journal_entries(entry_id, event_id, status, purpose) VALUES (?, ?, 'draft', 'Cohort materialization allocation')`, entryID, eventID); err != nil {
+		if _, err := conn.ExecContext(ctx, `INSERT INTO journal_entries(entry_id, event_id, status, purpose) VALUES (?, ?, 'draft', 'Cohort materialization allocation')`, entryID, eventID); err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialization journal", err)
 		}
 		postings := []struct {
@@ -343,16 +374,16 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 			if posting.amount == 0 {
 				continue
 			}
-			if _, err := tx.conn.ExecContext(ctx, `INSERT INTO postings(posting_id, entry_id, account_id, currency_id, amount_minor, memo) VALUES (?, ?, ?, ?, ?, 'Cohort materialization')`, "posting_"+command.CommandID+"_"+posting.name, entryID, posting.accountID, cohort.currencyID, posting.amount); err != nil {
+			if _, err := conn.ExecContext(ctx, `INSERT INTO postings(posting_id, entry_id, account_id, currency_id, amount_minor, memo) VALUES (?, ?, ?, ?, ?, 'Cohort materialization')`, "posting_"+command.CommandID+"_"+posting.name, entryID, posting.accountID, cohort.currencyID, posting.amount); err != nil {
 				return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialization posting", err)
 			}
 		}
-		if _, err := tx.conn.ExecContext(ctx, `UPDATE journal_entries SET status = 'posted' WHERE entry_id = ? AND status = 'draft'`, entryID); err != nil {
+		if _, err := conn.ExecContext(ctx, `UPDATE journal_entries SET status = 'posted' WHERE entry_id = ? AND status = 'draft'`, entryID); err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "post materialization journal", err)
 		}
 	}
 	if command.InventoryMinor > 0 {
-		if _, err := tx.conn.ExecContext(ctx, `INSERT INTO stock_movements(movement_id, event_id, sku_id, from_location_id, to_location_id, quantity_minor, movement_kind, reason_code) VALUES (?, ?, ?, ?, ?, ?, 'transfer', 'cohort_materialization')`, stockMovementID, eventID, cohort.skuID, cohort.locationID, entityLocation, command.InventoryMinor); err != nil {
+		if _, err := conn.ExecContext(ctx, `INSERT INTO stock_movements(movement_id, event_id, sku_id, from_location_id, to_location_id, quantity_minor, movement_kind, reason_code) VALUES (?, ?, ?, ?, ?, ?, 'transfer', 'cohort_materialization')`, stockMovementID, eventID, cohort.skuID, cohort.locationID, entityLocation, command.InventoryMinor); err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialization stock movement", err)
 		}
 	}
@@ -373,7 +404,7 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 		{"materialization branch head", `UPDATE branches SET head_sequence = ? WHERE instance_id = ? AND branch_id = ? AND head_sequence = ?`, []any{sequence, command.InstanceID, command.BranchID, head}},
 	}
 	for _, update := range updates {
-		result, err := tx.conn.ExecContext(ctx, update.query, update.args...)
+		result, err := conn.ExecContext(ctx, update.query, update.args...)
 		if err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "update "+update.name, err)
 		}
@@ -382,13 +413,13 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 		}
 	}
 	var recordOrder int64
-	if err := tx.conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(record_order), 0) + 1 FROM audit_records WHERE instance_id = ? AND branch_id = ?`, command.InstanceID, command.BranchID).Scan(&recordOrder); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(record_order), 0) + 1 FROM audit_records WHERE instance_id = ? AND branch_id = ?`, command.InstanceID, command.BranchID).Scan(&recordOrder); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "allocate materialization audit order", err)
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO audit_records(record_id, instance_id, branch_id, record_order, record_type, authority, related_event_id, command_id, attempt_id, trace_id, world_time, recorded_at_utc, audience_scope, payload) VALUES (?, ?, ?, ?, 'intervention', 'audit', ?, ?, ?, ?, ?, ?, ?, ?)`, "audit_"+command.CommandID, command.InstanceID, command.BranchID, recordOrder, eventID, command.CommandID, attemptID, "trace_"+command.CommandID, command.WorldTime, nowText, string(scopeJSON), string(payloadJSON)); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO audit_records(record_id, instance_id, branch_id, record_order, record_type, authority, related_event_id, command_id, attempt_id, trace_id, world_time, recorded_at_utc, audience_scope, payload) VALUES (?, ?, ?, ?, 'intervention', 'audit', ?, ?, ?, ?, ?, ?, ?, ?)`, "audit_"+command.CommandID, command.InstanceID, command.BranchID, recordOrder, eventID, command.CommandID, attemptID, "trace_"+command.CommandID, command.WorldTime, nowText, string(scopeJSON), string(payloadJSON)); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialization audit", err)
 	}
-	if _, err := tx.conn.ExecContext(ctx, `INSERT INTO outbox(outbox_id, event_id, topic, audience_scope, audience_scope_hash, payload) VALUES (?, ?, 'cohort.materialized', ?, ?, ?)`, outboxID, eventID, string(audienceJSON), audienceHash, string(payloadJSON)); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO outbox(outbox_id, event_id, topic, audience_scope, audience_scope_hash, payload) VALUES (?, ?, 'cohort.materialized', ?, ?, ?)`, outboxID, eventID, string(audienceJSON), audienceHash, string(payloadJSON)); err != nil {
 		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "insert materialization Outbox", err)
 	}
 	for _, transition := range []struct {
@@ -398,21 +429,13 @@ func (s *Store) MaterializeCohort(ctx context.Context, command core.MaterializeC
 		{"materialization attempt", `UPDATE command_attempts SET status = 'committed', finished_at_utc = ? WHERE command_id = ? AND attempt_no = 1 AND status = 'ready'`, []any{nowText, command.CommandID}},
 		{"materialization command", `UPDATE commands SET status = 'committed' WHERE command_id = ? AND status = 'pending'`, []any{command.CommandID}},
 	} {
-		result, err := tx.conn.ExecContext(ctx, transition.query, transition.args...)
+		result, err := conn.ExecContext(ctx, transition.query, transition.args...)
 		if err != nil {
 			return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "commit "+transition.name, err)
 		}
 		if rows, _ := result.RowsAffected(); rows != 1 {
 			return core.CohortTransitionResult{}, core.NewError(core.CodeStorageFailure, transition.name+" transition affected an unexpected row count")
 		}
-	}
-	if s.beforeCommit != nil {
-		if err := s.beforeCommit(); err != nil {
-			return core.CohortTransitionResult{}, err
-		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return core.CohortTransitionResult{}, core.WrapError(core.CodeStorageFailure, "commit Cohort materialization", err)
 	}
 	return core.CohortTransitionResult{
 		CommandID: command.CommandID, MaterializationID: command.MaterializationID, EntityID: command.EntityID,

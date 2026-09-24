@@ -235,7 +235,13 @@ func (s *Store) ensureRPTurnRun(ctx context.Context, request core.RPSpeechReques
 		return rpTurnRun{}, false, core.NewError(core.CodeBranchConflict, "RP session is closed")
 	}
 	if session.InstanceID != M2DemoInstanceID || session.BranchID != M2DemoBranchID {
-		return rpTurnRun{}, false, core.NewError(core.CodeNotFound, "bounded M2 RP world not found")
+		packages, err := readStudioActivePackages(ctx, tx.conn, session.InstanceID, session.BranchID)
+		if err != nil {
+			return rpTurnRun{}, false, err
+		}
+		if packages == nil {
+			return rpTurnRun{}, false, core.NewError(core.CodeNotFound, "supported RP world not found")
+		}
 	}
 	var pendingWaits, pendingTurns int
 	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_wait_intents i JOIN rp_sessions s ON s.session_id = i.session_id WHERE s.instance_id = ? AND s.branch_id = ? AND i.status = 'pending'`, session.InstanceID, session.BranchID).Scan(&pendingWaits); err != nil {

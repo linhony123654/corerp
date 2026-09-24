@@ -212,6 +212,21 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
+	studio, err := studioAccessDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	differences = append(differences, studio...)
+	activation, err := studioActivationDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	differences = append(differences, activation...)
+	readiness, err := studioReadinessDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	differences = append(differences, readiness...)
 	wages, err := careerWageProjectionDifferences(ctx, s.db, instanceID, branchID, head)
 	if err != nil {
 		return nil, err
@@ -349,6 +364,19 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 		if err := execAgentOne(ctx, tx.conn, "rebuild career wage projection", `UPDATE employment_contracts SET gross_wage_minor=? WHERE contract_id=? AND gross_wage_minor=?`, wage.Expected, wage.Key, wage.Actual); err != nil {
 			return err
 		}
+	}
+	studio, studioErr := studioAccessDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if studioErr != nil {
+		return studioErr
+	}
+	if err := repairStudioAccess(ctx, tx.conn, instanceID, branchID, studio); err != nil {
+		return err
+	}
+	if err := repairStudioActivation(ctx, tx.conn, instanceID, branchID, head); err != nil {
+		return err
+	}
+	if err := repairStudioReadiness(ctx, tx.conn, instanceID, branchID, head); err != nil {
+		return err
 	}
 	roles, err := careerRoleProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
 	if err != nil {

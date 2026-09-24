@@ -410,9 +410,10 @@ func authorizeRPControl(ctx context.Context, q rpQueryer, principalID, instanceI
 	var count int
 	err := q.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM capability_grants g JOIN principals p ON p.principal_id = g.principal_id
+		JOIN world_instances w ON w.instance_id=g.instance_id
 		WHERE g.principal_id = ? AND p.principal_type = 'player' AND p.status = 'active'
 		  AND g.capability_id = 'world.rp.control' AND g.instance_id = ? AND g.branch_id = ?
-		  AND g.subject_id = ? AND g.status = 'active'`, principalID, instanceID, branchID, entityID).Scan(&count)
+		  AND g.subject_id = ? AND g.status = 'active' AND `+studioControlPredicate, principalID, instanceID, branchID, entityID).Scan(&count)
 	if err != nil {
 		return core.WrapError(core.CodeStorageFailure, "check RP control grant", err)
 	}

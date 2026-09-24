@@ -11,6 +11,7 @@ import (
 )
 
 type RPDecisionResult struct {
+	ReasonCode   string                  `json:"reason_code,omitempty"`
 	NPCEntityID  string                  `json:"npc_entity_id"`
 	TurnID       string                  `json:"turn_id"`
 	HeadSequence int64                   `json:"head_sequence"`
@@ -269,14 +270,16 @@ func (s *Store) DecideRP(ctx context.Context, request core.RPDecisionRequest, pr
 	if err != nil {
 		result.Proposal = core.RPDecisionProposal{Action: "silence"}
 		result.Status = "provider_fallback"
+		result.ReasonCode = "provider_failure"
 		if auditErr := s.auditRPDecision(auditCtx, input, result); auditErr != nil {
 			return RPDecisionResult{}, auditErr
 		}
 		return result, nil
 	}
-	if err := validateRPDecisionProposal(input, proposal); err != nil {
+	if reason, err := core.ValidateRPDecisionProposalEvidence(input, proposal); err != nil {
 		result.Proposal = proposal
 		result.Status = "rejected"
+		result.ReasonCode = reason
 		if auditErr := s.auditRPDecision(auditCtx, input, result); auditErr != nil {
 			return RPDecisionResult{}, auditErr
 		}
@@ -300,12 +303,13 @@ func (s *Store) auditRPDecision(ctx context.Context, input core.RPDecisionInput,
 		return err
 	}
 	payload := struct {
-		TurnID    string                  `json:"turn_id"`
-		NPCID     string                  `json:"npc_entity_id"`
-		InputHash string                  `json:"input_hash"`
-		Status    string                  `json:"status"`
-		Proposal  core.RPDecisionProposal `json:"proposal"`
-	}{result.TurnID, result.NPCEntityID, result.InputHash, result.Status, result.Proposal}
+		ReasonCode string                  `json:"reason_code,omitempty"`
+		TurnID     string                  `json:"turn_id"`
+		NPCID      string                  `json:"npc_entity_id"`
+		InputHash  string                  `json:"input_hash"`
+		Status     string                  `json:"status"`
+		Proposal   core.RPDecisionProposal `json:"proposal"`
+	}{result.ReasonCode, result.TurnID, result.NPCEntityID, result.InputHash, result.Status, result.Proposal}
 	payloadJSON, err := core.CanonicalJSON(payload)
 	if err != nil {
 		return err

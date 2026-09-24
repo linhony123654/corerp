@@ -712,6 +712,10 @@ func (s *Store) executeNextM2Economy(ctx context.Context, tx *immediateTx, item 
 // A missing source of cash is a world fact, not a guessed projection value.
 // Compare the account projection to posted authority before deciding arrears.
 func verifyM2AccountProjection(ctx context.Context, conn *sql.Conn, accountID, currencyID string) error {
+	return verifyScopedAccountProjection(ctx, conn, M2DemoInstanceID, M2DemoBranchID, accountID, currencyID)
+}
+
+func verifyScopedAccountProjection(ctx context.Context, conn *sql.Conn, instanceID, branchID, accountID, currencyID string) error {
 	var projected, authoritative int64
 	var accountCurrency string
 	if err := conn.QueryRowContext(ctx, `SELECT b.balance_minor, a.currency_id FROM account_balances b JOIN accounts a ON a.account_id = b.account_id WHERE b.account_id = ?`, accountID).Scan(&projected, &accountCurrency); err != nil {
@@ -720,7 +724,7 @@ func verifyM2AccountProjection(ctx context.Context, conn *sql.Conn, accountID, c
 	if accountCurrency != currencyID {
 		return core.NewError(core.CodeProjectionDiverged, "M2 wage account currency differs from contract")
 	}
-	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(SUM(p.amount_minor), 0) FROM postings p JOIN journal_entries j ON j.entry_id = p.entry_id AND j.status = 'posted' JOIN events e ON e.event_id = j.event_id WHERE e.instance_id = ? AND e.branch_id = ? AND p.account_id = ?`, M2DemoInstanceID, M2DemoBranchID, accountID).Scan(&authoritative); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(SUM(p.amount_minor), 0) FROM postings p JOIN journal_entries j ON j.entry_id = p.entry_id AND j.status = 'posted' JOIN events e ON e.event_id = j.event_id WHERE e.instance_id = ? AND e.branch_id = ? AND p.account_id = ?`, instanceID, branchID, accountID).Scan(&authoritative); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "replay M2 wage account postings", err)
 	}
 	if projected != authoritative {

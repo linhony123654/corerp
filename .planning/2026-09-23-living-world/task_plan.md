@@ -8,6 +8,290 @@ Full-project DEFINE/DESIGN/BUILD/POLISH/local SHIP per stage. One large stage in
 
 ## Current phase
 
+Latest authoritative: RP8 original8A/B/C implemented and applicable final gates PASS.
+Historical rule provenance closed the remaining8B gap: exact recorded epoch→source
+activation→immutable installation contents, creator-only, current epoch isolation,
+corruption/rebuild/reopen and actual browser source navigation. Full baseline4389
+failed two legacy test-only queue fixtures; canonical payload/pending status fixed,
+production persisted-queue guard unchanged. Final full15968 PASS all packages
+(storage311.224s/HTTP18.745s), final vet43859 PASS, Studio race11622 PASS56.802s/6.041s,
+economic/scope race26859 PASS53.681s, build+Inspector41293 PASS, creator/Play/Inspector
+9614 PASS, configuredM0/M1/M2 verifiers PASS. All handles terminal, no running tests.
+Stage report docs/rp8/phase-report.md and requirement matrix verification.md ready;
+next authorized checkpoint commit +clean tree/schema030, then Final Integration.
+Original Final300turn/30days/scenarios/DoD remain unproven, goal active.
+
+Latest authoritative: RP8C initial creator UI and default Play binding picker
+implemented. Explicit /studio/create, two-person/two-place template, advanced
+conserved resources, generated or imported declarative System/Narrative packages,
+separate source/player identities, consented per-request local recovery and matching
+ready receipt. Play no longer hardcodes M2; paged authorized discovery, per-binding
+bookmarks, frozen open intents, legacy resume enrichment and Studio-return picker.
+Creator28129 real browser PASS including installed style/NPC dialogue/move/wait,
+unchanged administrative world, lost create/open response+restart/switch recovery.
+Original Play72055 and inspector29201 PASS. Expanded29755 found clear-credential
+button disabled during save; fixed actual UI. Final expanded67503 PASS terminal
+exit0 /tmp/corerp-rp8-play-worlds-1ccg2a, build2361 PASS2.54s terminal exit0.
+Delayed-response clearing, tampered imported package/no writes, archived original
+recovery and legacy-bookmark return picker all verified. All handles terminal.
+Next audit remaining original8A/B/C acceptance and full stage gates before checkpoint;
+Final300turn/30days remains pending. Schema030/backend source unchanged this increment.
+
+Latest authoritative: recoverable CreateStudioWorld coordinator and authenticated
+POST /api/v1/studio/worlds/create implemented. Full request hash pins settings,
+packages/player in optional genesis metadata; reuses all existing owners/receipts.
+Seven fault-stage reopen/resume tests, no premature player grant, altered-plan
+denial, dependency order and concurrent exact retry normal22169 PASS0.943s. Actual
+HTTP new-world full NPC/narrative turn/restart revealed and fixed one remaining
+M2-only ensureRPTurn gate; verified Studio-only admission, HTTP24398 PASS0.322s.
+Final7994 storage race PASS82.133s/HTTP race PASS8.142s and wholebackend vet PASS,
+terminal exit0; all handles terminal, whitespace clean. Next creator UI/
+Play authorized binding picker and browser journey; complete original8C and gates.
+
+Latest authoritative: sourced SaveStudioWorld player readiness and actual new-world
+RP action path implemented. Explicit existing player identity (separate credential),
+no creator control/token generation; ready Event/grant/lifecycle/clock atomic,
+shared discovery/control source predicate, source-backed readiness rebuild, schema030.
+Wait uses actual session scope and rejects unsupported due phases before intent.
+Normal6890 readiness/Wait/discovery PASS1.570s with two actual saved worlds running
+Observe/Speak/Move/Wait; corruption/recovery/reopen/revocation and missing-rule-write
+denial/readonly replay included. Final87433 selected storage race PASS67.410s and
+wholebackend vet PASS, terminal exit0; all handles terminal, whitespace clean.
+Next creator API/UI and Play binding selection/recovery; link
+Minutes and broader career dispatch limitations remain explicit before full gates.
+
+Latest authoritative: pinned initial package activation and real narrative/
+NPC-initiative-budget consumers implemented. Activation Event old epoch, new
+half-open epoch next sequence; exact installed pair/manifest/content/source/
+algorithm/phase/order lock. World remains paused, no player grant/readiness.
+Actual two-world style and initiative eligibility differences, rollback, immutable
+activation source, epoch corruption rejection and source-backed Compare/Rebuild,
+reopen/exact retry/revocation, additive029 upgrade tests passed. Final53945 selected
+storage race PASS60.743s +wholebackend vet PASS, terminal exit0; no live processes.
+Next explicit player binding/save-readiness and full creator API/UI→Play workflow;
+resolve Wait/career scoped-write and link-minute consumer limitations before
+claiming full8C or original stage/Final gates complete.
+
+Latest authoritative: bounded declarative System/Narrative package validation and
+source-backed installation implemented; M0 Manifest contract retained. Exact
+dependency sets/cycles, immutable saved content, current source authority, paused
+pre-activation target and retry checks enforced. Initial direct SQL update test
+failed, revealing missing generic Event immutability; fixed with targeted package
+UPDATE/DELETE/REPLACE guards in schema028 (not a generic legacy Event rewrite).
+Final85958 core race PASS1.064s/storage race PASS35.634s including all Studio and
+legacy upgrade checks; wholebackend vet PASS, terminal exit0. M0 verifier PASS52.
+All handles terminal. No activation/consumers/UI claim. Next pin installed contents
+to Rule Epoch, wire real narrative and NPC-budget consumers and player binding,
+then full creator settings/save/Play. Link Minutes runtime behavior and broader
+cross-world career/Wait constraints still require resolution before final gates.
+
+Latest authoritative: actual Studio spatial preparation implemented and verified,
+reusing private fact transaction + existing places/links/profiles/movement owners.
+Shared exact saved-genesis authorization, no control grants or package activation.
+Actual two Studio worlds, rollback, corrupt-position repair/rebuild/reopen/retry,
+revoked authority tested. Test-defined source schedule drives real scoped movement,
+clock/knowledge/Outbox while leaving the other worlds unchanged; not a production
+schedule API or Play completion. Final10382 selected race PASS10.358s +wholebackend
+vet PASS, terminal exit0; whitespace clean. No live checks. Next package contract/
+activation and player binding, followed actual creator settings/save/Play. Existing
+link Minutes still lacks production travel-time consumer; resolve before exposing
+as an effective setting. Full RP8/Final original gates remain open.
+
+Latest authoritative: conserved Studio participant preparation implemented using
+the existing Cohort owner in a caller-owned atomic transaction. Exact saved
+genesis + fresh source authority required; sequential integer allocations,
+rollback, isolation, recovery/retry/revocation tested by actual SQLite integration.
+Original materialization/genesis normal97227 PASS1.988s; initial participant
+normal79639 PASS0.253s. Expanded final current-source race92608 (including funded
+full depletion and original RP/wage materialization regressions) PASS73.059s;
+wholebackend vet PASS. All checks terminal; only docs changed after verification.
+RP8 BUILD remains open.
+Next spatial places/links/profile/initial movement facts and actual second-world
+movement, then package activation/settings/creator UI/save/Play/Final.
+
+Latest authoritative: internal PrepareStudioWorld actual atomic paused genesis
+implemented. Independent source creation authorization; immutable spec Event + existing
+cohort/ledger/stock/population owners, stable IDs, no source-world mutation. Actual
+funded/zero-resource worlds, rollback, corrupt projection repair, replay/reopen,
+exact retry and mismatch/collision tested. Final race94721 PASS4.974s +wholebackend
+vet PASS; all handles terminal. Next populate declared people/places/links through
+existing conserved materialization/spatial owners, verify second-world movement,
+then package activation/settings/creator UI/save/Play. No full8C completion claim.
+
+Latest authoritative: independent creation-authority prerequisite implemented.
+Local admin -purpose create_world emits sourced creator-only world.create/genesis
+grant; separate from inspector/explain. Creation check rejects stale active projection
+after revoke and role-only access; rebuild/reopen/old retry tested. Storage/admin
+race44977 PASS20.868s/3.368s; newer CLI purpose/retry race89527 PASS3.402s and
+wholebackend vet PASS. All handles terminal, whitespace clean.
+Next atomic source-backed world genesis/receipt/retry, using existing cohort/ledger/
+inventory and declared spec; no creation API or new-world success claim yet.
+
+Latest authoritative: core genesis input declaration/validation implemented (not
+creation API). Spec bounds topology/resources/participants/common calendar; stable
+world-namespaced object IDs and canonical request hashing. Core race17386 PASS1.013s
+and vet PASS. Broad role race15169 terminal PASS318.232s on launch source; all handles
+terminal. Next explicit independent creation capability in existing administrative
+scope, atomic source-backed genesis/recovery, then second-world movement/settlement
+and full package/settings/save/Play workflow. No RP8 checkpoint or completion.
+
+Latest authoritative: scoped movement still called M2-bound transit delay/supersession
+helpers; fixed both to use persisted queue scope for queries/retry/commit. Normal25554
+PASS4.702s; transit race/vet81840 result tracked in progress. Broad role race15169
+still live PID2267199 at~96%CPU, 15m bound, poll same handle. Actual second-world
+successful movement remains unproven; next source-backed genesis/fixture dependency
+must be resolved rather than claiming negative isolation tests prove playability.
+Retain full8C workflow and Final; do not endlessly expand optional arbitrary-calendar
+or every legacy demo-economy variant beyond the actual creator requirements.
+
+Latest authoritative: overtime/approved-leave reads follow contract-origin scope;
+automatic review and aggregate queue/activation follow persisted source/queue scope.
+Current normal52127 aggregate/leave/overtime/attendance/payroll PASS22.215s +vet PASS.
+New handler scope adversarial race33965 PASS2.374s. Previous role/position/raise/exit
+race1885 terminal FAIL4m suite timeout; same complete current-source suite15169 now
+running with15m bound, poll this handle (do not restart). Calendar/M2 aggregate contract and
+foreign-world external guards remain. Next resolve those actual implementation
+dependencies and second-world movement/settlement, then genesis/packs/Play/Final.
+
+Latest authoritative: payroll/term activation resolve persisted queue scope;
+employment terms follow contract origin Event; posting checks and effective role
+grant identity/principal/application now accept same world/branch. Scope/account
+race46494 PASS4.729s; Career/M2 wage normal79890 PASS37.839s before final role-scope
+refinement. Latest role/position/raise/exit race1885 running; current vet79475 result
+tracked in progress. Next finish these checks then remaining overtime/leave/aggregate
+scope/calendar dependencies and true second-world movement/settlement. Foreign-world
+external guards remain; full RP8C/genesis/packs/Play/Final not completed.
+
+Latest authoritative: shared scheduled commit verifies persisted queue scope/content
+before writes; career payroll queue derives scope from recorded owners. Current
+Career/commit normal35662 PASS38.130s, rejection race7295 PASS3.359s and vet PASS;
+strict scheduler/budget/reopen/original wage38976 PASS2.254s. All handles terminal.
+Next propagate scope through actual career/economic handlers and prove second-world
+movement/settlement, then genesis/package/Play. External foreign-world guards remain;
+do not claim full foreign payroll or completed RP8C from queue-source verification.
+
+Latest authoritative: fortnight normal36892 PASS112.156s. Internal scoped scheduler
+and movement owner implemented, demo wrappers/external guards retained. Foreign
+non-movement tasks safely rejected until nested economic/career handlers generalize.
+Two-existing-world clock/no-write/refusal tests race97342 PASS3.484s, vet30403 PASS.
+Correct legacy M2Agent/M2Runner/RPWait race25415 PASS20.164s; all handles terminal.
+Next nested handlers/queue producers and actual second-world movement evidence,
+then explicit creation authority/genesis/packs/Play. No full scheduler/world-create claim.
+
+Latest authoritative: broad race40613 terminal FAIL at5m during fortnight divergence
+simulation, not passed. Follow-up targeted race18507 PASS storage39.698s/HTTP2.621s,
+vet64385 PASS; fortnight normal36892 live PID2259875, poll same handle.
+Implemented Event-owned Outbox audience (M2 hardcode removed),
+with two-existing-world/missing-source/hash/reopen checks. General scheduler remains
+pending: nested economy/payroll/leave handlers and queue producers also bind M2.
+Do not merely relax Wait's scope guard. Next finish active checks, then scope that
+existing chain end-to-end and prove isolation before genesis/package implementation.
+
+Latest authoritative: RP8C architecture recon identifies mandatory scoped scheduler
+prerequisite (WaitRP guard plus RunAgentLife internals are M2-bound), global bootstrap
+IDs, pre-genesis authorization FK, fixed Play binding and builtin-only Narrative refs.
+docs/rp8/creator-design.md records full acceptance/dependency order;
+inspector-acceptance.md reconciles original seven8B questions and remaining pinned
+installed-rule provenance dependency. Next implement scoped scheduler with two-world
+isolation tests, preserving wrappers. Race40613 remains live (same handle/process);
+poll before further shared backend changes. No new creation code or stage completion.
+
+Latest authoritative: initiative fallback reasons + committed initiative lineage
+implemented. Initial normal37377 PASS; current build/browser73650 PASS2.90s,
+/tmp/corerp-rp8-studio-fEs2fL; vet20969 PASS. Relevant race40613 STILL RUNNING:
+authoritative ps confirms go-test2257202/storage.test2257887 (~96%CPU), not stalled
+or terminal. Poll same handle, do not restart. UI browser covers response lineage;
+initiative-specific reason/recovery coverage is storage tests, not browser evidence.
+Next finish this validation, reconcile seven original8B questions against actual
+coverage, then resolve mandatory8C world-genesis/package architecture. Avoid an
+unbounded expansion into every possible explanation family; retain original scope.
+
+Latest authoritative: committed NPC response lineage implemented/verified. Creator
+explanation joins immutable decision/utterance Events; five actual outcome families,
+ops redaction, candidate separation, no writes, rebuild/reopen tested. Focused95491,
+race78575 storage32.338s/HTTP2.590s, wholebackend vet95619 and build51742 PASS.
+Actual browser40508 PASS /tmp/corerp-rp8-studio-vOgX2C includes real NPC reply→
+trigger Event via keyboard Enter; desktop/mobile screenshots inspected, no overlap
+or overflow. All handles terminal. Next other8B rejection/no-op/causal families,
+then full8C and Final. RP8 BUILD remains open; no checkpoint/schema change.
+
+Latest authoritative: Studio explanation UI integrated and verified. Build33493 PASS;
+actual browser13244 PASS /tmp/corerp-rp8-studio-YzsvbY, real turn candidate/hearing
+records, optional offsite observer, denial/late response/no-read-write assertions and
+existing discovery/roles/restart/revoke. Desktop1440/mobile390 screenshots inspected:
+readable wrapped evidence, no overlap/overflow. All handles terminal. Next remaining
+8B committed causality and rejection/no-op families, then mandatory8C and Final.
+No RP8 completion/checkpoint; schema027. Full objective unchanged.
+
+Latest authoritative: RP8B recorded explanation backend implemented; resumed45145
+focused storage/HTTP/admin PASS. Explicit explain grant, bounded rejection reason
+codes and observer evidence; no raw private payload or fabricated historical reason.
+CLI opt-in compatibility verified; race5221 and provider/turn/initiative7219 PASS;
+wholebackend vet92910 PASS. All handles terminal. Next Studio explanation UI, remaining full8B evidence
+families and mandatory8C/Final. RP8 BUILD remains open, schema027, no RP8 commit.
+
+Latest authoritative: RP8 authorized discovery/timeline increment PASS. Final75810
+build1.88s/actualbrowser /tmp/corerp-rp8-studio-67FE2q/M0 and final screenshot review;
+backend25270 relevant race/vet/fullHTTP/server PASS. All handles terminal, no live
+checks. No further UI polish/repeat tests needed absent new defects. Next inspect
+actual command/audit/observation ownership for complete8B why/rejection/no-op/known
+evidence, then8C real genesis/settings/packs/save/Play. Preserve full Final scope.
+
+RP8 authorized scope/timeline discovery implemented; focused71122 storage/HTTP PASS,
+UI token→scope→timeline pages→event selection implemented. Build86103 PASS.
+Current15733 browser/build and25270 backend race/vet/fullHTTP running; one later
+list-error cleanup refinement needs current-source final browser/build. Exact contract
+docs/rp8/discovery.md. Next full8B recorded explanations/knowledge, then mandatory8C
+world creation/settings/packs/save/Play; no stage checkpoint/full-goal reduction.
+
+Authoritative latest: RP8 first actual setup→Studio event-evidence→restart/revoke→Play
+slice PASS. Final1186 build1.89s+browser /tmp/corerp-rp8-studio-B5BNaD and corrected
+desktop/mobile screenshots inspected; current backend25934/76540 PASS. All checks
+terminal; no live handles. Schema027. Next authorized world/branch/timeline discovery
+so users needn't transcribe Event IDs, then recorded rejection/no-op/knowledge
+explanations and mandatory8C creation/settings/packs/save/Play. No RP8 stage commit.
+Older “running” paragraphs are historical; do not restart completed checks.
+
+Latest verification: broad25934 terminal PASS storage race608.488s/admin3.215s/
+HTTP58.981s + whole-backend vet + fullHTTP/server12.476s/0.165s;76540 latest access
+assertions PASS. No live backend handles. Browser60743 failed due mechanical CSS
+rename touching data.rule properties; exact fix applied, current build/browser1186
+running. Finish visual review, then discovery/timeline and broader8B/8C.
+
+RP8 actual /studio event-evidence UI implemented and first real browser68157 PASS;
+actual CLI authorization/three-role read/revoke/restart/Play return. Visual review
+found global .rule collision, fixed .studio-rule and expanded60743 running+build.
+Broad backend25934 still live; preserve handle and poll. Next complete current
+visual/check results, then authorized scope/timeline discovery and recorded
+rejection/knowledge explanations; full8C world creation/packs and Final remain.
+No full RP8 checkpoint; schema027; no production or live-model operations.
+
+RP8 local setup now implemented: corerp-admin explicit filesystem-only access
+grant/revoke, immutable StudioAccessConfigured Event, scoped audit and projection
+comparison/rebuild (missing/corrupt/unsourced/revoked grants). No new schema.
+Focused90447 passed; latest76540 current-source storage/admin race passed4.804s/3.184s
+including rollback-head/old-retry assertions. Broad25934 still live; poll same handle.
+Next actual optional Studio UI using real setup
+and Inspector, then full8B explanations and8C genesis/packs. Do not repeat fake
+grant provisioning or use bareM2/M1 inconsistent timeline as successful fixture.
+
+RP8 first backend increment implemented: POST /api/v1/studio/events/read,
+independent branch+field-scoped creator/ops inspector grants, actual Event/batch/
+Rule Epoch evidence, ops payload redaction and coherent no-write snapshot. Initial
+storage/HTTP tests PASS; expanded purchase/reopen/rebuild and race/vet/fullHTTP
+55159 terminal PASS (storage race6.190s/HTTP2.317s, normalHTTP12.602s/server0.147s).
+No live checks or UI/provisioning/full-stage claim. Next complete actual optional
+Studio/setup vertical slice, then rejection/knowledge and original8C creation/packs.
+Exact contract docs/rp8/inspector.md. Earlier READ-ONLY-only status is historical.
+
+RP8 READ-ONLY recon begun after clean metadata checkpoint7de4b10. Actual default
+Play preserved; /demo Inspector is static. Existing role/grant/event/knowledge and
+M0 manifest contracts inspected; no runtime registry found in scoped backend scan.
+Acceptance/reuse/ordered slices in docs/rp8/phase-8.md. Next resolve exact authorized
+event-evidence Inspector DTO/grants/route and implement its representative slice;
+world genesis and registry activation need fixed-world/creation-authority research
+before broad writes. No RP8 business edits/tests yet. Full8C and Final not reduced.
+
 Current authoritative state: RP7 local stage gates PASS; final full backend+vet18487
 exit0 (storage322.433s/HTTP21.773s), relevant race22251, frontend44600, actual
 three-client49071 all terminal PASS. Frozen v1 and final7A–D audit in docs/rp7.

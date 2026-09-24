@@ -328,7 +328,15 @@ func (s *Store) RunAgentLifeAuthorized(ctx context.Context, request core.AgentLi
 	return s.RunAgentLife(ctx, request.TargetWorldTime, request.Budget)
 }
 
-func (s *Store) RunAgentLife(ctx context.Context, targetWorldTime string, budget int) (result AgentLifeRunResult, resultErr error) {
+func (s *Store) RunAgentLife(ctx context.Context, targetWorldTime string, budget int) (AgentLifeRunResult, error) {
+	return s.runAgentLifeForScope(ctx, M2DemoInstanceID, M2DemoBranchID, targetWorldTime, budget)
+}
+
+// Internal until all non-movement handlers support arbitrary world scope.
+func (s *Store) runAgentLifeForScope(ctx context.Context, instanceID, branchID, targetWorldTime string, budget int) (result AgentLifeRunResult, resultErr error) {
+	if !studioID(instanceID) || !studioID(branchID) {
+		return AgentLifeRunResult{}, core.NewError(core.CodeInvalidArgument, "bounded scheduler scope required")
+	}
 	target, err := time.Parse(time.RFC3339, targetWorldTime)
 	if err != nil {
 		return AgentLifeRunResult{}, core.WrapError(core.CodeInvalidArgument, "target_world_time must be RFC 3339", err)
@@ -337,7 +345,7 @@ func (s *Store) RunAgentLife(ctx context.Context, targetWorldTime string, budget
 		return AgentLifeRunResult{}, core.NewError(core.CodeInvalidArgument, "budget must be between 1 and 10000")
 	}
 	var currentText string
-	if err := s.db.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&currentText); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&currentText); err != nil {
 		return AgentLifeRunResult{}, classifyMissing(err, "M2 Agent world clock")
 	}
 	current, err := time.Parse(time.RFC3339, currentText)
@@ -349,7 +357,7 @@ func (s *Store) RunAgentLife(ctx context.Context, targetWorldTime string, budget
 	}
 	now := s.now().UTC()
 	runID := fmt.Sprintf("agent_run_%d", now.UnixNano())
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO agent_runs(run_id, instance_id, branch_id, target_world_time, status, started_at_utc) VALUES (?, ?, ?, ?, 'running', ?)`, runID, M2DemoInstanceID, M2DemoBranchID, targetWorldTime, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO agent_runs(run_id, instance_id, branch_id, target_world_time, status, started_at_utc) VALUES (?, ?, ?, ?, 'running', ?)`, runID, instanceID, branchID, targetWorldTime, now.Format(time.RFC3339Nano)); err != nil {
 		return AgentLifeRunResult{}, core.WrapError(core.CodeStorageFailure, "start Agent run", err)
 	}
 	processed := 0
@@ -361,7 +369,7 @@ func (s *Store) RunAgentLife(ctx context.Context, targetWorldTime string, budget
 		}
 	}()
 	for processed < budget {
-		didWork, err := s.executeNextAgentSchedule(ctx, targetWorldTime)
+		didWork, err := s.executeNextAgentScheduleForScope(ctx, instanceID, branchID, targetWorldTime)
 		if err != nil {
 			return AgentLifeRunResult{}, err
 		}
@@ -371,17 +379,17 @@ func (s *Store) RunAgentLife(ctx context.Context, targetWorldTime string, budget
 		processed++
 	}
 	var pending, head int64
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE instance_id = ? AND branch_id = ? AND status = 'pending' AND world_time <= ?`, M2DemoInstanceID, M2DemoBranchID, targetWorldTime).Scan(&pending); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE instance_id = ? AND branch_id = ? AND status = 'pending' AND world_time <= ?`, instanceID, branchID, targetWorldTime).Scan(&pending); err != nil {
 		return AgentLifeRunResult{}, core.WrapError(core.CodeStorageFailure, "count due M2 schedules", err)
 	}
 	status := "completed"
 	if pending > 0 {
 		status = "budget_exhausted"
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&currentText); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&currentText); err != nil {
 		return AgentLifeRunResult{}, core.WrapError(core.CodeStorageFailure, "read Agent clock after run", err)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&head); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&head); err != nil {
 		return AgentLifeRunResult{}, core.WrapError(core.CodeStorageFailure, "read Agent head after run", err)
 	}
 	finished := s.now().UTC().Format(time.RFC3339Nano)
@@ -392,6 +400,10 @@ func (s *Store) RunAgentLife(ctx context.Context, targetWorldTime string, budget
 }
 
 func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime string) (bool, error) {
+	return s.executeNextAgentScheduleForScope(ctx, M2DemoInstanceID, M2DemoBranchID, targetWorldTime)
+}
+
+func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID, branchID, targetWorldTime string) (bool, error) {
 	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
 		return false, core.WrapError(core.CodeStorageFailure, "begin Agent schedule", err)
@@ -403,7 +415,7 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		FROM scheduler_items
 		WHERE instance_id = ? AND branch_id = ? AND status = 'pending' AND world_time <= ?
 		ORDER BY world_time, phase_id, declared_priority, scheduler_item_id LIMIT 1`,
-		M2DemoInstanceID, M2DemoBranchID, targetWorldTime,
+		instanceID, branchID, targetWorldTime,
 	).Scan(&item.SchedulerItemID, &item.WorldTime, &item.PhaseID, &item.DeclaredPriority, &item.Status, &item.Payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -411,8 +423,15 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 	if err != nil {
 		return false, core.WrapError(core.CodeStorageFailure, "select Agent schedule", err)
 	}
+	// Never dispatch another world's queue into demo-owned economic handlers.
+	if err := requireStudioWriteRules(ctx, tx.conn, instanceID, branchID); err != nil {
+		return false, err
+	}
+	if item.PhaseID != m2AgentPhaseID && (instanceID != M2DemoInstanceID || branchID != M2DemoBranchID) {
+		return false, core.NewError(core.CodeInvalidArgument, "scheduler phase is not yet enabled for this world")
+	}
 	var currentWorldTime string
-	if err := tx.conn.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&currentWorldTime); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&currentWorldTime); err != nil {
 		return false, classifyMissing(err, "M2 scheduler world clock")
 	}
 	// A late definition or corrupted queue must not retroactively settle after a
@@ -465,12 +484,12 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		JOIN agent_positions p ON p.agent_id = a.agent_id
 		WHERE s.schedule_id = ? AND s.scheduler_item_id = ? AND s.agent_id = ?
 		  AND a.instance_id = ? AND a.branch_id = ? AND a.status = 'active'`,
-		scheduled.ScheduleID, item.SchedulerItemID, scheduled.AgentID, M2DemoInstanceID, M2DemoBranchID,
+		scheduled.ScheduleID, item.SchedulerItemID, scheduled.AgentID, instanceID, branchID,
 	).Scan(&scheduleWorldTime, &targetPlace, &activity, &scheduleStatus, &fromPlace, &positionVersion); err != nil {
 		return false, classifyMissing(err, "active Agent schedule")
 	}
 	effectiveTime := scheduleWorldTime
-	delay, err := readLatestRPTransitDelay(ctx, tx.conn, M2DemoInstanceID, M2DemoBranchID, scheduled.ScheduleID)
+	delay, err := readLatestRPTransitDelay(ctx, tx.conn, instanceID, branchID, scheduled.ScheduleID)
 	if err != nil {
 		return false, err
 	}
@@ -520,7 +539,7 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		// Arriving early is legal. Before accepting a same-place activity,
 		// prove the projection still matches its committed location source.
 		var established int
-		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_positions p JOIN events e ON e.event_sequence=p.last_event_sequence AND e.instance_id=? AND e.branch_id=? LEFT JOIN agent_movements m ON m.event_id=e.event_id AND m.agent_id=p.agent_id WHERE p.agent_id=? AND p.effective_world_time=e.world_time AND ((m.to_place_id=p.place_id AND m.activity_code=p.activity_code) OR (e.event_type='AgentActivityStarted' AND e.actor_id=p.agent_id AND json_extract(e.payload,'$.to_place_id')=p.place_id AND json_extract(e.payload,'$.activity_code')=p.activity_code))`, M2DemoInstanceID, M2DemoBranchID, scheduled.AgentID).Scan(&established); err != nil {
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_positions p JOIN events e ON e.event_sequence=p.last_event_sequence AND e.instance_id=? AND e.branch_id=? LEFT JOIN agent_movements m ON m.event_id=e.event_id AND m.agent_id=p.agent_id WHERE p.agent_id=? AND p.effective_world_time=e.world_time AND ((m.to_place_id=p.place_id AND m.activity_code=p.activity_code) OR (e.event_type='AgentActivityStarted' AND e.actor_id=p.agent_id AND json_extract(e.payload,'$.to_place_id')=p.place_id AND json_extract(e.payload,'$.activity_code')=p.activity_code))`, instanceID, branchID, scheduled.AgentID).Scan(&established); err != nil {
 			return false, err
 		}
 		if established != 1 {
@@ -532,7 +551,7 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		SELECT p.agent_id FROM agent_positions p JOIN agent_profiles a ON a.agent_id = p.agent_id
 		WHERE a.instance_id = ? AND a.branch_id = ? AND a.status = 'active'
 		  AND p.place_id = ? AND p.agent_id <> ? ORDER BY p.agent_id`,
-		M2DemoInstanceID, M2DemoBranchID, targetPlace, scheduled.AgentID,
+		instanceID, branchID, targetPlace, scheduled.AgentID,
 	)
 	if err != nil {
 		return false, core.WrapError(core.CodeStorageFailure, "read co-located Agents", err)
@@ -554,12 +573,12 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 	}
 
 	var head int64
-	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&head); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&head); err != nil {
 		return false, core.WrapError(core.CodeStorageFailure, "read Agent branch head", err)
 	}
 	sequence := head + 1
 	var epochID string
-	if err := tx.conn.QueryRowContext(ctx, `SELECT epoch_id FROM rule_epochs WHERE instance_id = ? AND branch_id = ? AND start_sequence <= ? AND (end_sequence IS NULL OR ? < end_sequence)`, M2DemoInstanceID, M2DemoBranchID, sequence, sequence).Scan(&epochID); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT epoch_id FROM rule_epochs WHERE instance_id = ? AND branch_id = ? AND start_sequence <= ? AND (end_sequence IS NULL OR ? < end_sequence)`, instanceID, branchID, sequence, sequence).Scan(&epochID); err != nil {
 		return false, classifyMissing(err, "Agent schedule Rule Epoch")
 	}
 	eventPayload := agentMovementPayload{scheduled.AgentID, scheduled.ScheduleID, fromPlace, targetPlace, activity, coLocated}
@@ -592,10 +611,10 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 		name, query string
 		args        []any
 	}{
-		{"Agent movement command", `INSERT INTO commands(command_id, instance_id, branch_id, command_type, idempotency_key, request_hash, expected_head, principal_id, command_policy, status, created_at_utc) VALUES (?, ?, ?, 'AgentScheduledMove', ?, ?, ?, 'principal_system', '{"authorization":"ruleset-scheduler"}', 'pending', ?)`, []any{commandID, M2DemoInstanceID, M2DemoBranchID, item.SchedulerItemID, requestHash, head, nowText}},
+		{"Agent movement command", `INSERT INTO commands(command_id, instance_id, branch_id, command_type, idempotency_key, request_hash, expected_head, principal_id, command_policy, status, created_at_utc) VALUES (?, ?, ?, 'AgentScheduledMove', ?, ?, ?, 'principal_system', '{"authorization":"ruleset-scheduler"}', 'pending', ?)`, []any{commandID, instanceID, branchID, item.SchedulerItemID, requestHash, head, nowText}},
 		{"Agent movement attempt", `INSERT INTO command_attempts(command_id, attempt_no, attempt_id, status, lease_owner, lease_until_utc, proposal_hash, created_at_utc) VALUES (?, 1, ?, 'ready', 'corerp-m2-agent', ?, ?, ?)`, []any{commandID, attemptID, s.now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano), requestHash, nowText}},
-		{"Agent movement batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, commandID, M2DemoInstanceID, M2DemoBranchID, epochID, head, sequence, sequence, item.WorldTime, batchHash, nowText}},
-		{"Agent schedule event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`, []any{eventID, batchID, M2DemoInstanceID, M2DemoBranchID, sequence, eventType, scheduled.AgentID, item.WorldTime, string(eventPayloadJSON)}},
+		{"Agent movement batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, commandID, instanceID, branchID, epochID, head, sequence, sequence, item.WorldTime, batchHash, nowText}},
+		{"Agent schedule event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`, []any{eventID, batchID, instanceID, branchID, sequence, eventType, scheduled.AgentID, item.WorldTime, string(eventPayloadJSON)}},
 	}
 	for _, statement := range statements {
 		if err := execAgentOne(ctx, tx.conn, statement.name, statement.query, statement.args...); err != nil {
@@ -624,13 +643,13 @@ func (s *Store) executeNextAgentSchedule(ctx context.Context, targetWorldTime st
 			}
 		}
 	}
-	if err := execAgentOne(ctx, tx.conn, "advance Agent clock", `UPDATE world_clocks SET current_world_time = ?, current_day = ?, status = 'running', projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time <= ?`, item.WorldTime, scheduled.Day, sequence, M2DemoInstanceID, M2DemoBranchID, item.WorldTime); err != nil {
+	if err := execAgentOne(ctx, tx.conn, "advance Agent clock", `UPDATE world_clocks SET current_world_time = ?, current_day = ?, status = 'running', projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time <= ?`, item.WorldTime, scheduled.Day, sequence, instanceID, branchID, item.WorldTime); err != nil {
 		return false, err
 	}
-	if err := execAgentOne(ctx, tx.conn, "advance Agent branch", `UPDATE branches SET head_sequence = ? WHERE instance_id = ? AND branch_id = ? AND head_sequence = ?`, sequence, M2DemoInstanceID, M2DemoBranchID, head); err != nil {
+	if err := execAgentOne(ctx, tx.conn, "advance Agent branch", `UPDATE branches SET head_sequence = ? WHERE instance_id = ? AND branch_id = ? AND head_sequence = ?`, sequence, instanceID, branchID, head); err != nil {
 		return false, err
 	}
-	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+commandID, "agent_decision", eventID, commandID, attemptID, item.WorldTime, nowText, eventPayloadJSON); err != nil {
+	if err := s.insertScopedAudit(ctx, tx.conn, instanceID, branchID, "audit_"+commandID, "agent_decision", eventID, commandID, attemptID, item.WorldTime, nowText, eventPayloadJSON); err != nil {
 		return false, err
 	}
 	if err := insertAgentOutbox(ctx, tx.conn, "outbox_"+item.SchedulerItemID, eventID, outboxTopic, eventPayloadJSON); err != nil {
@@ -689,19 +708,29 @@ func upsertCoLocationKnowledge(ctx context.Context, conn *sql.Conn, eventID stri
 }
 
 func (s *Store) insertAgentAudit(ctx context.Context, conn *sql.Conn, recordID, recordType, eventID, commandID, attemptID, worldTime, recordedAt string, payload []byte) error {
+	return s.insertScopedAudit(ctx, conn, M2DemoInstanceID, M2DemoBranchID, recordID, recordType, eventID, commandID, attemptID, worldTime, recordedAt, payload)
+}
+
+func (s *Store) insertScopedAudit(ctx context.Context, conn *sql.Conn, instance, branch, recordID, recordType, eventID, commandID, attemptID, worldTime, recordedAt string, payload []byte) error {
 	var recordOrder int64
-	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(record_order), 0) + 1 FROM audit_records WHERE instance_id = ? AND branch_id = ?`, M2DemoInstanceID, M2DemoBranchID).Scan(&recordOrder); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(record_order), 0) + 1 FROM audit_records WHERE instance_id = ? AND branch_id = ?`, instance, branch).Scan(&recordOrder); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "allocate Agent audit order", err)
 	}
-	audience := fmt.Sprintf(`{"instance_id":%q,"kind":"instance"}`, M2DemoInstanceID)
-	return execAgentOne(ctx, conn, "insert Agent audit", `INSERT INTO audit_records(record_id, instance_id, branch_id, record_order, record_type, authority, related_event_id, command_id, attempt_id, trace_id, world_time, recorded_at_utc, audience_scope, payload) VALUES (?, ?, ?, ?, ?, 'audit', ?, ?, ?, ?, ?, ?, ?, ?)`, recordID, M2DemoInstanceID, M2DemoBranchID, recordOrder, recordType, eventID, commandID, attemptID, "trace_"+commandID, worldTime, recordedAt, audience, string(payload))
+	audience := fmt.Sprintf(`{"instance_id":%q,"kind":"instance"}`, instance)
+	return execAgentOne(ctx, conn, "insert Agent audit", `INSERT INTO audit_records(record_id, instance_id, branch_id, record_order, record_type, authority, related_event_id, command_id, attempt_id, trace_id, world_time, recorded_at_utc, audience_scope, payload) VALUES (?, ?, ?, ?, ?, 'audit', ?, ?, ?, ?, ?, ?, ?, ?)`, recordID, instance, branch, recordOrder, recordType, eventID, commandID, attemptID, "trace_"+commandID, worldTime, recordedAt, audience, string(payload))
 }
 
 func insertAgentOutbox(ctx context.Context, conn *sql.Conn, outboxID, eventID, topic string, payload []byte) error {
+	// The immutable Event owns the delivery scope. Callers cannot accidentally
+	// publish another world's fact under the historical M2 fixture audience.
+	var instanceID string
+	if err := conn.QueryRowContext(ctx, `SELECT instance_id FROM events WHERE event_id=?`, eventID).Scan(&instanceID); err != nil {
+		return classifyMissing(err, "Outbox source event")
+	}
 	audience := struct {
 		InstanceID string `json:"instance_id"`
 		Kind       string `json:"kind"`
-	}{M2DemoInstanceID, "instance"}
+	}{instanceID, "instance"}
 	audienceJSON, err := core.CanonicalJSON(audience)
 	if err != nil {
 		return err
