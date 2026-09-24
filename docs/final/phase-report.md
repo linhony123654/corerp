@@ -2,8 +2,10 @@
 
 ## Goal Result
 
-PENDING CHECKPOINT — 功能、最终实玩与本地验证已完成，正在记录最终提交。
-此临时状态将在提交与干净工作区确认后更新，不代表已调用 Goal 完成标记。
+COMPLETE（本地实现、验证与检查点完成；未部署）。
+
+Final源码检查点：`130a959c3006d37d81ab4c0fb29a92b5a1136690`。
+该提交后已确认工作区干净；本报告中的哈希和完成状态作为文档跟进单独提交。
 
 原始范围：`/tmp/0d1b0723-9876-4319-912d-c780b0c66aea.md`，
 RP2→RP3→RP4→RP5→RP6→RP7→RP8→Final，未缩减最终300回合／30世界日条件。
@@ -20,7 +22,7 @@ RP2→RP3→RP4→RP5→RP6→RP7→RP8→Final，未缩减最终300回合／30�
 |RP6|玩家生活视图；独立、可配置且不反写事实的叙述；流式、重述、恢复和长期Play|[验证记录](../rp6/verification.md)：实际104回合、文风／恢复浏览器验证，全量normal及相关race、前端构建|55faee5|没有可用配置，真实模型语言质量未验证|
 |RP7|鉴权会话、历史／上下文／事件协议，Play、酒馆扩展和MCP接入|[验证记录](../rp7/verification.md)：真实三客户端同世界、重启与隔离，全量normal/vet、相关race、迁移及前端|c39af6b|未对外发布或使用真实账号|
 |RP8|可选Studio、授权Inspector、来源解释、可恢复世界创建、声明式包与就绪进入Play|[阶段报告](../rp8/phase-report.md)、[验证](../rp8/verification.md)：真实creator→Play、历史规则与角色隔离、迁移／恢复、normal/race/前端|86ca6f9|任意代码沙箱、规则热升级、分布式部署不在本Goal|
-|Final Integration|同世界9NPC／1玩家／3群体，职业文化法律关系与罕见探访；实际Play+MCP长期运行及同库重建审计|308回合、32.477083世界日、4次恢复；406/406全量测试；相关race/vet/前端与实际同库审计通过|待记录|没有未完成的必需功能或验收；真实模型质量限制保留|
+|Final Integration|同世界9NPC／1玩家／3群体，职业文化法律关系与罕见探访；实际Play+MCP长期运行及同库重建审计|308回合、32.477083世界日、4次恢复；406/406全量测试；相关race/vet/前端与实际同库审计通过|130a959|没有未完成的必需功能或验收；真实模型质量限制保留|
 
 详细测试范围和历史失败的处理方式见[阶段证据清单](milestone-evidence.md)。
 没有把中断的测试、局部通过或未执行的检查当作完整通过。
@@ -89,6 +91,12 @@ Faye于10月5日18:30、Gita于10月13日06:30从住所前往记忆中的Cafe。
 转移到这个清单。
 
 ## Architecture Deviations
+
+主要Final改动位于[多群体初始化](../../backend/internal/storage/rp_final_cohorts.go)、
+[WARM探访](../../backend/internal/storage/rp_warm.go)、
+[真实客户端验收](../../scripts/verify-final-clients.mjs)和
+[同库审计](../../backend/internal/storage/final_client_fixture_test.go)；
+完整31文件改动见源码检查点。
 
 - Final新增显式本地多群体开场：每个群体有来源事实与人口声明，资金和货物从
   既有有限资源转移；不是运行时人口复制，不会在服务启动时自动执行。

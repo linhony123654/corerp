@@ -1,6 +1,9 @@
 # Final Integration acceptance
 
-Status: Final local verification PASS; report/checkpoint handoff being finalized.
+Status: Final local verification/report/source checkpoint PASS.
+Source checkpoint `130a959c3006d37d81ab4c0fb29a92b5a1136690`, clean tree verified
+after commit. [Final report](phase-report.md) records the whole-goal result and
+limits; this status/hash is a documentation-only follow-up. No deployment.
 
 ## Final authoritative results
 

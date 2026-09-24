@@ -1,5 +1,9 @@
 # Living-world progress
 
+## 2026-09-25 — Final source checkpoint and completion metadata
+- Source commit130a959c3006d37d81ab4c0fb29a92b5a1136690 created onmain after green gates/report;31intended files, no runtimeDB/env/build artifacts. Post-commit git status --porcelain empty. Git used existing automatic system identity; no global identity/config change or push. Actual schema_meta contains corerp-rp8-world-ready-030-2026-09-24; unused PRAGMA user_version is0, not a missing migration.
+- Final report now records COMPLETE with actual source hash; acceptance, milestone inventory, resolved requirement audit and plan milestones/gates updated. Prior snapshots explicitly historical. Metadata-only follow-up commit/clean-tree check then update_goal complete and STOP. No required feature/test outstanding; no live processes. Remaining limitations are original advanced non-goals and conditional unavailable live-model quality, not silently deferred required work.
+
 ## 2026-09-25 — Final report and pre-checkpoint gate
 - Added section18 phase-report.md with explicit pending-checkpoint status, each milestone's implementation/evidence/tests/source commits/boundaries, actual Nora story, executed verification, original advanced deferred list and architecture deviations. Final source/chronology/knowledge/narrative/recovery gates have direct passing evidence; report will change Goal Result only after checkpoint/clean-tree steps. Updated authoritative requirements resolution and README; historical incremental pending labels are clearly superseded, not current blockers.
 - Final wholebackend vet recheck exit0 (toolchunk824e59). SQLite PRAGMA user_version=0 is NOT the project's migration tracker; inspected store.go hasSchemaVersion and current SchemaVersion=StudioReadySchemaVersion, actual tracker schema_meta. Do not infer a migration defect from unused PRAGMA. No runtime/schema change made. Fullnormal and actual audit remain valid; no active verification processes.

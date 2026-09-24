@@ -3,8 +3,9 @@
 Authority: original goal sections16–18 in
 `/tmp/0d1b0723-9876-4319-912d-c780b0c66aea.md`.
 The actual client run, full normal suite, same-database rebuild and final source
-review now have terminal passing evidence. Final report/checkpoint handoff is
-being finalized; do not equate verification with an unperformed Git checkpoint.
+review now have terminal passing evidence. Final source checkpoint130a959 and
+post-commit clean tree are verified; the [final report](phase-report.md) records
+completion. Status/hash updates are a documentation-only follow-up.
 
 ## Final resolution of original sections16–17
 
@@ -35,9 +36,11 @@ records commands, counts, artifacts, hashes and the conditional live-model limit
 ## Section18 delivery
 
 Stage provenance and implemented/evidence/tests/commit boundaries are in
-[milestone-evidence.md](milestone-evidence.md). The final report and Final Git
-checkpoint are the only handoff steps still to record. No required functional
-criterion above is being moved into the advanced-system deferred list.
+[milestone-evidence.md](milestone-evidence.md). The [final report](phase-report.md)
+contains the required Goal Result, eight milestone records, sourced world story,
+executed verification, original advanced deferrals and architecture deviations.
+Final source checkpoint130a959 and post-commit clean tree are verified. No
+required criterion has been moved into the advanced-system deferred list.
 
 ## Historical working coverage map — superseded
 

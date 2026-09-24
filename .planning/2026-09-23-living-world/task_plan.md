@@ -1,12 +1,23 @@
 # CoreRP living-world goal
 
 ## Objective and authority
-Implement the full goal `/tmp/0d1b0723-9876-4319-912d-c780b0c66aea.md`: strictly serial RP-2 → RP-3 → RP-4 → RP-5 → RP-6 → RP-7 → RP-8 → Final Integration. Do not redefine completion around a subset. Stage commits are explicitly authorized. Current baseline `e1aa4c7`, clean main, schema 025. Prior RP-1 plan/report are historical.
+Implement the full goal `/tmp/0d1b0723-9876-4319-912d-c780b0c66aea.md`: strictly serial RP-2 → RP-3 → RP-4 → RP-5 → RP-6 → RP-7 → RP-8 → Final Integration. Do not redefine completion around a subset. Stage commits are explicitly authorized. Initial RP1 baseline was `e1aa4c7`, schema025. Final source is130a959, schema030. Prior RP-1 plan/report are historical.
 
 ## Route and invariants
 Full-project DEFINE/DESIGN/BUILD/POLISH/local SHIP per stage. One large stage in implementation at a time. Each stage: read-only recon → reuse map → representative vertical slice → focused tests → full scope → required verification → report/commit → clean tree → next stage. No second character/economy/location/time/relationship/memory/history authority; validated Event chain owns facts. Models get only legally known context. No production or external publication authorization.
 
 ## Current phase
+
+Status: complete. RP2–RP8 and Final implemented, verified, reported and source
+checkpointed. Final130a959c3006d37d81ab4c0fb29a92b5a1136690; post-commit tree
+clean. Actual308turns/32.477083days/4recoveries, sameDB audit23.373s, fullnormal
+406/406, relevant race/vet/frontend all PASS. No live verification processes,
+no required remaining work. Final report docs/final/phase-report.md; original
+advanced systems deferred, live model unavailable/unverified as conditional,
+no deployment. Only completion metadata is being recorded after source commit.
+STOP after completion accounting; wait for user review, do not expand scope.
+
+## Historical execution snapshots — superseded by completion above
 
 LATEST: actualclient34349 terminal LONG_CLIENT_PASS308turns/32.477083days/
 4recoveries/2raremovements. Same ORIGINAL NODLns DB audit60725 PASS23.373s,
@@ -578,13 +589,13 @@ Traffic follow-up: actual two-pending-appointment collision reproduced and corre
 - [x] RP-5: verified/reported/checkpoint47c5d15; clean-tree transition confirmed.
 - [x] RP-6: verified/reported/checkpoint55faee5, metadata879dbc0; clean-tree transition confirmed.
 - [x] RP-7: stable protocol, actual thin SillyTavern adapter, MCP/Skill, actual three-client shared world/restart; verified/reported/checkpoint c39af6b, clean-tree transition confirmed.
-- [ ] RP-8: optional real Studio/Inspector/Creator workflow with player/creator/ops permission separation; preserve extension registry; verify/report/checkpoint.
-- [ ] Final Integration: 5–10 NPC, Cohorts and all life/society systems, 300 turns / 30 days, multiple restarts/clients, emergent identity/economic/career/culture/law/relationship/quiet/rare-event chains; full DoD item audit and final report.
+- [x] RP-8: optional Studio/Inspector/Creator and permission separation; registry preserved; verified/reported/source86ca6f9, metadata3e2d244, clean-tree transition.
+- [x] Final Integration:9NPC/oneplayer/threecohorts, all required sourced life/society chains, actual308turns/32.477083days/4recoveries/2raremovements; sameDB audit and full DoD/report PASS; source130a959, clean-tree transition.
 
 ## Verification policy
 Each completed stage: full uncached Go, vet, related race, applicable migrations/reopen/replay, frontend typecheck/build/configured verifiers, targeted E2E, browser recovery if Play changes. Live model REQUIRED_IF_AVAILABLE if no configured endpoint/key/model; implement real adapter regardless. Mock HTTP tests prove transport/contract and world boundary, not remote live quality.
 
-## Decisions
+## Historical design decisions
 - RP-5 design: evaluate sourced opportunity receipts within finishRPWait after scheduler drain, preserving trigger currency; never append an independent command between completed wait and initiative drain. Separate private receipts from existing public wait outbox. No simulation seed owner found; explicit Event-backed stream/policy installation proposed. Draw identity must exclude sessions/retry keys/wall time; full design and first source/effect slice still open.
 - RP-3 position proposal slice: source latest/current-term actual work review and active reviewer; explicit manager qualification judgments for exact target requirements; immutable same-organization conditional offer with declared grade direction. Separate internal assessment from employee proposed terms and redact employee reads/results. Offer/decline do not reserve capacity or activate terms. Next implement acceptance/revalidation/reservation/effective actual position/pay/owned authority and projection recovery; no completed promotion claim yet.
 - RP-3 position transition prerequisite: immutable manager-declared organization grade scale (2–16 unique labels, lowest first), Event-backed and manager-readable. Preserve legacy recruitment without inventing a rank; declaration must cover existing posting grades and new postings must match. Comparison alone grants no job, authority, money, or social status. Actual transition/reservation/qualification/permission activation and recovery remain next; do not count this prerequisite as completed promotion.
@@ -598,4 +609,10 @@ Each completed stage: full uncached Go, vet, related race, applicable migrations
 - Existing `RPDecisionInput`/`RPDecisionProposal` and `RunRPTurn(provider)` are reusable. Current HTTP product wrappers hardcode deterministic; supply an immutable service-level provider wrapper rather than mutable per-request global state.
 
 ## Gates
-DEFINE PASS: requested phase order/scope/DoD captured, original goal remains full acceptance reference. RP-2A/B/C/D/E DESIGN/BUILD/POLISH/local verification PASS (live model REQUIRED_IF_AVAILABLE, unconfigured; local HTTP adapter verified). Prior checkpoints B `d694788`, C `66211c0`, D `4ded11d`, E/full RP-2 `d68e10d`. RP-3 all local gates/checkpoint186fb68/clean-tree transition PASS. RP-4 DEFINE/DESIGN/BUILD/POLISH/local verification PASS with original A/B/C traceability and documented bounded behavior; final checkpoint/clean-tree transition pending. RP-5–8/final implementation gates pending.
+All original DEFINE/DESIGN/BUILD/POLISH/local SHIP gates PASS through Final.
+Sources: RP2 d68e10d (priorA328aead/Bd694788/C66211c0/D4ded11d), RP3 186fb68,
+RP4 53a5ac3, RP5 47c5d15, RP6 55faee5, RP7 c39af6b, RP8 86ca6f9,
+Final130a959. Stage reports and clean-tree transitions verified. Actual Final
+and sameDB audit passed; live model REQUIRED_IF_AVAILABLE remains unavailable,
+not falsely passed. No deployment requested/performed. Final original16–18
+traceability is in docs/final/requirements-audit.md and phase-report.md.
