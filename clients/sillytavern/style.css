@@ -1,0 +1,9 @@
+#corerp-runtime { display: grid; gap: .65rem; padding: .75rem 0; min-width: 0; }
+#corerp-runtime label { display: grid; gap: .25rem; }
+#corerp-runtime input, #corerp-runtime textarea, #corerp-runtime select { width: 100%; min-width: 0; box-sizing: border-box; }
+#corerp-runtime .corerp-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+#corerp-runtime button { min-height: 2.5rem; width: auto; padding: .4rem .65rem; white-space: nowrap; }
+#corerp-runtime .corerp-actions button { flex: 1 1 auto; }
+#corerp-runtime button[data-action=submit] { width: 100%; }
+#corerp-runtime pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; margin: 0; }
+#corerp-runtime [role=status] { border-left: 3px solid currentColor; padding-left: .65rem; }

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -57,8 +58,30 @@ func TestRPPlayObservationRestoresScopedHistoryAndLegalDestinations(t *testing.T
 		t.Fatal(err)
 	}
 	separate, err := store.ObserveRPSession(ctx, core.RPSessionReadRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: other.SessionID})
-	if err != nil || len(separate.RecentTurns) != 0 {
-		t.Fatalf("cross-session transcript: %+v, %v", separate, err)
+	if err != nil || len(separate.RecentTurns) != len(restored.RecentTurns) {
+		t.Fatalf("same observer lost shared history: %+v, %v", separate, err)
+	}
+	for index, shared := range separate.RecentTurns {
+		original := restored.RecentTurns[index]
+		if shared.TurnRunID != original.TurnRunID || !reflect.DeepEqual(shared.NarrativeLines, original.NarrativeLines) || shared.CanRegenerate {
+			t.Fatalf("shared facts or session-local regeneration boundary: %+v", shared)
+		}
+	}
+	if !restored.RecentTurns[0].CanRegenerate {
+		t.Fatal("own settled turn lost regeneration")
+	}
+	if _, err := store.ReadRPNarrative(ctx, RPNarrativeReadRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: other.SessionID, TurnRunID: turn.TurnRunID}); !core.HasCode(err, core.CodeNotFound) {
+		t.Fatalf("shared visibility granted another session's narrative endpoint: %v", err)
+	}
+	// Sharing is by the existing controlled observer, not all sessions in a world.
+	grantRPControlForTest(t, ctx, store, M2AgentAdaID)
+	ada, err := store.OpenRPSession(ctx, rpTestOpenRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	adaView, err := store.ObserveRPSession(ctx, core.RPSessionReadRequest{PrincipalID: rpTestPrincipal, SessionID: ada.SessionID})
+	if err != nil || len(adaView.RecentTurns) != 0 {
+		t.Fatalf("another observer's personal history exposed: %+v %v", adaView.RecentTurns, err)
 	}
 	if _, err := store.ObserveRPSession(ctx, core.RPSessionReadRequest{PrincipalID: "another-player", SessionID: session.SessionID}); err == nil {
 		t.Fatal("unauthorized history exposed")

@@ -30,6 +30,7 @@ const (
 func main() {
 	databasePath := flag.String("db", "", "required SQLite database path")
 	listenAddress := flag.String("listen", "127.0.0.1:8080", "HTTP listen address")
+	browserOrigins := flag.String("browser-origins", "", "optional comma-separated exact browser origins allowed to access the authenticated API")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -45,7 +46,11 @@ func main() {
 		logger.Error("invalid narrative provider configuration", "error", err)
 		os.Exit(1)
 	}
-	if err := runWithProviders(ctx, *databasePath, *listenAddress, os.Getenv(tokenEnvironment), os.Getenv(cursorEnvironment), logger, provider, mode, narrator); err != nil {
+	var origins []string
+	if *browserOrigins != "" {
+		origins = strings.Split(*browserOrigins, ",")
+	}
+	if err := runWithProviders(ctx, *databasePath, *listenAddress, os.Getenv(tokenEnvironment), os.Getenv(cursorEnvironment), logger, provider, mode, narrator, origins...); err != nil {
 		logger.Error("server stopped with error", "error", err)
 		os.Exit(1)
 	}
@@ -59,7 +64,7 @@ func runWithProvider(ctx context.Context, databasePath, listenAddress, tokenJSON
 	return runWithProviders(ctx, databasePath, listenAddress, tokenJSON, cursorSecret, logger, provider, mode, core.DeterministicRPNarrativeProvider{})
 }
 
-func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecret string, logger *slog.Logger, provider core.RPDecisionProvider, mode string, narrator core.RPStreamingNarrativeProvider) error {
+func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSON, cursorSecret string, logger *slog.Logger, provider core.RPDecisionProvider, mode string, narrator core.RPStreamingNarrativeProvider, browserOrigins ...string) error {
 	if strings.TrimSpace(databasePath) == "" {
 		return core.NewError(core.CodeInvalidArgument, "-db is required")
 	}
@@ -68,6 +73,10 @@ func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSO
 	}
 	if logger == nil {
 		return core.NewError(core.CodeInvalidArgument, "logger is required")
+	}
+	originPolicy, err := httpapi.BrowserOriginPolicy(browserOrigins)
+	if err != nil {
+		return err
 	}
 	tokens, err := parseTokenConfiguration(tokenJSON)
 	if err != nil {
@@ -99,7 +108,7 @@ func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSO
 	}
 	server := &http.Server{
 		Addr:              listenAddress,
-		Handler:           api.Handler(),
+		Handler:           originPolicy(api.Handler()),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		// Streaming responses install bounded per-write deadlines. A global

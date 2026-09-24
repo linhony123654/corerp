@@ -1,0 +1,11 @@
+{
+  "display_name": "CoreRP 世界运行时",
+  "loading_order": 20,
+  "js": "index.js",
+  "css": "style.css",
+  "author": "CoreRP",
+  "version": "0.1.0",
+  "auto_update": false,
+  "minimum_client_version": "1.19.0",
+  "generate_interceptor": "corerpRuntimeInterceptor"
+}

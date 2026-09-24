@@ -4,10 +4,24 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"corerp.local/backend/internal/core"
 )
+
+func TestBrowserOriginConfigurationFailsBeforeOpeningDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "must-not-create.db")
+	err := runWithProviders(context.Background(), path, "127.0.0.1:0", `{"player-token":"principal_player"}`, "cursor-test-secret-at-least-32-bytes", slog.New(slog.NewTextHandler(io.Discard, nil)), core.DeterministicRPDecisionProvider{}, "deterministic", core.DeterministicRPNarrativeProvider{}, "*")
+	if !core.HasCode(err, core.CodeInvalidArgument) {
+		t.Fatalf("invalid browser origin accepted: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("invalid configuration touched database: %v", err)
+	}
+}
 
 func TestParseTokenConfiguration(t *testing.T) {
 	tokens, err := parseTokenConfiguration(`{"buyer-token":"principal_buyer","creator-token":"principal_creator"}`)

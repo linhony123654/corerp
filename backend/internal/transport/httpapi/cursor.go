@@ -22,6 +22,8 @@ type cursorDocument struct {
 	InstanceID  string `json:"instance_id"`
 	BranchID    string `json:"branch_id"`
 	Sequence    int64  `json:"sequence"`
+	SessionID   string `json:"session_id,omitempty"`
+	ObserverID  string `json:"observer_id,omitempty"`
 }
 
 func NewCursorCodec(secret []byte) (*CursorCodec, error) {
@@ -41,10 +43,23 @@ func NewCursorCodec(secret []byte) (*CursorCodec, error) {
 }
 
 func (c *CursorCodec) Encode(principalID, instanceID, branchID string, sequence int64) (string, error) {
-	if sequence < 0 {
+	return c.encodeDocument(cursorDocument{Version: 1, PrincipalID: principalID, InstanceID: instanceID, BranchID: branchID, Sequence: sequence})
+}
+
+// Version 2 is exclusively the RP stream scope. A cursor is a continuation
+// token, not authorization: every page must recheck the live session and grant.
+func (c *CursorCodec) EncodeRP(principalID, instanceID, branchID, sessionID, observerID string, sequence int64) (string, error) {
+	if principalID == "" || instanceID == "" || branchID == "" || sessionID == "" || observerID == "" {
+		return "", core.NewError(core.CodeInvalidArgument, "RP cursor requires a complete session scope")
+	}
+	return c.encodeDocument(cursorDocument{Version: 2, PrincipalID: principalID, InstanceID: instanceID, BranchID: branchID, SessionID: sessionID, ObserverID: observerID, Sequence: sequence})
+}
+
+func (c *CursorCodec) encodeDocument(document cursorDocument) (string, error) {
+	if document.Sequence < 0 {
 		return "", core.NewError(core.CodeInvalidArgument, "cursor sequence must be nonnegative")
 	}
-	plaintext, err := json.Marshal(cursorDocument{1, principalID, instanceID, branchID, sequence})
+	plaintext, err := json.Marshal(document)
 	if err != nil {
 		return "", core.WrapError(core.CodeStorageFailure, "encode event cursor", err)
 	}
@@ -57,22 +72,44 @@ func (c *CursorCodec) Encode(principalID, instanceID, branchID string, sequence 
 }
 
 func (c *CursorCodec) Decode(encoded, principalID, instanceID, branchID string) (int64, error) {
-	sealed, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || len(sealed) < c.aead.NonceSize() {
-		return 0, core.NewError(core.CodeInvalidArgument, "event cursor is invalid")
-	}
-	nonce := sealed[:c.aead.NonceSize()]
-	ciphertext := sealed[c.aead.NonceSize():]
-	plaintext, err := c.aead.Open(nil, nonce, ciphertext, nil)
+	document, err := c.decodeDocument(encoded, 1)
 	if err != nil {
-		return 0, core.NewError(core.CodeInvalidArgument, "event cursor is invalid")
-	}
-	var document cursorDocument
-	if err := json.Unmarshal(plaintext, &document); err != nil || document.Version != 1 || document.Sequence < 0 {
-		return 0, core.NewError(core.CodeInvalidArgument, "event cursor is invalid")
+		return 0, err
 	}
 	if document.PrincipalID != principalID || document.InstanceID != instanceID || document.BranchID != branchID {
 		return 0, core.NewError(core.CodeUnauthorized, "event cursor does not belong to this principal or scope")
 	}
 	return document.Sequence, nil
+}
+
+func (c *CursorCodec) DecodeRP(encoded, principalID, instanceID, branchID, sessionID, observerID string) (int64, error) {
+	document, err := c.decodeDocument(encoded, 2)
+	if err != nil {
+		return 0, err
+	}
+	if document.SessionID == "" || document.ObserverID == "" || document.PrincipalID == "" || document.InstanceID == "" || document.BranchID == "" {
+		return 0, core.NewError(core.CodeInvalidArgument, "RP cursor requires a complete session scope")
+	}
+	if document.PrincipalID != principalID || document.InstanceID != instanceID || document.BranchID != branchID || document.SessionID != sessionID || document.ObserverID != observerID {
+		return 0, core.NewError(core.CodeUnauthorized, "RP cursor does not belong to this principal or session scope")
+	}
+	return document.Sequence, nil
+}
+
+func (c *CursorCodec) decodeDocument(encoded string, version int) (cursorDocument, error) {
+	var document cursorDocument
+	sealed, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(sealed) < c.aead.NonceSize() {
+		return document, core.NewError(core.CodeInvalidArgument, "event cursor is invalid")
+	}
+	nonce := sealed[:c.aead.NonceSize()]
+	ciphertext := sealed[c.aead.NonceSize():]
+	plaintext, err := c.aead.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return document, core.NewError(core.CodeInvalidArgument, "event cursor is invalid")
+	}
+	if err := json.Unmarshal(plaintext, &document); err != nil || document.Version != version || document.Sequence < 0 {
+		return document, core.NewError(core.CodeInvalidArgument, "event cursor is invalid")
+	}
+	return document, nil
 }

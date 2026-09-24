@@ -77,6 +77,9 @@ func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenReq
 	}
 	defer tx.Rollback(ctx)
 	var existingID, existingHash string
+	if err := checkRPRequestRetirement(ctx, tx.conn, request.PrincipalID, "open", "", request.IdempotencyKey); err != nil {
+		return RPSession{}, err
+	}
 	err = tx.conn.QueryRowContext(ctx, `SELECT session_id, request_hash FROM rp_sessions WHERE principal_id = ? AND idempotency_key = ?`, request.PrincipalID, request.IdempotencyKey).Scan(&existingID, &existingHash)
 	if err == nil && existingHash != requestHash {
 		return RPSession{}, core.NewError(core.CodeIdempotencyMismatch, "RP session idempotency key was used with another binding")
@@ -311,11 +314,14 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 			return RPObservation{}, err
 		}
 	}
-	// Only this authenticated session's settled view, never raw events or NPC private state.
+	// Settled history belongs to the controlled observer, not a particular client.
+	// Other sessions' prose can be read but only this session's turns are offered
+	// for regeneration; narrative mutation endpoints retain their own authorization.
 	view.RecentTurns = make([]RPHistoryTurn, 0)
 	rows, err = tx.conn.QueryContext(ctx, `SELECT turn_run_id, narrative_json, can_regenerate FROM
-		(SELECT turn_run_id, narrative_json, settled_sequence, 1 AS can_regenerate FROM rp_turn_runs
-		 WHERE session_id = ? AND status = 'settled'
+		(SELECT r.turn_run_id, r.narrative_json, r.settled_sequence, CASE WHEN r.session_id=? THEN 1 ELSE 0 END AS can_regenerate
+		 FROM rp_turn_runs r JOIN rp_sessions h ON h.session_id=r.session_id
+		 WHERE h.instance_id=? AND h.branch_id=? AND h.controlled_entity_id=? AND r.status='settled'
 		 UNION ALL
 		 SELECT e.event_id, json_array(CASE e.event_type
 		 WHEN 'RPPlayerMoved' THEN '你前往了 ' || p.display_name || '。'
@@ -323,19 +329,22 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		 ELSE '你等待至 ' || json_extract(e.payload, '$.target_world_time') || '。' END), e.event_sequence, 0
 		 FROM events e LEFT JOIN agent_places p ON p.place_id = json_extract(e.payload, '$.to_place_id')
 		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ?
-		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction') AND json_extract(e.payload, '$.session_id') = ?
+		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction')
 		 UNION ALL
 		 SELECT e.event_id,json_array(CASE e.event_type
 		 WHEN 'RPSpeechAccepted' THEN n.display_name || '说：“' || u.speech_text || '”'
 		 ELSE n.display_name || '前往了 ' || p.display_name || '。' END),e.event_sequence,0
 		 FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id
+		 JOIN rp_sessions h ON h.session_id=json_extract(e.payload,'$.session_id') AND h.instance_id=e.instance_id AND h.branch_id=e.branch_id
 		 JOIN materialized_entities n ON n.entity_id=e.actor_id
 		 LEFT JOIN rp_utterances u ON u.event_id=e.event_id
 		 LEFT JOIN agent_places p ON p.place_id=json_extract(e.payload,'$.to_place_id')
-		 WHERE c.command_type='RPNPCInitiative' AND e.instance_id=? AND e.branch_id=? AND json_extract(e.payload,'$.session_id')=?
+		 WHERE c.command_type='RPNPCInitiative' AND e.instance_id=? AND e.branch_id=? AND h.controlled_entity_id=?
 		 AND (e.event_type='RPNPCMoved' OR (e.event_type='RPSpeechAccepted' AND EXISTS (SELECT 1 FROM observation_records o WHERE o.source_event_id=e.event_id AND o.observer_agent_id=?)))
 		 ORDER BY settled_sequence DESC LIMIT 50)
-		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID, session.SessionID, session.InstanceID, session.BranchID, session.SessionID, session.ControlledEntityID)
+		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID,
+		session.InstanceID, session.BranchID, session.ControlledEntityID,
+		session.InstanceID, session.BranchID, session.ControlledEntityID, session.ControlledEntityID)
 	if err != nil {
 		return RPObservation{}, err
 	}

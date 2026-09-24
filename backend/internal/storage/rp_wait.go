@@ -90,6 +90,9 @@ func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitReque
 		return RPWaitResult{}, false, core.NewError(core.CodeNotFound, "bounded M2 RP world not found")
 	}
 	var intentID, existingHash, status string
+	if err := checkRPRequestRetirement(ctx, tx.conn, request.PrincipalID, "wait", session.SessionID, request.IdempotencyKey); err != nil {
+		return RPWaitResult{}, false, err
+	}
 	var commandID sql.NullString
 	err = tx.conn.QueryRowContext(ctx, `SELECT intent_id, request_hash, status, command_id FROM rp_wait_intents WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&intentID, &existingHash, &status, &commandID)
 	if err == nil {

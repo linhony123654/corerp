@@ -52,6 +52,9 @@ func (s *Store) MoveRP(ctx context.Context, request core.RPMoveRequest) (RPMoveR
 		return RPMoveResult{}, err
 	}
 	commandKey := "rp_move:" + session.SessionID + ":" + request.IdempotencyKey
+	if err := checkRPRequestRetirement(ctx, tx.conn, request.PrincipalID, "move", session.SessionID, request.IdempotencyKey); err != nil {
+		return RPMoveResult{}, err
+	}
 	var existingCommandID, existingHash, existingStatus string
 	err = tx.conn.QueryRowContext(ctx, `SELECT command_id, request_hash, status FROM commands WHERE instance_id = ? AND branch_id = ? AND command_type = 'RPPlayerMove' AND idempotency_key = ?`, session.InstanceID, session.BranchID, commandKey).Scan(&existingCommandID, &existingHash, &existingStatus)
 	if err == nil {

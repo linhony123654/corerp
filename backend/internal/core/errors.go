@@ -13,6 +13,7 @@ const (
 	CodeNotFound                ErrorCode = "NOT_FOUND"
 	CodeIdempotencyMismatch     ErrorCode = "IDEMPOTENCY_PAYLOAD_MISMATCH"
 	CodeCommandInProgress       ErrorCode = "COMMAND_IN_PROGRESS"
+	CodeRequestRetired          ErrorCode = "REQUEST_RETIRED"
 	CodeBranchConflict          ErrorCode = "BRANCH_VERSION_CONFLICT"
 	CodeInsufficientFunds       ErrorCode = "INSUFFICIENT_FUNDS"
 	CodeInsufficientStock       ErrorCode = "INSUFFICIENT_STOCK"

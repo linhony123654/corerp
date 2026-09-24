@@ -32,7 +32,9 @@ npm run verify:m0
 
 ## 当前 RP-6 产品体验
 
-RP-2～RP-6 已有阶段检查点，[RP-6](docs/rp6/phase-6.md) 已通过本地验收；下一阶段是 RP-7，RP-8 与总体验收也尚未完成。Play 已提供按需打开的钱包、工作信息、通讯录、手机工作通知和本地地图，以及叙事预设、视角、字节预算、流式读取、重试和不回滚世界的叙述重生成。
+RP-2～RP-6 已有阶段检查点，[RP-7](docs/rp7/phase-7.md) 外部客户端接入已通过本地阶段验收；RP-8 与总体验收尚未完成。当前 schema027 增加[未接受请求的永久停用机制](docs/rp7/requests.md)，不回滚世界。Play 已提供按需打开的钱包、工作信息、通讯录、手机工作通知和本地地图，以及叙事预设、视角、字节预算、流式读取、重试和不回滚世界的叙述重生成。
+
+RP-7 已提供[酒馆扩展](clients/sillytavern/README.md)、[MCP 适配器与接入说明](clients/mcp/README.md)及[CoreRP RP Skill](.agents/skills/corerp-rp/SKILL.md)。[真实三客户端同实例、同人物及重启恢复](docs/rp7/compatibility.md)与[本地阶段验证](docs/rp7/verification.md)已通过；未发布到生产，也未声称嵌套 Codex 或真实 LLM 实玩。
 
 自定义文风的可执行范围与人物决策配置分开：[独立文风解释器](docs/rp6/custom-style.md) 需要显式配置，只解释有限呈现偏好，不任意扩写事实。默认确定性叙述器会明确提示自由文风指令仅保存、不执行。手机不是私人聊天服务，地图不展示远处人物，完整边界见 [能力核对](docs/rp6/capability-audit.md)。
 

@@ -215,6 +215,9 @@ func (s *Store) ensureRPTurnRun(ctx context.Context, request core.RPSpeechReques
 	}
 	var run rpTurnRun
 	var existingHash string
+	if err := checkRPRequestRetirement(ctx, tx.conn, request.PrincipalID, "dialogue", session.SessionID, request.IdempotencyKey); err != nil {
+		return rpTurnRun{}, false, err
+	}
 	var playerTurnID, playerEventID sql.NullString
 	err = tx.conn.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence, request_hash FROM rp_turn_runs WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &existingHash)
 	if err == nil {

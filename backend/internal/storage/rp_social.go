@@ -48,6 +48,9 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 		return empty, err
 	}
 	key := "rp_social:" + session.SessionID + ":" + r.IdempotencyKey
+	if err := checkRPRequestRetirement(ctx, tx.conn, r.PrincipalID, "social", session.SessionID, r.IdempotencyKey); err != nil {
+		return empty, err
+	}
 	var oldHash, payload string
 	var prior RPSocialResult
 	err = tx.conn.QueryRowContext(ctx, `SELECT c.request_hash,e.event_id,e.event_sequence,e.payload FROM commands c

@@ -1,0 +1,10 @@
+interface:
+  display_name: "CoreRP RP"
+  short_description: "Roleplay through the shared CoreRP world runtime"
+  default_prompt: "Use $corerp-rp to continue my existing CoreRP session with only my character's permitted knowledge."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "corerp"
+      description: "CoreRP authenticated world runtime tools"
+      transport: "stdio"

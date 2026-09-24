@@ -93,6 +93,10 @@ type Service interface {
 	ReadRPStyle(context.Context, core.RPSessionReadRequest) (storage.RPResolvedStyle, error)
 	ReadRPWallet(context.Context, core.RPSessionReadRequest) (storage.RPWallet, error)
 	ReadRPContacts(context.Context, storage.RPContactsReadRequest) (storage.RPContacts, error)
+	ReadRPContext(context.Context, storage.RPContextReadRequest) (storage.RPClientContext, error)
+	RetireRPRequest(context.Context, storage.RPRequestRetireRequest) (storage.RPRequestOutcome, error)
+	DiscoverRPBindings(context.Context, storage.RPDiscoverRequest) (storage.RPDiscovery, error)
+	ReadRPEvents(context.Context, storage.RPEventsReadRequest) (storage.RPClientEvents, error)
 	ReadRPMessages(context.Context, storage.RPMessagesReadRequest) (storage.RPMessages, error)
 	ReadRPWork(context.Context, core.RPSessionReadRequest) (storage.RPWork, error)
 	ReadRPNarrative(context.Context, storage.RPNarrativeReadRequest) (storage.RPNarrativeReadResult, error)
@@ -192,6 +196,8 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleEncounter(response, request, requestID, principalID)
 	case "/api/v1/rp/sessions/open":
 		s.handleRPSessionOpen(response, request, requestID, principalID)
+	case "/api/v1/rp/bindings/list":
+		s.handleRPDiscovery(response, request, requestID, principalID)
 	case "/api/v1/rp/sessions/read":
 		s.handleRPSessionRead(response, request, requestID, principalID)
 	case "/api/v1/rp/sessions/resume":
@@ -200,6 +206,14 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPSessionClose(response, request, requestID, principalID)
 	case "/api/v1/rp/observe":
 		s.handleRPObserve(response, request, requestID, principalID)
+	case "/api/v1/rp/context/read":
+		s.handleRPContextRead(response, request, requestID, principalID)
+	case "/api/v1/rp/requests/retire":
+		s.handleRPRequestRetire(response, request, requestID, principalID)
+	case "/api/v1/rp/events":
+		s.handleRPEvents(response, request, requestID, principalID, false)
+	case "/api/v1/rp/events/stream":
+		s.handleRPEvents(response, request, requestID, principalID, true)
 	case "/api/v1/rp/actions/move":
 		s.handleRPMove(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/social":
@@ -1029,7 +1043,7 @@ func writeError(response http.ResponseWriter, requestID string, err error) {
 			status = http.StatusForbidden
 		case core.CodeNotFound:
 			status = http.StatusNotFound
-		case core.CodeIdempotencyMismatch, core.CodeCommandInProgress, core.CodeBranchConflict, core.CodeMaterializationConflict:
+		case core.CodeIdempotencyMismatch, core.CodeCommandInProgress, core.CodeRequestRetired, core.CodeBranchConflict, core.CodeMaterializationConflict:
 			status = http.StatusConflict
 		case core.CodeInsufficientFunds, core.CodeInsufficientStock, core.CodeIssuanceLimit, core.CodeIntegerOverflow, core.CodeConservationFailed:
 			status = http.StatusUnprocessableEntity

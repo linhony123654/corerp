@@ -1,0 +1,10 @@
+{
+  "package": "sillytavern",
+  "version": "1.19.0",
+  "npm_git_head": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+  "tarball": "https://registry.npmjs.org/sillytavern/-/sillytavern-1.19.0.tgz",
+  "integrity": "sha512-RNu7duRWf/YJUBLA7UKNzTy4R0KJXu+e9K+s6WHBOK+GSV51JQ6ifcSdIqFTxHV4kJfUkgBqJ2PbrSLlhTl2+Q==",
+  "inspected_release_head": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+  "node_engine": ">=20",
+  "note": "Published npm artifact and release branch head are distinct. Host compatibility must be measured against this integrity-pinned artifact, not inferred from moving documentation."
+}
