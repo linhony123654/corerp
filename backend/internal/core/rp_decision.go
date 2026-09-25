@@ -116,6 +116,8 @@ func (DeterministicRPDecisionProvider) Propose(_ context.Context, input RPDecisi
 			switch goal.Code {
 			case "collect_money_owed", "stabilize_income":
 				return RPDecisionProposal{Action: "refuse", Text: "我得先处理手头的开销，暂时没心思闲聊。"}, nil
+			case "stabilize_household_income":
+				return RPDecisionProposal{Action: "refuse", Text: "我得先想办法补上家里的房租，暂时不能闲聊。"}, nil
 			case "avoid_conflict":
 				if goal.SubjectEntityID != input.InterlocutorEntityID {
 					continue

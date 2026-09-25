@@ -470,6 +470,15 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 		}
 		return true, nil
 	}
+	if item.PhaseID == rpHouseholdRentPhase {
+		if err := s.executeRPHouseholdRent(ctx, tx, item); err != nil {
+			return false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 	if item.PhaseID != m2AgentPhaseID {
 		return false, core.NewError(core.CodeStorageFailure, "unsupported M2 scheduler phase "+item.PhaseID)
 	}

@@ -65,6 +65,7 @@ type RPLifeContext struct {
 	ReceivableMinor        int64                  `json:"receivable_minor"`
 	LiabilityMinor         int64                  `json:"liability_minor"`
 	RentDueMinor           int64                  `json:"rent_due_minor"`
+	HouseholdPressure      *RPHouseholdPressure   `json:"household_pressure,omitempty"`
 	EconomicSourceEventIDs []string               `json:"economic_source_event_ids"`
 	Employment             []RPOwnEmployment      `json:"employment"`
 	Relationships          []RPRelationship       `json:"relationships"`
@@ -80,6 +81,21 @@ type RPUnemployment struct {
 	SinceDay           int    `json:"since_day"`
 	Kind               string `json:"kind"`
 	SourceEventID      string `json:"source_event_id"`
+}
+
+// Forecast only: no member's personal cash or identity is disclosed here.
+type RPHouseholdPressure struct {
+	RentMinor        int64  `json:"rent_minor"`
+	OwnShareMinor    int64  `json:"own_share_minor"`
+	RentFundMinor    int64  `json:"rent_fund_minor"`
+	OutstandingMinor int64  `json:"outstanding_minor"`
+	PressureLevel    string `json:"pressure_level"`
+	NextDueWorldTime string `json:"next_due_world_time"`
+	// Exact aggregate wage and gap amounts are local decision inputs. In a
+	// two-person household, exporting them could reveal the other wage by
+	// subtracting the observer's own known income.
+	ExpectedIncomeMinor int64 `json:"-"`
+	CoverageGapMinor    int64 `json:"-"`
 }
 
 // This versioned seed is a minimal stable tendency, not a generated biography.
@@ -120,6 +136,9 @@ func DeriveRPLifeGoals(input RPDecisionInput, life *RPLifeContext) {
 			goal = "collect_money_owed"
 		}
 		add("cash_security", "high", goal, life.EconomicSourceEventIDs, "discretionary_spending", "extended_socializing")
+	}
+	if life.HouseholdPressure != nil && life.HouseholdPressure.CoverageGapMinor > 0 {
+		add("household_budget_pressure", "high", "stabilize_household_income", life.EconomicSourceEventIDs, "discretionary_spending", "unplanned_housing_cost")
 	}
 	if input.NextSchedule != nil && input.NextSchedule.ActivityCode == "work" {
 		sources := []string{}

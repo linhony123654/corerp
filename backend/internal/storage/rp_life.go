@@ -74,6 +74,10 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 	if err != nil {
 		return nil, err
 	}
+	life.HouseholdPressure, err = readRPHouseholdPressure(ctx, conn, input)
+	if err != nil {
+		return nil, err
+	}
 
 	// Repeat contact supports familiarity, not trust. Other dimensions remain
 	// neutral until there are explicit sourced interpersonal actions.

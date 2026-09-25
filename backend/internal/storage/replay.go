@@ -279,7 +279,19 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	for _, group := range [][]ProjectionDifference{wages, roles, culture, institutions, transit, leaveQueues, locations, journeys, journeyQueues, perception, identity, enrollments, authorities} {
+	households, err := rpHouseholdProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	houserent, err := rpHouseholdRentProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	rentruntime, err := rpHouseholdRentRuntimeDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range [][]ProjectionDifference{wages, roles, culture, institutions, transit, leaveQueues, locations, journeys, journeyQueues, perception, identity, enrollments, authorities, households, houserent, rentruntime} {
 		differences = append(differences, group...)
 	}
 	return differences, nil
@@ -356,6 +368,27 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 		return err
 	}
 	if err := repairRPControllerAuthorities(ctx, tx.conn, instanceID, branchID, head, authorities); err != nil {
+		return err
+	}
+	households, err := rpHouseholdProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPHouseholdProjections(ctx, tx.conn, instanceID, branchID, head, households); err != nil {
+		return err
+	}
+	houserent, err := rpHouseholdRentProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPHouseholdRentProjections(ctx, tx.conn, instanceID, branchID, head, houserent); err != nil {
+		return err
+	}
+	rentruntime, err := rpHouseholdRentRuntimeDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPHouseholdRentRuntime(ctx, tx.conn, instanceID, branchID, head, rentruntime); err != nil {
 		return err
 	}
 	for _, account := range replay.State.AccountBalances {
