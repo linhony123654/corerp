@@ -78,6 +78,21 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 	if err != nil {
 		return nil, err
 	}
+	life.Health, err = readRPOwnSleepHealth(ctx, conn, input)
+	if err != nil {
+		return nil, err
+	}
+	symptoms, conditionImpact, err := readRPOwnConditionSymptoms(ctx, conn, input)
+	if err != nil {
+		return nil, err
+	}
+	if len(symptoms) > 0 {
+		if life.Health == nil {
+			life.Health = &core.RPHealthSelf{}
+		}
+		life.Health.Symptoms = append(life.Health.Symptoms, symptoms...)
+		life.Health.ConditionImpact = conditionImpact
+	}
 
 	// Repeat contact supports familiarity, not trust. Other dimensions remain
 	// neutral until there are explicit sourced interpersonal actions.

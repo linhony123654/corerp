@@ -52,6 +52,7 @@ runtime or grant permission for actions beyond the user's intent.
 tools `corerp_journey_start`, `corerp_journey_cancel`, `corerp_map_survey` and
 `corerp_map_read`, and the F3 participant tools `corerp_round_read`,
 `corerp_round_wait`, `corerp_round_speech`, `corerp_round_move`,
+`corerp_round_sleep`, `corerp_round_work_task`,
 `corerp_round_advance`. Timed travel enters an actual
 segment; cancellation leaves the traveller there. Map notes are dated beliefs,
 not current route permission. Shared rounds must first be opened by a local
@@ -72,6 +73,15 @@ RP actions cannot bypass an active round. A selected speech's internal-NPC
 response settles before the round closes. If Human chooses to wait again at
 the same world time, the next round gives the wait/scheduler boundary priority
 over repeated external actions; Human can still choose an action instead.
+`corerp_round_sleep` proposes only the actor's own start/end. A selected start
+or end writes one private sleep Event through the same actor command used in a
+solo world; a global wait or being at home alone never creates sleep. The
+round receipt contains no private sleep Event ID, duration or condition truth.
+`corerp_round_work_task` proposes only the actor's `routine_check` for a
+current sourced employment shift at the workplace. The selected work Event is
+separate from attendance and wages; the round receipt contains no private
+fatigue or illness cause. An authorized manager can separately read only the
+bounded task outcome through the internal business API, not through MCP.
 `corerp_round_advance` may be retried with a different per-call scheduler budget
 when due work remains; the round and accepted child key stay the same. This does
 not change the exact-budget retry contract of direct `corerp_wait`.

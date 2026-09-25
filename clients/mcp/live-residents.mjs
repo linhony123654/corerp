@@ -85,9 +85,9 @@ export async function validateLiveResidents(config, { retainEvidence = true } = 
   const temp = await mkdtemp(join(tmpdir(), 'corerp-f3-live-'));
   const database = join(temp, 'world.db');
   const executable = join(temp, 'server'), setup = join(temp, 'setup'), controller = join(temp, 'controller');
-  run('/usr/local/go/bin/go', ['build', '-o', executable, './cmd/corerp-server']);
-  run('/usr/local/go/bin/go', ['build', '-o', setup, './cmd/corerp-m2']);
-  run('/usr/local/go/bin/go', ['build', '-o', controller, './cmd/corerp-controller']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', executable, './cmd/corerp-server']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', setup, './cmd/corerp-m2']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', controller, './cmd/corerp-controller']);
   run(setup, ['-db', database, '-action', 'rp-travel-prepare']);
   run('sqlite3', [database, "INSERT INTO principals(principal_id,principal_type,display_name,status) VALUES ('principal_live_resident_a','service','Live Resident A','active'),('principal_live_resident_b','service','Live Resident B','active');"]);
 

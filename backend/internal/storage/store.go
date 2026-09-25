@@ -61,7 +61,8 @@ const (
 	RPHouseholdRentSchemaVersion         = "corerp-f4-household-rent-043-2026-09-25"
 	RPHouseholdContributionSchemaVersion = "corerp-f4-household-rent-contributions-044-2026-09-25"
 	RPHouseholdDependentSchemaVersion    = "corerp-f4-household-dependents-045-2026-09-25"
-	SchemaVersion                        = RPHouseholdDependentSchemaVersion
+	RPSharedHealthSchemaVersion          = "corerp-f5-shared-health-rounds-046-2026-09-25"
+	SchemaVersion                        = RPSharedHealthSchemaVersion
 )
 
 const (
@@ -221,6 +222,7 @@ func (s *Store) migrate(ctx context.Context) error {
 		{RPHouseholdRentSchemaVersion, "043_household_rent_agreements.sql"},
 		{RPHouseholdContributionSchemaVersion, "044_household_rent_contributions.sql"},
 		{RPHouseholdDependentSchemaVersion, "045_household_dependents.sql"},
+		{RPSharedHealthSchemaVersion, "046_shared_health_rounds.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

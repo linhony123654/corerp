@@ -190,6 +190,17 @@ func rpSharedRoundView(ctx context.Context, q rpQueryer, row rpSharedRoundRow) (
 			if row.SelectedActionKind == "move" {
 				eventType = "RPPlayerMoved"
 			}
+		} else if row.SettlementKind == "health" {
+			switch row.SelectedActionKind {
+			case "sleep_start":
+				eventType = "RPSleepStarted"
+			case "sleep_end":
+				eventType = "RPSleepEnded"
+			case "work_task":
+				eventType = "RPWorkTaskAttempted"
+			default:
+				return RPSharedRound{}, core.NewError(core.CodeProjectionDiverged, "unknown settled shared health action")
+			}
 		}
 		if err := q.QueryRowContext(ctx, `SELECT world_time FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_sequence=? AND event_type=?`, row.CompletionEvent, row.Instance, row.Branch, row.SettledSequence, eventType).Scan(&view.CurrentWorldTime); err != nil {
 			return RPSharedRound{}, core.WrapError(core.CodeProjectionDiverged, "settled shared round lacks its typed Event", err)
@@ -816,7 +827,7 @@ func rpSharedRoundHumanWaitPriority(ctx context.Context, conn *sql.Conn, row rpS
 		return false, nil
 	}
 	var priorAtSameTime, dueNow int
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_shared_rounds WHERE instance_id=? AND branch_id=? AND status='settled' AND settlement_kind='speech' AND baseline_world_time=?`, row.Instance, row.Branch, row.BaselineTime).Scan(&priorAtSameTime); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_shared_rounds WHERE instance_id=? AND branch_id=? AND status='settled' AND settlement_kind IN ('speech','health') AND baseline_world_time=?`, row.Instance, row.Branch, row.BaselineTime).Scan(&priorAtSameTime); err != nil {
 		return false, err
 	}
 	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE instance_id=? AND branch_id=? AND status='pending' AND world_time<=?`, row.Instance, row.Branch, row.BaselineTime).Scan(&dueNow); err != nil {
@@ -889,17 +900,21 @@ func (s *Store) advanceRPSharedRoundWithProvider(ctx context.Context, r RPShared
 			// This is independent of arrival/submission order and pins the choice
 			// before any typed world command is attempted.
 			var priorEntity string
-			err := tx.conn.QueryRowContext(ctx, `SELECT p.entity_id FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id AND p.session_id=r.selected_session_id WHERE r.instance_id=? AND r.branch_id=? AND r.status='settled' AND r.settlement_kind='speech' ORDER BY r.settled_sequence DESC LIMIT 1`, row.Instance, row.Branch).Scan(&priorEntity)
+			err := tx.conn.QueryRowContext(ctx, `SELECT p.entity_id FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id AND p.session_id=r.selected_session_id WHERE r.instance_id=? AND r.branch_id=? AND r.status='settled' AND r.settlement_kind IN ('speech','health') ORDER BY r.settled_sequence DESC LIMIT 1`, row.Instance, row.Branch).Scan(&priorEntity)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return empty, err
 			}
 			if err := tx.conn.QueryRowContext(ctx, `SELECT p.session_id,a.action_kind FROM rp_shared_round_actions a JOIN rp_shared_round_participants p ON p.round_id=a.round_id AND p.session_id=a.session_id WHERE a.round_id=? ORDER BY CASE WHEN p.entity_id>? THEN 0 ELSE 1 END,p.entity_id LIMIT 1`, row.ID, priorEntity).Scan(&row.SelectedSession, &row.SelectedActionKind); err != nil {
 				return empty, err
 			}
-			if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_shared_rounds SET status='advancing',settlement_kind='speech',selected_session_id=?,selected_action_kind=? WHERE round_id=? AND status='open'`, row.SelectedSession, row.SelectedActionKind, row.ID); err != nil {
+			settlement := "speech"
+			if row.SelectedActionKind == "sleep_start" || row.SelectedActionKind == "sleep_end" || row.SelectedActionKind == "work_task" {
+				settlement = "health"
+			}
+			if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_shared_rounds SET status='advancing',settlement_kind=?,selected_session_id=?,selected_action_kind=? WHERE round_id=? AND status='open'`, settlement, row.SelectedSession, row.SelectedActionKind, row.ID); err != nil {
 				return empty, err
 			}
-			row.Status, row.SettlementKind = "advancing", "speech"
+			row.Status, row.SettlementKind = "advancing", settlement
 		} else {
 			target, err := rpSharedRoundTarget(ctx, tx.conn, row)
 			if err != nil {
@@ -915,9 +930,18 @@ func (s *Store) advanceRPSharedRoundWithProvider(ctx context.Context, r RPShared
 			row.Status, row.SettlementKind, row.AdvanceTarget, row.WaitKey = "advancing", "wait", target, key
 		}
 	}
-	if row.SettlementKind == "speech" {
+	if row.SettlementKind == "speech" || row.SettlementKind == "health" {
 		if err := tx.Commit(ctx); err != nil {
 			return empty, err
+		}
+		if row.SettlementKind == "health" {
+			if row.SelectedActionKind == "work_task" {
+				return s.advanceRPSharedWorkTask(ctx, r, row)
+			}
+			if row.SelectedActionKind == "sleep_start" || row.SelectedActionKind == "sleep_end" {
+				return s.advanceRPSharedSleep(ctx, r, row)
+			}
+			return empty, core.NewError(core.CodeProjectionDiverged, "unknown selected shared health action")
 		}
 		if row.SelectedActionKind == "move" {
 			return s.advanceRPSharedMove(ctx, r, row)

@@ -118,6 +118,11 @@ func (DeterministicRPDecisionProvider) Propose(_ context.Context, input RPDecisi
 				return RPDecisionProposal{Action: "refuse", Text: "我得先处理手头的开销，暂时没心思闲聊。"}, nil
 			case "stabilize_household_income":
 				return RPDecisionProposal{Action: "refuse", Text: "我得先想办法补上家里的房租，暂时不能闲聊。"}, nil
+			case "prioritize_rest":
+				at, err := time.Parse(time.RFC3339, input.WorldTime)
+				if err == nil && at.Hour() >= 18 && (strings.Contains(input.PlayerSpeechText, "一起") || strings.Contains(input.PlayerSpeechText, "约")) {
+					return RPDecisionProposal{Action: "refuse", Text: "我今晚需要休息，改天再约。"}, nil
+				}
 			case "avoid_conflict":
 				if goal.SubjectEntityID != input.InterlocutorEntityID {
 					continue

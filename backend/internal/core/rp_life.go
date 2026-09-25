@@ -56,6 +56,7 @@ type RPOwnEmployment struct {
 }
 type RPLifeContext struct {
 	LawCases               []RPLawCase            `json:"law_cases,omitempty"`
+	Health                 *RPHealthSelf          `json:"health,omitempty"`
 	CultureAffiliations    []RPCultureAffiliation `json:"culture_affiliations,omitempty"`
 	CultureExperiences     []RPCultureExperience  `json:"culture_experiences,omitempty"`
 	Unemployment           *RPUnemployment        `json:"unemployment,omitempty"`
@@ -74,6 +75,17 @@ type RPLifeContext struct {
 	Needs                  []RPNeed               `json:"needs"`
 	Goals                  []RPGoal               `json:"goals"`
 	Commitments            []RPSocialEvidence     `json:"commitments"`
+}
+
+// An individual's perceived functional state, not a diagnosis or a copy of
+// private health Event payloads. Other people receive only separate lawful
+// observation/knowledge claims.
+type RPHealthSelf struct {
+	FatigueLevel     string   `json:"fatigue_level"`
+	SleepDebtLevel   string   `json:"sleep_debt_level"`
+	FunctionalImpact string   `json:"functional_impact"`
+	ConditionImpact  string   `json:"condition_impact,omitempty"`
+	Symptoms         []string `json:"symptoms"`
 }
 
 type RPUnemployment struct {
@@ -139,6 +151,9 @@ func DeriveRPLifeGoals(input RPDecisionInput, life *RPLifeContext) {
 	}
 	if life.HouseholdPressure != nil && life.HouseholdPressure.CoverageGapMinor > 0 {
 		add("household_budget_pressure", "high", "stabilize_household_income", life.EconomicSourceEventIDs, "discretionary_spending", "unplanned_housing_cost")
+	}
+	if life.Health != nil && life.Health.FatigueLevel == "moderate" {
+		add("fatigue", "high", "prioritize_rest", []string{}, "optional_evening_activity")
 	}
 	if input.NextSchedule != nil && input.NextSchedule.ActivityCode == "work" {
 		sources := []string{}

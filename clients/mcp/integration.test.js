@@ -41,9 +41,9 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   const temp = await mkdtemp(join(tmpdir(), 'corerp-rp7-mcp-'));
   const database = join(temp, 'world.db'); const executable = join(temp, 'server'); const setup = join(temp, 'setup'); const controller = join(temp, 'controller');
   const run = (command, args) => execFileSync(command, args, { cwd: join(root, 'backend'), stdio: 'pipe' });
-  run('/usr/local/go/bin/go', ['build', '-o', executable, './cmd/corerp-server']);
-  run('/usr/local/go/bin/go', ['build', '-o', setup, './cmd/corerp-m2']);
-  run('/usr/local/go/bin/go', ['build', '-o', controller, './cmd/corerp-controller']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', executable, './cmd/corerp-server']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', setup, './cmd/corerp-m2']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', controller, './cmd/corerp-controller']);
   run(setup, ['-db', database, '-action', 'rp-travel-prepare']);
   run('sqlite3', [database, "INSERT INTO principals(principal_id,principal_type,display_name,status) VALUES ('principal_mcp_resident_a','service','MCP Resident A','active'),('principal_mcp_resident_b','service','MCP Resident B','active');"]);
   const token = randomBytes(24).toString('hex'), creatorToken = randomBytes(24).toString('hex'), operatorToken = randomBytes(24).toString('hex');
@@ -55,9 +55,11 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   t.after(() => stop(runtime)); await ready(origin);
   let connected = await connect(origin, token); t.after(() => connected.client.close());
   const tools = await connected.client.listTools();
-  assert.equal(tools.tools.length, 26);
+  assert.equal(tools.tools.length, 28);
   assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_speech'));
   assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_move'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_sleep'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_work_task'));
   assert.ok(tools.tools.every(tool => !JSON.stringify(tool.inputSchema).includes('principal_id')));
   const call = async (name, args) => data(await connected.client.callTool({ name, arguments: args }));
   const worlds = await call('corerp_worlds', {});
@@ -68,6 +70,8 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   for (const [name, args] of [
     ['corerp_round_read', { ...read, round_id: 'missing-round' }],
     ['corerp_round_wait', { ...read, round_id: 'missing-round', horizon_world_time: '2026-09-22T03:00:00Z', idempotency_key: randomUUID() }],
+    ['corerp_round_sleep', { ...read, round_id: 'missing-round', action: 'start', idempotency_key: randomUUID() }],
+    ['corerp_round_work_task', { ...read, round_id: 'missing-round', contract_id: 'missing-contract', task_code: 'routine_check', idempotency_key: randomUUID() }],
     ['corerp_round_advance', { ...read, round_id: 'missing-round', budget: 1 }],
   ]) {
     const missing = await connected.client.callTool({ name, arguments: args });
@@ -142,7 +146,7 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   // modern connection so both protocol eras are tested, not merely advertised.
   const modern = await connect(origin, token, true); t.after(() => modern.client.close());
   assert.equal(modern.client.getServerVersion().name, 'corerp-runtime');
-  assert.equal((await modern.client.listTools()).tools.length, 26);
+  assert.equal((await modern.client.listTools()).tools.length, 28);
   assert.deepEqual(data(await modern.client.callTool({ name: 'corerp_context', arguments: read })), await call('corerp_context', read));
 
   let loseReply = true;
@@ -301,6 +305,56 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   assert.equal((await callA('corerp_dialogue', { ...ownA, expected_cursor: observedA.observation_cursor, idempotency_key: randomUUID(), text: distantText })).status, 'settled');
   const afterLeaving = await callB('corerp_events', { ...ownB, cursor: heard.next_cursor, limit: 50 });
   assert.equal(afterLeaving.events.some(event => event.facts.some(fact => fact.kind === 'speaker_said' && fact.text === distantText)), false, 'distant B heard face-to-face speech');
+  const homeView = await callA('corerp_observe', ownA);
+  if (homeView.place_id !== 'place_m2_home_ada') {
+    const homeJourney = await callA('corerp_journey_start', { ...ownA, expected_cursor: homeView.observation_cursor, idempotency_key: randomUUID(), from_place_id: homeView.place_id, to_place_id: 'place_m2_home_ada' });
+    for (let roundNumber = 0; roundNumber < 16; roundNumber++) {
+      const current = await callA('corerp_observe', ownA);
+      if (current.place_id === 'place_m2_home_ada') break;
+      assert.equal(current.active_journey?.journey_id, homeJourney.journey_id);
+      await call('corerp_observe', read); await callB('corerp_observe', ownB);
+      const travelID = await openResidentRound();
+      for (const [residentCall, own] of [[call, read], [callA, ownA], [callB, ownB]]) {
+        await residentCall('corerp_round_wait', { ...own, round_id: travelID, horizon_world_time: homeJourney.scheduled_arrival_at, idempotency_key: randomUUID() });
+      }
+      await callA('corerp_round_advance', { ...ownA, round_id: travelID, budget: 100 });
+      if (roundNumber === 15) assert.fail('Ada did not arrive home through the scheduled journey');
+    }
+  }
+  const sleepBaseline = (await call('corerp_observe', read)).world_time;
+  await callA('corerp_observe', ownA); await callB('corerp_observe', ownB);
+  const sleepStartID = await openResidentRound(), sleepStartA = { ...ownA, round_id: sleepStartID };
+  const sleepStartHead = head();
+  const sleepStartProposal = { ...sleepStartA, action: 'start', idempotency_key: randomUUID() };
+  assert.equal((await callA('corerp_round_sleep', sleepStartProposal)).submitted, 1);
+  assert.equal(head(), sleepStartHead, 'private MCP sleep proposal changed world before Human');
+  const sleepStartHorizon = new Date(Date.parse(sleepBaseline) + 10 * 60_000).toISOString().replace('.000Z', 'Z');
+  await callB('corerp_round_wait', { ...ownB, round_id: sleepStartID, horizon_world_time: sleepStartHorizon, idempotency_key: randomUUID() });
+  const prematureSleep = await residentA.client.callTool({ name: 'corerp_round_advance', arguments: { ...sleepStartA, budget: 100 } });
+  assert.equal(prematureSleep.isError, true); assert.match(JSON.stringify(prematureSleep), /COMMAND_IN_PROGRESS/u);
+  await call('corerp_round_wait', { ...read, round_id: sleepStartID, horizon_world_time: sleepStartHorizon, idempotency_key: randomUUID() });
+  const startedSleep = await callA('corerp_round_advance', { ...sleepStartA, budget: 100 });
+  assert.equal(startedSleep.status, 'settled'); assert.equal(startedSleep.own_disposition, 'action_accepted');
+  assert.equal(startedSleep.event_sequence, sleepStartHead + 1); assert.equal(startedSleep.current_world_time, sleepBaseline);
+  assert.equal((await callA('corerp_round_sleep', sleepStartProposal)).replayed, true);
+  for (const privateValue of ['event_rp_sleep_', 'entity_m2_agent_ada', 'rest_minutes', 'start_event_id']) assert.equal(JSON.stringify(startedSleep).includes(privateValue), false);
+  assert.equal(Number(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSleepStarted';"]).toString().trim()), 1);
+  await call('corerp_observe', read); await callA('corerp_observe', ownA); await callB('corerp_observe', ownB);
+  const sleepWaitID = await openResidentRound();
+  for (const [residentCall, own] of [[call, read], [callA, ownA], [callB, ownB]]) {
+    await residentCall('corerp_round_wait', { ...own, round_id: sleepWaitID, horizon_world_time: sleepStartHorizon, idempotency_key: randomUUID() });
+  }
+  assert.equal((await callA('corerp_round_advance', { ...ownA, round_id: sleepWaitID, budget: 100 })).current_world_time, sleepStartHorizon);
+  await call('corerp_observe', read); await callA('corerp_observe', ownA); await callB('corerp_observe', ownB);
+  const sleepEndID = await openResidentRound(), sleepEndA = { ...ownA, round_id: sleepEndID };
+  const sleepEndProposal = { ...sleepEndA, action: 'end', idempotency_key: randomUUID() };
+  await callA('corerp_round_sleep', sleepEndProposal);
+  const sleepEndHorizon = new Date(Date.parse(sleepStartHorizon) + 10 * 60_000).toISOString().replace('.000Z', 'Z');
+  await callB('corerp_round_wait', { ...ownB, round_id: sleepEndID, horizon_world_time: sleepEndHorizon, idempotency_key: randomUUID() });
+  await call('corerp_round_wait', { ...read, round_id: sleepEndID, horizon_world_time: sleepEndHorizon, idempotency_key: randomUUID() });
+  const endedSleep = await callA('corerp_round_advance', { ...sleepEndA, budget: 100 });
+  assert.equal(endedSleep.status, 'settled'); assert.equal(endedSleep.own_disposition, 'action_accepted');
+  assert.equal(Number(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSleepEnded';"]).toString().trim()), 1);
   for (const entity of ['entity_m2_agent_ada', 'entity_m2_agent_bo']) {
     const released = localController('release', { binding: { ...scope, principal_id: 'principal_operator', expected_head: head(), idempotency_key: randomUUID() }, entity_id: entity, expected_generation: 1 });
     assert.equal(released.fact.generation, 2);
@@ -321,5 +375,5 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   assert.equal(Number(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPExternalControllerReleased';"]).toString().trim()), 2);
   assert.equal(connected.stderr().includes(token), false); assert.equal(foreign.stderr().includes(creatorToken), false);
   assert.equal(residentA.stderr().includes(residentAToken), false); assert.equal(residentB.stderr().includes(residentBToken), false);
-  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; two service residents/Human settled shared waits plus conflicting shared speech and move windows, each scripted resident spoke twice, physical meeting delivered speech and leaving scene stopped hearing, explicit release fenced old proposals and preserved frozen receipts; live model provider not exercised`);
+  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; two service residents/Human settled shared waits plus conflicting shared speech and move windows, sourced private sleep start/end through full shared rounds, each scripted resident spoke twice, physical meeting delivered speech and leaving scene stopped hearing, explicit release fenced old proposals and preserved frozen receipts; live model provider not exercised`);
 });

@@ -121,6 +121,8 @@ type Service interface {
 	SubmitRPSharedWait(context.Context, storage.RPSharedWaitRequest) (storage.RPSharedRound, error)
 	SubmitRPSharedSpeech(context.Context, storage.RPSharedSpeechRequest) (storage.RPSharedRound, error)
 	SubmitRPSharedMove(context.Context, storage.RPSharedMoveRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedSleep(context.Context, storage.RPSharedSleepRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedWorkTask(context.Context, storage.RPSharedWorkTaskRequest) (storage.RPSharedRound, error)
 	AdvanceRPSharedRound(context.Context, storage.RPSharedRoundAdvanceRequest) (storage.RPSharedRound, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
@@ -412,6 +414,10 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedSpeechRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedSpeech)
 	case "/api/v1/rp/rounds/move":
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedMoveRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedMove)
+	case "/api/v1/rp/rounds/sleep":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedSleepRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedSleep)
+	case "/api/v1/rp/rounds/work-task":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedWorkTaskRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedWorkTask)
 	case "/api/v1/rp/rounds/advance":
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedRoundAdvanceRequest) *string { return &r.PrincipalID }, s.service.AdvanceRPSharedRound)
 	case "/api/v1/rp/actions/speak":
