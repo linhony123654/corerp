@@ -77,6 +77,7 @@ func (s *Store) PostCareerPosition(ctx context.Context, r core.CareerPostingRequ
 	}
 	// Copy the caller's slice before storing/hash construction.
 	r.Posting.RequiredQualifications = append([]string{}, r.Posting.RequiredQualifications...)
+	r.Posting.RequiredCredentials = append([]core.CredentialRequirement(nil), r.Posting.RequiredCredentials...)
 	r.Posting.Capabilities = append([]string(nil), r.Posting.Capabilities...)
 	b, p := r.Binding, r.Posting
 	return s.executeCareerCommand(ctx, b, "PostCareerPosition", r, func(conn *sql.Conn) error {
@@ -108,6 +109,16 @@ func (s *Store) ApplyForCareerPosition(ctx context.Context, r core.CareerApplica
 		}
 		posting, err := readCareerRecord(ctx, conn, b.InstanceID, b.BranchID, "posting", r.PositionID)
 		if err != nil {
+			return CareerFact{}, nil, err
+		}
+		if posting.Fact.Posting == nil {
+			return CareerFact{}, nil, core.NewError(core.CodeProjectionDiverged, "posting lacks terms")
+		}
+		var worldTime string
+		if err := conn.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id=? AND branch_id=?`, b.InstanceID, b.BranchID).Scan(&worldTime); err != nil {
+			return CareerFact{}, nil, err
+		}
+		if err := requireCareerCredentials(ctx, conn, b, r.CandidateID, posting.Fact.Posting.RequiredCredentials, worldTime); err != nil {
 			return CareerFact{}, nil, err
 		}
 		rows, err := conn.QueryContext(ctx, `SELECT DISTINCT json_extract(payload,'$.record_id') FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='application' AND json_extract(payload,'$.application.position_id')=? AND json_extract(payload,'$.application.candidate_id')=?`, b.InstanceID, b.BranchID, r.PositionID, r.CandidateID)

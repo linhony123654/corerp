@@ -103,6 +103,14 @@ type Service interface {
 	RaiseCareerWage(context.Context, core.CareerRaiseRequest) (storage.CareerRecord, error)
 	ReferCareerCandidate(context.Context, core.CareerReferralRequest) (storage.CareerRecord, error)
 	ReadCareerRecruitmentRecord(context.Context, string, string, string, string, string) (storage.CareerRecord, error)
+	DefineEducationProgramLocal(context.Context, storage.EducationProgramRequest) (storage.EducationRecord, error)
+	EnrollEducation(context.Context, storage.EducationEnrollmentRequest) (storage.EducationRecord, error)
+	SubmitEducationExercise(context.Context, storage.EducationExerciseRequest) (storage.EducationRecord, error)
+	CompleteEducationTraining(context.Context, storage.EducationCompletionRequest) (storage.EducationRecord, error)
+	IssueEducationCredential(context.Context, storage.EducationCredentialRequest) (storage.EducationRecord, error)
+	RevokeEducationCredential(context.Context, storage.EducationRevocationRequest) (storage.EducationRecord, error)
+	ReadEducationQualification(context.Context, string, string, string, string) (storage.EducationQualificationView, error)
+	DiscoverEducationPrograms(context.Context, string, string, string, string, string, string, int64) (storage.EducationProgramMarket, error)
 	SetRPStyle(context.Context, storage.RPStyleSetRequest) (storage.RPStyleSetResult, error)
 	ReadRPStyle(context.Context, core.RPSessionReadRequest) (storage.RPResolvedStyle, error)
 	ReadRPWallet(context.Context, core.RPSessionReadRequest) (storage.RPWallet, error)
@@ -386,6 +394,26 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerReferralRequest) *string { return &r.Binding.PrincipalID }, s.service.ReferCareerCandidate)
 	case "/api/v1/career/records/read":
 		s.handleCareerRecordRead(response, request, requestID, principalID)
+	case "/api/v1/education/programs/define-local":
+		handleEducationCommand(s, response, request, requestID, principalID, func(r *storage.EducationProgramRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineEducationProgramLocal)
+	case "/api/v1/education/enrollments/start":
+		handleEducationCommand(s, response, request, requestID, principalID, func(r *storage.EducationEnrollmentRequest) *string { return &r.Binding.PrincipalID }, s.service.EnrollEducation)
+	case "/api/v1/education/exercises/submit":
+		handleEducationCommand(s, response, request, requestID, principalID, func(r *storage.EducationExerciseRequest) *string { return &r.Binding.PrincipalID }, s.service.SubmitEducationExercise)
+	case "/api/v1/education/training/complete":
+		handleEducationCommand(s, response, request, requestID, principalID, func(r *storage.EducationCompletionRequest) *string { return &r.Binding.PrincipalID }, s.service.CompleteEducationTraining)
+	case "/api/v1/education/credentials/issue":
+		handleEducationCommand(s, response, request, requestID, principalID, func(r *storage.EducationCredentialRequest) *string { return &r.Binding.PrincipalID }, s.service.IssueEducationCredential)
+	case "/api/v1/education/credentials/revoke":
+		handleEducationCommand(s, response, request, requestID, principalID, func(r *storage.EducationRevocationRequest) *string { return &r.Binding.PrincipalID }, s.service.RevokeEducationCredential)
+	case "/api/v1/education/qualifications/own":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *educationQualificationRead) *string { return &r.PrincipalID }, func(ctx context.Context, r educationQualificationRead) (storage.EducationQualificationView, error) {
+			return s.service.ReadEducationQualification(ctx, r.PrincipalID, r.InstanceID, r.BranchID, r.LearnerID)
+		})
+	case "/api/v1/education/programs/query":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *educationProgramRead) *string { return &r.PrincipalID }, func(ctx context.Context, r educationProgramRead) (storage.EducationProgramMarket, error) {
+			return s.service.DiscoverEducationPrograms(ctx, r.PrincipalID, r.InstanceID, r.BranchID, r.LearnerID, r.Code, r.IssuerID, r.AfterSequence)
+		})
 	case "/api/v1/rp/style/set":
 		s.handleRPStyleSet(response, request, requestID, principalID)
 	case "/api/v1/rp/style/read":

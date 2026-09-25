@@ -106,6 +106,9 @@ func (s *Store) AcceptCareerOffer(ctx context.Context, r core.CareerOfferAcceptR
 		if posting.EventID != offer.PostingEventID || posting.Fact.Posting == nil || len(evaluation.Evaluation.Assessments) != len(posting.Fact.Posting.RequiredQualifications) {
 			return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "offer posting terms changed")
 		}
+		if err := requireCareerCredentials(ctx, conn, b, careerRecordCandidate(record.Fact), posting.Fact.Posting.RequiredCredentials, c.WorldTime); err != nil {
+			return CareerFact{}, nil, err
+		}
 		var count int
 		count, err = careerPositionOccupancy(ctx, conn, offer.PositionKey)
 		if err != nil {

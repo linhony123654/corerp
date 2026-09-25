@@ -257,6 +257,9 @@ func (s *Store) OfferCareerEmployment(ctx context.Context, r core.CareerOfferReq
 		if posting.Fact.Posting == nil || application.Fact.Application.PostingEventID != posting.EventID {
 			return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "application posting terms changed")
 		}
+		if err := requireCareerCredentials(ctx, conn, b, application.Fact.Application.CandidateID, posting.Fact.Posting.RequiredCredentials, c.WorldTime); err != nil {
+			return CareerFact{}, nil, err
+		}
 		org, err := readCareerRecord(ctx, conn, b.InstanceID, b.BranchID, "organization", posting.Fact.OrganizationID)
 		if err != nil {
 			return CareerFact{}, nil, err

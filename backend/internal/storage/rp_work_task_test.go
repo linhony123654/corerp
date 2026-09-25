@@ -133,6 +133,14 @@ func TestRPWorkTaskSleepFatigueChangesNextShiftOutcomeWithoutChangingWages(t *te
 		strings.Contains(string(encoded), after.Fact.WorkSourceEventID) {
 		t.Fatal("private work/health cause escaped manager view")
 	}
+	qualification, err := s.ReadEducationQualification(ctx, M2AgentAdaPrincipal, M2DemoInstanceID, M2DemoBranchID, M2AgentAdaID)
+	if err != nil || len(qualification.Experience) != 2 || qualification.Experience[0].Day != 2 || qualification.Experience[0].Outcome != "recheck_required" {
+		t.Fatal("qualification query lost sourced work experience", qualification, err)
+	}
+	bounded, _ := json.Marshal(qualification)
+	if strings.Contains(string(bounded), "fatigue") || strings.Contains(string(bounded), "condition") || strings.Contains(string(bounded), after.Fact.WorkSourceEventID) {
+		t.Fatal("qualification query leaked private work cause")
+	}
 	if _, err := s.ReadRPWorkTask(ctx, M2RPNPCPrincipal, M2DemoInstanceID, M2DemoBranchID, after.EventID); !core.HasCode(err, core.CodeUnauthorized) {
 		t.Fatal("unrelated principal read task outcome", err)
 	}

@@ -41,7 +41,15 @@ type CareerPostingDefinition struct {
 	Capacity               int      `json:"capacity"`
 	DailyWageMinor         int64    `json:"daily_wage_minor"`
 	RequiredQualifications []string `json:"required_qualifications"`
-	Capabilities           []string `json:"capabilities,omitempty"`
+	// Portable sourced credentials are separate from organization-specific
+	// interview assessments in RequiredQualifications.
+	RequiredCredentials []CredentialRequirement `json:"required_credentials,omitempty"`
+	Capabilities        []string                `json:"capabilities,omitempty"`
+}
+
+type CredentialRequirement struct {
+	Code     string `json:"code"`
+	IssuerID string `json:"issuer_id"`
 }
 
 type CareerPostingRequest struct {
@@ -89,7 +97,7 @@ func (r CareerPostingRequest) Validate() error {
 	if err := validateCareerIDs(p.PositionID, p.OrganizationID, p.Title, p.OccupationID, p.Grade); err != nil {
 		return err
 	}
-	if p.Capacity < 1 || p.Capacity > 100 || p.DailyWageMinor < 1 || p.DailyWageMinor > MaxJSONSafeInteger || len(p.RequiredQualifications) > 16 {
+	if p.Capacity < 1 || p.Capacity > 100 || p.DailyWageMinor < 1 || p.DailyWageMinor > MaxJSONSafeInteger || len(p.RequiredQualifications) > 16 || len(p.RequiredCredentials) > 16 {
 		return NewError(CodeInvalidArgument, "invalid vacancy capacity, wage or requirements")
 	}
 	seen := map[string]bool{}
@@ -104,6 +112,17 @@ func (r CareerPostingRequest) Validate() error {
 			return NewError(CodeInvalidArgument, "duplicate qualification requirement")
 		}
 		seen[code] = true
+	}
+	seenCredentials := map[string]bool{}
+	for _, requirement := range p.RequiredCredentials {
+		if err := validateCareerIDs(requirement.Code, requirement.IssuerID); err != nil {
+			return err
+		}
+		key := requirement.Code + "\x00" + requirement.IssuerID
+		if seenCredentials[key] {
+			return NewError(CodeInvalidArgument, "duplicate sourced credential requirement")
+		}
+		seenCredentials[key] = true
 	}
 	return nil
 }
