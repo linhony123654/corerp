@@ -10,6 +10,7 @@ import { createServer } from 'vite';
 
 const root = resolve(import.meta.dirname, '..'), temp = await mkdtemp(join(tmpdir(), 'corerp-rp8-play-worlds-'));
 const creatorUI = process.argv.includes('--creator-ui');
+const interactionIsolation = process.argv.includes('--interaction-isolation');
 const db = join(temp, 'world.db'), apiOrigin = 'http://127.0.0.1:4408', origin = 'http://127.0.0.1:4409';
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'pipe' }).toString();
 for (const [name, pkg] of [['runtime', 'corerp-server'], ['m1', 'corerp-m1'], ['setup', 'corerp-m2'], ['admin', 'corerp-admin']]) run('/usr/local/go/bin/go', ['build', '-o', join(temp, name), `./cmd/${pkg}`], join(root, 'backend'));
@@ -183,6 +184,38 @@ try {
   await page.getByRole('heading', { name: '新世界广场' }).waitFor();
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).session), bookmark.session);
   assert.equal(sessionCount(), '2');
+  if (interactionIsolation) {
+    const marker = '迟到流只属于新世界。';
+    let releaseStream, streamArrived;
+    const streamGate = new Promise(resolve => { releaseStream = resolve; });
+    const streamReady = new Promise(resolve => { streamArrived = resolve; });
+    const streamPattern = '**/api/v1/rp/narrative/stream';
+    await page.route(streamPattern, async route => {
+      const response = await route.fetch(); assert.equal(response.status(), 200);
+      streamArrived(); await streamGate;
+      try { await route.fulfill({ response }); } catch { /* page navigation aborts old stream */ }
+    }, { times: 1 });
+    await page.getByLabel('输入方式').selectOption('DIALOGUE');
+    await page.getByLabel('你想说的话').fill(marker);
+    await page.getByRole('button', { name: '说出' }).click();
+    await streamReady;
+    assert.equal(await page.getByRole('button', { name: '切换世界', exact: true }).isDisabled(), true, 'pending stream forbids world switch');
+    const pending = await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).pending);
+    assert.equal(pending.path, 'interactions/run'); assert.ok(pending.narrative_turn_id);
+    await page.goto(`${origin}/studio`); releaseStream(); await page.unroute(streamPattern);
+    await page.goto(origin); await page.getByLabel('玩家访问凭证').fill(player);
+    await page.getByRole('button', { name: '继续这段生活' }).click();
+    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending);
+    assert.match(await page.locator('.reading').innerText(), /迟到流只属于新世界/);
+    await page.getByRole('button', { name: '切换世界', exact: true }).click();
+    await page.locator('.world-picker li button').filter({ hasText: 'inst_m2_t09' }).click();
+    await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor();
+    assert.doesNotMatch(await page.locator('.reading').innerText(), /迟到流只属于新世界/, 'late stream crossed world binding');
+    await page.getByRole('button', { name: '切换世界', exact: true }).click();
+    await page.getByRole('button', { name: /新世界玩家/ }).click();
+    await page.getByRole('heading', { name: '新世界广场' }).waitFor();
+    assert.equal(run('sqlite3', [db, `SELECT COUNT(*) FROM rp_utterances WHERE session_id='${bookmark.session}' AND speech_text='${marker}';`]).trim(), '1', 'late stream recovery repeated speech');
+  }
   await stop(runtime); runtime = start(); await ready();
   await page.reload(); await page.getByLabel('玩家访问凭证').fill(player);
   await page.getByRole('button', { name: '继续这段生活' }).click();
@@ -233,5 +266,5 @@ try {
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   assert.ok(!stored.includes(player) && !stored.includes(creator) && !stored.includes(operator));
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ status: 'PASS', creatorUI, artifacts: temp, checks: ['real Create API', ...(creatorUI ? ['creator form + generated packages', 'explicit persistence consent', 'lost create response + runtime restart + frozen retry', 'receipt-only ready state', 'late response after credential clear', 'tampered custom package/no writes', 'archived original request recovery', 'separate Play navigation'] : []), 'separate creator/player authority', 'authorized multi-world picker', 'mobile overflow', 'keyboard choice', 'lost open response/reload/same key', 'actual NPC dialogue/installed style/move/wait', 'unchanged administrative world', 'per-binding session recovery', 'runtime restart', 'legacy bookmark upgrade + Studio return picker', 'no persisted credentials', 'no page errors'] }, null, 2));
+  console.log(JSON.stringify({ status: 'PASS', creatorUI, interactionIsolation, artifacts: temp, checks: ['real Create API', ...(creatorUI ? ['creator form + generated packages', 'explicit persistence consent', 'lost create response + runtime restart + frozen retry', 'receipt-only ready state', 'late response after credential clear', 'tampered custom package/no writes', 'archived original request recovery', 'separate Play navigation'] : []), 'separate creator/player authority', 'authorized multi-world picker', 'mobile overflow', 'keyboard choice', 'lost open response/reload/same key', 'actual NPC dialogue/installed style/move/wait', ...(interactionIsolation ? ['delayed interaction stream cancelled on navigation', 'pending blocks world switch', 'original-session recovery before switching', 'late stream absent in other world'] : []), 'unchanged administrative world', 'per-binding session recovery', 'runtime restart', 'legacy bookmark upgrade + Studio return picker', 'no persisted credentials', 'no page errors'] }, null, 2));
 } finally { await browser?.close(); await vite?.close(); await stop(runtime); }

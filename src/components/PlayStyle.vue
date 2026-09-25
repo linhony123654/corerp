@@ -27,7 +27,7 @@ async function load() {
   if (active) {
     const p = result.profile
     // A resolved profile also has a version field; it is not part of a patch.
-    profile.value = { context_budget_bytes: p.context_budget_bytes || 0, pov: p.pov, tense: p.tense, verbosity: p.verbosity, dialogue_ratio: p.dialogue_ratio, description_density: p.description_density, inner_monologue_policy: p.inner_monologue_policy, prose_instructions: p.prose_instructions, forbidden_patterns: p.forbidden_patterns, narrative_pack_ref: p.narrative_pack_ref }
+    profile.value = { context_budget_bytes: p.context_budget_bytes || 0, narrative_density: p.narrative_density || '', pov: p.pov, tense: p.tense, verbosity: p.verbosity, dialogue_ratio: p.dialogue_ratio, description_density: p.description_density, inner_monologue_policy: p.inner_monologue_policy, prose_instructions: p.prose_instructions, forbidden_patterns: p.forbidden_patterns, narrative_pack_ref: p.narrative_pack_ref }
     revision.value = result.session_revision
   }
 }
@@ -98,8 +98,10 @@ onBeforeUnmount(() => { active = false; dialog.value?.close() })
         <div class="presets" aria-label="风格预设"><button type="button" @click="preset('plain')">日常</button><button type="button" @click="preset('dialogue')">对话</button><button type="button" @click="preset('detailed')">细叙</button></div>
         <div class="fields"><label>叙述视角<select v-model="profile.pov"><option value="first_person">第一人称 · 我</option><option value="second_person">第二人称 · 你</option><option value="third_person">第三人称 · 人物名字</option></select></label>
           <label>回应详略<select v-model="profile.verbosity"><option value="terse">简短</option><option value="normal">适中</option><option value="detailed">详细</option></select></label>
+          <label>叙述篇幅<select v-model="profile.narrative_density" aria-describedby="density-hint"><option value="">沿用旧设置</option><option value="concise">简洁</option><option value="standard">标准</option><option value="long">长篇（仅有事实时展开）</option></select></label>
           <label>叙述时态<select v-model="profile.tense"><option value="present">现在</option><option value="past">过去</option></select></label>
         </div>
+        <p id="density-hint" class="hint">只影响之后新段落的呈现，不推进时间。长篇模式不会为凑字数编造事件或心理。</p>
         <label>对话比例偏好 · {{ profile.dialogue_ratio }}%<input v-model.number="profile.dialogue_ratio" type="range" min="0" max="100"></label>
         <label>场景描写密度 · {{ profile.description_density }}%<input v-model.number="profile.description_density" type="range" min="0" max="100"></label>
         <label>叙述上下文预算<select v-model.number="profile.context_budget_bytes" aria-describedby="context-budget-hint"><option :value="0">默认 · 64 KiB</option><option :value="4096">4 KiB</option><option :value="16384">16 KiB</option><option :value="65536">64 KiB</option><option :value="262144">256 KiB</option></select></label>

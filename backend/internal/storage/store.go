@@ -46,7 +46,8 @@ const (
 	StudioPackageSchemaVersion      = "corerp-rp8-package-content-028-2026-09-24"
 	StudioActivationSchemaVersion   = "corerp-rp8-package-activation-029-2026-09-24"
 	StudioReadySchemaVersion        = "corerp-rp8-world-ready-030-2026-09-24"
-	SchemaVersion                   = StudioReadySchemaVersion
+	RPInteractionSchemaVersion      = "corerp-f1-interactions-031-2026-09-25"
+	SchemaVersion                   = RPInteractionSchemaVersion
 )
 
 const (
@@ -82,12 +83,13 @@ const (
 var migrationFiles embed.FS
 
 type Store struct {
-	db               *sql.DB
-	now              func() time.Time
-	beforeCommit     func() error
-	afterPublish     func(OutboxMessage) error
-	afterRPTurnStage func(string) error
-	reverseAgentSeed bool
+	db                     *sql.DB
+	now                    func() time.Time
+	beforeCommit           func() error
+	afterPublish           func(OutboxMessage) error
+	afterRPTurnStage       func(string) error
+	afterRPInteractionStep func(int) error
+	reverseAgentSeed       bool
 }
 
 type State struct {
@@ -189,6 +191,7 @@ func (s *Store) migrate(ctx context.Context) error {
 		{StudioPackageSchemaVersion, "028_studio_package_content.sql"},
 		{StudioActivationSchemaVersion, "029_studio_package_activation.sql"},
 		{StudioReadySchemaVersion, "030_studio_world_ready.sql"},
+		{RPInteractionSchemaVersion, "031_rp_interactions.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

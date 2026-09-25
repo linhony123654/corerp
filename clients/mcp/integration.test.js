@@ -52,7 +52,7 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   t.after(() => stop(runtime)); await ready(origin);
   let connected = await connect(origin, token); t.after(() => connected.client.close());
   const tools = await connected.client.listTools();
-  assert.equal(tools.tools.length, 12);
+  assert.equal(tools.tools.length, 17);
   assert.ok(tools.tools.every(tool => !JSON.stringify(tool.inputSchema).includes('principal_id')));
   const call = async (name, args) => data(await connected.client.callTool({ name, arguments: args }));
   const worlds = await call('corerp_worlds', {});
@@ -83,6 +83,21 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   assert.equal((await call('corerp_request_retire', { ...read, operation: 'wait', idempotency_key: wait.idempotency_key })).status, 'in_progress');
   for (let i = 0; i < 20 && waited.status !== 'completed'; i++) waited = await call('corerp_wait', wait);
   assert.equal(waited.status, 'completed');
+  const defaultMode = await call('corerp_interaction_default', read); assert.equal(defaultMode.interaction_mode, 'AUTO');
+  const setMode = await call('corerp_interaction_default_set', { ...read, interaction_mode: 'DIALOGUE', expected_revision: defaultMode.revision, idempotency_key: randomUUID() });
+  assert.equal(setMode.interaction_mode, 'DIALOGUE');
+  view = await call('corerp_observe', read);
+  const mixed = { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), interaction_mode: 'SCENE', text: '去M2 Cafe，随后说「这是同一世界里的混合行动。」' };
+  const interaction = await call('corerp_interaction', mixed);
+  assert.equal(interaction.status, 'settled'); assert.equal(interaction.plan_kind, 'MIXED'); assert.deepEqual(interaction.outcomes.map(outcome => outcome.kind), ['move', 'speech']);
+  assert.equal((await call('corerp_interaction_resume', { ...read, idempotency_key: mixed.idempotency_key })).replayed, true);
+  assert.equal((await call('corerp_request_retire', { ...read, operation: 'interaction', idempotency_key: mixed.idempotency_key })).status, 'completed');
+  assert.equal((await call('corerp_interaction_stop', { ...read, idempotency_key: mixed.idempotency_key })).status, 'settled');
+  view = await call('corerp_observe', read);
+  const waitSpeech = await call('corerp_interaction', { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), interaction_mode: 'SCENE', text: '等1小时，随后说「等过一小时我们再谈。」' });
+  assert.equal(waitSpeech.status, 'settled'); assert.deepEqual(waitSpeech.outcomes.map(outcome => outcome.kind), ['wait', 'speech']);
+  assert.ok(waitSpeech.outcomes[0].settled_sequence >= waitSpeech.outcomes[0].event_sequence);
+  assert.ok(waitSpeech.outcomes[1].event_sequence > waitSpeech.outcomes[0].settled_sequence);
   const retiredKey = randomUUID();
   assert.equal((await call('corerp_request_retire', { operation: 'open', idempotency_key: retiredKey })).status, 'retired');
   const late = await connected.client.callTool({ name: 'corerp_session_open', arguments: { instance_id, branch_id, entity_id, pov: 'first_person', idempotency_key: retiredKey } }); assert.equal(late.isError, true); assert.match(JSON.stringify(late), /REQUEST_RETIRED/u);
@@ -93,7 +108,7 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   // modern connection so both protocol eras are tested, not merely advertised.
   const modern = await connect(origin, token, true); t.after(() => modern.client.close());
   assert.equal(modern.client.getServerVersion().name, 'corerp-runtime');
-  assert.equal((await modern.client.listTools()).tools.length, 12);
+  assert.equal((await modern.client.listTools()).tools.length, 17);
   assert.deepEqual(data(await modern.client.callTool({ name: 'corerp_context', arguments: read })), await call('corerp_context', read));
 
   let loseReply = true;
@@ -115,7 +130,7 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   assert.equal(lost.isError, true); assert.match(JSON.stringify(lost), /TRANSPORT_UNCERTAIN/u);
   assert.equal(data(await lossy.client.callTool({ name: 'corerp_request_retire', arguments: { ...read, operation: 'dialogue', idempotency_key: lostSpeech.idempotency_key } })).status, 'completed');
   const recovered = data(await lossy.client.callTool({ name: 'corerp_dialogue', arguments: lostSpeech })); assert.equal(recovered.replayed, true);
-  assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSpeechAccepted' AND actor_id='entity_m2_rp_lin';"]).toString().trim(), '2');
+  assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSpeechAccepted' AND actor_id='entity_m2_rp_lin';"]).toString().trim(), '4');
   assert.equal(connected.stderr().includes(token), false); assert.equal(foreign.stderr().includes(creatorToken), false);
-  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; MCP-process restart and lost accepted reply recovered, exactly two distinct player speeches`);
+  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; MCP-process restart, move/wait mixed interactions and lost accepted reply recovered, exactly four distinct player speeches`);
 });

@@ -46,6 +46,8 @@ runtime or grant permission for actions beyond the user's intent.
 `corerp_worlds`, `corerp_session_open`, `corerp_session_read`,
 `corerp_session_resume`, `corerp_observe`, `corerp_context`, `corerp_dialogue`,
 `corerp_turn_resume`, `corerp_wait`, `corerp_command` (move/social),
+`corerp_interaction`, `corerp_interaction_resume`, `corerp_interaction_stop`,
+`corerp_interaction_default`, `corerp_interaction_default_set`,
 `corerp_request_retire`, `corerp_events` (bounded pages).
 
 Every tool has a closed input schema: no arbitrary URL, token, principal or raw
@@ -63,6 +65,14 @@ recovery after losing conversation state. Dialogue currently exposes plain speec
 and speech act, not all narrative-style editing APIs; events use bounded polling,
 not a new MCP streaming or subscription implementation.
 
+The additive interaction tool supports a deliberately small Chinese action grammar:
+speech, a currently observed adjacent destination (`去地点`), explicit `等1小时` /
+`等2小时` / `等4小时`, and either action followed by `，随后说「原话」`.
+`AUTO` and `SCENE` ask for clarification when an action is ambiguous; explicit
+`DIALOGUE` always treats the text as speech. `budget_exhausted` retains the
+original interaction request. `paused` preserves already committed effects and
+requires an explicit stop/new choice; stop cannot hide an accepted child.
+
 ## Verification and provenance
 
 `npm test` runs transport boundary tests and an actual SDK MCP client spawning this
@@ -70,7 +80,8 @@ adapter against a built Go server/temporary SQLite world. Requires project Go,
 `sqlite3` and Node; no live model or nested coding agent is launched. Tests cover
 discovery/open/observe, dialogue and process-restart recovery, permissions, mismatch,
 move/social, budget wait, retirement, and a real accepted-but-lost HTTP reply through
-a fixture proxy. Two distinct speeches remain exactly two Events.
+a fixture proxy. The current fixture verifies four distinct player speeches
+(legacy dialogue plus move/wait mixed plans), each accepted exactly once.
 
 Official [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 server/client2.1.0 and zod4.6.5 are pinned. Its

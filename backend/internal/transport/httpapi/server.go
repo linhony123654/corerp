@@ -110,6 +110,11 @@ type Service interface {
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
 	PlayResumeRPTurn(context.Context, storage.RPTurnResumeRequest) (storage.RPTurnResult, error)
+	RunRPInteraction(context.Context, core.RPInteractionRequest) (storage.RPInteractionResult, error)
+	ResumeRPInteraction(context.Context, storage.RPInteractionResumeRequest) (storage.RPInteractionResult, error)
+	StopRPInteraction(context.Context, storage.RPInteractionResumeRequest) (storage.RPInteractionResult, error)
+	ReadRPInteractionMode(context.Context, core.RPSessionReadRequest) (storage.RPInteractionModeView, error)
+	SetRPInteractionMode(context.Context, storage.RPInteractionModeSetRequest) (storage.RPInteractionModeView, error)
 	ReadDemoStateAuthorized(context.Context, core.StateReadRequest) (storage.State, error)
 	ListVisibleEvents(context.Context, core.VisibleEventRequest) (storage.VisibleEventPage, error)
 }
@@ -361,6 +366,16 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPTurnRun(response, request, requestID, principalID)
 	case "/api/v1/rp/turns/resume":
 		s.handleRPTurnResume(response, request, requestID, principalID)
+	case "/api/v1/rp/interactions/run":
+		s.handleRPInteractionRun(response, request, requestID, principalID)
+	case "/api/v1/rp/interactions/resume":
+		s.handleRPInteractionResume(response, request, requestID, principalID)
+	case "/api/v1/rp/interactions/stop":
+		s.handleRPInteractionStop(response, request, requestID, principalID)
+	case "/api/v1/rp/interactions/default/read":
+		s.handleRPInteractionModeRead(response, request, requestID, principalID)
+	case "/api/v1/rp/interactions/default/set":
+		s.handleRPInteractionModeSet(response, request, requestID, principalID)
 	case "/api/v1/state/query":
 		s.handleState(response, request, requestID, principalID)
 	case "/api/v1/events":

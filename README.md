@@ -4,7 +4,7 @@
 技术栈遵循《CoreRP v0.3.1 · M0 工程审计版》§24.1：**Vue 3 + TypeScript + Vite**，
 不引入 UI 组件库，零运行时 CDN 依赖。
 
-> Play 已接入持久会话、同场发言/NPC 回应、移动、等待和重启恢复。默认使用确定性 Provider，也可[配置真实 LLM 兼容接口](docs/rp2/README.md)；live 模型验收仍待配置。`/demo` 仍全部是构造示例，不应作为真实世界状态。启动方式见 [Play 本地指南](docs/rp1/play.md)。
+> Play 已接入持久会话、同场发言/NPC 回应、移动、等待和重启恢复，并提供可选的有限语法“自然输入／场景指令”。默认使用确定性 Provider，也可[配置真实 LLM 兼容接口](docs/rp2/README.md)；live 模型验收仍待配置。`/demo` 仍全部是构造示例，不应作为真实世界状态。启动方式见 [Play 本地指南](docs/rp1/play.md)。
 
 ## M0 契约 RFC
 
@@ -30,11 +30,11 @@ npm run verify:m0
 
 [RP-1A–F](docs/rp1/README.md)在同一 M2 世界上提供真实玩家绑定、受限观察、移动、调度器等待、原子发言/听者认知、NPC 决策和连续回合，以及移动端 Play。本地切片经 T09 准备 1 名玩家、3 名 NPC、5 个地点。20 回合后端测试和真实浏览器/服务重启测试均已通过；未部署生产环境。`npm run verify:rp1-play` 可复现完整浏览器恢复场景。
 
-## 当前 RP-6 产品体验
+## 当前 Play / Studio 产品体验
 
-RP-8 已通过[本地阶段验收并提交检查点](docs/rp8/phase-report.md)：可从 `/studio` 打开[真实事件检查页](docs/rp8/studio-ui.md)，默认 `/` 仍是 Play。检查权限由[本地管理工具](docs/rp8/access.md)显式配置，支持 creator 内容与 ops 脱敏边界、撤权和重启恢复。输入凭证即可[选择授权世界、分支与时间线事件](docs/rp8/discovery.md)，无需手抄 ID。`/studio/create` 已有[可恢复创建界面](docs/rp8/creator-ui.md)，调用[真实创建 API](docs/rp8/creator-api.md)安装声明式 System/Narrative 包；玩家使用独立凭证在 Play 选择获授权世界。当前界面采用两个人物、两处地点的起始模板，不支持任意可执行插件或热升级；300 回合 / 30 世界日的最终长期实玩验收尚未完成。
+RP-8 已通过[本地阶段验收并提交检查点](docs/rp8/phase-report.md)：可从 `/studio` 打开[真实事件检查页](docs/rp8/studio-ui.md)，默认 `/` 仍是 Play。检查权限由[本地管理工具](docs/rp8/access.md)显式配置，支持 creator 内容与 ops 脱敏边界、撤权和重启恢复。输入凭证即可[选择授权世界、分支与时间线事件](docs/rp8/discovery.md)，无需手抄 ID。`/studio/create` 已有[可恢复创建界面](docs/rp8/creator-ui.md)，调用[真实创建 API](docs/rp8/creator-api.md)安装声明式 System/Narrative 包；玩家使用独立凭证在 Play 选择获授权世界。当前界面采用两个人物、两处地点的起始模板，不支持任意可执行插件或热升级；旧目标的长期实玩验收已在 [Final Integration](docs/final/acceptance.md) 完成。
 
-RP-2～RP-8 已有阶段检查点，[RP-7](docs/rp7/phase-7.md) 外部客户端接入已通过本地阶段验收；Final Integration 与总体验收尚未完成。当前 schema030 保护[新世界保存与玩家授权来源](docs/rp8/readiness.md)；schema028/029 保护[包安装与激活](docs/rp8/packages.md)，schema027 的[请求永久停用机制](docs/rp7/requests.md)保留，不回滚世界。Play 已提供按需打开的钱包、工作信息、通讯录、手机工作通知和本地地图，以及叙事预设、视角、字节预算、流式读取、重试和不回滚世界的叙述重生成。
+RP-2～RP-8 和旧目标 Final Integration 已有本地检查点，[RP-7](docs/rp7/phase-7.md) 外部客户端接入已通过阶段验收。当前 F1 使用增量 schema031 保存[交互计划和会话模式](docs/f1/protocol.md)，不替代权威世界事件；schema030 保护[新世界保存与玩家授权来源](docs/rp8/readiness.md)，schema028/029 保护[包安装与激活](docs/rp8/packages.md)，schema027 的[请求永久停用机制](docs/rp7/requests.md)保留，不回滚世界。Play 已提供按需打开的钱包、工作信息、通讯录、手机工作通知和本地地图，以及叙事预设、视角、篇幅偏好、字节预算、流式读取、重试和不回滚世界的叙述重生成。F1 的[验收状态与限制](docs/f1/phase-report.md)单独记录；有限语法不等于任意自然语言行动，长篇 fixture 也不等于 live 模型文笔认证。
 
 RP-7 已提供[酒馆扩展](clients/sillytavern/README.md)、[MCP 适配器与接入说明](clients/mcp/README.md)及[CoreRP RP Skill](.agents/skills/corerp-rp/SKILL.md)。[真实三客户端同实例、同人物及重启恢复](docs/rp7/compatibility.md)与[本地阶段验证](docs/rp7/verification.md)已通过；未发布到生产，也未声称嵌套 Codex 或真实 LLM 实玩。
 

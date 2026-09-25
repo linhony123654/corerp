@@ -22,7 +22,8 @@ type Observation = LocalMap & {
   present_entities: Person[]
   recent_turns: Turn[]
 }
-type Pending = { path: string; body: Record<string, unknown>; narrative_turn_id?: string }
+type Pending = { path: string; body: Record<string, unknown>; narrative_turn_id?: string; interaction_status?: string }
+type InteractionResult = { status: string; plan_kind: string; clarification?: string; pause_reason?: string; outcomes: { kind: string; turn_run_id?: string }[] }
 type Binding = { instance_id: string; branch_id: string; entity_id: string }
 type AvailableBinding = Binding & { display_name: string }
 type Discovery = { bindings: AvailableBinding[]; next_after?: Binding }
@@ -41,6 +42,7 @@ const busy = ref(false)
 const error = ref('')
 const notice = ref('')
 const draft = ref('')
+const inputMode = ref<'speech' | 'AUTO' | 'DIALOGUE' | 'SCENE'>('speech')
 const travel = ref(false)
 const walletOpen = ref(false)
 const contactsOpen = ref(false)
@@ -204,10 +206,29 @@ async function finishPending(useSavedNarrative = false) {
   if (useSavedNarrative && !pending.narrative_turn_id) return
   let completedPresentation: { lines: string[]; warnings: string[] } | null = null
   if (!pending.narrative_turn_id) {
-    const result = await api<{ status?: string; turn_run_id?: string }>(pending.path, pending.body)
+    const result = await api<{ status?: string; turn_run_id?: string } & Partial<InteractionResult>>(pending.path, pending.body)
     if (result.status === 'budget_exhausted') {
       notice.value = '时间正在推进，点击“继续未完成的行动”即可接着等待。'
       await refresh(); return
+    }
+    if (pending.path === 'interactions/run') {
+      if (result.status === 'paused') {
+        pending.interaction_status = 'paused'; save()
+        notice.value = result.pause_reason || '原计划已暂停。已发生的行动不会回滚；可结束计划后重新选择。'
+        await refresh(); return
+      }
+      if (result.status === 'clarification') {
+        notice.value = result.clarification || '请明确下一步行动。'
+        await refresh()
+        bookmark.value.pending = null; save()
+        return
+      }
+      if (result.status !== 'settled') throw new Error('交互尚未确认结束，请继续原请求。')
+      const speech = result.outcomes?.slice().reverse().find(outcome => outcome.kind === 'speech')
+      if (speech?.turn_run_id) {
+        pending.narrative_turn_id = speech.turn_run_id
+        save() // Do not rerun the interaction if the narrative stream fails.
+      }
     }
     if (pending.path === 'turns/run') {
       if (result.status !== 'settled' || !result.turn_run_id) throw new Error('回合尚未确认结束，请继续原行动。')
@@ -243,8 +264,9 @@ async function finishPending(useSavedNarrative = false) {
   bookmark.value.pending = null; save()
   if (useSavedNarrative) notice.value = '已读取保存的原叙述，没有重做行动或调整世界事实。'
   if (pending.path === 'actions/wait') socialSeeking.value = false
-  if (pending.path === 'turns/run') draft.value = ''
-  else notice.value = pending.path === 'actions/move' ? '你已抵达新的地点。' : '时间已经向前。'
+  if (pending.path === 'turns/run' || pending.path === 'interactions/run') draft.value = ''
+  if (pending.path === 'interactions/run' && !pending.narrative_turn_id) notice.value = '行动已按顺序完成。'
+  else if (pending.path !== 'turns/run' && pending.path !== 'interactions/run') notice.value = pending.path === 'actions/move' ? '你已抵达新的地点。' : '时间已经向前。'
   if (completedPresentation?.warnings.length) notice.value = '叙述器提示：' + completedPresentation.warnings.join('；')
   travel.value = false
   await scrollToEnd()
@@ -260,7 +282,19 @@ async function act(path: string, values: Record<string, unknown>) {
   })
 }
 function speak() {
-  if (draft.value.trim()) void act('turns/run', { text: draft.value.trim() })
+  if (!draft.value.trim()) return
+  if (inputMode.value === 'speech') void act('turns/run', { text: draft.value.trim() })
+  else void act('interactions/run', { text: draft.value.trim(), interaction_mode: inputMode.value })
+}
+async function stopInteraction() {
+  const pending = bookmark.value.pending
+  if (!pending || pending.path !== 'interactions/run' || pending.narrative_turn_id) return
+  const result = await api<InteractionResult>('interactions/stop', { session_id: pending.body.session_id, idempotency_key: pending.body.idempotency_key })
+  if (result.status === 'settled') { await finishPending(); return }
+  if (result.status !== 'stopped' && result.status !== 'clarification') throw new Error('原计划状态尚未确定，请保留请求并继续恢复。')
+  await refresh()
+  bookmark.value.pending = null; save()
+  notice.value = result.status === 'stopped' ? '已结束原计划；已完成的行动仍保留在世界里。' : result.clarification || '请明确下一步。'
 }
 function wait(hours: number) {
   if (!observation.value) return
@@ -338,10 +372,11 @@ function wait(hours: number) {
 
       <footer class="composer">
         <div class="composer-inner">
-          <p v-if="error" class="error" role="alert">暂未完成：{{ error }}。{{ bookmark.pending?.narrative_turn_id ? '行动已经提交，继续只会读取叙述，不会重做行动。' : '已保留原行动，可安全重试。' }}</p>
+          <p v-if="error" class="error" role="alert">暂未完成：{{ error }}。{{ bookmark.pending?.narrative_turn_id ? '行动已经提交，继续只会读取叙述，不会重做行动。' : '已保留原请求；已发生的效果不会重做。' }}</p>
           <p v-if="notice" class="notice" role="status">{{ notice }}</p>
           <p v-if="stylePending" class="notice" role="status">叙事设置尚未确认，请打开“叙事设置”继续保存，再开始新行动。</p>
-          <button v-if="bookmark.pending" class="recover" :disabled="busy" @click="guarded(finishPending)">{{ busy ? '正在继续…' : bookmark.pending.narrative_turn_id ? '继续读取叙述' : '继续未完成的行动' }}</button>
+          <button v-if="bookmark.pending && bookmark.pending.interaction_status !== 'paused'" class="recover" :disabled="busy" @click="guarded(finishPending)">{{ busy ? '正在继续…' : bookmark.pending.narrative_turn_id ? '继续读取叙述' : '继续未完成的行动' }}</button>
+          <button v-if="bookmark.pending?.path === 'interactions/run' && !bookmark.pending.narrative_turn_id" class="recover" :disabled="busy" @click="guarded(stopInteraction)">{{ bookmark.pending.interaction_status === 'paused' ? '结束已暂停的计划' : '尝试结束原计划（已发生的不回滚）' }}</button>
           <button v-if="bookmark.pending?.narrative_turn_id && !busy" class="recover" @click="guarded(() => finishPending(true))">读取已保存原叙述</button>
           <nav class="actions" aria-label="场景行动">
             <button :disabled="!canChooseWorld" @click="chooseWorld">切换世界</button>
@@ -358,18 +393,19 @@ function wait(hours: number) {
           </nav>
           <div class="wait-intent">
             <label><input v-model="socialSeeking" type="checkbox" :disabled="locked" aria-describedby="wait-intent-hint">等待时，愿意和熟人聊聊</label>
-            <p id="wait-intent-hint">仅用于下一次等待，不保证有人回应，也不会替你说话。</p>
+            <p id="wait-intent-hint">仅用于上方快捷等待，不用于自然输入；不保证有人回应，也不会替你说话。</p>
           </div>
           <div v-if="travel" id="destinations" class="destinations">
             <p v-if="!observation.reachable_places.length">附近没有可以前往的地点。</p>
             <button v-for="place in observation.reachable_places" :key="place.place_id" :disabled="locked" @click="act('actions/move', { from_place_id: observation.place_id, to_place_id: place.place_id })">{{ place.display_name }} →</button>
           </div>
+          <div class="input-mode"><label for="input-mode">输入方式</label><select id="input-mode" v-model="inputMode" :disabled="locked"><option value="speech">只说话</option><option value="AUTO">自然输入</option><option value="DIALOGUE">明确说话</option><option value="SCENE">场景指令</option></select><span>{{ inputMode === 'speech' || inputMode === 'DIALOGUE' ? '输入会作为你的话' : '支持“去已知地点，随后说「…」”或“等1小时”；不确定时会先询问' }}</span></div>
           <form class="speech" @submit.prevent="speak">
-            <label class="sr-only" for="words">你想说的话</label>
-            <textarea id="words" v-model="draft" :disabled="locked" maxlength="2000" rows="2" placeholder="说点什么，让相遇继续……" @keydown.ctrl.enter.prevent="speak" @keydown.meta.enter.prevent="speak"></textarea>
-            <button class="primary" :disabled="locked || !draft.trim()">{{ busy ? '…' : '说出 →' }}</button>
+            <label class="sr-only" for="words">{{ inputMode === 'speech' || inputMode === 'DIALOGUE' ? '你想说的话' : '你想说或做的事' }}</label>
+            <textarea id="words" v-model="draft" :disabled="locked" maxlength="2000" rows="2" :placeholder="inputMode === 'speech' || inputMode === 'DIALOGUE' ? '说点什么，让相遇继续……' : '说话，或去已知地点，随后说「你好」……'" @keydown.ctrl.enter.prevent="speak" @keydown.meta.enter.prevent="speak"></textarea>
+            <button class="primary" :disabled="locked || !draft.trim()">{{ busy ? '…' : inputMode === 'speech' || inputMode === 'DIALOGUE' ? '说出 →' : '继续 →' }}</button>
           </form>
-          <p class="footnote"><span>{{ busy ? '世界正在回应…' : '此处输入会作为你说出的话' }}</span><span>Ctrl / ⌘ + Enter</span></p>
+          <p class="footnote"><span>{{ busy ? '世界正在回应…' : inputMode === 'speech' || inputMode === 'DIALOGUE' ? '此处输入会作为你说出的话' : '行动按顺序提交；含糊指令不会擅自执行' }}</span><span>Ctrl / ⌘ + Enter</span></p>
         </div>
       </footer>
       <PlayWallet v-if="walletOpen" :owner="observation.controlled_entity.display_name" :read="readWallet" @close="walletOpen = false" />
@@ -398,11 +434,12 @@ function wait(hours: number) {
 .play-header { max-width: 1160px; margin: auto; padding: 28px 36px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #39493525; }
 .wordmark { font-family: Georgia, serif; font-size: 25px; letter-spacing: -.8px; }.wordmark > span { color: var(--accent); }.wordmark small { font-family: var(--font-body); font-size: 11px; margin-left: 22px; letter-spacing: 2px; color: var(--muted); }.mode { font-size: 11px; color: var(--muted); }
 .arrival { max-width: 560px; margin: 7vh auto 0; padding: 0 28px 70px; }.chapter-mark { color: var(--accent); font-size: 74px; line-height: 1.2; }.eyebrow { font-size: 11px; letter-spacing: 2px; color: var(--muted); }.play h1 { color: var(--text); font-family: var(--font-serif); font-weight: 400; font-size: clamp(32px, 5vw, 52px); line-height: 1.5; }.intro { font-family: var(--font-serif); line-height: 2; font-size: 18px; margin: 20px 0 36px; }.entry label { display: block; font-size: 13px; margin-bottom: 8px; }.entry input { width: 100%; padding: 14px; border: 1px solid #858d7f; background: #fff9; color: var(--text); font: inherit; }.hint { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 12px 0 24px; }
-.play button { cursor: pointer; font: inherit; color: inherit; background: none; border: 0; padding: 10px 12px; min-height: 44px; border-radius: 2px; }.play button:hover:not(:disabled) { background: #35433112; }.play button:disabled { opacity: .48; cursor: default; }.play :is(button, input, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }.play button.primary { background: #344638; color: #fffaf0; padding: 12px 24px; }.play button.primary:hover:not(:disabled) { background: #485b40; }
+.play button { cursor: pointer; font: inherit; color: inherit; background: none; border: 0; padding: 10px 12px; min-height: 44px; border-radius: 2px; }.play button:hover:not(:disabled) { background: #35433112; }.play button:disabled { opacity: .48; cursor: default; }.play :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }.play button.primary { background: #344638; color: #fffaf0; padding: 12px 24px; }.play button.primary:hover:not(:disabled) { background: #485b40; }
 .scene { max-width: 860px; margin: auto; padding: 48px 32px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }.sun { color: var(--accent); padding: 0 14px; font-size: 18px; }.presence { color: var(--muted); font-size: 13px; line-height: 2; }.presence > span { padding: 0 10px; }.presence strong { font-weight: 400; color: var(--text); margin-right: 12px; white-space: nowrap; }.scene-seal { border: 1px solid #94563f80; color: var(--accent); padding: 12px 9px; font-family: var(--font-serif); font-size: 19px; transform: rotate(3deg); }.scene-seal span { display: block; }
 .reading { max-width: 796px; margin: auto; padding: 0 24px 32px; min-height: 30vh; }.history-label { border-top: 1px solid #39493535; padding-top: 16px; color: var(--muted); font-size: 11px; letter-spacing: 2px; display: flex; justify-content: space-between; }.history-label span { letter-spacing: 0; }.quiet { padding: 24px 0; color: var(--muted); font-family: var(--font-serif); font-size: 18px; line-height: 2; }.quiet > span { color: var(--accent); }.turn { position: relative; padding: 22px 0 22px 32px; border-bottom: 1px solid #39493518; animation: arrive .3s ease-out; }.turn-mark { position: absolute; left: 0; top: 29px; color: #7b8073; font: 10px var(--font-mono); }.turn p { font-family: var(--font-serif); font-size: 18px; line-height: 1.95; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }.turn .your-words { color: var(--accent); font-size: 16px; }
 .composer { position: sticky; bottom: 0; background: #f1eee5fa; border-top: 1px solid #39493525; padding: 12px 24px max(14px, env(safe-area-inset-bottom)); }.composer-inner { max-width: 748px; margin: auto; }.actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }.actions button { padding: 7px 10px; }.speech { display: flex; align-items: center; gap: 14px; border: 1px solid #8b9487; background: #fff7; padding: 10px; }.speech textarea { flex: 1; min-width: 0; resize: vertical; max-height: 180px; padding: 4px; background: none; border: 0; font: 15px/1.8 var(--font-body); color: var(--text); }.footnote { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin: 9px 0 0; }.destinations { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 16px; font-size: 13px; }.destinations button { border-bottom: 1px solid #7e493550; }.error { color: #99372f; font-size: 13px; overflow-wrap: anywhere; }.notice { color: #425c39; font-size: 13px; }.recover { color: var(--accent) !important; text-decoration: underline; }.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.input-mode { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 2px 0 10px; font-size: 12px; color: var(--muted); }.input-mode label { white-space: nowrap; }.input-mode select { min-height: 44px; border: 0; border-bottom: 1px solid #7e493580; background: transparent; color: var(--text); font: inherit; }.input-mode span { flex: 1; min-width: 210px; font-size: 11px; line-height: 1.6; }
 @keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .turn { animation: none; } }
-@media (max-width: 600px) { .play-header { padding: 18px 20px; }.wordmark small { display: none; }.mode { font-size: 10px; }.scene { padding: 30px 24px 14px; }.scene-seal { font-size: 15px; padding: 8px; }.reading { padding-inline: 24px; }.presence > span { padding: 0 4px; }.composer { padding-inline: 16px; }.speech { gap: 6px; }.speech button.primary { padding: 10px 14px; }.footnote span:last-child { display: none; }.turn p { font-size: 17px; }.actions { justify-content: space-between; gap: 0; }.actions button { padding-inline: 6px; }.history-label { letter-spacing: 1px; }.arrival { margin-top: 4vh; } }
+@media (max-width: 600px) { .play-header { padding: 18px 20px; }.wordmark small { display: none; }.mode { font-size: 10px; }.scene { padding: 30px 24px 14px; }.scene-seal { font-size: 15px; padding: 8px; }.reading { padding-inline: 24px; }.presence > span { padding: 0 4px; }.composer { padding-inline: 16px; }.speech { gap: 6px; }.speech button.primary { padding: 10px 14px; }.footnote span:last-child { display: none; }.turn p { font-size: 17px; }.actions { justify-content: space-between; gap: 0; }.actions button { padding-inline: 6px; }.history-label { letter-spacing: 1px; }.arrival { margin-top: 4vh; }.input-mode { flex-wrap: nowrap; gap: 8px; }.input-mode label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }.input-mode select { flex: 0 0 auto; max-width: 112px; }.input-mode span { min-width: 0; font-size: 12px; line-height: 1.4; } }
 </style>

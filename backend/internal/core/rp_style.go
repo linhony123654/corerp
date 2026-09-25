@@ -17,6 +17,7 @@ type RPStyleProfile struct {
 	POV                  string   `json:"pov"`
 	Tense                string   `json:"tense"`
 	Verbosity            string   `json:"verbosity"`
+	NarrativeDensity     string   `json:"narrative_density,omitempty"`
 	DialogueRatio        int      `json:"dialogue_ratio"`
 	DescriptionDensity   int      `json:"description_density"`
 	InnerMonologuePolicy string   `json:"inner_monologue_policy"`
@@ -31,6 +32,7 @@ type RPStylePatch struct {
 	POV                  *string  `json:"pov,omitempty"`
 	Tense                *string  `json:"tense,omitempty"`
 	Verbosity            *string  `json:"verbosity,omitempty"`
+	NarrativeDensity     *string  `json:"narrative_density,omitempty"`
 	DialogueRatio        *int     `json:"dialogue_ratio,omitempty"`
 	DescriptionDensity   *int     `json:"description_density,omitempty"`
 	InnerMonologuePolicy *string  `json:"inner_monologue_policy,omitempty"`
@@ -63,6 +65,9 @@ func OverlayRPStyle(s RPStyleProfile, layers ...RPStylePatch) (RPStyleProfile, e
 		}
 		if p.Verbosity != nil {
 			s.Verbosity = *p.Verbosity
+		}
+		if p.NarrativeDensity != nil {
+			s.NarrativeDensity = *p.NarrativeDensity
 		}
 		if p.DialogueRatio != nil {
 			s.DialogueRatio = *p.DialogueRatio
@@ -104,6 +109,9 @@ func (s RPStyleProfile) Validate() error {
 	}
 	if s.Verbosity != "terse" && s.Verbosity != "normal" && s.Verbosity != "detailed" {
 		return NewError(CodeInvalidArgument, "invalid verbosity")
+	}
+	if s.NarrativeDensity != "" && s.NarrativeDensity != "concise" && s.NarrativeDensity != "standard" && s.NarrativeDensity != "long" {
+		return NewError(CodeInvalidArgument, "invalid narrative density")
 	}
 	if s.DialogueRatio < 0 || s.DialogueRatio > 100 || s.DescriptionDensity < 0 || s.DescriptionDensity > 100 {
 		return NewError(CodeInvalidArgument, "style density must be 0–100")
@@ -249,13 +257,33 @@ func (DeterministicRPNarrativeProvider) RenderStream(ctx context.Context, in RPN
 			}
 		}
 		literalLine := line
+		if in.Style.NarrativeDensity == "long" {
+			// Long layout has only source-backed time/place framing and the
+			// accepted literal fact. Sparse scenes stay short; never pad a
+			// response with invented sensations, thoughts or dialogue.
+			parts := make([]string, 0, 2)
+			if fact.PlaceName != "" {
+				parts = append(parts, "在"+fact.PlaceName)
+			}
+			if fact.WorldTime != "" {
+				parts = append(parts, fact.WorldTime)
+			}
+			if len(parts) > 0 {
+				line = strings.Join(parts, "，") + "。\n" + framing
+			} else {
+				line = framing
+			}
+			if spoken {
+				line += "：\n「" + fact.Text + "」"
+			}
+		}
 		if in.Style.Tense == "past" {
 			line = "当时，" + line
 		}
-		if in.Style.DescriptionDensity > 0 && in.Style.Verbosity != "terse" && fact.PlaceName != "" {
+		if in.Style.NarrativeDensity != "long" && in.Style.NarrativeDensity != "concise" && in.Style.DescriptionDensity > 0 && in.Style.Verbosity != "terse" && fact.PlaceName != "" {
 			line = fmt.Sprintf("在%s，%s", fact.PlaceName, line)
 		}
-		if in.Style.Verbosity == "detailed" && fact.WorldTime != "" {
+		if in.Style.NarrativeDensity != "long" && in.Style.NarrativeDensity != "concise" && in.Style.Verbosity == "detailed" && fact.WorldTime != "" {
 			line = "（" + fact.WorldTime + "）" + line
 		}
 		matchesForbidden := func(text string) bool {

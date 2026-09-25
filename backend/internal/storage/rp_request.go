@@ -38,7 +38,7 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 		if r.SessionID != "" {
 			return out, core.NewError(core.CodeInvalidArgument, "open keys are principal scoped")
 		}
-	case "dialogue", "wait", "move", "social":
+	case "dialogue", "wait", "move", "social", "interaction":
 		if strings.TrimSpace(r.SessionID) == "" {
 			return out, core.NewError(core.CodeInvalidArgument, "session required")
 		}
@@ -77,6 +77,8 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status='settled' THEN 'completed' ELSE 'in_progress' END FROM rp_turn_runs WHERE session_id=? AND idempotency_key=?`, r.SessionID, r.IdempotencyKey).Scan(&status)
 	case "wait":
 		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status='completed' THEN 'completed' ELSE 'in_progress' END FROM rp_wait_intents WHERE session_id=? AND idempotency_key=?`, r.SessionID, r.IdempotencyKey).Scan(&status)
+	case "interaction":
+		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status IN ('settled','stopped','clarification') THEN 'completed' ELSE 'in_progress' END FROM rp_interactions WHERE session_id=? AND idempotency_key=?`, r.SessionID, r.IdempotencyKey).Scan(&status)
 	case "move", "social":
 		commandType := "RPPlayerMove"
 		if r.Operation == "social" {
@@ -91,7 +93,11 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 	if !errors.Is(err, sql.ErrNoRows) {
 		return RPRequestOutcome{}, core.WrapError(core.CodeStorageFailure, "read RP request acceptance", err)
 	}
-	_, err = tx.conn.ExecContext(ctx, `INSERT INTO rp_request_retirements(principal_id,operation,session_scope,idempotency_key,retired_at_utc) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`, r.PrincipalID, r.Operation, r.SessionID, r.IdempotencyKey, s.now().UTC().Format(time.RFC3339Nano))
+	if r.Operation == "interaction" {
+		_, err = tx.conn.ExecContext(ctx, `INSERT INTO rp_interaction_retirements(principal_id,session_id,idempotency_key,retired_at_utc) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, r.PrincipalID, r.SessionID, r.IdempotencyKey, s.now().UTC().Format(time.RFC3339Nano))
+	} else {
+		_, err = tx.conn.ExecContext(ctx, `INSERT INTO rp_request_retirements(principal_id,operation,session_scope,idempotency_key,retired_at_utc) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`, r.PrincipalID, r.Operation, r.SessionID, r.IdempotencyKey, s.now().UTC().Format(time.RFC3339Nano))
+	}
 	if err != nil {
 		return RPRequestOutcome{}, core.WrapError(core.CodeStorageFailure, "retire RP request", err)
 	}
