@@ -52,7 +52,7 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   t.after(() => stop(runtime)); await ready(origin);
   let connected = await connect(origin, token); t.after(() => connected.client.close());
   const tools = await connected.client.listTools();
-  assert.equal(tools.tools.length, 17);
+  assert.equal(tools.tools.length, 21);
   assert.ok(tools.tools.every(tool => !JSON.stringify(tool.inputSchema).includes('principal_id')));
   const call = async (name, args) => data(await connected.client.callTool({ name, arguments: args }));
   const worlds = await call('corerp_worlds', {});
@@ -98,6 +98,27 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   assert.equal(waitSpeech.status, 'settled'); assert.deepEqual(waitSpeech.outcomes.map(outcome => outcome.kind), ['wait', 'speech']);
   assert.ok(waitSpeech.outcomes[0].settled_sequence >= waitSpeech.outcomes[0].event_sequence);
   assert.ok(waitSpeech.outcomes[1].event_sequence > waitSpeech.outcomes[0].settled_sequence);
+  view = await call('corerp_observe', read);
+  const mapNote = await call('corerp_map_survey', { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID() });
+  assert.equal(mapNote.fact.observer_id, entity_id);
+  assert.equal((await call('corerp_map_read', read))[0].place_id, view.place_id);
+  const creatorCall = async (route, body) => {
+    const response = await fetch(`${origin}/api/v1/rp/${route}`, { method: 'POST', headers: { Authorization: `Bearer ${creatorToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const envelope = await response.json(); assert.equal(response.status, 200, JSON.stringify(envelope)); return envelope.data;
+  };
+  const scope = { instance_id, branch_id };
+  const segment = await creatorCall('locations/materialize', { binding: { ...scope, expected_head: mapNote.event_sequence, idempotency_key: 'mcp-segment' }, parent_location_id: view.place_id, slot_key: 'mcp-road', candidate: { display_name: 'MCP 路段', generator_version: 'local-v1' } });
+  await creatorCall('edges/define', { binding: { ...scope, expected_head: segment.event_sequence, idempotency_key: 'mcp-edge' }, from_place_id: view.place_id, to_place_id: 'place_m2_home_ada', segment_place_id: segment.fact.location_id, duration_minutes: 15 });
+  view = await call('corerp_observe', read);
+  const journeyRequest = { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), from_place_id: view.place_id, to_place_id: 'place_m2_home_ada' };
+  const journey = await call('corerp_journey_start', journeyRequest);
+  assert.equal(journey.segment_place_id, segment.fact.location_id);
+  assert.equal((await call('corerp_journey_start', journeyRequest)).replayed, true);
+  view = await call('corerp_observe', read);
+  assert.equal(view.place_id, segment.fact.location_id); assert.equal(view.active_journey.journey_id, journey.journey_id);
+  await call('corerp_journey_cancel', { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), journey_id: journey.journey_id });
+  view = await call('corerp_observe', read);
+  assert.equal(view.place_id, segment.fact.location_id); assert.equal(view.active_journey, undefined);
   const retiredKey = randomUUID();
   assert.equal((await call('corerp_request_retire', { operation: 'open', idempotency_key: retiredKey })).status, 'retired');
   const late = await connected.client.callTool({ name: 'corerp_session_open', arguments: { instance_id, branch_id, entity_id, pov: 'first_person', idempotency_key: retiredKey } }); assert.equal(late.isError, true); assert.match(JSON.stringify(late), /REQUEST_RETIRED/u);
@@ -108,7 +129,7 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   // modern connection so both protocol eras are tested, not merely advertised.
   const modern = await connect(origin, token, true); t.after(() => modern.client.close());
   assert.equal(modern.client.getServerVersion().name, 'corerp-runtime');
-  assert.equal((await modern.client.listTools()).tools.length, 17);
+  assert.equal((await modern.client.listTools()).tools.length, 21);
   assert.deepEqual(data(await modern.client.callTool({ name: 'corerp_context', arguments: read })), await call('corerp_context', read));
 
   let loseReply = true;
@@ -132,5 +153,5 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   const recovered = data(await lossy.client.callTool({ name: 'corerp_dialogue', arguments: lostSpeech })); assert.equal(recovered.replayed, true);
   assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSpeechAccepted' AND actor_id='entity_m2_rp_lin';"]).toString().trim(), '4');
   assert.equal(connected.stderr().includes(token), false); assert.equal(foreign.stderr().includes(creatorToken), false);
-  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; MCP-process restart, move/wait mixed interactions and lost accepted reply recovered, exactly four distinct player speeches`);
+  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; MCP-process restart, move/wait mixed interactions, map memory, real timed journey/cancel and lost accepted reply recovered, exactly four distinct player speeches`);
 });

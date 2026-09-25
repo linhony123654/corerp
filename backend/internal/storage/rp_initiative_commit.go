@@ -220,7 +220,7 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 	event := rpInitiativeEvent{ReasonCode: reason, SessionID: r.SessionID, NPCEntityID: r.NPCEntityID, TriggerEventID: r.TriggerEventID, InputHash: inputHash, Proposal: proposal, Action: proposal.Action, Status: status}
 	if proposal.Action == "respond" {
 		eventType = "RPSpeechAccepted"
-		listeners, err := rpCoLocatedEntityIDs(ctx, tx.conn, input.InstanceID, input.BranchID, input.PlaceID, r.NPCEntityID)
+		listeners, err := rpPerceivedEntityIDs(ctx, tx.conn, input.InstanceID, input.BranchID, input.PlaceID, r.NPCEntityID, "audio", "voice")
 		if err != nil {
 			return empty, err
 		}

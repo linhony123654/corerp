@@ -251,7 +251,27 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	return append(append(append(append(append(append(differences, wages...), roles...), culture...), institutions...), transit...), leaveQueues...), nil
+	locations, err := rpLocationProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	journeys, err := rpJourneyProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	journeyQueues, err := rpJourneyQueueDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	perception, err := rpPerceptionProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := rpIdentityProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(append(append(append(append(append(append(append(append(append(differences, wages...), roles...), culture...), institutions...), transit...), leaveQueues...), locations...), journeys...), journeyQueues...), perception...), identity...), nil
 }
 
 func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID string) error {
@@ -268,6 +288,41 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 		InstanceID: instanceID, BranchID: branchID,
 	}, 0, head)
 	if err != nil {
+		return err
+	}
+	locations, err := rpLocationProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPLocationProjections(ctx, tx.conn, instanceID, branchID, locations); err != nil {
+		return err
+	}
+	journeys, err := rpJourneyProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPJourneyProjections(ctx, tx.conn, instanceID, branchID, journeys); err != nil {
+		return err
+	}
+	journeyQueues, err := rpJourneyQueueDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPJourneyQueues(ctx, tx.conn, instanceID, branchID, journeyQueues); err != nil {
+		return err
+	}
+	perception, err := rpPerceptionProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPPerceptionProjections(ctx, tx.conn, instanceID, branchID, perception); err != nil {
+		return err
+	}
+	identity, err := rpIdentityProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPIdentityProjections(ctx, tx.conn, instanceID, branchID, identity); err != nil {
 		return err
 	}
 	for _, account := range replay.State.AccountBalances {

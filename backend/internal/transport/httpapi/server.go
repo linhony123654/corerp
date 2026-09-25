@@ -41,6 +41,15 @@ type Service interface {
 	CloseRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
 	ObserveRPSession(context.Context, core.RPSessionReadRequest) (storage.RPObservation, error)
 	MoveRP(context.Context, core.RPMoveRequest) (storage.RPMoveResult, error)
+	StartRPJourney(context.Context, core.RPMoveRequest) (storage.RPJourneyResult, error)
+	CancelRPJourney(context.Context, core.RPJourneyCancelRequest) (storage.RPJourneyCancelRecord, error)
+	SurveyRPMap(context.Context, storage.RPMapSurveyRequest) (storage.RPMapSurveyRecord, error)
+	ReadRPMap(context.Context, core.RPSessionReadRequest) ([]storage.RPMapMemory, error)
+	MaterializeRPLocation(context.Context, storage.RPLocationMaterializeRequest) (storage.RPLocationRecord, error)
+	RenameRPLocation(context.Context, storage.RPLocationRenameRequest) (storage.RPLocationRenameRecord, error)
+	DefineRPTimedEdge(context.Context, storage.RPTimedEdgeRequest) (storage.RPTimedEdgeRecord, error)
+	DefineRPPerceptionLink(context.Context, storage.RPPerceptionLinkRequest) (storage.RPPerceptionLinkRecord, error)
+	PlaceRPActorInZone(context.Context, storage.RPActorZoneRequest) (storage.RPActorZoneRecord, error)
 	SocialRP(context.Context, core.RPSocialRequest) (storage.RPSocialResult, error)
 	MaterializeRPBackground(context.Context, core.RPBackgroundRequest) (storage.RPBackgroundResult, error)
 	DefineCareerOrganization(context.Context, core.CareerOrganizationRequest) (storage.CareerRecord, error)
@@ -236,6 +245,33 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPEvents(response, request, requestID, principalID, true)
 	case "/api/v1/rp/actions/move":
 		s.handleRPMove(response, request, requestID, principalID)
+	case "/api/v1/rp/journeys/start":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *core.RPMoveRequest) *string { return &r.PrincipalID }, s.service.StartRPJourney)
+	case "/api/v1/rp/journeys/cancel":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *core.RPJourneyCancelRequest) *string { return &r.PrincipalID }, s.service.CancelRPJourney)
+	case "/api/v1/rp/map/survey":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPMapSurveyRequest) *string { return &r.PrincipalID }, s.service.SurveyRPMap)
+	case "/api/v1/rp/map/read":
+		input, ok := s.decodeRPSessionRead(response, request, requestID, principalID)
+		if !ok {
+			return
+		}
+		result, err := s.service.ReadRPMap(request.Context(), input)
+		if err != nil {
+			writeError(response, requestID, err)
+			return
+		}
+		writeData(response, http.StatusOK, result)
+	case "/api/v1/rp/locations/materialize":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPLocationMaterializeRequest) *string { return &r.Binding.PrincipalID }, s.service.MaterializeRPLocation)
+	case "/api/v1/rp/locations/rename":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPLocationRenameRequest) *string { return &r.Binding.PrincipalID }, s.service.RenameRPLocation)
+	case "/api/v1/rp/edges/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPTimedEdgeRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPTimedEdge)
+	case "/api/v1/rp/perception/links/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPPerceptionLinkRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPPerceptionLink)
+	case "/api/v1/rp/perception/zones/place":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPActorZoneRequest) *string { return &r.Binding.PrincipalID }, s.service.PlaceRPActorInZone)
 	case "/api/v1/rp/actions/social":
 		s.handleRPSocial(response, request, requestID, principalID)
 	case "/api/v1/rp/background/materialize":

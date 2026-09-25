@@ -10,7 +10,7 @@ export async function checkContacts({ page, sql, temp, stage }) {
   const dialog = page.getByRole('dialog', { name: '通讯录', exact: true })
   await opener.click()
   const { data } = await (await response).json()
-  const known = sql("SELECT DISTINCT subject_agent_id FROM agent_knowledge WHERE observer_agent_id='entity_m2_rp_lin' AND subject_agent_id<>'entity_m2_rp_lin' AND json_extract(claim_payload,'$.claim_type') IN ('agent_presence','speaker_said') ORDER BY subject_agent_id").split('\n').filter(Boolean)
+  const known = sql("SELECT DISTINCT k.subject_agent_id FROM agent_knowledge k JOIN rp_identity_familiarity f ON f.observer_agent_id=k.observer_agent_id AND f.subject_agent_id=k.subject_agent_id WHERE k.observer_agent_id='entity_m2_rp_lin' AND k.subject_agent_id<>'entity_m2_rp_lin' AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said') ORDER BY k.subject_agent_id").split('\n').filter(Boolean)
   assert.deepEqual(data.contacts.map(c => c.entity_id), known)
   for (const contact of data.contacts) {
     assert.deepEqual(Object.keys(contact).sort(), ['display_name', 'entity_id', 'last_known_world_time'])

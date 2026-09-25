@@ -50,6 +50,7 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 		var speechText sql.NullString
 		fact := core.RPNarrativeFact{PlaceName: player.PlaceName}
 		if err := rows.Scan(&action, &eventType, &name, &speechText, &fact.EventID, &fact.ActorID, &fact.WorldTime); err != nil {
+			rows.Close()
 			return input, core.WrapError(core.CodeStorageFailure, "scan committed NPC effect for narrative", err)
 		}
 		switch action {
@@ -80,7 +81,34 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 		input.Facts = append(input.Facts, fact)
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
 		return input, core.WrapError(core.CodeStorageFailure, "iterate committed NPC effects for narrative", err)
+	}
+	if err := rows.Close(); err != nil {
+		return input, err
+	}
+	var instance, branch string
+	if err := s.db.QueryRowContext(ctx, `SELECT instance_id,branch_id FROM rp_sessions WHERE session_id=?`, sessionID).Scan(&instance, &branch); err != nil {
+		return input, err
+	}
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return input, err
+	}
+	defer conn.Close()
+	for i := 1; i < len(input.Facts); i++ {
+		fact := &input.Facts[i]
+		known, err := rpIdentityKnown(ctx, conn, instance, branch, player.ActorID, fact.ActorID)
+		if err != nil {
+			return input, err
+		}
+		if !known {
+			fact.ActorName = "陌生人"
+			fact.ActorID, err = rpAnonymousEntityID(ctx, conn, instance, branch, player.ActorID, fact.ActorID)
+			if err != nil {
+				return input, err
+			}
+		}
 	}
 	return input, nil
 }

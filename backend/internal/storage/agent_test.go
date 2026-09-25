@@ -309,7 +309,15 @@ func TestM2AgentKnowledgeAndEncounterAreScopedStateBackedAndReadOnly(t *testing.
 	if adaEncounter.PlaceID != M2AgentCafeID || boEncounter.PlaceID != M2AgentCafeID || adaEncounter.WorldTime != boEncounter.WorldTime || adaEncounter.WorldTime != M2AgentNoonTime {
 		t.Fatalf("co-located views disagree on place/time: Ada=%+v Bo=%+v", adaEncounter, boEncounter)
 	}
-	if len(adaEncounter.Participants) != 1 || adaEncounter.Participants[0].AgentID != M2AgentBoID || len(boEncounter.Participants) != 1 || boEncounter.Participants[0].AgentID != M2AgentAdaID {
+	boAlias, err := rpAnonymousEntityIDForTest(ctx, store, M2DemoInstanceID, M2DemoBranchID, M2AgentAdaID, M2AgentBoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adaAlias, err := rpAnonymousEntityIDForTest(ctx, store, M2DemoInstanceID, M2DemoBranchID, M2AgentBoID, M2AgentAdaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(adaEncounter.Participants) != 1 || adaEncounter.Participants[0].AgentID != boAlias || len(boEncounter.Participants) != 1 || boEncounter.Participants[0].AgentID != adaAlias {
 		t.Fatalf("co-located views disagree on participants: Ada=%+v Bo=%+v", adaEncounter, boEncounter)
 	}
 }

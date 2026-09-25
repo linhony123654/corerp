@@ -31,6 +31,7 @@ type RPSession struct {
 type RPVisibleEntity struct {
 	EntityID    string `json:"entity_id"`
 	DisplayName string `json:"display_name"`
+	Identified  bool   `json:"identified,omitempty"`
 }
 
 type RPObservation struct {
@@ -48,13 +49,24 @@ type RPObservation struct {
 	PresentEntities   []RPVisibleEntity          `json:"present_entities"`
 	ObservationCursor int64                      `json:"observation_cursor"`
 	ReachablePlaces   []RPVisiblePlace           `json:"reachable_places"`
+	ActiveJourney     *RPJourneyView             `json:"active_journey,omitempty"`
 	RecentTurns       []RPHistoryTurn            `json:"recent_turns"`
 }
 
+type RPJourneyView struct {
+	JourneyID          string `json:"journey_id"`
+	FromPlaceID        string `json:"from_place_id"`
+	ToPlaceID          string `json:"to_place_id"`
+	SegmentPlaceID     string `json:"segment_place_id"`
+	ScheduledArrivalAt string `json:"scheduled_arrival_at"`
+}
+
 type RPVisiblePlace struct {
-	PlaceID     string `json:"place_id"`
-	DisplayName string `json:"display_name"`
-	CanMoveNow  bool   `json:"can_move_now"`
+	PlaceID         string `json:"place_id"`
+	DisplayName     string `json:"display_name"`
+	CanMoveNow      bool   `json:"can_move_now"`
+	CanStartJourney bool   `json:"can_start_journey,omitempty"`
+	TravelMinutes   int    `json:"travel_minutes,omitempty"`
 }
 
 type RPHistoryTurn struct {
@@ -239,6 +251,7 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	view.NarrativeMode = "deterministic"
 	view.SessionID = session.SessionID
 	view.ControlledEntity.EntityID = session.ControlledEntityID
+	view.ControlledEntity.Identified = true
 	err = tx.conn.QueryRowContext(ctx, `
 		SELECT e.display_name, p.place_id, l.display_name, l.place_kind, c.current_world_time, b.head_sequence
 		FROM materialized_entities e
@@ -283,7 +296,47 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	if err := rows.Close(); err != nil {
 		return RPObservation{}, core.WrapError(core.CodeStorageFailure, "close RP presence cursor", err)
 	}
+	visible := make([]RPVisibleEntity, 0, len(view.PresentEntities))
+	for _, entity := range view.PresentEntities {
+		canSee, err := rpCanPerceive(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, entity.EntityID, "visual", "")
+		if err != nil {
+			return RPObservation{}, err
+		}
+		if canSee {
+			known, err := rpIdentityKnown(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, entity.EntityID)
+			if err != nil {
+				return RPObservation{}, err
+			}
+			entity.Identified = known
+			if !known {
+				entity.DisplayName = "陌生人"
+				entity.EntityID, err = rpAnonymousEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, entity.EntityID)
+				if err != nil {
+					return RPObservation{}, err
+				}
+			}
+			visible = append(visible, entity)
+		}
+	}
+	view.PresentEntities = visible
 	view.ReachablePlaces = make([]RPVisiblePlace, 0)
+	var activeJourney int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_journeys WHERE instance_id=? AND branch_id=? AND agent_id=? AND status='active'`, session.InstanceID, session.BranchID, session.ControlledEntityID).Scan(&activeJourney); err != nil {
+		return RPObservation{}, err
+	}
+	if activeJourney > 1 {
+		return RPObservation{}, core.NewError(core.CodeProjectionDiverged, "multiple active journeys for one actor")
+	}
+	if activeJourney == 1 {
+		var journey RPJourneyView
+		if err := tx.conn.QueryRowContext(ctx, `SELECT journey_id,from_place_id,to_place_id,segment_place_id,scheduled_arrival_at FROM rp_journeys WHERE instance_id=? AND branch_id=? AND agent_id=? AND status='active'`, session.InstanceID, session.BranchID, session.ControlledEntityID).Scan(&journey.JourneyID, &journey.FromPlaceID, &journey.ToPlaceID, &journey.SegmentPlaceID, &journey.ScheduledArrivalAt); err != nil {
+			return RPObservation{}, err
+		}
+		if journey.SegmentPlaceID != view.PlaceID {
+			return RPObservation{}, core.NewError(core.CodeProjectionDiverged, "active journey position differs from segment")
+		}
+		view.ActiveJourney = &journey
+	}
 	rows, err = tx.conn.QueryContext(ctx, `SELECT p.place_id, p.display_name FROM rp_place_links l
 		JOIN agent_places p ON p.place_id = l.to_place_id
 		WHERE l.instance_id = ? AND l.branch_id = ? AND l.from_place_id = ?
@@ -309,6 +362,21 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	// owner's physical route check, including alternate paths, in this snapshot.
 	for i := range view.ReachablePlaces {
 		place := &view.ReachablePlaces[i]
+		if activeJourney != 0 {
+			continue
+		}
+		err = tx.conn.QueryRowContext(ctx, `SELECT duration_minutes FROM rp_timed_edges WHERE instance_id=? AND branch_id=? AND from_place_id=? AND to_place_id=?`, session.InstanceID, session.BranchID, view.PlaceID, place.PlaceID).Scan(&place.TravelMinutes)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return RPObservation{}, err
+		}
+		if err == nil {
+			worksEnd, worksErr := readRPDirectWorksEnd(ctx, tx.conn, session.InstanceID, session.BranchID, view.PlaceID, place.PlaceID, view.WorldTime)
+			if worksErr != nil {
+				return RPObservation{}, worksErr
+			}
+			place.CanStartJourney = worksEnd == ""
+			continue
+		}
 		place.CanMoveNow, err = rpTransitAllowsImmediate(ctx, tx.conn, session.InstanceID, session.BranchID, view.PlaceID, place.PlaceID, view.WorldTime)
 		if err != nil {
 			return RPObservation{}, err

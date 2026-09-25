@@ -132,26 +132,66 @@ func (s *Store) ResolveEncounter(ctx context.Context, request core.EncounterRead
 	if err != nil {
 		return EncounterView{}, core.WrapError(core.CodeStorageFailure, "resolve co-located encounter", err)
 	}
-	defer rows.Close()
-	participants := make([]EncounterParticipant, 0)
-	evidence := make([]string, 0)
+	type encountered struct {
+		participant EncounterParticipant
+		eventID     string
+	}
+	physical := make([]encountered, 0)
 	for rows.Next() {
 		var participant EncounterParticipant
 		var evidenceEventID string
 		if err := rows.Scan(&participant.AgentID, &participant.DisplayName, &participant.ActivityCode, &evidenceEventID); err != nil {
+			rows.Close()
 			return EncounterView{}, core.WrapError(core.CodeStorageFailure, "scan encounter participant", err)
+		}
+		physical = append(physical, encountered{participant, evidenceEventID})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return EncounterView{}, core.WrapError(core.CodeStorageFailure, "iterate encounter participants", err)
+	}
+	if err := rows.Close(); err != nil {
+		return EncounterView{}, core.WrapError(core.CodeStorageFailure, "close encounter participants", err)
+	}
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return EncounterView{}, err
+	}
+	defer conn.Close()
+	participants := make([]EncounterParticipant, 0, len(physical))
+	evidence := make([]string, 0, len(physical))
+	for _, seen := range physical {
+		allowedSight, err := rpCanPerceive(ctx, conn, request.InstanceID, request.BranchID, request.ObserverAgentID, seen.participant.AgentID, "visual", "")
+		if err != nil {
+			return EncounterView{}, err
+		}
+		if !allowedSight {
+			continue
+		}
+		participant := seen.participant
+		known, err := rpIdentityKnown(ctx, conn, request.InstanceID, request.BranchID, request.ObserverAgentID, participant.AgentID)
+		if err != nil {
+			return EncounterView{}, err
+		}
+		if !known {
+			participant.DisplayName = "陌生人"
+			participant.AgentID, err = rpAnonymousEntityID(ctx, conn, request.InstanceID, request.BranchID, request.ObserverAgentID, participant.AgentID)
+			if err != nil {
+				return EncounterView{}, err
+			}
+			seen.eventID, err = rpAnonymousEvidenceID(ctx, conn, request.InstanceID, request.BranchID, request.ObserverAgentID, seen.eventID)
+			if err != nil {
+				return EncounterView{}, err
+			}
 		}
 		if !allowed["activity"] {
 			participant.ActivityCode = ""
 		}
 		if allowed["evidence"] {
-			participant.EvidenceEventID = evidenceEventID
-			evidence = append(evidence, evidenceEventID)
+			participant.EvidenceEventID = seen.eventID
+			evidence = append(evidence, seen.eventID)
 		}
 		participants = append(participants, participant)
-	}
-	if err := rows.Err(); err != nil {
-		return EncounterView{}, core.WrapError(core.CodeStorageFailure, "iterate encounter participants", err)
 	}
 	if allowed["participants"] {
 		view.Participants = participants

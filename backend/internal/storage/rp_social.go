@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"corerp.local/backend/internal/core"
@@ -71,6 +72,19 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 	if !errors.Is(err, sql.ErrNoRows) {
 		return empty, err
 	}
+	if !strings.HasPrefix(r.TargetEntityID, "person_") {
+		known, err := rpIdentityKnown(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, r.TargetEntityID)
+		if err != nil {
+			return empty, err
+		}
+		if !known {
+			return empty, core.NewError(core.CodeNotFound, "unidentified interpersonal target")
+		}
+	}
+	r.TargetEntityID, err = rpResolvePublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, r.TargetEntityID)
+	if err != nil {
+		return empty, err
+	}
 	if session.Status != "active" || session.ControlledEntityID == r.TargetEntityID {
 		return empty, core.NewError(core.CodeInvalidArgument, "active session and distinct target required")
 	}
@@ -87,23 +101,34 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 		return empty, core.NewError(core.CodeCommandInProgress, "finish pending RP action first")
 	}
 	var head int64
-	var worldTime, place, actorName, targetName string
-	err = tx.conn.QueryRowContext(ctx, `SELECT b.head_sequence,c.current_world_time,p.place_id,n.display_name
+	var worldTime, place string
+	err = tx.conn.QueryRowContext(ctx, `SELECT b.head_sequence,c.current_world_time,p.place_id
  FROM branches b JOIN world_clocks c ON c.instance_id=b.instance_id AND c.branch_id=b.branch_id
- JOIN agent_positions p ON p.agent_id=? JOIN materialized_entities n ON n.entity_id=p.agent_id
- WHERE b.instance_id=? AND b.branch_id=?`, session.ControlledEntityID, session.InstanceID, session.BranchID).Scan(&head, &worldTime, &place, &actorName)
+ JOIN agent_positions p ON p.agent_id=?
+ WHERE b.instance_id=? AND b.branch_id=?`, session.ControlledEntityID, session.InstanceID, session.BranchID).Scan(&head, &worldTime, &place)
 	if err != nil {
 		return empty, err
 	}
 	if head != r.ExpectedCursor || session.ObservationCursor != r.ExpectedCursor {
 		return empty, core.NewError(core.CodeBranchConflict, "observe current world before interpersonal action")
 	}
-	err = tx.conn.QueryRowContext(ctx, `SELECT n.display_name FROM agent_profiles a JOIN agent_positions p ON p.agent_id=a.agent_id
+	var present int
+	err = tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_profiles a JOIN agent_positions p ON p.agent_id=a.agent_id
 	JOIN materialized_entities n ON n.entity_id=a.agent_id JOIN cohorts source ON source.cohort_id=n.source_cohort_id
 	WHERE a.agent_id=? AND a.instance_id=? AND a.branch_id=? AND source.instance_id=a.instance_id AND source.branch_id=a.branch_id
-	AND a.status='active' AND n.status='active' AND n.population_count=1 AND p.place_id=?`, r.TargetEntityID, session.InstanceID, session.BranchID, place).Scan(&targetName)
+	AND a.status='active' AND n.status='active' AND n.population_count=1 AND p.place_id=?`, r.TargetEntityID, session.InstanceID, session.BranchID, place).Scan(&present)
 	if err != nil {
-		return empty, classifyMissing(err, "present interpersonal target")
+		return empty, err
+	}
+	if present != 1 {
+		return empty, core.NewError(core.CodeNotFound, "present interpersonal target not found")
+	}
+	visible, err := rpCanPerceive(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, r.TargetEntityID, "visual", "")
+	if err != nil {
+		return empty, err
+	}
+	if !visible {
+		return empty, core.NewError(core.CodeNotFound, "interpersonal target is not visible")
 	}
 	if err := ensureCohortTransitionChronology(ctx, tx.conn, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return empty, err
@@ -111,13 +136,13 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 	evidence := core.RPSocialEvidence{ClaimType: "interpersonal_action", SessionID: session.SessionID, ActorEntityID: session.ControlledEntityID, TargetEntityID: r.TargetEntityID, Action: r.Action, PlaceID: place, AmountMinor: r.AmountMinor, PromiseEventID: r.PromiseEventID, MeetingPlaceID: r.MeetingPlaceID, MeetingWorldTime: r.MeetingWorldTime}
 	switch r.Action {
 	case "greet":
-		evidence.Description = actorName + " 向 " + targetName + " 挥手致意。"
+		evidence.Description = "有人向另一人挥手致意。"
 	case "insult":
-		evidence.Description = actorName + " 对 " + targetName + " 做出了冒犯的手势。"
+		evidence.Description = "有人对另一人做出了冒犯的手势。"
 	case "apologize":
-		evidence.Description = actorName + " 向 " + targetName + " 表达歉意。"
+		evidence.Description = "有人向另一人表达歉意。"
 	case "gift":
-		evidence.Description = actorName + " 赠予 " + targetName + " 一笔钱。"
+		evidence.Description = "有人赠予另一人一笔钱。"
 	case "promise_meeting":
 		now, _ := time.Parse(time.RFC3339, worldTime)
 		at, _ := time.Parse(time.RFC3339, r.MeetingWorldTime)
@@ -132,7 +157,7 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 		if reachable != 1 {
 			return empty, core.NewError(core.CodeInvalidArgument, "meeting place is not known/reachable")
 		}
-		evidence.Description = actorName + " 向 " + targetName + " 作出见面承诺。"
+		evidence.Description = "有人向另一人作出见面承诺。"
 	case "keep_meeting":
 		var raw string
 		if err := tx.conn.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPInterpersonalAction' AND actor_id=?`, r.PromiseEventID, session.InstanceID, session.BranchID, session.ControlledEntityID).Scan(&raw); err != nil {
@@ -156,7 +181,7 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 		}
 		evidence.MeetingPlaceID = promise.MeetingPlaceID
 		evidence.MeetingWorldTime = promise.MeetingWorldTime
-		evidence.Description = actorName + " 如约与 " + targetName + " 见面。"
+		evidence.Description = "两人如约见面。"
 	}
 	var giverAccount, recipientAccount, currency string
 	var giverBalance, recipientBalance int64

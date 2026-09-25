@@ -48,7 +48,10 @@ runtime or grant permission for actions beyond the user's intent.
 `corerp_turn_resume`, `corerp_wait`, `corerp_command` (move/social),
 `corerp_interaction`, `corerp_interaction_resume`, `corerp_interaction_stop`,
 `corerp_interaction_default`, `corerp_interaction_default_set`,
-`corerp_request_retire`, `corerp_events` (bounded pages).
+`corerp_request_retire`, `corerp_events` (bounded pages), plus the F2 spatial
+tools `corerp_journey_start`, `corerp_journey_cancel`, `corerp_map_survey` and
+`corerp_map_read`. Timed travel enters an actual segment; cancellation leaves
+the traveller there. Map notes are dated beliefs, not current route permission.
 
 Every tool has a closed input schema: no arbitrary URL, token, principal or raw
 HTTP operation. Tool results contain `{data: ...}` or sanitized `{error: ...}` and
@@ -81,7 +84,9 @@ adapter against a built Go server/temporary SQLite world. Requires project Go,
 discovery/open/observe, dialogue and process-restart recovery, permissions, mismatch,
 move/social, budget wait, retirement, and a real accepted-but-lost HTTP reply through
 a fixture proxy. The current fixture verifies four distinct player speeches
-(legacy dialogue plus move/wait mixed plans), each accepted exactly once.
+(legacy dialogue plus move/wait mixed plans), each accepted exactly once, and
+the same-world F2 map/journey/cancel path. F2's local gate and scoped limits are
+recorded in [its phase report](../../docs/f2/phase-report.md).
 
 Official [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 server/client2.1.0 and zod4.6.5 are pinned. Its

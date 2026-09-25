@@ -43,7 +43,11 @@ func TestRPMoveUsesRealRouteMovementKnowledgeAndRetry(t *testing.T) {
 		t.Fatalf("unexpected real move: %+v", result)
 	}
 	after, err := store.ObserveRPSession(ctx, read)
-	if err != nil || after.PlaceID != "place_m2_home_ada" || after.ObservationCursor != 9 || len(after.PresentEntities) != 1 || after.PresentEntities[0].EntityID != M2AgentAdaID {
+	alias, aliasErr := rpAnonymousEntityIDForTest(ctx, store, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, M2AgentAdaID)
+	if aliasErr != nil {
+		t.Fatal(aliasErr)
+	}
+	if err != nil || after.PlaceID != "place_m2_home_ada" || after.ObservationCursor != 9 || len(after.PresentEntities) != 1 || after.PresentEntities[0].EntityID != alias {
 		t.Fatalf("observation did not follow player location: %+v, %v", after, err)
 	}
 	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM agent_movements WHERE agent_id = ? AND event_id = ?`, []any{M2RPPlayerID, result.EventID}, 1)

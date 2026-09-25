@@ -65,7 +65,11 @@ func TestRPSessionFirstSliceDerivesPresenceAndResumesAfterReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.PlaceID != M2AgentCafeID || view.WorldTime != M2AgentNoonTime || view.ObservationCursor != 8 || len(view.PresentEntities) != 1 || view.PresentEntities[0].EntityID != M2AgentBoID {
+	alias, aliasErr := rpAnonymousEntityIDForTest(ctx, store, M2DemoInstanceID, M2DemoBranchID, M2AgentAdaID, M2AgentBoID)
+	if aliasErr != nil {
+		t.Fatal(aliasErr)
+	}
+	if view.PlaceID != M2AgentCafeID || view.WorldTime != M2AgentNoonTime || view.ObservationCursor != 8 || len(view.PresentEntities) != 1 || view.PresentEntities[0].EntityID != alias {
 		t.Fatalf("session failed to derive new co-location from world state: %+v", view)
 	}
 	encoded, err := json.Marshal(view)

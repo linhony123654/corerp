@@ -77,10 +77,19 @@ func TestRPClientContextOwnEvidenceSharedSessionsAndRecovery(t *testing.T) {
 	for _, subject := range []string{M2AgentBoID, "entity_unknown"} {
 		unknown := r
 		unknown.SubjectEntityID = subject
-		out, err := s.ReadRPContext(ctx, unknown)
-		if err != nil || len(out.Facts) != 0 || out.MoreFacts {
-			t.Fatalf("unheard subject exposed: %+v %v", out, err)
+		if _, err := s.ReadRPContext(ctx, unknown); !core.HasCode(err, core.CodeNotFound) {
+			t.Fatalf("guessed unfamiliar subject was not rejected: %s %v", subject, err)
 		}
+	}
+	boAlias, err := rpAnonymousEntityIDForTest(ctx, s, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, M2AgentBoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown := r
+	unknown.SubjectEntityID = boAlias
+	out, err := s.ReadRPContext(ctx, unknown)
+	if err != nil || len(out.Facts) != 0 || out.MoreFacts || out.SubjectEntityID != boAlias {
+		t.Fatalf("unheard anonymous subject exposed history: %+v %v", out, err)
 	}
 	limited := r
 	limited.Limit = 1
@@ -199,7 +208,11 @@ func TestRPClientContextSubjectRestrictsKnownFactsNotPrivateCharacter(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, subject := range []string{M2RPNPCID, M2AgentAdaID} {
+	adaAlias, err := rpAnonymousEntityIDForTest(ctx, s, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, M2AgentAdaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []string{M2RPNPCID, adaAlias} {
 		out, err := s.ReadRPContext(ctx, RPContextReadRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, SubjectEntityID: subject})
 		if err != nil || len(out.Facts) == 0 || out.ObserverEntityID != M2RPPlayerID || out.ObservationCursor != last.SettledSequence {
 			t.Fatalf("subject boundary: %+v %v", out, err)

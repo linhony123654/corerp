@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"corerp.local/backend/internal/core"
 )
@@ -72,7 +73,27 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 	if err := validateRPBinding(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return result, err
 	}
-	result = RPClientContext{ProtocolVersion: RPClientProtocolVersion, SessionID: session.SessionID, InstanceID: session.InstanceID, BranchID: session.BranchID, ObserverEntityID: session.ControlledEntityID, SubjectEntityID: r.SubjectEntityID, Facts: []RPContextFact{}}
+	if r.SubjectEntityID != "" && !strings.HasPrefix(r.SubjectEntityID, "person_") {
+		known, err := rpIdentityKnown(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, r.SubjectEntityID)
+		if err != nil {
+			return result, err
+		}
+		if !known {
+			return result, core.NewError(core.CodeNotFound, "unidentified context subject")
+		}
+	}
+	subjectID, err := rpResolvePublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, r.SubjectEntityID)
+	if err != nil {
+		return result, err
+	}
+	publicSubjectID := ""
+	if subjectID != "" {
+		publicSubjectID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, subjectID)
+		if err != nil {
+			return result, err
+		}
+	}
+	result = RPClientContext{ProtocolVersion: RPClientProtocolVersion, SessionID: session.SessionID, InstanceID: session.InstanceID, BranchID: session.BranchID, ObserverEntityID: session.ControlledEntityID, SubjectEntityID: publicSubjectID, Facts: []RPContextFact{}}
 	if err := tx.conn.QueryRowContext(ctx, `SELECT c.current_world_time,b.head_sequence FROM world_clocks c JOIN branches b ON b.instance_id=c.instance_id AND b.branch_id=c.branch_id WHERE b.instance_id=? AND b.branch_id=?`, session.InstanceID, session.BranchID).Scan(&result.WorldTime, &result.ObservationCursor); err != nil {
 		return result, err
 	}
@@ -81,15 +102,15 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 	 WHERE k.observer_agent_id=? AND e.instance_id=? AND e.branch_id=?
 	 AND e.world_time<=? AND k.learned_world_time<=? AND (?='' OR k.subject_agent_id=?)
 	 AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action')
-	 ORDER BY e.event_sequence DESC,k.claim_key LIMIT ?`, session.ControlledEntityID, session.InstanceID, session.BranchID, result.WorldTime, result.WorldTime, r.SubjectEntityID, r.SubjectEntityID, r.Limit+1)
+	 ORDER BY e.event_sequence DESC,k.claim_key LIMIT ?`, session.ControlledEntityID, session.InstanceID, session.BranchID, result.WorldTime, result.WorldTime, subjectID, subjectID, r.Limit+1)
 	if err != nil {
 		return result, err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		var fact RPContextFact
 		var raw string
 		if err := rows.Scan(&fact.SubjectEntityID, &fact.PlaceID, &fact.LearnedWorldTime, &fact.SourceEventID, &raw); err != nil {
+			rows.Close()
 			return result, err
 		}
 		var claim struct {
@@ -99,6 +120,7 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 			Action      string `json:"action"`
 		}
 		if err := json.Unmarshal([]byte(raw), &claim); err != nil {
+			rows.Close()
 			return result, core.WrapError(core.CodeProjectionDiverged, "invalid known context evidence", err)
 		}
 		fact.Kind = claim.Kind
@@ -111,11 +133,29 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 		result.Facts = append(result.Facts, fact)
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
+		return result, err
+	}
+	if err := rows.Close(); err != nil {
 		return result, err
 	}
 	if len(result.Facts) > r.Limit {
 		result.Facts = result.Facts[:r.Limit]
 		result.MoreFacts = true
+	}
+	for i := range result.Facts {
+		fact := &result.Facts[i]
+		originalID := fact.SubjectEntityID
+		fact.SubjectEntityID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, originalID)
+		if err != nil {
+			return result, err
+		}
+		if fact.SubjectEntityID != originalID {
+			fact.SourceEventID, err = rpAnonymousEvidenceID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, fact.SourceEventID)
+			if err != nil {
+				return result, err
+			}
+		}
 	}
 	return result, nil
 }

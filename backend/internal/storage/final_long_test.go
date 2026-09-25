@@ -28,6 +28,10 @@ func runFinalWorldMonth(t *testing.T, current **Store, path string, read core.RP
 		t.Fatal(err)
 	}
 	reads := []core.RPSessionReadRequest{read, {PrincipalID: read.PrincipalID, SessionID: other.SessionID}}
+	noraAlias, err := rpAnonymousEntityIDForTest(ctx, s, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, nora)
+	if err != nil {
+		t.Fatal(err)
+	}
 	turns, quiet, waits, rareDraws, rareHits, rareEffects, gifts, restarts := 0, 0, 0, 0, 0, 0, 0, 0
 	move := func(target, key string) {
 		t.Helper()
@@ -111,7 +115,7 @@ func runFinalWorldMonth(t *testing.T, current **Store, path string, read core.RP
 				}
 				present := false
 				for _, person := range view.PresentEntities {
-					present = present || person.EntityID == nora
+					present = present || person.EntityID == noraAlias
 				}
 				if present {
 					if day == 3 {

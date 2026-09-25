@@ -54,9 +54,13 @@ func TestRPBackgroundMaterializationEntersRPReencountersAndReopens(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	noraAlias, err := rpAnonymousEntityIDForTest(ctx, s, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, r.EntityID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	seen := func(view RPObservation) bool {
 		for _, p := range view.PresentEntities {
-			if p.EntityID == r.EntityID {
+			if p.EntityID == noraAlias {
 				return true
 			}
 		}

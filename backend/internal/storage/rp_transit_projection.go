@@ -60,7 +60,7 @@ func transitProjectionDifferences(ctx context.Context, q replayQuerier, instance
 	if len(queues) == 0 {
 		return nil, nil
 	}
-	rows, err = q.QueryContext(ctx, `SELECT event_id,event_sequence,event_type,payload FROM events WHERE instance_id=? AND branch_id=? AND event_sequence<=? AND event_type IN ('AgentMoved','AgentActivityStarted','AgentTravelSuperseded','RPCareerFactRecorded','CareerEmploymentTermsActivated','CareerAggregateExitActivated') ORDER BY event_sequence`, instance, branch, through)
+	rows, err = q.QueryContext(ctx, `SELECT event_id,event_sequence,event_type,payload FROM events WHERE instance_id=? AND branch_id=? AND event_sequence<=? AND event_type IN ('AgentMoved','AgentActivityStarted','AgentTravelSuperseded','AgentJourneyStarted','RPCareerFactRecorded','CareerEmploymentTermsActivated','CareerAggregateExitActivated') ORDER BY event_sequence`, instance, branch, through)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +70,29 @@ func transitProjectionDifferences(ctx context.Context, q replayQuerier, instance
 		if err := rows.Scan(&id, &sequence, &kind, &raw); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if kind == "AgentJourneyStarted" {
+			var start rpJourneyStartEvent
+			if err := json.Unmarshal([]byte(raw), &start); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			state, ok := schedules[start.ArrivalScheduleID]
+			if !ok || sequence <= sequences[start.ArrivalScheduleID] {
+				continue
+			}
+			if id != "event_"+state.ItemID || start.AgentID != state.AgentID || start.ToPlaceID != state.PlaceID || start.ArrivalItemID == "" {
+				rows.Close()
+				return nil, core.NewError(core.CodeProjectionDiverged, "delayed timed departure differs from accepted schedule")
+			}
+			queue := queues[state.ItemID]
+			queue.Status = "completed"
+			queues[state.ItemID] = queue
+			// Journey replay now owns the active arrival pointer. RP5 still
+			// audits the consumed departure queue but no longer expects the
+			// original appointment to point at it.
+			delete(schedules, start.ArrivalScheduleID)
+			continue
 		}
 		if kind == "AgentMoved" || kind == "AgentActivityStarted" || kind == "AgentTravelSuperseded" {
 			var move agentMovementPayload

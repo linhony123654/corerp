@@ -7,12 +7,12 @@ Execute `/tmp/f3aba99d-86cf-4b76-8ad6-c2e6390139e7.md` in strict F0→F13 order:
 Full-project route. Only the current stage may be in implementation. Each stage: read-only source recon and reuse/gap map → representative vertical slice → targeted checks → full stage and relevant regressions → phase report → authorized checkpoint → clean recoverable tree → next stage. Do not claim absent live-provider evidence as passed. Preserve immutable Event authority, permissions, idempotency and replay. Resolve architecture-changing uncertainty before broad build.
 
 ## Current phase
-F1 — unified interaction and sourced long-form display: local REQUIRED gates PASSED; the checkpoint is the commit containing `docs/f1/phase-report.md`. F0 passed at `f6b3df87ea9f41529998be14b1ef1224d37bfb10`. F1 backend, additive HTTP/MCP, Play, bounded narrative density, recovery, race, browser isolation and full Go regression are verified. Live provider is unavailable and remains `LIVE_VALIDATION_PENDING`. Verify the F1 checkpoint clean tree before entering F2.
+F2 — Shared Spatial Topology / real encounters (`SHIP`, local gate PASSED; this ledger is included in the F2 checkpoint). F1 checkpoint is `dba744d515ca9dcc3a274fea9cfbf8866fe15edf`, with live-provider quality still `LIVE_VALIDATION_PENDING`. Migrations 032–035 and additive HTTP/Play/MCP paths implement scoped lazy places, timed segments and occupancy, RP5 delays, sight/hearing barriers, sourced acquaintance, dated maps and private-keyed anonymous player references. Final-source full Go regression PASS (storage 1295.688s, HTTP 16.123s); targeted race, vet, frontend, actual browser and MCP SDK checks also PASS. The focused month-long run exceeded a 15m deadline but passed as part of the clean full suite. Same-instance positive branch-fork testing is unavailable without a product fork workflow; two independent worlds and foreign-branch denial were verified. Next: finalize the F2 checkpoint, then F3 read-only recon and principal-purpose boundary before external controllers.
 
 ## Phases
 - [x] F0 — old goal ended; branch/HEAD/clean state, migrations, versions, clients, docs, Inspector/Studio, prior E2E/race/replay; 13-row reuse matrix; source-backed gaps; report/checkpoint `f6b3df8`; clean tree verified.
 - [x] F1 — unified interaction modes and sourced long-form display. Representative backend slice, migration031, authenticated routes, Play/MCP adapters, recovery/long-fixture/two-world browser checks, focused race/vet and terminal full Go regression pass. Live quality pending; containing checkpoint and clean-tree audit finalize the stage.
-- [ ] F2 — shared spatial topology, travel encounters, perception and lazy locations.
+- [x] F2 — shared spatial topology, travel encounters, perception and lazy locations. Local gate passed; this ledger accompanies the containing checkpoint.
 - [ ] F3 — MCP model residents, exclusive control and shared world time.
 - [ ] F4 — household foundation.
 - [ ] F5 — health contract.
@@ -30,6 +30,7 @@ F1 — unified interaction and sourced long-form display: local REQUIRED gates P
 - Prior `.planning/2026-09-23-living-world/` is historical evidence; this plan is the new goal's ledger.
 - Checkpoint commits are authorized by the user-provided goal, after each stage gate; no push/deployment authorization.
 - An unavailable live provider remains `LIVE_VALIDATION_PENDING`, never a fabricated COMPLETE.
+- F2 identity scope: preserve the explicitly capability-authorized internal AgentKnowledge stable Entity/Event ID contract for career referrals; ordinary player/Agent perception does not grant canonical identity. F3 entry is gated on principal-and-purpose filtering before external model/Agent-controller access to raw AgentKnowledge IDs. Current MCP has no direct AgentKnowledge tool. Do not redesign referral credentials in F2.
 
 ## Errors encountered
 - F0 source lookup guessed `backend/internal/storage/migrations.go`, which does not exist; actual schema constants live in `store.go` and migration SQL under `migrations/`. Corrected lookup scope.

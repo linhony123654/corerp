@@ -44,6 +44,24 @@ func TestRPContactsOwnHearingPersistencePrivacyAndCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	unintroduced, err := s.ReadRPContacts(ctx, r)
+	if err != nil || len(unintroduced.Contacts) != 1 || unintroduced.Contacts[0].EntityID != M2RPNPCID {
+		t.Fatalf("hearing an unfamiliar person revealed their name: %+v %v", unintroduced, err)
+	}
+	grantRPControlForTest(t, ctx, s, M2AgentAdaID)
+	ada, err := s.OpenRPSession(ctx, rpTestOpenRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	adaRead := core.RPSessionReadRequest{PrincipalID: rpTestPrincipal, SessionID: ada.SessionID}
+	adaView, err := s.ObserveRPSession(ctx, adaRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intro, err := s.SpeakRP(ctx, core.RPSpeechRequest{PrincipalID: adaRead.PrincipalID, SessionID: adaRead.SessionID, ExpectedCursor: adaView.ObservationCursor, IdempotencyKey: "contacts-ada-intro", Text: "我叫 Ada。", IntroduceSelf: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 	after, err := s.ReadRPContacts(ctx, r)
 	if err != nil || len(after.Contacts) != 2 {
 		t.Fatalf("actual hearing not reflected: %+v %v", after, err)
@@ -91,5 +109,5 @@ func TestRPContactsOwnHearingPersistencePrivacyAndCursor(t *testing.T) {
 	if _, err := s.ReadRPContacts(ctx, r); !core.HasCode(err, core.CodeUnauthorized) {
 		t.Fatalf("revoked controller read contacts: %v", err)
 	}
-	assertM2Value(t, ctx, s, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, []any{M2DemoInstanceID, M2DemoBranchID}, turn.SettledSequence)
+	assertM2Value(t, ctx, s, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, []any{M2DemoInstanceID, M2DemoBranchID}, intro.EventSequence)
 }

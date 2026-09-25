@@ -55,6 +55,7 @@ type agentSchedulePayload struct {
 	ScheduleID   string `json:"schedule_id"`
 	ToPlaceID    string `json:"to_place_id"`
 	ActivityCode string `json:"activity_code"`
+	JourneyID    string `json:"journey_id,omitempty"`
 }
 
 type agentSetupPayload struct {
@@ -237,6 +238,9 @@ func (s *Store) setupM2AgentLife(ctx context.Context) (AgentSetupResult, error) 
 		if err := execAgentOne(ctx, tx.conn, "insert Agent place", `INSERT INTO agent_places(place_id, instance_id, branch_id, display_name, place_kind, status, definition_event_id) VALUES (?, ?, ?, ?, ?, 'active', ?)`, place.id, M2DemoInstanceID, M2DemoBranchID, place.name, place.kind, m2AgentSetupEventID); err != nil {
 			return AgentSetupResult{}, err
 		}
+		if err := execAgentOne(ctx, tx.conn, "insert Agent location root", `INSERT INTO rp_location_nodes(location_id,instance_id,branch_id,readable_path,generator_version,definition_event_id) VALUES (?,?,? ,?,'declared',?)`, place.id, M2DemoInstanceID, M2DemoBranchID, "/"+place.id, m2AgentSetupEventID); err != nil {
+			return AgentSetupResult{}, err
+		}
 	}
 	profiles := []struct{ agentID, principalID, goal string }{
 		{M2AgentAdaID, M2AgentAdaPrincipal, "maintain_daily_routine"},
@@ -252,7 +256,7 @@ func (s *Store) setupM2AgentLife(ctx context.Context) (AgentSetupResult, error) 
 	}
 	for _, schedule := range schedules {
 		day := 1
-		itemPayload, err := core.CanonicalJSON(agentSchedulePayload{"agent_move", day, schedule.agentID, schedule.id, schedule.placeID, schedule.activity})
+		itemPayload, err := core.CanonicalJSON(agentSchedulePayload{Kind: "agent_move", Day: day, AgentID: schedule.agentID, ScheduleID: schedule.id, ToPlaceID: schedule.placeID, ActivityCode: schedule.activity})
 		if err != nil {
 			return AgentSetupResult{}, err
 		}
@@ -473,6 +477,20 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 	if err := json.Unmarshal([]byte(item.Payload), &scheduled); err != nil {
 		return false, core.WrapError(core.CodeStorageFailure, "decode Agent schedule", err)
 	}
+	if scheduled.Kind == "rp_journey_arrival" {
+		if err := s.executeRPJourneyArrival(ctx, tx, item, scheduled, instanceID, branchID); err != nil {
+			return false, err
+		}
+		if s.beforeCommit != nil {
+			if err := s.beforeCommit(); err != nil {
+				return false, err
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, core.WrapError(core.CodeStorageFailure, "commit RP journey arrival", err)
+		}
+		return true, nil
+	}
 	if scheduled.Kind != "agent_move" || scheduled.Day < 0 {
 		return false, core.NewError(core.CodeStorageFailure, "invalid Agent schedule payload")
 	}
@@ -531,6 +549,21 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return false, err
+		}
+		return true, nil
+	}
+	startedJourney, err := s.beginScheduledRPJourneyIfTimed(ctx, tx, item, scheduled, fromPlace, targetPlace, positionVersion, instanceID, branchID)
+	if err != nil {
+		return false, err
+	}
+	if startedJourney {
+		if s.beforeCommit != nil {
+			if err := s.beforeCommit(); err != nil {
+				return false, err
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, core.WrapError(core.CodeStorageFailure, "commit scheduled journey start", err)
 		}
 		return true, nil
 	}
@@ -673,6 +706,17 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 }
 
 func upsertCoLocationKnowledge(ctx context.Context, conn *sql.Conn, eventID string, sequence int64, observerID, subjectID, placeID, worldTime string) error {
+	var instance, branch string
+	if err := conn.QueryRowContext(ctx, `SELECT instance_id,branch_id FROM events WHERE event_id=?`, eventID).Scan(&instance, &branch); err != nil {
+		return classifyMissing(err, "presence observation Event")
+	}
+	visible, err := rpCanPerceive(ctx, conn, instance, branch, observerID, subjectID, "visual", "")
+	if err != nil {
+		return err
+	}
+	if !visible {
+		return nil
+	}
 	claimKey := "presence:" + subjectID
 	observationID := fmt.Sprintf("observation_%s_%s_%s", eventID, observerID, subjectID)
 	claim := struct {

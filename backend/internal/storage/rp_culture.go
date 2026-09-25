@@ -158,7 +158,7 @@ func (s *Store) TransmitRPCulture(ctx context.Context, r CultureTransmissionRequ
 		if err := conn.QueryRowContext(ctx, `SELECT place_id FROM agent_positions WHERE agent_id=?`, r.SpeakerID).Scan(&place); err != nil {
 			return CultureFact{}, nil, err
 		}
-		listeners, err := rpCoLocatedEntityIDs(ctx, conn, r.Binding.InstanceID, r.Binding.BranchID, place, r.SpeakerID)
+		listeners, err := rpPerceivedEntityIDs(ctx, conn, r.Binding.InstanceID, r.Binding.BranchID, place, r.SpeakerID, "audio", "voice")
 		if err != nil {
 			return CultureFact{}, nil, err
 		}

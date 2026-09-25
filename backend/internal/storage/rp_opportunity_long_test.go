@@ -63,6 +63,10 @@ func TestRPOpportunitySameWorldFortnightDivergenceAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	bo := allowFixtureControl(t, ctx, baseline, M2AgentBoID)
+	noraAlias, err := rpAnonymousEntityIDForTest(ctx, baseline, M2DemoInstanceID, M2DemoBranchID, M2AgentBoID, nora)
+	if err != nil {
+		t.Fatal(err)
+	}
 	type outcome struct {
 		InitialHash                                     string
 		Visits                                          []string
@@ -203,7 +207,7 @@ func TestRPOpportunitySameWorldFortnightDivergenceAndReplay(t *testing.T) {
 							t.Fatal(err)
 						}
 						for _, person := range view.PresentEntities {
-							if person.EntityID != nora {
+							if person.EntityID != noraAlias {
 								continue
 							}
 							gift := socialRequest(t, ctx, s, bo, nora, "gift", "lunch-gift-"+at)

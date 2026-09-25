@@ -19,7 +19,7 @@ type RPSpeechResult struct {
 	UtteranceID   string   `json:"utterance_id"`
 	WorldTime     string   `json:"world_time"`
 	PlaceID       string   `json:"place_id"`
-	ListenerIDs   []string `json:"listener_ids"`
+	ListenerIDs   []string `json:"-"` // internal turn routing; the speaker cannot identify unseen hearers
 	Replayed      bool     `json:"replayed"`
 }
 
@@ -32,6 +32,8 @@ type rpSpeechEvent struct {
 	PlaceID         string   `json:"place_id"`
 	Text            string   `json:"text"`
 	SpeechAct       string   `json:"speech_act"`
+	DeliveryChannel string   `json:"delivery_channel,omitempty"`
+	IntroduceSelf   bool     `json:"introduce_self,omitempty"`
 	ListenerIDs     []string `json:"listener_ids"`
 }
 
@@ -126,7 +128,7 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	if err := ensureCohortTransitionChronology(ctx, tx.conn, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return RPSpeechResult{}, err
 	}
-	listeners, err := rpCoLocatedEntityIDs(ctx, tx.conn, session.InstanceID, session.BranchID, placeID, session.ControlledEntityID)
+	listeners, err := rpPerceivedEntityIDs(ctx, tx.conn, session.InstanceID, session.BranchID, placeID, session.ControlledEntityID, "audio", request.DeliveryChannel)
 	if err != nil {
 		return RPSpeechResult{}, err
 	}
@@ -143,7 +145,7 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	commandID, attemptID := "cmd_rp_speech_"+suffix, "attempt_rp_speech_"+suffix
 	batchID, eventID := "batch_rp_speech_"+suffix, "event_rp_speech_"+suffix
 	turnID, utteranceID := "turn_rp_speech_"+suffix, "utterance_rp_speech_"+suffix
-	payload := rpSpeechEvent{SessionID: session.SessionID, TurnID: turnID, UtteranceID: utteranceID, SpeakerEntityID: session.ControlledEntityID, PlaceID: placeID, Text: request.Text, SpeechAct: request.SpeechAct, ListenerIDs: listeners}
+	payload := rpSpeechEvent{SessionID: session.SessionID, TurnID: turnID, UtteranceID: utteranceID, SpeakerEntityID: session.ControlledEntityID, PlaceID: placeID, Text: request.Text, SpeechAct: request.SpeechAct, DeliveryChannel: request.DeliveryChannel, IntroduceSelf: request.IntroduceSelf, ListenerIDs: listeners}
 	payloadJSON, err := core.CanonicalJSON(payload)
 	if err != nil {
 		return RPSpeechResult{}, err
@@ -158,6 +160,16 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 		return RPSpeechResult{}, err
 	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
+	delivery := request.DeliveryChannel
+	if delivery == "" {
+		delivery = "voice"
+	}
+	utteranceQuery := `INSERT INTO rp_utterances(utterance_id, event_id, session_id, turn_id, speaker_entity_id, place_id, world_time, speech_text, speech_act, listener_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	utteranceArgs := []any{utteranceID, eventID, session.SessionID, turnID, session.ControlledEntityID, placeID, worldTime, request.Text, request.SpeechAct, len(listeners)}
+	if delivery != "voice" {
+		utteranceQuery = `INSERT INTO rp_utterances(utterance_id, event_id, session_id, turn_id, speaker_entity_id, place_id, world_time, speech_text, speech_act, listener_count, delivery_channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		utteranceArgs = append(utteranceArgs, delivery)
+	}
 	statements := []struct {
 		name, query string
 		args        []any
@@ -166,7 +178,7 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 		{"RP speech attempt", `INSERT INTO command_attempts(command_id, attempt_no, attempt_id, status, lease_owner, lease_until_utc, proposal_hash, created_at_utc) VALUES (?, 1, ?, 'ready', 'corerp-rp1', ?, ?, ?)`, []any{commandID, attemptID, s.now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano), requestHash, now}},
 		{"RP speech batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, commandID, session.InstanceID, session.BranchID, epochID, head, sequence, sequence, worldTime, batchHash, now}},
 		{"RP speech event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, 'RPSpeechAccepted', ?, ?, ?)`, []any{eventID, batchID, session.InstanceID, session.BranchID, sequence, session.ControlledEntityID, worldTime, string(payloadJSON)}},
-		{"RP immutable utterance", `INSERT INTO rp_utterances(utterance_id, event_id, session_id, turn_id, speaker_entity_id, place_id, world_time, speech_text, speech_act, listener_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, []any{utteranceID, eventID, session.SessionID, turnID, session.ControlledEntityID, placeID, worldTime, request.Text, request.SpeechAct, len(listeners)}},
+		{"RP immutable utterance", utteranceQuery, utteranceArgs},
 	}
 	for _, statement := range statements {
 		if err := execAgentOne(ctx, tx.conn, statement.name, statement.query, statement.args...); err != nil {
@@ -175,6 +187,13 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	}
 	if err := insertRPSpeechHearings(ctx, tx.conn, eventID, sequence, session.ControlledEntityID, placeID, worldTime, utteranceID, request.Text, request.SpeechAct, listeners); err != nil {
 		return RPSpeechResult{}, err
+	}
+	if request.IntroduceSelf {
+		for _, listener := range listeners {
+			if _, err := tx.conn.ExecContext(ctx, `INSERT OR IGNORE INTO rp_identity_familiarity(observer_agent_id,subject_agent_id,instance_id,branch_id,source_event_id,learned_world_time,origin_kind) VALUES (?,?,?,?,?,?,'introduction')`, listener, session.ControlledEntityID, session.InstanceID, session.BranchID, eventID, worldTime); err != nil {
+				return RPSpeechResult{}, core.WrapError(core.CodeStorageFailure, "record heard self-introduction", err)
+			}
+		}
 	}
 	if err := execAgentOne(ctx, tx.conn, "advance RP speech clock lineage", `UPDATE world_clocks SET projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time = ?`, sequence, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return RPSpeechResult{}, err

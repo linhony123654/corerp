@@ -136,7 +136,7 @@ func TestRPMoveHTTPValidatesRouteAndUsesCommittedPosition(t *testing.T) {
 	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
 	assertStatus(t, response, http.StatusOK)
 	after := decodeData[storage.RPObservation](t, response)
-	if after.PlaceID != "place_m2_home_ada" || len(after.PresentEntities) != 1 || after.PresentEntities[0].EntityID != storage.M2AgentAdaID {
+	if after.PlaceID != "place_m2_home_ada" || len(after.PresentEntities) != 1 || !strings.HasPrefix(after.PresentEntities[0].EntityID, "person_") || after.PresentEntities[0].DisplayName != "陌生人" {
 		t.Fatalf("HTTP move observation did not follow world: %+v", after)
 	}
 	illegal := move
@@ -146,6 +146,18 @@ func TestRPMoveHTTPValidatesRouteAndUsesCommittedPosition(t *testing.T) {
 	illegal.IdempotencyKey = "http-illegal-shortcut"
 	response = performJSON(t, handler, "/api/v1/rp/actions/move", rpPlayerToken, illegal)
 	assertAPIError(t, response, http.StatusBadRequest, core.CodeInvalidArgument)
+	response = performJSON(t, handler, "/api/v1/rp/context/read", rpPlayerToken, storage.RPContextReadRequest{SessionID: session.SessionID, SubjectEntityID: storage.M2AgentAdaID})
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	guessed := core.RPSocialRequest{SessionID: session.SessionID, TargetEntityID: storage.M2AgentAdaID, Action: "greet", ExpectedCursor: after.ObservationCursor, IdempotencyKey: "http-guessed-ada"}
+	response = performJSON(t, handler, "/api/v1/rp/actions/social", rpPlayerToken, guessed)
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	guessed.TargetEntityID = after.PresentEntities[0].EntityID
+	guessed.IdempotencyKey = "http-greet-anonymous"
+	response = performJSON(t, handler, "/api/v1/rp/actions/social", rpPlayerToken, guessed)
+	assertStatus(t, response, http.StatusOK)
+	if strings.Contains(response.Body.String(), storage.M2AgentAdaID) || strings.Contains(response.Body.String(), "Ada") {
+		t.Fatalf("anonymous social response disclosed Ada: %s", response.Body.String())
+	}
 }
 
 func TestRPWaitHTTPUsesPlayerAuthorizationAndCommittedClock(t *testing.T) {
@@ -209,8 +221,8 @@ func TestRPSpeechHTTPCommitsSamePlaceHearingAndRejectsWrongPrincipal(t *testing.
 	response = performJSON(t, handler, "/api/v1/rp/actions/speak", rpPlayerToken, speech)
 	assertStatus(t, response, http.StatusOK)
 	first := decodeData[storage.RPSpeechResult](t, response)
-	if first.EventID == "" || len(first.ListenerIDs) != 1 || first.ListenerIDs[0] != storage.M2RPNPCID {
-		t.Fatalf("HTTP speech did not select real listener: %+v", first)
+	if first.EventID == "" || len(first.ListenerIDs) != 0 || strings.Contains(response.Body.String(), "listener_ids") {
+		t.Fatalf("HTTP speech exposed internal listener identities: %+v", first)
 	}
 	response = performJSON(t, handler, "/api/v1/rp/actions/speak", rpPlayerToken, speech)
 	assertStatus(t, response, http.StatusOK)
@@ -559,7 +571,7 @@ func TestAgentHTTPRunKnowledgeAndEncounterRemainScoped(t *testing.T) {
 	response = performJSON(t, handler, "/api/v1/encounters/query", adaAgentToken, encounterRequest)
 	assertStatus(t, response, http.StatusOK)
 	encounter := decodeData[storage.EncounterView](t, response)
-	if encounter.PlaceID != storage.M2AgentCafeID || len(encounter.Participants) != 1 || encounter.Participants[0].AgentID != storage.M2AgentBoID {
+	if encounter.PlaceID != storage.M2AgentCafeID || len(encounter.Participants) != 1 || !strings.HasPrefix(encounter.Participants[0].AgentID, "person_") || encounter.Participants[0].DisplayName != "陌生人" {
 		t.Fatalf("unexpected HTTP encounter: %+v", encounter)
 	}
 	wrongPrincipal := encounterRequest

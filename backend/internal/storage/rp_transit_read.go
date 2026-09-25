@@ -31,6 +31,41 @@ func readRPLocalTransitWorks(ctx context.Context, conn *sql.Conn, instance, bran
 
 func rpTransitAllowsImmediate(ctx context.Context, conn *sql.Conn, instance, branch, from, to, at string) (bool, error) {
 	var count int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_timed_edges WHERE instance_id=? AND branch_id=? AND from_place_id=? AND to_place_id=?`, instance, branch, from, to).Scan(&count); err != nil {
+		return false, err
+	}
+	if count != 0 {
+		return false, nil
+	}
+	// An exit from a timed segment back to its origin remains subject to the
+	// same sourced roadworks as the edge that entered it.
+	rows, err := conn.QueryContext(ctx, `SELECT from_place_id,to_place_id FROM rp_timed_edges WHERE instance_id=? AND branch_id=? AND segment_place_id=? AND from_place_id=?`, instance, branch, from, to)
+	if err != nil {
+		return false, err
+	}
+	var returns [][2]string
+	for rows.Next() {
+		var edge [2]string
+		if err := rows.Scan(&edge[0], &edge[1]); err != nil {
+			rows.Close()
+			return false, err
+		}
+		returns = append(returns, edge)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return false, err
+	}
+	for _, edge := range returns {
+		end, err := readRPDirectWorksEnd(ctx, conn, instance, branch, edge[0], edge[1], at)
+		if err != nil {
+			return false, err
+		}
+		if end != "" {
+			return false, nil
+		}
+	}
 	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPTransitWorksDefined' AND json_extract(payload,'$.window.ends_at')>?`, instance, branch, at).Scan(&count); err != nil {
 		return false, err
 	}

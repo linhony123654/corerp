@@ -166,7 +166,7 @@ func (s *Store) DefineM2AgentRoutine(ctx context.Context, request core.AgentRout
 		}
 	}
 	for _, entry := range definition.Entries {
-		itemPayload, err := core.CanonicalJSON(agentSchedulePayload{"agent_move", entry.Day, entry.AgentID, entry.ScheduleID, entry.PlaceID, entry.ActivityCode})
+		itemPayload, err := core.CanonicalJSON(agentSchedulePayload{Kind: "agent_move", Day: entry.Day, AgentID: entry.AgentID, ScheduleID: entry.ScheduleID, ToPlaceID: entry.PlaceID, ActivityCode: entry.ActivityCode})
 		if err != nil {
 			return AgentRoutineResult{}, err
 		}

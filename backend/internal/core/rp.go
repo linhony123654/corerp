@@ -81,6 +81,26 @@ type RPWaitRequest struct {
 	IdempotencyKey    string `json:"idempotency_key"`
 }
 
+type RPJourneyCancelRequest struct {
+	PrincipalID    string `json:"principal_id"`
+	SessionID      string `json:"session_id"`
+	JourneyID      string `json:"journey_id"`
+	ExpectedCursor int64  `json:"expected_cursor"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (r RPJourneyCancelRequest) Validate() error {
+	for _, value := range []string{r.PrincipalID, r.SessionID, r.JourneyID, r.IdempotencyKey} {
+		if strings.TrimSpace(value) == "" || len(value) > 256 {
+			return NewError(CodeInvalidArgument, "bounded journey cancellation identity required")
+		}
+	}
+	if len(r.IdempotencyKey) > 128 || r.ExpectedCursor < 1 {
+		return NewError(CodeInvalidArgument, "invalid journey cancellation key or cursor")
+	}
+	return nil
+}
+
 func (r RPWaitRequest) Validate() error {
 	if r.OpportunityIntent != "" && r.OpportunityIntent != "social" {
 		return NewError(CodeInvalidArgument, "opportunity_intent must be empty or social")
@@ -98,13 +118,15 @@ func (r RPWaitRequest) Validate() error {
 }
 
 type RPSpeechRequest struct {
-	NarrativeStyle *RPStylePatch `json:"narrative_style,omitempty"`
-	PrincipalID    string        `json:"principal_id"`
-	SessionID      string        `json:"session_id"`
-	Text           string        `json:"text"`
-	SpeechAct      string        `json:"speech_act,omitempty"`
-	ExpectedCursor int64         `json:"expected_cursor"`
-	IdempotencyKey string        `json:"idempotency_key"`
+	NarrativeStyle  *RPStylePatch `json:"narrative_style,omitempty"`
+	PrincipalID     string        `json:"principal_id"`
+	SessionID       string        `json:"session_id"`
+	Text            string        `json:"text"`
+	SpeechAct       string        `json:"speech_act,omitempty"`
+	DeliveryChannel string        `json:"delivery_channel,omitempty"`
+	IntroduceSelf   bool          `json:"introduce_self,omitempty"`
+	ExpectedCursor  int64         `json:"expected_cursor"`
+	IdempotencyKey  string        `json:"idempotency_key"`
 }
 
 func (r RPSpeechRequest) Validate() error {
@@ -124,6 +146,9 @@ func (r RPSpeechRequest) Validate() error {
 	}
 	if r.SpeechAct != "" && r.SpeechAct != "statement" && r.SpeechAct != "question" && r.SpeechAct != "request" {
 		return NewError(CodeInvalidArgument, "speech_act must be statement, question or request")
+	}
+	if r.DeliveryChannel != "" && r.DeliveryChannel != "voice" && r.DeliveryChannel != "whisper" && r.DeliveryChannel != "shout" {
+		return NewError(CodeInvalidArgument, "delivery_channel must be voice, whisper or shout")
 	}
 	return nil
 }

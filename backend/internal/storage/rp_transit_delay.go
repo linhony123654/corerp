@@ -19,6 +19,7 @@ type rpTransitQueue struct {
 	Status    string `json:"status"`
 }
 type rpTransitDelay struct {
+	Reason                string         `json:"reason,omitempty"`
 	AgentID               string         `json:"agent_id"`
 	ScheduleID            string         `json:"schedule_id"`
 	OriginalWorldTime     string         `json:"original_world_time"`
@@ -121,16 +122,62 @@ func (s *Store) delayRPAgentTransit(ctx context.Context, tx *immediateTx, item S
 	if from == scheduled.ToPlaceID {
 		return false, nil
 	}
-	var configured int
-	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPTransitWorksDefined' AND json_extract(payload,'$.window.ends_at')>?`, instanceID, branchID, item.WorldTime).Scan(&configured); err != nil {
+	var journeyETA, journeySource string
+	err := tx.conn.QueryRowContext(ctx, `SELECT scheduled_arrival_at,start_event_id FROM rp_journeys WHERE instance_id=? AND branch_id=? AND agent_id=? AND segment_place_id=? AND status='active'`, instanceID, branchID, scheduled.AgentID, from).Scan(&journeyETA, &journeySource)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	if configured == 0 {
-		return false, nil
+	var arrival core.RPTransitArrival
+	reason := ""
+	if err == nil {
+		// A later appointment cannot move an actor away from a journey's
+		// real segment before its arrival queue resolves. A one-minute gap
+		// makes the pinned arrival precede this appointment even when its
+		// queue priority or item ID sorts later.
+		eta, parseErr := time.Parse(time.RFC3339, journeyETA)
+		if parseErr != nil {
+			return false, parseErr
+		}
+		retryAt := eta.Add(time.Minute).UTC().Format(time.RFC3339)
+		if retryAt <= item.WorldTime {
+			return false, core.NewError(core.CodeProjectionDiverged, "active journey arrival precedes later appointment")
+		}
+		arrival = core.RPTransitArrival{Reachable: true, WorldTime: retryAt, Path: []string{from}, DelaySourceEventIDs: []string{journeySource}}
+		reason = "journey_occupancy"
 	}
-	arrival, err := readRPTransitArrival(ctx, tx.conn, instanceID, branchID, from, scheduled.ToPlaceID, item.WorldTime)
-	if err != nil {
-		return false, err
+	var configured, timed int
+	if reason == "" {
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_timed_edges WHERE instance_id=? AND branch_id=? AND from_place_id=? AND to_place_id=?`, instanceID, branchID, from, scheduled.ToPlaceID).Scan(&timed); err != nil {
+			return false, err
+		}
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPTransitWorksDefined' AND json_extract(payload,'$.window.ends_at')>?`, instanceID, branchID, item.WorldTime).Scan(&configured); err != nil {
+			return false, err
+		}
+		if configured == 0 {
+			return false, nil
+		}
+	}
+	if reason != "" {
+		// The destination is not examined while an actor is held at the
+		// segment. The existing appointment is retried after the journey.
+	} else if timed != 0 {
+		// A timed edge is an actual, pinned segment. RP5's alternative graph
+		// can inform a later explicit reroute, but cannot make this departure
+		// teleport across a directly obstructed segment.
+		end, sources, err := readRPDirectWorksEvidence(ctx, tx.conn, instanceID, branchID, from, scheduled.ToPlaceID, item.WorldTime)
+		if err != nil {
+			return false, err
+		}
+		if end == "" {
+			return false, nil
+		}
+		arrival = core.RPTransitArrival{Reachable: true, WorldTime: end, Path: []string{from, scheduled.ToPlaceID}, DelaySourceEventIDs: sources}
+	} else {
+		var err error
+		arrival, err = readRPTransitArrival(ctx, tx.conn, instanceID, branchID, from, scheduled.ToPlaceID, item.WorldTime)
+		if err != nil {
+			return false, err
+		}
 	}
 	// Legacy schedules may predate explicit RP topology; only declared paths
 	// have physical closure evidence. Do not invent missing graph connections.
@@ -152,7 +199,7 @@ func (s *Store) delayRPAgentTransit(ctx context.Context, tx *immediateTx, item S
 	if err != nil {
 		return false, err
 	}
-	delay := rpTransitDelay{AgentID: scheduled.AgentID, ScheduleID: scheduled.ScheduleID, OriginalWorldTime: originalTime, FromPlaceID: from, ToPlaceID: scheduled.ToPlaceID, ActivityCode: scheduled.ActivityCode, Path: arrival.Path, DelaySourceEventIDs: arrival.DelaySourceEventIDs,
+	delay := rpTransitDelay{Reason: reason, AgentID: scheduled.AgentID, ScheduleID: scheduled.ScheduleID, OriginalWorldTime: originalTime, FromPlaceID: from, ToPlaceID: scheduled.ToPlaceID, ActivityCode: scheduled.ActivityCode, Path: arrival.Path, DelaySourceEventIDs: arrival.DelaySourceEventIDs,
 		Previous: rpTransitQueue{ID: item.SchedulerItemID, WorldTime: item.WorldTime, PhaseID: item.PhaseID, Priority: item.DeclaredPriority, Payload: item.Payload, Status: "completed"},
 		Retry:    rpTransitQueue{ID: "sched_transit_" + hash[7:], WorldTime: arrival.WorldTime, PhaseID: item.PhaseID, Priority: item.DeclaredPriority, Payload: string(encoded), Status: "pending"}}
 	if err := tx.conn.QueryRowContext(ctx, `SELECT definition_event_id,declared_priority FROM agent_schedule_entries WHERE schedule_id=?`, scheduled.ScheduleID).Scan(&delay.ScheduleSourceEventID, &delay.SchedulePriority); err != nil {

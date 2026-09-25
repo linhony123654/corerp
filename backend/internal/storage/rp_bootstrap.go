@@ -152,6 +152,13 @@ func (s *Store) setupRPParticipantsAt(ctx context.Context, setupTime string) (RP
 			return RPPlaySetupResult{}, err
 		}
 	}
+	// This demo's two named participants start with a declared acquaintance;
+	// later co-location does not create one automatically.
+	for _, pair := range [][2]string{{M2RPPlayerID, M2RPNPCID}, {M2RPNPCID, M2RPPlayerID}} {
+		if err := execAgentOne(ctx, tx.conn, "seed RP participant acquaintance", `INSERT INTO rp_identity_familiarity(observer_agent_id,subject_agent_id,instance_id,branch_id,source_event_id,learned_world_time,origin_kind) VALUES (?,?,?,?,?,?,'demo')`, pair[0], pair[1], M2DemoInstanceID, M2DemoBranchID, m2RPSetupEventID, setupTime); err != nil {
+			return RPPlaySetupResult{}, err
+		}
+	}
 	if err := execAgentOne(ctx, tx.conn, "insert player control grant", `INSERT INTO capability_grants(grant_id, principal_id, capability_id, instance_id, branch_id, subject_id, field_scope, status, definition_event_id) VALUES ('grant_m2_rp_player_control', ?, 'world.rp.control', ?, ?, ?, '[]', 'active', ?)`, M2RPPlayerPrincipal, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, m2RPSetupEventID); err != nil {
 		return RPPlaySetupResult{}, err
 	}

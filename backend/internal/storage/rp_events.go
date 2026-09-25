@@ -19,6 +19,8 @@ type RPEventsReadRequest struct {
 type RPClientAction struct {
 	Kind            string `json:"kind"`
 	Text            string `json:"text,omitempty"`
+	JourneyID       string `json:"journey_id,omitempty"`
+	SegmentPlaceID  string `json:"segment_place_id,omitempty"`
 	PlaceID         string `json:"place_id,omitempty"`
 	FromPlaceID     string `json:"from_place_id,omitempty"`
 	ToPlaceID       string `json:"to_place_id,omitempty"`
@@ -99,9 +101,10 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 	rows, err := tx.conn.QueryContext(ctx, `SELECT e.event_id,e.event_sequence,e.world_time,e.actor_id,e.event_type,e.payload
 	 FROM events e WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence>? AND e.event_sequence<=? AND e.world_time<=?
 	 AND ((e.actor_id=? AND e.event_type IN ('RPSpeechAccepted','RPPlayerMoved','RPWaitCompleted'))
+	 OR (e.event_type IN ('RPJourneyStarted','RPJourneyDelayed','RPJourneyArrived','RPJourneyCancelled') AND json_extract(e.payload,'$.agent_id')=?)
 	 OR EXISTS (SELECT 1 FROM observation_records o WHERE o.source_event_id=e.event_id AND o.observer_agent_id=? AND o.observed_world_time<=?
 	 AND json_extract(o.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action')))
-	 ORDER BY e.event_sequence LIMIT ?`, session.InstanceID, session.BranchID, r.After, result.HeadSequence, result.WorldTime, session.ControlledEntityID, session.ControlledEntityID, result.WorldTime, r.Limit+1)
+	 ORDER BY e.event_sequence LIMIT ?`, session.InstanceID, session.BranchID, r.After, result.HeadSequence, result.WorldTime, session.ControlledEntityID, session.ControlledEntityID, session.ControlledEntityID, result.WorldTime, r.Limit+1)
 	if err != nil {
 		return result, err
 	}
@@ -129,25 +132,39 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 	}
 	for _, item := range sources {
 		item.event.Facts = []RPContextFact{}
-		if item.actor == session.ControlledEntityID {
+		if item.actor == session.ControlledEntityID || item.kind == "RPJourneyStarted" || item.kind == "RPJourneyDelayed" || item.kind == "RPJourneyArrived" || item.kind == "RPJourneyCancelled" {
 			var payload struct {
+				AgentID         string `json:"agent_id"`
 				Text            string `json:"text"`
+				JourneyID       string `json:"journey_id"`
+				SegmentPlaceID  string `json:"segment_place_id"`
 				PlaceID         string `json:"place_id"`
 				FromPlaceID     string `json:"from_place_id"`
 				ToPlaceID       string `json:"to_place_id"`
 				FromWorldTime   string `json:"from_world_time"`
 				TargetWorldTime string `json:"target_world_time"`
+				NewArrivalAt    string `json:"new_arrival_at"`
 			}
 			if err := json.Unmarshal([]byte(item.raw), &payload); err != nil {
 				return result, core.WrapError(core.CodeProjectionDiverged, "invalid own action event", err)
 			}
-			switch item.kind {
-			case "RPSpeechAccepted":
-				item.event.OwnAction = &RPClientAction{Kind: "speech", Text: payload.Text, PlaceID: payload.PlaceID}
-			case "RPPlayerMoved":
-				item.event.OwnAction = &RPClientAction{Kind: "move", FromPlaceID: payload.FromPlaceID, ToPlaceID: payload.ToPlaceID}
-			case "RPWaitCompleted":
-				item.event.OwnAction = &RPClientAction{Kind: "wait", FromWorldTime: payload.FromWorldTime, TargetWorldTime: payload.TargetWorldTime}
+			if payload.AgentID == session.ControlledEntityID || (item.kind != "RPJourneyStarted" && item.kind != "RPJourneyDelayed" && item.kind != "RPJourneyArrived" && item.kind != "RPJourneyCancelled") {
+				switch item.kind {
+				case "RPSpeechAccepted":
+					item.event.OwnAction = &RPClientAction{Kind: "speech", Text: payload.Text, PlaceID: payload.PlaceID}
+				case "RPPlayerMoved":
+					item.event.OwnAction = &RPClientAction{Kind: "move", FromPlaceID: payload.FromPlaceID, ToPlaceID: payload.ToPlaceID}
+				case "RPWaitCompleted":
+					item.event.OwnAction = &RPClientAction{Kind: "wait", FromWorldTime: payload.FromWorldTime, TargetWorldTime: payload.TargetWorldTime}
+				case "RPJourneyStarted":
+					item.event.OwnAction = &RPClientAction{Kind: "journey_started", JourneyID: payload.JourneyID, FromPlaceID: payload.FromPlaceID, ToPlaceID: payload.ToPlaceID, SegmentPlaceID: payload.SegmentPlaceID}
+				case "RPJourneyDelayed":
+					item.event.OwnAction = &RPClientAction{Kind: "journey_delayed", JourneyID: payload.JourneyID, SegmentPlaceID: payload.SegmentPlaceID, TargetWorldTime: payload.NewArrivalAt}
+				case "RPJourneyArrived":
+					item.event.OwnAction = &RPClientAction{Kind: "journey_arrived", JourneyID: payload.JourneyID, FromPlaceID: payload.FromPlaceID, ToPlaceID: payload.ToPlaceID}
+				case "RPJourneyCancelled":
+					item.event.OwnAction = &RPClientAction{Kind: "journey_cancelled", JourneyID: payload.JourneyID, SegmentPlaceID: payload.SegmentPlaceID}
+				}
 			}
 		}
 		facts, err := tx.conn.QueryContext(ctx, `SELECT subject_agent_id,place_id,observed_world_time,claim_payload FROM observation_records
@@ -186,6 +203,32 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 		facts.Close()
 		if err != nil {
 			return result, err
+		}
+		anonymousEvent := false
+		if item.actor != "" {
+			known, err := rpIdentityKnown(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, item.actor)
+			if err != nil {
+				return result, err
+			}
+			anonymousEvent = !known
+		}
+		for i := range item.event.Facts {
+			fact := &item.event.Facts[i]
+			originalID := fact.SubjectEntityID
+			fact.SubjectEntityID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, originalID)
+			if err != nil {
+				return result, err
+			}
+			anonymousEvent = anonymousEvent || fact.SubjectEntityID != originalID
+		}
+		if anonymousEvent {
+			item.event.EventID, err = rpAnonymousEvidenceID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, item.event.EventID)
+			if err != nil {
+				return result, err
+			}
+			for i := range item.event.Facts {
+				item.event.Facts[i].SourceEventID = item.event.EventID
+			}
 		}
 		result.Events = append(result.Events, item.event)
 	}

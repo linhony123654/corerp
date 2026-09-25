@@ -86,6 +86,13 @@ func (s *Store) MoveRP(ctx context.Context, request core.RPMoveRequest) (RPMoveR
 	if pendingTurns != 0 {
 		return RPMoveResult{}, core.NewError(core.CodeCommandInProgress, "RP turn must settle before another player action")
 	}
+	var activeJourney int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_journeys WHERE instance_id=? AND branch_id=? AND agent_id=? AND status='active'`, session.InstanceID, session.BranchID, session.ControlledEntityID).Scan(&activeJourney); err != nil {
+		return RPMoveResult{}, err
+	}
+	if activeJourney != 0 {
+		return RPMoveResult{}, core.NewError(core.CodeCommandInProgress, "finish or cancel the active journey before moving")
+	}
 	if err := validateRPBinding(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPMoveResult{}, err
 	}

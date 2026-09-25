@@ -59,13 +59,15 @@ func (s *Store) ReadRPContacts(ctx context.Context, r RPContactsReadRequest) (RP
 	rows, err := tx.conn.QueryContext(ctx, `
 		SELECT k.subject_agent_id,n.display_name,MAX(k.learned_world_time)
 		FROM agent_knowledge k
+		JOIN rp_identity_familiarity f ON f.observer_agent_id=k.observer_agent_id AND f.subject_agent_id=k.subject_agent_id
+		AND f.instance_id=? AND f.branch_id=?
 		JOIN materialized_entities n ON n.entity_id=k.subject_agent_id
 		JOIN agent_profiles a ON a.agent_id=n.entity_id AND a.instance_id=? AND a.branch_id=?
 		JOIN events e ON e.event_id=k.source_event_id AND e.instance_id=a.instance_id AND e.branch_id=a.branch_id
 		WHERE k.observer_agent_id=? AND k.subject_agent_id<>? AND k.subject_agent_id>?
 		AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said')
 		GROUP BY k.subject_agent_id,n.display_name ORDER BY k.subject_agent_id LIMIT 51`,
-		session.InstanceID, session.BranchID, session.ControlledEntityID, session.ControlledEntityID, r.AfterEntityID)
+		session.InstanceID, session.BranchID, session.InstanceID, session.BranchID, session.ControlledEntityID, session.ControlledEntityID, r.AfterEntityID)
 	if err != nil {
 		return result, err
 	}

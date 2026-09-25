@@ -86,7 +86,7 @@ func (s *Store) SpeakCareerAnnouncement(ctx context.Context, r core.CareerAnnoun
 		if len(text) > 2000 {
 			return CareerFact{}, nil, core.NewError(core.CodeInvalidArgument, "announcement exceeds speech text bound")
 		}
-		listeners, err := rpCoLocatedEntityIDs(ctx, conn, b.InstanceID, b.BranchID, place, r.SpeakerID)
+		listeners, err := rpPerceivedEntityIDs(ctx, conn, b.InstanceID, b.BranchID, place, r.SpeakerID, "audio", "voice")
 		if err != nil {
 			return CareerFact{}, nil, err
 		}

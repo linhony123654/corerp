@@ -58,6 +58,9 @@ func (s *Store) PrepareStudioSpatial(ctx context.Context, r StudioGenesisRequest
 					if err := exec(`INSERT INTO agent_places(place_id,instance_id,branch_id,display_name,place_kind,status,definition_event_id) VALUES (?,?,'br_main',?,?,'active',?)`, id("place", place.Key), r.InstanceID, place.Name, place.Kind, c.EventID); err != nil {
 						return err
 					}
+					if err := exec(`INSERT INTO rp_location_nodes(location_id,instance_id,branch_id,readable_path,generator_version,definition_event_id) VALUES (?,?,'br_main',?,'declared',?)`, id("place", place.Key), r.InstanceID, "/"+place.Key, c.EventID); err != nil {
+						return err
+					}
 				}
 				for i, link := range r.Spec.Links {
 					for j, endpoints := range [][2]string{{link.From, link.To}, {link.To, link.From}} {

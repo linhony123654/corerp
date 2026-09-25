@@ -220,6 +220,10 @@ func TestRPClientEventsRetainEncountersAndNarrowWait(t *testing.T) {
 	_, read, initial := newRPWaitTestSession(t, ctx, s)
 	from := M2AgentCafeID
 	var encounters []string
+	adaAlias, err := rpAnonymousEntityIDForTest(ctx, s, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, M2AgentAdaID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for index, to := range []string{"place_m2_home_ada", M2AgentCafeID, "place_m2_home_ada", M2AgentCafeID} {
 		view, err := s.ObserveRPSession(ctx, read)
 		if err != nil {
@@ -230,7 +234,11 @@ func TestRPClientEventsRetainEncountersAndNarrowWait(t *testing.T) {
 			t.Fatal(err)
 		}
 		if to == "place_m2_home_ada" {
-			encounters = append(encounters, moved.EventID)
+			publicEventID, err := rpAnonymousEvidenceIDForTest(ctx, s, M2DemoInstanceID, M2DemoBranchID, M2RPPlayerID, moved.EventID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			encounters = append(encounters, publicEventID)
 		}
 		from = to
 	}
@@ -251,7 +259,7 @@ func TestRPClientEventsRetainEncountersAndNarrowWait(t *testing.T) {
 	waitSeen := false
 	for _, event := range page.Events {
 		for _, fact := range event.Facts {
-			if fact.Kind == "agent_presence" && fact.SubjectEntityID == M2AgentAdaID {
+			if fact.Kind == "agent_presence" && fact.SubjectEntityID == adaAlias {
 				seen = append(seen, event.EventID)
 			}
 		}

@@ -17,6 +17,25 @@ func socialRequest(t *testing.T, ctx context.Context, s *Store, read core.RPSess
 	if err != nil {
 		t.Fatal(err)
 	}
+	session, err := s.ReadRPSession(ctx, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	known, err := rpIdentityKnown(ctx, conn, session.InstanceID, session.BranchID, session.ControlledEntityID, target)
+	conn.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !known {
+		target, err = rpAnonymousEntityIDForTest(ctx, s, session.InstanceID, session.BranchID, session.ControlledEntityID, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	return core.RPSocialRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, TargetEntityID: target, Action: action, ExpectedCursor: view.ObservationCursor, IdempotencyKey: key}
 }
 func allowFixtureControl(t *testing.T, ctx context.Context, s *Store, entity string) core.RPSessionReadRequest {

@@ -14,8 +14,10 @@ async function load() {
   finally { if (active) loading.value = false }
 }
 function move(to: string) {
-  if (!map.value || loading.value || error.value || !map.value.reachable_places.some(p => p.place_id === to && p.can_move_now)) return
-  emit('move', { from_place_id: map.value.place_id, to_place_id: to, expected_cursor: map.value.observation_cursor })
+  if (!map.value || loading.value || error.value || map.value.active_journey) return
+  const route = map.value.reachable_places.find(p => p.place_id === to)
+  if (!route || (!route.can_move_now && !route.can_start_journey)) return
+  emit('move', { from_place_id: map.value.place_id, to_place_id: to, expected_cursor: map.value.observation_cursor, journey: !!route.can_start_journey })
 }
 function containTab(event: KeyboardEvent) {
   if (event.key !== 'Tab') return
@@ -36,14 +38,15 @@ onBeforeUnmount(() => { active = false; dialog.value?.close() })
     <header><div><p class="eyebrow">随身 · 此处与彼处</p><h2 id="map-title">附近地图</h2></div><button autofocus aria-label="关闭地图" @click="dialog?.close()">收起 ×</button></header>
     <p class="intro">从此处出发，可以走向哪里。</p>
     <p class="hint">连接示意，不代表距离或方位；只显示当前位置的相邻地点，不显示远处人物。</p>
+    <p v-if="map?.active_journey" class="hint" role="status">你正在途中；抵达或取消这段旅程后才能再次出发。</p>
     <p v-if="error" role="alert" class="error">{{ error }}{{ map ? '。以下仍是上次读取的地图，重新查看后才能出发。' : '' }}</p>
     <p v-if="loading" role="status">正在查看附近路线…</p>
     <section v-if="map" class="route-tree" aria-label="当前位置与相邻路线">
       <div class="origin"><span class="here" aria-hidden="true">此处</span><div><p class="hint">你在这里</p><h3>{{ map.place_name }}</h3></div></div>
       <p v-if="!map.reachable_places.length" class="empty">没有查到相邻路线。</p>
-      <ul><li v-for="place in map.reachable_places" :key="place.place_id" :class="{ obstructed: !place.can_move_now }">
-        <div class="destination"><h4>{{ place.display_name }}</h4><button :disabled="loading || !!error || !place.can_move_now" :aria-label="`前往 ${place.display_name}`" @click="move(place.place_id)">前往 →</button></div>
-        <p class="route-state">{{ place.can_move_now ? '当前可前往' : '当前无法通行' }}</p>
+      <ul><li v-for="place in map.reachable_places" :key="place.place_id" :class="{ obstructed: !place.can_move_now && !place.can_start_journey }">
+        <div class="destination"><h4>{{ place.display_name }}</h4><button :disabled="loading || !!error || !!map.active_journey || (!place.can_move_now && !place.can_start_journey)" :aria-label="`${place.can_start_journey ? '开始旅程，前往' : '前往'} ${place.display_name}`" @click="move(place.place_id)">{{ place.can_start_journey ? '启程 →' : '前往 →' }}</button></div>
+        <p class="route-state">{{ place.can_start_journey ? `约 ${place.travel_minutes} 分钟 · 途中有真实路段` : place.can_move_now ? '当前可前往' : '当前无法通行' }}</p>
         <p v-for="(work, i) in works(place.place_id)" :key="i" class="hint">相邻路段施工至 {{ time(work.ends_at) }}{{ place.can_move_now ? '；当前仍有可用通路。' : '。' }}</p>
       </li></ul>
     </section>

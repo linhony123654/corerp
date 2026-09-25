@@ -8,7 +8,7 @@ import (
 )
 
 func readRPHotInitiativeRoster(ctx context.Context, conn *sql.Conn, instance, branch, place, player string) ([]string, error) {
-	present, err := rpCoLocatedEntityIDs(ctx, conn, instance, branch, place, player)
+	present, err := rpPerceivedEntityIDs(ctx, conn, instance, branch, place, player, "visual", "")
 	if err != nil {
 		return nil, err
 	}

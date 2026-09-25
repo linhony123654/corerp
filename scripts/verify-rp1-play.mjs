@@ -191,8 +191,9 @@ try {
   await page.getByRole('button', { name: '去别处' }).click()
   await page.getByRole('button', { name: 'M2 Cafe' }).click()
   await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
-  assert.match(await page.locator('.presence').innerText(), /Ada/)
-  assert.match(await page.locator('.presence').innerText(), /Bo/)
+  const lunchPresence = await page.locator('.presence').innerText()
+  assert.equal((lunchPresence.match(/陌生人/g) || []).length, 2, 'sight alone must not reveal Ada or Bo')
+  assert.match(lunchPresence, /Cai/, 'declared demo acquaintance remains identified')
 
   // Real server commits; browser deliberately loses ONLY the response.
   await page.route('**/api/v1/rp/turns/run', async route => {

@@ -135,7 +135,7 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 	childTurnID, utteranceID := "turn_rp_npc_"+suffix, "utterance_rp_npc_"+suffix
 	if action == "respond" || action == "refuse" {
 		eventType = "RPSpeechAccepted"
-		listeners, err = rpCoLocatedEntityIDs(ctx, tx.conn, session.InstanceID, session.BranchID, input.PlaceID, request.NPCEntityID)
+		listeners, err = rpPerceivedEntityIDs(ctx, tx.conn, session.InstanceID, session.BranchID, input.PlaceID, request.NPCEntityID, "audio", "voice")
 		if err != nil {
 			return RPNPCDecisionCommitResult{}, err
 		}
