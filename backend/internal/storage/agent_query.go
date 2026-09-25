@@ -44,6 +44,9 @@ func (s *Store) ReadAgentKnowledge(ctx context.Context, request core.AgentKnowle
 	if err := request.Validate(); err != nil {
 		return AgentKnowledgeView{}, err
 	}
+	if err := s.authorizeInternalAgentKnowledgePurpose(ctx, request); err != nil {
+		return AgentKnowledgeView{}, err
+	}
 	allowed, err := s.authorizeAgentFields(ctx, request.PrincipalID, request.CapabilityID, request.InstanceID, request.BranchID, request.ObserverAgentID, request.Fields)
 	if err != nil {
 		return AgentKnowledgeView{}, err
@@ -89,6 +92,39 @@ func (s *Store) ReadAgentKnowledge(ctx context.Context, request core.AgentKnowle
 		return AgentKnowledgeView{}, core.WrapError(core.CodeStorageFailure, "iterate Agent knowledge", err)
 	}
 	return view, nil
+}
+
+// The legacy raw-ID read serves internal career referral and creator review,
+// not physical perception or external controller model context. The client
+// cannot declare a trustworthy purpose in JSON, so bind it to the authenticated
+// principal type, its own Agent profile and the specific capability instead.
+func (s *Store) authorizeInternalAgentKnowledgePurpose(ctx context.Context, request core.AgentKnowledgeRead) error {
+	if request.CapabilityID != "world.agent.knowledge.read" {
+		return core.NewError(core.CodeUnauthorized, "Agent knowledge requires the internal read capability")
+	}
+	var principalType string
+	err := s.db.QueryRowContext(ctx, `SELECT principal_type FROM principals WHERE principal_id=? AND status='active'`, request.PrincipalID).Scan(&principalType)
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.NewError(core.CodeUnauthorized, "internal Agent knowledge purpose is unavailable to this principal")
+	}
+	if err != nil {
+		return core.WrapError(core.CodeStorageFailure, "read Agent knowledge principal type", err)
+	}
+	if principalType == "creator" {
+		return nil // field/scope grant is checked below; existing creator review stays intact.
+	}
+	if principalType != "agent" {
+		return core.NewError(core.CodeUnauthorized, "raw Agent knowledge is not an external controller view")
+	}
+	var own int
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_profiles WHERE agent_id=? AND principal_id=? AND instance_id=? AND branch_id=? AND status='active'`, request.ObserverAgentID, request.PrincipalID, request.InstanceID, request.BranchID).Scan(&own)
+	if err != nil {
+		return core.WrapError(core.CodeStorageFailure, "check internal Agent knowledge observer", err)
+	}
+	if own != 1 {
+		return core.NewError(core.CodeUnauthorized, "internal Agent may read only its own knowledge")
+	}
+	return nil
 }
 
 func (s *Store) ResolveEncounter(ctx context.Context, request core.EncounterRead) (EncounterView, error) {

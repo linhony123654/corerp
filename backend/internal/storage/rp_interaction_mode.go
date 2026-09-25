@@ -68,15 +68,17 @@ func (s *Store) SetRPInteractionMode(ctx context.Context, r RPInteractionModeSet
 		return RPInteractionModeView{}, err
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, r.PrincipalID, r.SessionID)
+	session, err := loadRPSessionRecord(ctx, tx.conn, r.PrincipalID, r.SessionID)
 	if err != nil {
 		return RPInteractionModeView{}, err
 	}
-	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
-		return RPInteractionModeView{}, err
-	}
-	if session.Status != "active" {
-		return RPInteractionModeView{}, core.NewError(core.CodeBranchConflict, "interaction mode requires active session")
+	currentErr := requireCurrentRPSession(ctx, tx.conn, session)
+	if currentErr == nil {
+		if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+			return RPInteractionModeView{}, err
+		}
+	} else if !core.HasCode(currentErr, core.CodeBranchConflict) {
+		return RPInteractionModeView{}, currentErr
 	}
 	var prior RPInteractionModeView
 	var oldHash string
@@ -90,6 +92,12 @@ func (s *Store) SetRPInteractionMode(ctx context.Context, r RPInteractionModeSet
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return RPInteractionModeView{}, core.WrapError(core.CodeStorageFailure, "look up interaction mode revision", err)
+	}
+	if currentErr != nil {
+		return RPInteractionModeView{}, currentErr
+	}
+	if session.Status != "active" {
+		return RPInteractionModeView{}, core.NewError(core.CodeBranchConflict, "interaction mode requires active session")
 	}
 	current, err := readRPInteractionMode(ctx, tx.conn, r.SessionID)
 	if err != nil {

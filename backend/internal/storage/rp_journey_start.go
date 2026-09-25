@@ -53,11 +53,8 @@ func (s *Store) StartRPJourney(ctx context.Context, request core.RPMoveRequest) 
 		return RPJourneyResult{}, core.WrapError(core.CodeStorageFailure, "begin RP journey", err)
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, request.PrincipalID, request.SessionID)
+	session, err := loadRPSessionRecord(ctx, tx.conn, request.PrincipalID, request.SessionID)
 	if err != nil {
-		return RPJourneyResult{}, err
-	}
-	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPJourneyResult{}, err
 	}
 	commandKey := "rp_journey:" + session.SessionID + ":" + request.IdempotencyKey
@@ -73,6 +70,15 @@ func (s *Store) StartRPJourney(ctx context.Context, request core.RPMoveRequest) 
 		return loadRPJourneyResult(ctx, tx.conn, existingCommandID, true)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
+		return RPJourneyResult{}, err
+	}
+	if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+		return RPJourneyResult{}, err
+	}
+	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+		return RPJourneyResult{}, err
+	}
+	if err := requireNoActiveRPSharedRound(ctx, tx.conn, session.InstanceID, session.BranchID); err != nil {
 		return RPJourneyResult{}, err
 	}
 	if session.Status != "active" {

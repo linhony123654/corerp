@@ -52,12 +52,21 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 	defer tx.Rollback(ctx)
 	var session RPSession
 	if r.Operation != "open" {
-		session, err = loadRPSession(ctx, tx.conn, r.PrincipalID, r.SessionID)
+		// A former controller may inspect only the exact accepted result of
+		// their own session/key. Fresh retirement still needs current control.
+		session, err = loadRPSessionRecord(ctx, tx.conn, r.PrincipalID, r.SessionID)
 		if err != nil {
 			return out, err
 		}
-		if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
-			return out, err
+		// A revoked current grant is not a controller handoff. Continue to
+		// enforce its denial even when the session has a committed receipt.
+		currentErr := requireCurrentRPSession(ctx, tx.conn, session)
+		if currentErr == nil {
+			if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+				return out, err
+			}
+		} else if !core.HasCode(currentErr, core.CodeBranchConflict) {
+			return out, currentErr
 		}
 	} else {
 		// No proposed world binding is required: an invalid open must also be
@@ -92,6 +101,50 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return RPRequestOutcome{}, core.WrapError(core.CodeStorageFailure, "read RP request acceptance", err)
+	}
+	if r.Operation == "wait" {
+		// The Human-owned child key belongs to its round even before an intent
+		// exists. An open round must not become impossible to settle.
+		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN r.status='settled' THEN 'completed' ELSE 'in_progress' END FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id AND p.session_id=r.human_session_id WHERE r.human_session_id=? AND p.principal_id=? AND (r.status IN ('open','advancing') OR (r.status='settled' AND r.settlement_kind='wait')) AND ?='shared_'||r.round_id`, r.SessionID, r.PrincipalID, r.IdempotencyKey).Scan(&status)
+		if err == nil {
+			out.Status = status
+			return out, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return RPRequestOutcome{}, core.WrapError(core.CodeStorageFailure, "read shared wait reservation", err)
+		}
+	}
+	if r.Operation == "dialogue" || r.Operation == "move" {
+		// A round reserves both potential typed action keys on opening. An
+		// unsubmitted action can still be selected after this retirement call.
+		err = tx.conn.QueryRowContext(ctx, `SELECT 'in_progress' FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id WHERE p.session_id=? AND p.principal_id=? AND r.status IN ('open','advancing') AND ?='shared_action_'||r.round_id`, r.SessionID, r.PrincipalID, r.IdempotencyKey).Scan(&status)
+		if err == nil {
+			out.Status = status
+			return out, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return RPRequestOutcome{}, core.WrapError(core.CodeStorageFailure, "read shared action reservation", err)
+		}
+		kind := "speech"
+		if r.Operation == "move" {
+			kind = "move"
+		}
+		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN r.status='settled' THEN 'completed' ELSE 'in_progress' END FROM rp_shared_round_actions a JOIN rp_shared_rounds r ON r.round_id=a.round_id JOIN rp_shared_round_participants p ON p.round_id=a.round_id AND p.session_id=a.session_id WHERE a.session_id=? AND p.principal_id=? AND a.action_kind=? AND ?='shared_action_'||r.round_id`, r.SessionID, r.PrincipalID, kind, r.IdempotencyKey).Scan(&status)
+		if err == nil {
+			out.Status = status
+			return out, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return RPRequestOutcome{}, core.WrapError(core.CodeStorageFailure, "read shared action acceptance", err)
+		}
+	}
+	if r.Operation != "open" {
+		if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+			return RPRequestOutcome{}, err
+		}
+		if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+			return RPRequestOutcome{}, err
+		}
 	}
 	if r.Operation == "interaction" {
 		_, err = tx.conn.ExecContext(ctx, `INSERT INTO rp_interaction_retirements(principal_id,session_id,idempotency_key,retired_at_utc) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, r.PrincipalID, r.SessionID, r.IdempotencyKey, s.now().UTC().Format(time.RFC3339Nano))

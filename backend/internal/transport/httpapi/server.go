@@ -116,6 +116,12 @@ type Service interface {
 	ReadRPNarrative(context.Context, storage.RPNarrativeReadRequest) (storage.RPNarrativeReadResult, error)
 	StreamRPNarrative(context.Context, storage.RPNarrativeReadRequest, func(core.RPNarrativeChunk) error) (storage.RPNarrativeReadResult, error)
 	WaitRP(context.Context, core.RPWaitRequest) (storage.RPWaitResult, error)
+	OpenRPSharedRoundLocal(context.Context, storage.RPSharedRoundOpenRequest) (storage.RPSharedRound, error)
+	ReadRPSharedRound(context.Context, storage.RPSharedRoundReadRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedWait(context.Context, storage.RPSharedWaitRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedSpeech(context.Context, storage.RPSharedSpeechRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedMove(context.Context, storage.RPSharedMoveRequest) (storage.RPSharedRound, error)
+	AdvanceRPSharedRound(context.Context, storage.RPSharedRoundAdvanceRequest) (storage.RPSharedRound, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
 	PlayResumeRPTurn(context.Context, storage.RPTurnResumeRequest) (storage.RPTurnResult, error)
@@ -396,6 +402,18 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPNarrativeStream(response, request, requestID, principalID)
 	case "/api/v1/rp/actions/wait":
 		s.handleRPWait(response, request, requestID, principalID)
+	case "/api/v1/rp/rounds/open":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedRoundOpenRequest) *string { return &r.Binding.PrincipalID }, s.service.OpenRPSharedRoundLocal)
+	case "/api/v1/rp/rounds/read":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedRoundReadRequest) *string { return &r.PrincipalID }, s.service.ReadRPSharedRound)
+	case "/api/v1/rp/rounds/wait":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedWaitRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedWait)
+	case "/api/v1/rp/rounds/speech":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedSpeechRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedSpeech)
+	case "/api/v1/rp/rounds/move":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedMoveRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedMove)
+	case "/api/v1/rp/rounds/advance":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedRoundAdvanceRequest) *string { return &r.PrincipalID }, s.service.AdvanceRPSharedRound)
 	case "/api/v1/rp/actions/speak":
 		s.handleRPSpeak(response, request, requestID, principalID)
 	case "/api/v1/rp/turns/run":

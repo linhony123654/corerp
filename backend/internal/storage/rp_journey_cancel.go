@@ -24,19 +24,26 @@ func (s *Store) CancelRPJourney(ctx context.Context, r core.RPJourneyCancelReque
 	if err := r.Validate(); err != nil {
 		return RPJourneyCancelRecord{}, err
 	}
-	session, err := loadRPSession(ctx, s.db, r.PrincipalID, r.SessionID)
+	session, err := loadRPSessionRecord(ctx, s.db, r.PrincipalID, r.SessionID)
 	if err != nil {
 		return RPJourneyCancelRecord{}, err
 	}
 	binding := core.CareerBinding{PrincipalID: r.PrincipalID, InstanceID: session.InstanceID, BranchID: session.BranchID, ExpectedHead: r.ExpectedCursor, IdempotencyKey: "journey-cancel:" + r.SessionID + ":" + r.IdempotencyKey}
-	return executePrivateFactCommand(s, ctx, binding, "CancelRPJourney", r,
+	return executePrivateFactCommandWithOptions(s, ctx, binding, "CancelRPJourney", r,
 		privateFactDomain{"rp_journey_cancel", "RPJourneyCancelled", `{"authorization":"rp-session-control"}`},
+		privateFactOptions{replayAuthorize: func(conn *sql.Conn) error {
+			_, err := loadRPSessionRecord(ctx, conn, r.PrincipalID, r.SessionID)
+			return err
+		}},
 		func(conn *sql.Conn) error {
 			current, err := loadRPSession(ctx, conn, r.PrincipalID, r.SessionID)
 			if err != nil {
 				return err
 			}
-			return authorizeRPControl(ctx, conn, r.PrincipalID, current.InstanceID, current.BranchID, current.ControlledEntityID)
+			if err := authorizeRPControl(ctx, conn, r.PrincipalID, current.InstanceID, current.BranchID, current.ControlledEntityID); err != nil {
+				return err
+			}
+			return requireNoActiveRPSharedRound(ctx, conn, current.InstanceID, current.BranchID)
 		},
 		func(conn *sql.Conn, c privateFactContext) (RPJourneyCancelFact, func() error, error) {
 			current, err := loadRPSession(ctx, conn, r.PrincipalID, r.SessionID)

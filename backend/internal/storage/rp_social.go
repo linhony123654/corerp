@@ -41,11 +41,8 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 		return empty, err
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, r.PrincipalID, r.SessionID)
+	session, err := loadRPSessionRecord(ctx, tx.conn, r.PrincipalID, r.SessionID)
 	if err != nil {
-		return empty, err
-	}
-	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return empty, err
 	}
 	key := "rp_social:" + session.SessionID + ":" + r.IdempotencyKey
@@ -70,6 +67,15 @@ func (s *Store) SocialRP(ctx context.Context, r core.RPSocialRequest) (RPSocialR
 		return prior, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
+		return empty, err
+	}
+	if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+		return empty, err
+	}
+	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+		return empty, err
+	}
+	if err := requireNoActiveRPSharedRound(ctx, tx.conn, session.InstanceID, session.BranchID); err != nil {
 		return empty, err
 	}
 	if !strings.HasPrefix(r.TargetEntityID, "person_") {

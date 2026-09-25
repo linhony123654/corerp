@@ -259,6 +259,11 @@ func (s *Store) DecideRP(ctx context.Context, request core.RPDecisionRequest, pr
 	if err != nil {
 		return RPDecisionResult{}, err
 	}
+	// BuildRPDecisionInput is also a read-only diagnostic. Provider invocation
+	// is the first autonomous-decision boundary and must respect live control.
+	if err := requireInternalRPDecisionOwner(ctx, s.db, input.InstanceID, input.BranchID, request.NPCEntityID); err != nil {
+		return RPDecisionResult{}, err
+	}
 	inputHash, err := core.HashJSON(input)
 	if err != nil {
 		return RPDecisionResult{}, err

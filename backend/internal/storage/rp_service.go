@@ -51,6 +51,39 @@ func (s *RPService) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPW
 	if err != nil || result.Status != "completed" {
 		return result, err
 	}
+	return s.finishRPWaitPresentation(ctx, request, result)
+}
+
+// Shared-round authority is settled by Store first. The product service then
+// drains the same warm/initiative work as an ordinary Human wait; a retry
+// replays the single wait Event and resumes any unfinished derived work.
+func (s *RPService) AdvanceRPSharedRound(ctx context.Context, request RPSharedRoundAdvanceRequest) (RPSharedRound, error) {
+	result, err := s.Store.advanceRPSharedRoundWithProvider(ctx, request, s.provider)
+	if err != nil || result.Status != "settled" {
+		return result, err
+	}
+	// An action boundary has no Human wait or post-wait roster to drain.
+	var settlementKind string
+	if err := s.Store.db.QueryRowContext(ctx, `SELECT settlement_kind FROM rp_shared_rounds WHERE round_id=?`, request.RoundID).Scan(&settlementKind); err != nil {
+		return result, err
+	}
+	if settlementKind != "wait" {
+		return result, nil
+	}
+	var wait core.RPWaitRequest
+	if err := s.Store.db.QueryRowContext(ctx, `SELECT p.principal_id,r.human_session_id,r.advance_target,r.baseline_head,r.wait_key FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id AND p.role='human' WHERE r.round_id=? AND r.status='settled'`, request.RoundID).Scan(&wait.PrincipalID, &wait.SessionID, &wait.TargetWorldTime, &wait.ExpectedCursor, &wait.IdempotencyKey); err != nil {
+		return result, err
+	}
+	wait.Budget = request.Budget
+	completed, err := s.Store.waitRPForSharedRound(ctx, wait, request.RoundID)
+	if err != nil {
+		return result, err
+	}
+	_, err = s.finishRPWaitPresentation(ctx, wait, completed)
+	return result, err
+}
+
+func (s *RPService) finishRPWaitPresentation(ctx context.Context, request core.RPWaitRequest, result RPWaitResult) (RPWaitResult, error) {
 	for _, npc := range result.WarmNPCIDs {
 		_, err := s.Store.runRPWarmDecision(ctx, core.RPInitiativeRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID, NPCEntityID: npc, TriggerEventID: result.EventID})
 		if err != nil && !core.HasCode(err, core.CodeBranchConflict) && !core.HasCode(err, core.CodeNotFound) && !core.HasCode(err, core.CodeCommandInProgress) {

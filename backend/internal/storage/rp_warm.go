@@ -70,6 +70,9 @@ func (s *Store) runRPWarmDecision(ctx context.Context, r core.RPInitiativeReques
 		if err := authorizeRPControl(ctx, conn, r.PrincipalID, current.InstanceID, current.BranchID, current.ControlledEntityID); err != nil {
 			return err
 		}
+		if err := requireInternalRPDecisionOwner(ctx, conn, current.InstanceID, current.BranchID, r.NPCEntityID); err != nil {
+			return err
+		}
 		_, _, _, err = readRPWarmTrigger(ctx, conn, current, r)
 		return err
 	}, func(conn *sql.Conn, c privateFactContext) (rpWarmFact, func() error, error) {

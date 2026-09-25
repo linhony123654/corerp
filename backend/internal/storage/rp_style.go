@@ -65,6 +65,8 @@ func (s *Store) SetRPStyle(ctx context.Context, r RPStyleSetRequest) (RPStyleSet
 	}
 	defer tx.Rollback(ctx)
 	var controlledEntityID string
+	var oldHash string
+	var prior RPStyleSetResult
 	if r.Scope == "world" {
 		var allowed int
 		err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM capability_grants g JOIN principals p ON p.principal_id=g.principal_id WHERE p.principal_id=? AND p.principal_type='creator' AND p.status='active' AND g.instance_id=? AND g.branch_id=? AND g.status='active' AND g.capability_id IN ('world.cohort.materialize','world.simulate')`, r.PrincipalID, r.InstanceID, r.BranchID).Scan(&allowed)
@@ -75,21 +77,49 @@ func (s *Store) SetRPStyle(ctx context.Context, r RPStyleSetRequest) (RPStyleSet
 			return empty, core.NewError(core.CodeUnauthorized, "world presentation requires scoped creator write authority")
 		}
 	} else {
-		session, err := loadRPSession(ctx, tx.conn, r.PrincipalID, r.SessionID)
+		var session RPSession
+		session, err = loadRPSessionRecord(ctx, tx.conn, r.PrincipalID, r.SessionID)
 		if err != nil {
 			return empty, err
 		}
-		if session.InstanceID != r.InstanceID || session.BranchID != r.BranchID || session.Status != "active" {
+		if session.InstanceID != r.InstanceID || session.BranchID != r.BranchID {
 			return empty, core.NewError(core.CodeUnauthorized, "style session scope differs")
+		}
+		currentErr := requireCurrentRPSession(ctx, tx.conn, session)
+		if currentErr == nil {
+			if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, r.InstanceID, r.BranchID, session.ControlledEntityID); err != nil {
+				return empty, err
+			}
+		} else if !core.HasCode(currentErr, core.CodeBranchConflict) {
+			return empty, currentErr
+		}
+		// The original session can recover its exact presentation revision
+		// after release, but cannot create another revision under stale control.
+		err = tx.conn.QueryRowContext(ctx, `SELECT revision_id,revision,request_hash FROM rp_style_revisions WHERE principal_id=? AND idempotency_key=?`, r.PrincipalID, r.IdempotencyKey).Scan(&prior.RevisionID, &prior.Revision, &oldHash)
+		if err == nil {
+			if hash != oldHash {
+				return empty, core.NewError(core.CodeIdempotencyMismatch, "style retry differs")
+			}
+			prior.Replayed = true
+			return prior, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return empty, err
+		}
+		if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+			return empty, err
+		}
+		if session.Status != "active" {
+			return empty, core.NewError(core.CodeUnauthorized, "style session is closed")
 		}
 		if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, r.InstanceID, r.BranchID, session.ControlledEntityID); err != nil {
 			return empty, err
 		}
 		controlledEntityID = session.ControlledEntityID
 	}
-	var oldHash string
-	var prior RPStyleSetResult
-	err = tx.conn.QueryRowContext(ctx, `SELECT revision_id,revision,request_hash FROM rp_style_revisions WHERE principal_id=? AND idempotency_key=?`, r.PrincipalID, r.IdempotencyKey).Scan(&prior.RevisionID, &prior.Revision, &oldHash)
+	if r.Scope == "world" {
+		err = tx.conn.QueryRowContext(ctx, `SELECT revision_id,revision,request_hash FROM rp_style_revisions WHERE principal_id=? AND idempotency_key=?`, r.PrincipalID, r.IdempotencyKey).Scan(&prior.RevisionID, &prior.Revision, &oldHash)
+	}
 	if err == nil {
 		if hash != oldHash {
 			return empty, core.NewError(core.CodeIdempotencyMismatch, "style retry differs")

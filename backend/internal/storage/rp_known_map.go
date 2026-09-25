@@ -39,16 +39,30 @@ func (s *Store) SurveyRPMap(ctx context.Context, r RPMapSurveyRequest) (RPMapSur
 	if err := (core.RPSessionReadRequest{PrincipalID: r.PrincipalID, SessionID: r.SessionID}).Validate(); err != nil {
 		return RPMapSurveyRecord{}, err
 	}
-	session, err := s.ReadRPSession(ctx, core.RPSessionReadRequest{PrincipalID: r.PrincipalID, SessionID: r.SessionID})
+	session, err := loadRPSessionRecord(ctx, s.db, r.PrincipalID, r.SessionID)
 	if err != nil {
 		return RPMapSurveyRecord{}, err
 	}
-	if session.Status != "active" {
-		return RPMapSurveyRecord{}, core.NewError(core.CodeBranchConflict, "RP session is closed")
-	}
 	b := core.CareerBinding{PrincipalID: r.PrincipalID, InstanceID: session.InstanceID, BranchID: session.BranchID, ExpectedHead: r.ExpectedCursor, IdempotencyKey: r.IdempotencyKey}
-	return executePrivateFactCommand(s, ctx, b, "SurveyRPMap", r,
+	return executePrivateFactCommandWithOptions(s, ctx, b, "SurveyRPMap", r,
 		privateFactDomain{"rp_map", "RPMapSurveyed", `{"authorization":"rp-session-control"}`},
+		privateFactOptions{replayAuthorize: func(conn *sql.Conn) error {
+			original, err := loadRPSessionRecord(ctx, conn, r.PrincipalID, r.SessionID)
+			if err != nil {
+				return err
+			}
+			if original.InstanceID != b.InstanceID || original.BranchID != b.BranchID || original.ControlledEntityID != session.ControlledEntityID {
+				return core.NewError(core.CodeBranchConflict, "RP map receipt scope changed")
+			}
+			currentErr := requireCurrentRPSession(ctx, conn, original)
+			if currentErr == nil {
+				return authorizeRPControl(ctx, conn, r.PrincipalID, b.InstanceID, b.BranchID, original.ControlledEntityID)
+			}
+			if core.HasCode(currentErr, core.CodeBranchConflict) {
+				return nil // Only a committed, exact original key can pass this path.
+			}
+			return currentErr
+		}},
 		func(conn *sql.Conn) error {
 			current, err := loadRPSession(ctx, conn, r.PrincipalID, r.SessionID)
 			if err != nil {
@@ -58,6 +72,9 @@ func (s *Store) SurveyRPMap(ctx context.Context, r RPMapSurveyRequest) (RPMapSur
 				return core.NewError(core.CodeBranchConflict, "RP map session binding changed")
 			}
 			if err := authorizeRPControl(ctx, conn, r.PrincipalID, b.InstanceID, b.BranchID, current.ControlledEntityID); err != nil {
+				return err
+			}
+			if err := requireNoActiveRPSharedRound(ctx, conn, b.InstanceID, b.BranchID); err != nil {
 				return err
 			}
 			return validateRPBinding(ctx, conn, b.InstanceID, b.BranchID, current.ControlledEntityID)

@@ -75,6 +75,9 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPNPCDecisionCommitResult{}, err
 	}
+	if err := requireInternalRPDecisionOwner(ctx, tx.conn, session.InstanceID, session.BranchID, request.NPCEntityID); err != nil {
+		return RPNPCDecisionCommitResult{}, err
+	}
 	if result, found, err := findCommittedRPDecisionOnConn(ctx, tx.conn, session.SessionID, request, decision.InputHash, proposalHash); err != nil || found {
 		return result, err
 	}

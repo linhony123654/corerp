@@ -44,11 +44,8 @@ func (s *Store) MoveRP(ctx context.Context, request core.RPMoveRequest) (RPMoveR
 		return RPMoveResult{}, core.WrapError(core.CodeStorageFailure, "begin RP move", err)
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, request.PrincipalID, request.SessionID)
+	session, err := loadRPSessionRecord(ctx, tx.conn, request.PrincipalID, request.SessionID)
 	if err != nil {
-		return RPMoveResult{}, err
-	}
-	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPMoveResult{}, err
 	}
 	commandKey := "rp_move:" + session.SessionID + ":" + request.IdempotencyKey
@@ -68,6 +65,21 @@ func (s *Store) MoveRP(ctx context.Context, request core.RPMoveRequest) (RPMoveR
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return RPMoveResult{}, core.WrapError(core.CodeStorageFailure, "look up RP move", err)
+	}
+	if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+		return RPMoveResult{}, err
+	}
+	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+		return RPMoveResult{}, err
+	}
+	selected, err := selectedRPSharedMove(ctx, tx.conn, session, request, requestHash)
+	if err != nil {
+		return RPMoveResult{}, err
+	}
+	if !selected {
+		if err := requireNoActiveRPSharedRound(ctx, tx.conn, session.InstanceID, session.BranchID); err != nil {
+			return RPMoveResult{}, err
+		}
 	}
 	if session.Status != "active" {
 		return RPMoveResult{}, core.NewError(core.CodeBranchConflict, "RP session is closed")

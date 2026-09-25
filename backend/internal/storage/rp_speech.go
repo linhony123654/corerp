@@ -67,11 +67,8 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 		return RPSpeechResult{}, core.WrapError(core.CodeStorageFailure, "begin RP speech", err)
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, request.PrincipalID, request.SessionID)
+	session, err := loadRPSessionRecord(ctx, tx.conn, request.PrincipalID, request.SessionID)
 	if err != nil {
-		return RPSpeechResult{}, err
-	}
-	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPSpeechResult{}, err
 	}
 	commandKey := "rp_speech:" + session.SessionID + ":" + request.IdempotencyKey
@@ -88,6 +85,12 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return RPSpeechResult{}, core.WrapError(core.CodeStorageFailure, "look up RP speech", err)
+	}
+	if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+		return RPSpeechResult{}, err
+	}
+	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+		return RPSpeechResult{}, err
 	}
 	if session.Status != "active" {
 		return RPSpeechResult{}, core.NewError(core.CodeBranchConflict, "RP session is closed")
@@ -124,6 +127,30 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	}
 	if request.ExpectedCursor != head || session.ObservationCursor != head {
 		return RPSpeechResult{}, core.NewError(core.CodeBranchConflict, "RP speech requires a current observation cursor")
+	}
+	var roundID, roundStatus, selectedSession, settlementKind, selectedKind string
+	err = tx.conn.QueryRowContext(ctx, `SELECT round_id,status,selected_session_id,settlement_kind,selected_action_kind FROM rp_shared_rounds WHERE instance_id=? AND branch_id=? AND status IN ('open','advancing')`, session.InstanceID, session.BranchID).Scan(&roundID, &roundStatus, &selectedSession, &settlementKind, &selectedKind)
+	if err == nil {
+		if roundStatus != "advancing" || settlementKind != "speech" || selectedKind != "speech" || selectedSession != session.SessionID || request.IdempotencyKey != "shared_action_"+roundID {
+			return RPSpeechResult{}, core.NewError(core.CodeCommandInProgress, "shared decision window owns RP speech")
+		}
+		var raw string
+		if err := tx.conn.QueryRowContext(ctx, `SELECT request_json FROM rp_shared_round_actions WHERE round_id=? AND session_id=?`, roundID, session.SessionID).Scan(&raw); err != nil {
+			return RPSpeechResult{}, classifyMissing(err, "selected shared speech request")
+		}
+		var accepted core.RPSpeechRequest
+		if err := json.Unmarshal([]byte(raw), &accepted); err != nil {
+			return RPSpeechResult{}, core.WrapError(core.CodeProjectionDiverged, "decode selected shared speech request", err)
+		}
+		acceptedHash, err := core.HashJSON(accepted)
+		if err != nil {
+			return RPSpeechResult{}, err
+		}
+		if requestHash != acceptedHash {
+			return RPSpeechResult{}, core.NewError(core.CodeUnauthorized, "speech differs from selected shared proposal")
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return RPSpeechResult{}, err
 	}
 	if err := ensureCohortTransitionChronology(ctx, tx.conn, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return RPSpeechResult{}, err

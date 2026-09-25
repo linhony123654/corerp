@@ -46,8 +46,25 @@ type rpWaitEvent struct {
 // WaitRP stores only retry intent before invoking the existing scoped scheduler.
 // The final clock and event are one authority commit after all due work drains.
 func (s *Store) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPWaitResult, error) {
+	return s.waitRP(ctx, request, "")
+}
+
+func (s *Store) waitRPForSharedRound(ctx context.Context, request core.RPWaitRequest, roundID string) (RPWaitResult, error) {
+	if roundID == "" {
+		return RPWaitResult{}, core.NewError(core.CodeInvalidArgument, "shared round ID required")
+	}
+	return s.waitRP(ctx, request, roundID)
+}
+
+func (s *Store) waitRP(ctx context.Context, request core.RPWaitRequest, sharedRoundID string) (RPWaitResult, error) {
 	if err := request.Validate(); err != nil {
 		return RPWaitResult{}, err
+	}
+	executionBudget := request.Budget
+	if sharedRoundID != "" {
+		// The participant's retry budget bounds this scheduler invocation, not
+		// the identity of the one durable Human-owned wait command.
+		request.Budget = 1
 	}
 	target, _ := time.Parse(time.RFC3339, request.TargetWorldTime)
 	request.TargetWorldTime = target.UTC().Format(time.RFC3339)
@@ -55,15 +72,23 @@ func (s *Store) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPWaitR
 	if err != nil {
 		return RPWaitResult{}, err
 	}
-	intent, replayed, err := s.ensureRPWaitIntent(ctx, request, requestHash)
+	intent, replayed, err := s.ensureRPWaitIntentForRound(ctx, request, requestHash, sharedRoundID)
 	if err != nil || replayed {
 		return intent, err
+	}
+	if sharedRoundID != "" {
+		// Rounds accepted by the earlier schema hashed the caller's budget.
+		// The acceptance transaction verified every other pinned field; retain
+		// that original hash when finishing its already accepted work.
+		if err := s.db.QueryRowContext(ctx, `SELECT request_hash FROM rp_wait_intents WHERE intent_id=?`, intent.IntentID).Scan(&requestHash); err != nil {
+			return RPWaitResult{}, classifyMissing(err, "shared RP wait intent")
+		}
 	}
 	session, err := loadRPSession(ctx, s.db, request.PrincipalID, request.SessionID)
 	if err != nil {
 		return RPWaitResult{}, err
 	}
-	run, err := s.runAgentLifeForScope(ctx, session.InstanceID, session.BranchID, request.TargetWorldTime, request.Budget)
+	run, err := s.runAgentLifeForScope(ctx, session.InstanceID, session.BranchID, request.TargetWorldTime, executionBudget)
 	if err != nil {
 		return RPWaitResult{}, err
 	}
@@ -78,17 +103,68 @@ func (s *Store) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPWaitR
 }
 
 func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitRequest, requestHash string) (RPWaitResult, bool, error) {
+	return s.ensureRPWaitIntentForRound(ctx, request, requestHash, "")
+}
+
+func (s *Store) ensureRPWaitIntentForRound(ctx context.Context, request core.RPWaitRequest, requestHash, sharedRoundID string) (RPWaitResult, bool, error) {
 	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
 		return RPWaitResult{}, false, core.WrapError(core.CodeStorageFailure, "begin RP wait intent", err)
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, request.PrincipalID, request.SessionID)
+	session, err := loadRPSessionRecord(ctx, tx.conn, request.PrincipalID, request.SessionID)
 	if err != nil {
+		return RPWaitResult{}, false, err
+	}
+	var intentID, existingHash, status string
+	if err := checkRPRequestRetirement(ctx, tx.conn, request.PrincipalID, "wait", session.SessionID, request.IdempotencyKey); err != nil {
+		return RPWaitResult{}, false, err
+	}
+	var commandID sql.NullString
+	err = tx.conn.QueryRowContext(ctx, `SELECT intent_id, request_hash, status, command_id FROM rp_wait_intents WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&intentID, &existingHash, &status, &commandID)
+	if err == nil {
+		if existingHash != requestHash {
+			if sharedRoundID == "" {
+				return RPWaitResult{}, false, core.NewError(core.CodeIdempotencyMismatch, "RP wait key was used with another request")
+			}
+			matches, err := matchesLegacyRPSharedWaitHash(request, existingHash)
+			if err != nil {
+				return RPWaitResult{}, false, err
+			}
+			if !matches {
+				return RPWaitResult{}, false, core.NewError(core.CodeIdempotencyMismatch, "RP wait key was used with another request")
+			}
+		}
+		if status == "completed" {
+			result, err := loadRPWaitResult(ctx, tx.conn, intentID, commandID.String, true)
+			return result, true, err
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return RPWaitResult{}, false, core.WrapError(core.CodeStorageFailure, "look up RP wait intent", err)
+	}
+	if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
 		return RPWaitResult{}, false, err
 	}
 	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPWaitResult{}, false, err
+	}
+	if sharedRoundID == "" {
+		var activeRound int
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_shared_rounds WHERE instance_id=? AND branch_id=? AND status IN ('open','advancing')`, session.InstanceID, session.BranchID).Scan(&activeRound); err != nil {
+			return RPWaitResult{}, false, err
+		}
+		if activeRound != 0 {
+			return RPWaitResult{}, false, core.NewError(core.CodeCommandInProgress, "shared decision window owns world-time advance")
+		}
+	}
+	if sharedRoundID != "" {
+		var allowed int
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id AND p.session_id=r.human_session_id AND p.role='human' WHERE r.round_id=? AND r.instance_id=? AND r.branch_id=? AND r.status='advancing' AND r.human_session_id=? AND r.advance_target=? AND r.wait_key=? AND r.baseline_head=? AND p.principal_id=? AND p.entity_id=? AND p.control_generation=? AND p.controller_instance_id=?`, sharedRoundID, session.InstanceID, session.BranchID, session.SessionID, request.TargetWorldTime, request.IdempotencyKey, request.ExpectedCursor, request.PrincipalID, session.ControlledEntityID, session.ControlGeneration, session.ControllerInstanceID).Scan(&allowed); err != nil {
+			return RPWaitResult{}, false, err
+		}
+		if allowed != 1 {
+			return RPWaitResult{}, false, core.NewError(core.CodeUnauthorized, "wait is not bound to an advancing shared round")
+		}
 	}
 	if session.InstanceID != M2DemoInstanceID || session.BranchID != M2DemoBranchID {
 		packages, err := readStudioActivePackages(ctx, tx.conn, session.InstanceID, session.BranchID)
@@ -106,20 +182,7 @@ func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitReque
 			return RPWaitResult{}, false, core.NewError(core.CodeInvalidArgument, "world has unsupported due scheduler phases")
 		}
 	}
-	var intentID, existingHash, status string
-	if err := checkRPRequestRetirement(ctx, tx.conn, request.PrincipalID, "wait", session.SessionID, request.IdempotencyKey); err != nil {
-		return RPWaitResult{}, false, err
-	}
-	var commandID sql.NullString
-	err = tx.conn.QueryRowContext(ctx, `SELECT intent_id, request_hash, status, command_id FROM rp_wait_intents WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&intentID, &existingHash, &status, &commandID)
 	if err == nil {
-		if existingHash != requestHash {
-			return RPWaitResult{}, false, core.NewError(core.CodeIdempotencyMismatch, "RP wait key was used with another request")
-		}
-		if status == "completed" {
-			result, err := loadRPWaitResult(ctx, tx.conn, intentID, commandID.String, true)
-			return result, true, err
-		}
 		if session.Status != "active" {
 			return RPWaitResult{}, false, core.NewError(core.CodeBranchConflict, "RP session is closed")
 		}
@@ -128,8 +191,14 @@ func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitReque
 		}
 		return RPWaitResult{IntentID: intentID, Status: "pending", TargetWorldTime: request.TargetWorldTime}, false, nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return RPWaitResult{}, false, core.WrapError(core.CodeStorageFailure, "look up RP wait intent", err)
+	// Exact accepted-result recovery above stays readable. Only a fresh wait
+	// needs the F3 shared-time owner, which is not installed in this slice.
+	var externalResidents int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_controller_authorities WHERE instance_id=? AND branch_id=? AND status='active'`, session.InstanceID, session.BranchID).Scan(&externalResidents); err != nil {
+		return RPWaitResult{}, false, core.WrapError(core.CodeStorageFailure, "check shared-time participants", err)
+	}
+	if externalResidents != 0 && sharedRoundID == "" {
+		return RPWaitResult{}, false, core.NewError(core.CodeCommandInProgress, "shared-time round is required before waiting with external residents")
 	}
 	if session.Status != "active" {
 		return RPWaitResult{}, false, core.NewError(core.CodeBranchConflict, "RP session is closed")
@@ -161,7 +230,7 @@ func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitReque
 		return RPWaitResult{}, false, core.WrapError(core.CodeProjectionDiverged, "invalid RP clock", err)
 	}
 	target, _ := time.Parse(time.RFC3339, request.TargetWorldTime)
-	if !target.After(current) {
+	if target.Before(current) || (sharedRoundID == "" && !target.After(current)) {
 		return RPWaitResult{}, false, core.NewError(core.CodeInvalidArgument, "RP wait target must be after current world time")
 	}
 	if request.ExpectedCursor != head || session.ObservationCursor != head {
@@ -179,6 +248,20 @@ func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitReque
 		return RPWaitResult{}, false, core.WrapError(core.CodeStorageFailure, "commit RP wait intent", err)
 	}
 	return RPWaitResult{IntentID: intentID, Status: "pending", TargetWorldTime: request.TargetWorldTime}, false, nil
+}
+
+func matchesLegacyRPSharedWaitHash(request core.RPWaitRequest, existingHash string) (bool, error) {
+	for budget := 2; budget <= 10000; budget++ {
+		request.Budget = budget
+		hash, err := core.HashJSON(request)
+		if err != nil {
+			return false, err
+		}
+		if hash == existingHash {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, requestHash, intentID string, processed int) (RPWaitResult, error) {

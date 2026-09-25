@@ -52,25 +52,36 @@ func (s *Store) DiscoverRPBindings(ctx context.Context, r RPDiscoverRequest) (RP
 	if r.Limit == 0 {
 		r.Limit = 20
 	}
-	// Matches authorizeRPControl's exact-one active grant and validateRPBinding's
-	// active individual/spatial/source-world constraints. No wildcard control.
-	rows, err := s.db.QueryContext(ctx, `SELECT g.instance_id,g.branch_id,g.subject_id,e.display_name
+	// Player grants and sourced service assignments are distinct authorities.
+	// Discovery must list only the current owner, with the same individual and
+	// spatial binding checks used by OpenRPSession. No wildcard control.
+	rows, err := s.db.QueryContext(ctx, `WITH bindings AS (
+ SELECT g.instance_id,g.branch_id,g.subject_id AS entity_id
  FROM capability_grants g JOIN principals caller ON caller.principal_id=g.principal_id
  JOIN world_instances w ON w.instance_id=g.instance_id
- JOIN materialized_entities e ON e.entity_id=g.subject_id
+ WHERE g.principal_id=? AND caller.principal_type='player' AND caller.status='active'
+ AND g.capability_id='world.rp.control' AND g.status='active'
+ AND `+studioControlPredicate+`
+ AND NOT EXISTS (SELECT 1 FROM rp_controller_authorities owner WHERE owner.instance_id=g.instance_id AND owner.branch_id=g.branch_id AND owner.entity_id=g.subject_id AND owner.status='active')
+ GROUP BY g.instance_id,g.branch_id,g.subject_id HAVING COUNT(*)=1
+ UNION ALL
+ SELECT owner.instance_id,owner.branch_id,owner.entity_id
+ FROM rp_controller_authorities owner JOIN principals caller ON caller.principal_id=owner.principal_id
+ WHERE owner.principal_id=? AND owner.status='active' AND caller.principal_type='service' AND caller.status='active'
+ )
+ SELECT binding.instance_id,binding.branch_id,binding.entity_id,e.display_name
+ FROM bindings binding
+ JOIN world_instances w ON w.instance_id=binding.instance_id
+ JOIN materialized_entities e ON e.entity_id=binding.entity_id
  JOIN cohorts source ON source.cohort_id=e.source_cohort_id
  JOIN agent_profiles a ON a.agent_id=e.entity_id
  JOIN agent_positions position ON position.agent_id=a.agent_id
- JOIN branches b ON b.instance_id=g.instance_id AND b.branch_id=g.branch_id
- WHERE g.principal_id=? AND caller.principal_type='player' AND caller.status='active'
- AND g.capability_id='world.rp.control' AND g.status='active'
- AND e.status='active' AND e.population_count=1 AND a.status='active'
- AND source.instance_id=g.instance_id AND source.branch_id=g.branch_id
+ JOIN branches b ON b.instance_id=binding.instance_id AND b.branch_id=binding.branch_id
+ WHERE e.status='active' AND e.population_count=1 AND a.status='active'
+ AND source.instance_id=binding.instance_id AND source.branch_id=binding.branch_id
  AND a.instance_id=source.instance_id AND a.branch_id=source.branch_id
- AND `+studioControlPredicate+`
- AND (g.instance_id,g.branch_id,g.subject_id)>(?,?,?)
- GROUP BY g.instance_id,g.branch_id,g.subject_id,e.display_name HAVING COUNT(*)=1
- ORDER BY g.instance_id,g.branch_id,g.subject_id LIMIT ?`, r.PrincipalID, after.InstanceID, after.BranchID, after.EntityID, r.Limit+1)
+ AND (binding.instance_id,binding.branch_id,binding.entity_id)>(?,?,?)
+ ORDER BY binding.instance_id,binding.branch_id,binding.entity_id LIMIT ?`, r.PrincipalID, r.PrincipalID, after.InstanceID, after.BranchID, after.EntityID, r.Limit+1)
 	if err != nil {
 		return out, core.WrapError(core.CodeStorageFailure, "discover RP bindings", err)
 	}

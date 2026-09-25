@@ -193,11 +193,8 @@ func (s *RPService) StopRPInteraction(ctx context.Context, r RPInteractionResume
 		return RPInteractionResult{}, err
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, r.PrincipalID, r.SessionID)
+	session, err := loadRPSessionRecord(ctx, tx.conn, r.PrincipalID, r.SessionID)
 	if err != nil {
-		return RPInteractionResult{}, err
-	}
-	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPInteractionResult{}, err
 	}
 	run, err := loadRPInteraction(ctx, tx.conn, r.SessionID, r.IdempotencyKey)
@@ -206,6 +203,12 @@ func (s *RPService) StopRPInteraction(ctx context.Context, r RPInteractionResume
 	}
 	if run.Status == "stopped" || run.Status == "settled" || run.Status == "clarification" {
 		return run.result(true), nil
+	}
+	if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+		return RPInteractionResult{}, err
+	}
+	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+		return RPInteractionResult{}, err
 	}
 	if run.PendingKind != "" {
 		var child struct {
@@ -259,11 +262,8 @@ func (s *RPService) ResumeRPInteraction(ctx context.Context, r RPInteractionResu
 		return RPInteractionResult{}, err
 	}
 	defer tx.Rollback(ctx)
-	session, err := loadRPSession(ctx, tx.conn, r.PrincipalID, r.SessionID)
+	_, err = loadRPSessionRecord(ctx, tx.conn, r.PrincipalID, r.SessionID)
 	if err != nil {
-		return RPInteractionResult{}, err
-	}
-	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return RPInteractionResult{}, err
 	}
 	run, err := loadRPInteraction(ctx, tx.conn, r.SessionID, r.IdempotencyKey)
@@ -291,11 +291,8 @@ func (s *RPService) ensureRPInteraction(ctx context.Context, request core.RPInte
 		return rpInteraction{}, false, err
 	}
 	check := func(tx *immediateTx) (RPSession, rpInteraction, bool, error) {
-		session, err := loadRPSession(ctx, tx.conn, request.PrincipalID, request.SessionID)
+		session, err := loadRPSessionRecord(ctx, tx.conn, request.PrincipalID, request.SessionID)
 		if err != nil {
-			return RPSession{}, rpInteraction{}, false, err
-		}
-		if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 			return RPSession{}, rpInteraction{}, false, err
 		}
 		run, err := loadRPInteraction(ctx, tx.conn, request.SessionID, request.IdempotencyKey)
@@ -303,9 +300,23 @@ func (s *RPService) ensureRPInteraction(ctx context.Context, request core.RPInte
 			if run.RequestHash != hash {
 				return RPSession{}, rpInteraction{}, false, core.NewError(core.CodeIdempotencyMismatch, "interaction key was used with different input")
 			}
+			if run.Status == "settled" || run.Status == "stopped" || run.Status == "clarification" {
+				return session, run, true, nil
+			}
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return RPSession{}, rpInteraction{}, false, err
+		}
+		if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+			return RPSession{}, rpInteraction{}, false, err
+		}
+		if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+			return RPSession{}, rpInteraction{}, false, err
+		}
+		if err == nil {
 			return session, run, true, nil
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
+		if err := requireNoActiveRPSharedRound(ctx, tx.conn, session.InstanceID, session.BranchID); err != nil {
 			return RPSession{}, rpInteraction{}, false, err
 		}
 		var retired int

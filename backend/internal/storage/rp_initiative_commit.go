@@ -134,6 +134,9 @@ func (s *Store) RunRPInitiative(ctx context.Context, r core.RPInitiativeRequest,
 	if err != nil {
 		return empty, err
 	}
+	if err := requireInternalRPDecisionOwner(ctx, tx.conn, input.InstanceID, input.BranchID, r.NPCEntityID); err != nil {
+		return empty, err
+	}
 	eligible, err := rpInitiativeEligible(ctx, tx.conn, input)
 	if err != nil {
 		return empty, err
@@ -183,6 +186,9 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 	}
 	input, err := readRPInitiativeInput(ctx, tx.conn, r)
 	if err != nil {
+		return empty, err
+	}
+	if err := requireInternalRPDecisionOwner(ctx, tx.conn, input.InstanceID, input.BranchID, r.NPCEntityID); err != nil {
 		return empty, err
 	}
 	freshHash, err := core.HashJSON(input)

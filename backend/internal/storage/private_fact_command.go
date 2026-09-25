@@ -12,6 +12,14 @@ import (
 // Shared private Event transaction; domain-specific authorization and typed
 // preparation remain mandatory. No public outbox or implicit knowledge grant.
 type privateFactDomain struct{ namespace, eventType, policy string }
+type privateFactOptions struct {
+	// Only the sourced controller handoff uses this exception. The pending
+	// turn must already have committed speech heard by this Entity.
+	pendingListenerID string
+	// A command-specific check for reading its own committed receipt. Fresh
+	// commands still run the ordinary authorizer after the exact-key lookup.
+	replayAuthorize func(*sql.Conn) error
+}
 type privateFactContext struct {
 	EventID   string
 	Sequence  int64
@@ -26,6 +34,10 @@ type privateFactRecord[T any] struct {
 }
 
 func executePrivateFactCommand[T any](s *Store, ctx context.Context, b core.CareerBinding, commandType string, request any, domain privateFactDomain, authorize func(*sql.Conn) error, prepare func(*sql.Conn, privateFactContext) (T, func() error, error)) (privateFactRecord[T], error) {
+	return executePrivateFactCommandWithOptions(s, ctx, b, commandType, request, domain, privateFactOptions{}, authorize, prepare)
+}
+
+func executePrivateFactCommandWithOptions[T any](s *Store, ctx context.Context, b core.CareerBinding, commandType string, request any, domain privateFactDomain, options privateFactOptions, authorize func(*sql.Conn) error, prepare func(*sql.Conn, privateFactContext) (T, func() error, error)) (privateFactRecord[T], error) {
 	var empty privateFactRecord[T]
 	if err := b.Validate(); err != nil {
 		return empty, err
@@ -43,7 +55,11 @@ func executePrivateFactCommand[T any](s *Store, ctx context.Context, b core.Care
 		return empty, err
 	}
 	defer tx.Rollback(ctx)
-	if err := authorize(tx.conn); err != nil {
+	initialAuthorize := authorize
+	if options.replayAuthorize != nil {
+		initialAuthorize = options.replayAuthorize
+	}
+	if err := initialAuthorize(tx.conn); err != nil {
 		return empty, err
 	}
 	var previous privateFactRecord[T]
@@ -63,6 +79,11 @@ func executePrivateFactCommand[T any](s *Store, ctx context.Context, b core.Care
 	if !errors.Is(err, sql.ErrNoRows) {
 		return empty, err
 	}
+	if options.replayAuthorize != nil {
+		if err := authorize(tx.conn); err != nil {
+			return empty, err
+		}
+	}
 	var head int64
 	var worldTime, epoch string
 	if err := tx.conn.QueryRowContext(ctx, `SELECT b.head_sequence,c.current_world_time FROM branches b JOIN world_clocks c ON c.instance_id=b.instance_id AND c.branch_id=b.branch_id WHERE b.instance_id=? AND b.branch_id=?`, b.InstanceID, b.BranchID).Scan(&head, &worldTime); err != nil {
@@ -76,7 +97,19 @@ func executePrivateFactCommand[T any](s *Store, ctx context.Context, b core.Care
 		return empty, err
 	}
 	if pending != 0 {
-		return empty, core.NewError(core.CodeCommandInProgress, "finish active RP action before career command")
+		if options.pendingListenerID == "" {
+			return empty, core.NewError(core.CodeCommandInProgress, "finish active RP action before career command")
+		}
+		var waits, turns, eligible int
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_wait_intents w JOIN rp_sessions s ON s.session_id=w.session_id WHERE s.instance_id=? AND s.branch_id=? AND w.status='pending'`, b.InstanceID, b.BranchID).Scan(&waits); err != nil {
+			return empty, err
+		}
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN t.player_event_id IS NOT NULL AND EXISTS(SELECT 1 FROM json_each(t.listener_ids_json) WHERE value=?) THEN 1 ELSE 0 END),0) FROM rp_turn_runs t JOIN rp_sessions s ON s.session_id=t.session_id WHERE s.instance_id=? AND s.branch_id=? AND t.status<>'settled'`, options.pendingListenerID, b.InstanceID, b.BranchID).Scan(&turns, &eligible); err != nil {
+			return empty, err
+		}
+		if waits != 0 || turns != 1 || eligible != 1 {
+			return empty, core.NewError(core.CodeCommandInProgress, "controller handoff requires one committed heard turn and no pending wait")
+		}
 	}
 	if err := ensureCohortTransitionChronology(ctx, tx.conn, b.InstanceID, b.BranchID, worldTime); err != nil {
 		return empty, err
@@ -130,7 +163,7 @@ func executePrivateFactCommand[T any](s *Store, ctx context.Context, b core.Care
 		}
 	}
 	auditType := "agent_decision"
-	if commandType == "ConfigureStudioAccessLocal" || commandType == "PrepareRPFinalCohortLocal" {
+	if commandType == "ConfigureStudioAccessLocal" || commandType == "PrepareRPFinalCohortLocal" || commandType == "EnrollRPExternalControllerLocal" || commandType == "AssignRPExternalControllerLocal" || commandType == "ReleaseRPExternalControllerLocal" || commandType == "ReplaceRPExternalControllerLocal" {
 		auditType = "runtime_diagnostic"
 	}
 	if err := s.insertScopedAudit(ctx, tx.conn, b.InstanceID, b.BranchID, "audit_"+commandID, auditType, c.EventID, commandID, attemptID, worldTime, nowText, encoded); err != nil {

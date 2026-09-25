@@ -271,7 +271,18 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	return append(append(append(append(append(append(append(append(append(append(append(differences, wages...), roles...), culture...), institutions...), transit...), leaveQueues...), locations...), journeys...), journeyQueues...), perception...), identity...), nil
+	enrollments, err := rpExternalEnrollmentDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	authorities, err := rpControllerAuthorityDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range [][]ProjectionDifference{wages, roles, culture, institutions, transit, leaveQueues, locations, journeys, journeyQueues, perception, identity, enrollments, authorities} {
+		differences = append(differences, group...)
+	}
+	return differences, nil
 }
 
 func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID string) error {
@@ -323,6 +334,28 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 		return err
 	}
 	if err := repairRPIdentityProjections(ctx, tx.conn, instanceID, branchID, identity); err != nil {
+		return err
+	}
+	enrollments, err := rpExternalEnrollmentDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if len(enrollments) != 0 {
+		// Authority rows reference enrollment keys. Drop derived authority
+		// inside this rebuild transaction before replacing damaged enrollment;
+		// the sourced authority projection is restored immediately below.
+		if _, err := tx.conn.ExecContext(ctx, `DELETE FROM rp_controller_authorities WHERE instance_id=? AND branch_id=?`, instanceID, branchID); err != nil {
+			return err
+		}
+	}
+	if err := repairRPExternalEnrollments(ctx, tx.conn, instanceID, branchID, head, enrollments); err != nil {
+		return err
+	}
+	authorities, err := rpControllerAuthorityDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPControllerAuthorities(ctx, tx.conn, instanceID, branchID, head, authorities); err != nil {
 		return err
 	}
 	for _, account := range replay.State.AccountBalances {

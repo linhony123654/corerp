@@ -14,18 +14,20 @@ import (
 
 // RPSession contains application cursors, never a copy of world state.
 type RPSession struct {
-	SessionID          string `json:"session_id"`
-	InstanceID         string `json:"instance_id"`
-	BranchID           string `json:"branch_id"`
-	ControlledEntityID string `json:"controlled_entity_id"`
-	POV                string `json:"pov"`
-	ObservationCursor  int64  `json:"observation_cursor"`
-	TurnCursor         string `json:"turn_cursor"`
-	TurnState          string `json:"turn_state"`
-	Status             string `json:"status"`
-	CreatedAtUTC       string `json:"created_at_utc"`
-	ResumedAtUTC       string `json:"resumed_at_utc"`
-	Replayed           bool   `json:"replayed,omitempty"`
+	SessionID            string `json:"session_id"`
+	InstanceID           string `json:"instance_id"`
+	BranchID             string `json:"branch_id"`
+	ControlledEntityID   string `json:"controlled_entity_id"`
+	ControlGeneration    int64  `json:"control_generation"`
+	ControllerInstanceID string `json:"controller_instance_id,omitempty"`
+	POV                  string `json:"pov"`
+	ObservationCursor    int64  `json:"observation_cursor"`
+	TurnCursor           string `json:"turn_cursor"`
+	TurnState            string `json:"turn_state"`
+	Status               string `json:"status"`
+	CreatedAtUTC         string `json:"created_at_utc"`
+	ResumedAtUTC         string `json:"resumed_at_utc"`
+	Replayed             bool   `json:"replayed,omitempty"`
 }
 
 type RPVisibleEntity struct {
@@ -99,19 +101,24 @@ func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenReq
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "look up RP session idempotency key", err)
 	}
+	existing := err == nil
+	if existing {
+		session, err := loadRPSessionRecord(ctx, tx.conn, request.PrincipalID, existingID)
+		if err != nil {
+			return RPSession{}, err
+		}
+		session.Replayed = true
+		return session, nil
+	}
 	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, request.InstanceID, request.BranchID, request.EntityID); err != nil {
 		return RPSession{}, err
 	}
 	if err := validateRPBinding(ctx, tx.conn, request.InstanceID, request.BranchID, request.EntityID); err != nil {
 		return RPSession{}, err
 	}
-	if err == nil {
-		session, err := loadRPSession(ctx, tx.conn, request.PrincipalID, existingID)
-		if err != nil {
-			return RPSession{}, err
-		}
-		session.Replayed = true
-		return session, nil
+	generation, controller, err := rpControlGeneration(ctx, tx.conn, request.InstanceID, request.BranchID, request.EntityID)
+	if err != nil {
+		return RPSession{}, err
 	}
 	id, err := newRPSessionID()
 	if err != nil {
@@ -119,8 +126,8 @@ func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenReq
 	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
 	_, err = tx.conn.ExecContext(ctx, `
-		INSERT INTO rp_sessions(session_id, principal_id, instance_id, branch_id, controlled_entity_id, pov, idempotency_key, request_hash, created_at_utc, resumed_at_utc)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, request.PrincipalID, request.InstanceID, request.BranchID, request.EntityID, request.POV, request.IdempotencyKey, requestHash, now, now)
+		INSERT INTO rp_sessions(session_id, principal_id, instance_id, branch_id, controlled_entity_id, pov, idempotency_key, request_hash, created_at_utc, resumed_at_utc, control_generation, controller_instance_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, request.PrincipalID, request.InstanceID, request.BranchID, request.EntityID, request.POV, request.IdempotencyKey, requestHash, now, now, generation, controller)
 	if err != nil {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "insert RP session", err)
 	}
@@ -132,7 +139,7 @@ func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenReq
 	if err := tx.Commit(ctx); err != nil {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "commit RP session open", err)
 	}
-	return RPSession{SessionID: id, InstanceID: request.InstanceID, BranchID: request.BranchID, ControlledEntityID: request.EntityID, POV: request.POV, TurnState: "idle", Status: "active", CreatedAtUTC: now, ResumedAtUTC: now}, nil
+	return RPSession{SessionID: id, InstanceID: request.InstanceID, BranchID: request.BranchID, ControlledEntityID: request.EntityID, ControlGeneration: generation, ControllerInstanceID: controller, POV: request.POV, TurnState: "idle", Status: "active", CreatedAtUTC: now, ResumedAtUTC: now}, nil
 }
 
 func (s *Store) ReadRPSession(ctx context.Context, request core.RPSessionReadRequest) (RPSession, error) {
@@ -216,6 +223,20 @@ func (s *Store) CloseRPSession(ctx context.Context, request core.RPSessionReadRe
 	}
 	if pendingTurns != 0 {
 		return RPSession{}, core.NewError(core.CodeCommandInProgress, "RP turn must settle before closing the session")
+	}
+	var activeInteractions int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_interactions WHERE session_id=? AND status IN ('open','paused')`, session.SessionID).Scan(&activeInteractions); err != nil {
+		return RPSession{}, core.WrapError(core.CodeStorageFailure, "check active RP interaction before close", err)
+	}
+	if activeInteractions != 0 {
+		return RPSession{}, core.NewError(core.CodeCommandInProgress, "interaction must settle or stop before closing the session")
+	}
+	var activeSharedRounds int
+	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_shared_round_participants p JOIN rp_shared_rounds r ON r.round_id=p.round_id WHERE p.session_id=? AND r.status IN ('open','advancing')`, session.SessionID).Scan(&activeSharedRounds); err != nil {
+		return RPSession{}, core.WrapError(core.CodeStorageFailure, "check active shared round before close", err)
+	}
+	if activeSharedRounds != 0 {
+		return RPSession{}, core.NewError(core.CodeCommandInProgress, "shared round must settle before closing the session")
 	}
 	if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_sessions SET status = 'closed' WHERE session_id = ? AND status = 'active'`, session.SessionID); err != nil {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "close RP session", err)
@@ -460,23 +481,82 @@ type rpQueryer interface {
 }
 
 func loadRPSession(ctx context.Context, q rpQueryer, principalID, sessionID string) (RPSession, error) {
+	session, err := loadRPSessionRecord(ctx, q, principalID, sessionID)
+	if err != nil {
+		return RPSession{}, err
+	}
+	if err := requireCurrentRPSession(ctx, q, session); err != nil {
+		return RPSession{}, err
+	}
+	return session, nil
+}
+
+// Exact completed-command receipts remain readable by their original
+// principal/session after a controller handoff. This loader alone does not
+// authorize a new world effect or access to the current observation.
+func loadRPSessionRecord(ctx context.Context, q rpQueryer, principalID, sessionID string) (RPSession, error) {
 	var session RPSession
 	err := q.QueryRowContext(ctx, `
 		SELECT session_id, instance_id, branch_id, controlled_entity_id, pov, observation_cursor,
-		       turn_cursor, turn_state, status, created_at_utc, resumed_at_utc
+		       turn_cursor, turn_state, status, created_at_utc, resumed_at_utc, control_generation, controller_instance_id
 		FROM rp_sessions WHERE session_id = ? AND principal_id = ?`, sessionID, principalID,
 	).Scan(&session.SessionID, &session.InstanceID, &session.BranchID, &session.ControlledEntityID,
 		&session.POV, &session.ObservationCursor, &session.TurnCursor, &session.TurnState,
-		&session.Status, &session.CreatedAtUTC, &session.ResumedAtUTC)
+		&session.Status, &session.CreatedAtUTC, &session.ResumedAtUTC, &session.ControlGeneration, &session.ControllerInstanceID)
 	if err != nil {
 		return RPSession{}, classifyMissing(err, "RP session")
 	}
 	return session, nil
 }
 
+func requireCurrentRPSession(ctx context.Context, q rpQueryer, session RPSession) error {
+	generation, controller, err := rpControlGeneration(ctx, q, session.InstanceID, session.BranchID, session.ControlledEntityID)
+	if err != nil {
+		return err
+	}
+	if session.ControlGeneration != generation || session.ControllerInstanceID != controller {
+		return core.NewError(core.CodeBranchConflict, "RP session controller generation is stale")
+	}
+	return nil
+}
+
+func rpControlGeneration(ctx context.Context, q rpQueryer, instanceID, branchID, entityID string) (int64, string, error) {
+	var generation int64
+	var controller, status string
+	err := q.QueryRowContext(ctx, `SELECT generation,controller_instance_id,status FROM rp_controller_authorities WHERE instance_id=? AND branch_id=? AND entity_id=?`, instanceID, branchID, entityID).Scan(&generation, &controller, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", nil
+	}
+	if err != nil {
+		return 0, "", core.WrapError(core.CodeStorageFailure, "read RP control generation", err)
+	}
+	if status == "released" {
+		controller = ""
+	}
+	return generation, controller, nil
+}
+
 func authorizeRPControl(ctx context.Context, q rpQueryer, principalID, instanceID, branchID, entityID string) error {
+	var owner string
+	err := q.QueryRowContext(ctx, `SELECT a.principal_id FROM rp_controller_authorities a JOIN principals p ON p.principal_id=a.principal_id WHERE a.instance_id=? AND a.branch_id=? AND a.entity_id=? AND a.status='active' AND p.principal_type='service' AND p.status='active'`, instanceID, branchID, entityID).Scan(&owner)
+	if err == nil {
+		if owner != principalID {
+			return core.NewError(core.CodeUnauthorized, "Entity belongs to another RP controller")
+		}
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return core.WrapError(core.CodeStorageFailure, "check external RP controller", err)
+	}
+	var assigned int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_controller_authorities WHERE instance_id=? AND branch_id=? AND entity_id=? AND status='active'`, instanceID, branchID, entityID).Scan(&assigned); err != nil {
+		return core.WrapError(core.CodeStorageFailure, "check RP assignment integrity", err)
+	}
+	if assigned != 0 {
+		return core.NewError(core.CodeUnauthorized, "assigned RP controller is inactive")
+	}
 	var count int
-	err := q.QueryRowContext(ctx, `
+	err = q.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM capability_grants g JOIN principals p ON p.principal_id = g.principal_id
 		JOIN world_instances w ON w.instance_id=g.instance_id
 		WHERE g.principal_id = ? AND p.principal_type = 'player' AND p.status = 'active'
