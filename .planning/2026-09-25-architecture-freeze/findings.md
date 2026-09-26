@@ -1,5 +1,30 @@
 # Findings — final architecture goal v3
 
+## F13 architecture freeze and final sign-off audit (2026-09-26)
+- Core authority boundary audit: confirmed that throughout F0-F12, no secondary source of truth or parallel mutable state was introduced. Every subsystem (Household, Health, Education, Information, Organization Agency, Spatial Timed Edges, Packs, World QA, Observer) derives from immutable Event Ledger entries through deterministic projection functions.
+- Verified that `CompareProjections` yields 0 differences across 30 world days and 3 restart cycles, proving total event-sourcing fidelity.
+- Formally enumerated 24 frozen core responsibilities; all future gameplay mechanisms are directed to Pack-first modular architecture (World, System, Content, Narrative Packs, Technical Adapters).
+- Enumerated 14 explicitly deferred out-of-scope systems to protect CoreRP's architectural simplicity and lightweight SQLite foundation.
+
+## F12 integrated long-run and engineering evidence audit (2026-09-26)
+- Resolved unified multi-subsystem simulation: `TestF12ComprehensiveUnifiedLongRun` concurrently exercises F9 DLC Content & Narrative packs, 2 external MCP resident service controllers, core NPCs, spatial topology with timed edge and encounter point (`街区林荫道`), household formation with shared rent agreement, education credentialing, career hiring, work task shifts, sleep/fatigue, information direct message with zero leakage, player dialogue turns, and long life journal prose.
+- Clock advanced across 30 world days and 3 full SQLite store close/reopen cycles; projection rebuild and comparison confirmed identically 0 drift.
+- World QA 14-dimension health audit verified `HEALTHY`, `DoubleEntryBalanceZeroSum == 0`, `LeakageIndicators == 0`, and `OrphanNodes == 0`.
+- 5 Observer perspectives validated with canonical Studio Inspector links (`/studio/inspect?...`).
+- Studio Inspector event rule epoch provenance verified (`EpochID`, `RulesetHash`).
+- Full repository engineering suite verified: frontend build (`vue-tsc` + `vite build`), MCP 4/4, SillyTavern 5/5, Go packages (`core`, `decision`, `narrative`, `httpapi` 54/54), targeted race detection (320.865s), and static checks clean (`go vet` 0 errors, `git diff --check` clean).
+
+## F11 single-source manual and tutorial reproduction audit (2026-09-26)
+- Markdown sources in `docs/manual/` established as sole authoritative source of truth for Player, Creator, External Agent, and Maintainer.
+- Native Go static compiler in `backend/cmd/manual-gen/main.go` verified: compiles `docs/manual/` into self-contained HTML (`docs/manual/dist/index.html`, 78,135 bytes) with zero CDN or font dependencies (system font stack), client-side search with keyboard shortcuts (`/`, `Esc`), deep anchor links, responsive sidebar/mobile drawer, and code copy buttons.
+- Automated 9-step tutorial reproduction test `TestF11TutorialReproduction` in `backend/internal/storage/f11_reproduction_test.go` PASS (0.808s) across clean `t.TempDir()`.
+
+## F10 World QA and Observer audit (2026-09-26)
+- Implemented read-only World QA diagnostics across 14 dimensions in `backend/internal/storage/world_qa.go` (population, employment, finances, households, housing, commute, relationships, events, decisions, knowledge containment, organization decisions, failed actions, spatial reachability, economic conservation).
+- Configurable anomaly thresholds with typed `WorldQAAnomaly` and health status resolution (`HEALTHY`, `WARNING`, `CRITICAL`) without mutating world facts.
+- Implemented Observer Mode with 5 structured perspectives in `backend/internal/storage/world_observer.go` (Macro, Entity, Organization, Relationship, Digest) with direct Studio Inspector links and role-based privacy scoping (`creator`, `operator`, `observer`).
+- Unit and integration tests PASS 9/9 (6.410s); targeted race detection PASS (158.021s); static checks clean.
+
 ## F9 author packs and lifecycle audit (2026-09-26)
 - Resolved generic DLC content expansion: `core.StudioPackageContent` now defines `RetailCareer *StudioRetailCareerCatalog` (kind: `content`, capability: `content.career.retail`). Package validation enforces canonical hash, version `corerp.retail-career.v1`, and strict bounds without any package-ID-specific host branch.
 - Studio package activation extends `StudioPackageLock` with `Content []StudioPackagePin`. All installed content bundles are verified, hashed, and pinned into immutable `rule_epochs`.

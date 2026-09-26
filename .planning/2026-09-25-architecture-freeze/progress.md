@@ -1,5 +1,69 @@
 # Progress — final architecture goal v3
 
+## 2026-09-26 — F13 architecture freeze and final sign-off
+- F13 architecture freeze completed and verified:
+  - Authored `docs/f13/architecture-freeze.md`:
+    - Formally froze the 24 core authoritative responsibilities (World Registry, Entity/State, Event Ledger, Time/Scheduler, Spatial/Travel, Rule/Institution, Economy/Ownership, Agent Runtime, Knowledge/Belief/Memory, Relationship, Household Contract, Body/Health Contract, Education/Qualification Contract, Information/Communication, Organization Agency, Emergence/Cohort, Encounter, Observation/Narrative, RP Session/Turn, Extension Registry, Gateway/Client Protocol, Studio/Inspector, World QA/Observer, Persistence/Recovery).
+    - Preserved invariant: zero second source of truth; no new authoritative layer without a core RFC.
+    - Declared pack-first future development principles (World Pack, System Pack, Content Pack, Narrative Pack, Technical Adapter).
+    - Formally enumerated and deferred 14 out-of-scope systems (MMO, distributed servers, redis/kafka, postgres, infinite proc-gen maps, arbitrary scripts, WASM sandbox, rules hot upgrade, full medical, full marriage/inheritance, 50-year demographics, full real estate, securities/macro-finance, 1000+ LLM residents).
+    - Declared transition to content phase and recorded explicit architecture freeze statement.
+  - Authored `docs/f13/final-report.md`:
+    - Status: `IMPLEMENTATION_COMPLETE_WITH_LIVE_VALIDATION_PENDING`.
+    - Comprehensive sign-off covering baseline, F0-F13 phase matrix, single-source invariant, end-to-end long-run story, live vs fixture demarcation, 14-dimension World QA audit, pack proofs, and documentation reproduction.
+  - Full goal F0→F13 complete. Stage gate: PASS.
+
+## 2026-09-26 — F12 completed and verified, checkpoint committed
+- F12 comprehensive long-run integration test and repository-wide engineering evidence complete:
+  - `TestF12ComprehensiveUnifiedLongRun` in `f12_final_integration_test.go` PASS (10.077s):
+    - Concurrently validates F9 Content & Narrative DLC packs, 2 external MCP resident service controllers, core NPCs (Ada, Bo, Cai, Lin, Nora, Eli), spatial topology with timed edge and encounter point (`街区林荫道`), household formation with shared rent agreement, education credentialing, career hiring, sleep/fatigue, information direct message with zero leakage, player dialogue turns and long life journal prose without semantic drift.
+    - 30-day timeline progression and 3 complete SQLite store close/reopen cycles with projection rebuild and comparison confirming identically 0 drift.
+    - 14-dimension World QA audit PASS (`HEALTHY`, `DoubleEntryBalanceZeroSum == 0`, `LeakageIndicators == 0`, `OrphanNodes == 0`).
+    - 5 Observer perspectives validated with canonical Studio Inspector links (`/studio/inspect?...`).
+    - Studio Inspector rule epoch provenance verified (`EpochID`, `RulesetHash`).
+  - Full engineering verification across subsystems:
+    - Frontend typecheck and production build (`vue-tsc --noEmit && vite build`) PASS (84 modules transformed, 0 errors).
+    - MCP test suite in `clients/mcp` PASS 4/4 (19.811s).
+    - SillyTavern test suite in `clients/sillytavern` PASS 5/5 (0.125s).
+    - Go packages `core` (0.040s), `decision` (0.354s), `narrative` (0.162s), `httpapi` (52.245s, 54/54 tests) all PASS.
+    - Static checks clean: `go vet ./...` PASS (0 errors), `git diff --check` PASS (clean).
+  - Targeted race detection across F11/F12 suites PASS (320.865s).
+  - Scoped checkpoint commit `d625a23` created on `f12-final`.
+
+## 2026-09-26 — F11 completed and verified, checkpoint committed
+- F11 single-source manual, native Go static compiler and tutorial reproduction complete:
+  - Authored comprehensive Markdown manual sources under `docs/manual/` covering 4 key audiences:
+    - `index.md`: overview, architecture, quickstart.
+    - `player.md`: installation, world selection, turns, dialogue, long narrative, travel, wait, wallet, career, messages, truth vs claims.
+    - `creator.md`: world creation, locations, households, skills, organizations, DLC installation, activation, Studio Inspector, branching.
+    - `external-agent.md`: MCP setup, token binding, controller ownership, bounded observations, model residency, budget, stop/disconnect, shared time.
+    - `maintainer.md`: command/proposal/event/projection lifecycle, turns, speech, knowledge, scheduler, spatial, households, health, skills, information, organization agency, migrations, backup, replay, World QA, Pack platform, Inspector.
+  - Native Go static compiler implemented in `backend/cmd/manual-gen/main.go`:
+    - Zero external CDN or font dependencies (system font stack).
+    - Responsive desktop sidebar and collapsible mobile drawer.
+    - Client-side search with keyboard shortcuts (`/` focus, `Esc` clear).
+    - Deep anchor links for all sections and code copy buttons.
+    - Built static HTML artifact: `docs/manual/dist/index.html` (78,135 bytes).
+    - Compiler unit tests `backend/cmd/manual-gen/main_test.go` PASS 2/2 (0.010s).
+  - Automated 9-step tutorial reproduction test in `backend/internal/storage/f11_reproduction_test.go`:
+    - `TestF11TutorialReproduction` PASS (0.808s) across clean `t.TempDir()`.
+    - Validates: 1. store bootstrap; 2. world creation; 3. turn play; 4. long narrative; 5. DLC pack installation; 6. MCP controller enrollment; 7. process restart; 8. session resume; 9. Inspector / World QA read.
+  - Scoped checkpoint commit `e8d2206` created on `f11-manual`.
+
+## 2026-09-26 — F10 completed and verified, checkpoint committed
+- F10 World QA and Observer mode complete:
+  - Implemented read-only World QA diagnostics across 14 dimensions in `backend/internal/storage/world_qa.go`:
+    - Population & cohort materialization, employment & vacancies, financial flows & arrears, household rent pressure, housing coverage, commute & transit topology, relationship network, event density & repetition, agent decision distribution, knowledge containment & leakage indicators, organization decisions, failed/rejected actions, spatial reachability, and economic conservation (`DoubleEntryBalanceZeroSum == 0`).
+    - Configurable anomaly thresholds with typed `WorldQAAnomaly` and status resolution (`HEALTHY`, `WARNING`, `CRITICAL`).
+  - Implemented Observer Mode with 5 structured read-only perspectives in `backend/internal/storage/world_observer.go`:
+    - Macro timeline, Entity life summary, Organization summary, Relationship network, and Time-window digest.
+    - Direct canonical Studio Inspector links (`/studio/inspect?instance_id=...&branch_id=...&event_id=...`).
+    - Role-based privacy scoping (`creator`, `operator`, `observer`).
+  - Comprehensive unit and integration test suite PASS (9/9 tests, 6.410s).
+  - Targeted race detection PASS (158.021s).
+  - Static checks clean (`go vet ./...` 0 errors, `git diff --check` clean).
+  - Scoped checkpoint commit `233ef44` created on `f10-qa`.
+
 ## 2026-09-26 — F9 completed and verified, ready for F9 checkpoint
 - F9 end-to-end integration and platform lifecycle completed and verified:
   - Retail Career Content Pack (`docs/f9/retail-career/`): manifest, schema hash, content hash and declarative catalog validated. Real M2 domain integration verified in `TestF9RetailCareerRealDomainIntegration` (PASS 0.854s): Education program definition -> candidate enrollment -> timed wait -> exercise completion -> credential issuance -> Career posting with wage reference -> application -> interview -> evaluation -> offer -> acceptance -> shift appointments (08:00–17:00) -> RP life memories in `Life.Employment` -> promotion to `next_grade` ("senior") -> payroll and projection comparison without diffs. Proves full realization through existing Career/Wage authorities without parallel authority.

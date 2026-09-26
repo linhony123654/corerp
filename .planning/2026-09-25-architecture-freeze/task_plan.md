@@ -7,7 +7,16 @@ Execute `/tmp/f3aba99d-86cf-4b76-8ad6-c2e6390139e7.md` in strict F0→F13 order:
 Full-project route. Only the current stage may be in implementation. Each stage: read-only source recon and reuse/gap map → representative vertical slice → targeted checks → full stage and relevant regressions → phase report → authorized checkpoint → clean recoverable tree → next stage. Do not claim absent live-provider evidence as passed. Preserve immutable Event authority, permissions, idempotency and replay. Resolve architecture-changing uncertainty before broad build.
 
 ## Current phase
-F10 — World QA & Observer (`not started`). Next stage after F9 checkpoint. Will implement read-only comprehensive world diagnostics across population, employment, finances, households, housing, commute, relationships, events, decisions, knowledge leakage indicators, organization decisions, and orphan references without forming parallel state, plus non-controlling observer mode.
+F13 — Architecture Freeze, Final Report & Stop (`COMPLETE`). All F0→F13 phases completed and verified according to `/tmp/f3aba99d-86cf-4b76-8ad6-c2e6390139e7.md`. Architecture frozen; stop further core invention and transition to Pack development.
+
+### Completed F12 handoff (historical)
+F12 — Comprehensive Unified Long-Run & Engineering Evidence (`local acceptance PASS`, checkpoint `d625a23`). Unified long-run integration test `TestF12ComprehensiveUnifiedLongRun` simultaneously validated F9 DLC packs, 2 external MCP resident service controllers, core NPCs, spatial topology with timed edge and encounter point (`街区林荫道`), household formation with shared rent agreement, education credentialing, career hiring, work task shifts, sleep/fatigue, information direct message with zero leakage, player dialogue turns, and long life journal prose. Verified across 30 world days and 3 SQLite close/reopen cycles with projection rebuild and comparison confirming identically 0 drift. 14-dimension World QA audit PASS (`HEALTHY`, `DoubleEntryBalanceZeroSum == 0`, `LeakageIndicators == 0`, `OrphanNodes == 0`). 5 Observer perspectives and canonical Inspector links validated. Full engineering suite verified: frontend build (`vue-tsc` + `vite build`), MCP 4/4, SillyTavern 5/5, Go packages (`core`, `decision`, `narrative`, `httpapi` 54/54), targeted race (320.865s), static checks clean (`go vet` 0 errors, `git diff --check` clean).
+
+### Completed F11 handoff (historical)
+F11 — Single-Source Manual & Maintainer Handoff (`local acceptance PASS`, checkpoint `e8d2206`). Comprehensive Markdown manual sources in `docs/manual/` for Player, Creator, External Agent, and Maintainer. Native Go static compiler in `backend/cmd/manual-gen` generates self-contained HTML (`docs/manual/dist/index.html`, 78,135 bytes) with zero CDN/font dependencies, sidebar, search, and deep anchors. 9-step tutorial reproduction test `TestF11TutorialReproduction` PASS across clean directory.
+
+### Completed F10 handoff (historical)
+F10 — World QA & Observer (`local acceptance PASS`, checkpoint `233ef44`). Read-only 14-dimension simulation health diagnostics with configurable thresholds and status resolution (`HEALTHY`, `WARNING`, `CRITICAL`). Observer Mode with 5 structured perspectives (Macro, Entity, Organization, Relationship, Digest) and direct Studio Inspector links. Zero leakage and double-entry economic balance verified.
 
 ### Completed F9 handoff (historical)
 F9 — Two Real Packs and Author Lifecycle (`local acceptance PASS`, checkpoint in the containing scoped commit). Generic `content` package kind and `StudioRetailCareerCatalog` added to Studio package platform without hardcoded package-ID hacks. Two pure data DLC packs implemented: Retail Career Content Pack (`docs/f9/retail-career/`) and Long-form Life Journal Narrative Pack (`docs/f9/life-journal/`). Full domain integration verified across Education training/credentialing, Career posting/interview/evaluation/offer/acceptance/schedule/progression, RP life memories, and payroll. Alternative narrative presentation renders identical world facts without mutation. Pack platform lifecycle verified: manifest/hash validation, install vs activate distinction, failed upgrade lock preservation, disable/unload with historical provenance, duplicate install idempotency, and dataset swap without Go/Vue host changes. Focused storage/core tests PASS, race detection PASS (core 1.017s, storage 107.280s), fast packages PASS (45.071s), MCP 4/4 PASS (8.627s), static/diff checks PASS. Verify exact F8 parent and clean recoverable F9 worktree after commit, then enter F10. No push or release; full goal remains F0→F13.
@@ -50,10 +59,10 @@ The user-approved Play-only redesign and separate HTTPS public preview remain in
 - [x] F7 — information and communication network. Unified channel contract, stance, one-hop rumor, Career organization notice, law public notice, seven F3 shared actions, handle-based safe publication discovery and MCP 30 tools pass locally; all-package regression PASS (storage 1575.876s, HTTP 44.905s), focused normal/race and static checks clean; phase report updated and scoped checkpoint commit verified.
 - [x] F8 — source-authorized bounded organization agency, real Career/Household/Information consequences, recovery and final-source regression; containing checkpoint, verify clean tree before F9.
 - [x] F9 — two real packs and author lifecycle.
-- [ ] F10 — world QA and observer.
-- [ ] F11 — static HTML manual and maintainer handoff.
-- [ ] F12 — integrated long-run, clients and full engineering evidence.
-- [ ] F13 — architecture freeze, final report and stop.
+- [x] F10 — world QA and observer. 14-dimension read-only diagnostics, thresholds, 5-perspective observer, Inspector links, checkpoint `233ef44`.
+- [x] F11 — static HTML manual and maintainer handoff. Markdown sources in docs/manual/, native Go static site compiler, 9-step reproduction test PASS, checkpoint `e8d2206`.
+- [x] F12 — integrated long-run, clients and full engineering evidence. TestF12ComprehensiveUnifiedLongRun across 30 days & 3 SQLite restarts, 0 drift, full frontend/MCP/SillyTavern/Go suites PASS, checkpoint `d625a23`.
+- [x] F13 — architecture freeze, final report and stop. Frozen 24 core responsibilities, pack-first principles, deferred systems list, comprehensive sign-off report, stop directive.
 
 ## Decisions and guardrails
 - Baseline is `/home/ubuntu/corerp-console`, not the `/home/ubuntu` multi-project root.
