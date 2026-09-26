@@ -103,7 +103,7 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 	 AND ((e.actor_id=? AND e.event_type IN ('RPSpeechAccepted','RPPlayerMoved','RPWaitCompleted'))
 	 OR (e.event_type IN ('RPJourneyStarted','RPJourneyDelayed','RPJourneyArrived','RPJourneyCancelled') AND json_extract(e.payload,'$.agent_id')=?)
 	 OR EXISTS (SELECT 1 FROM observation_records o WHERE o.source_event_id=e.event_id AND o.observer_agent_id=? AND o.observed_world_time<=?
-	 AND json_extract(o.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action')))
+	 AND json_extract(o.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received')))
 	 ORDER BY e.event_sequence LIMIT ?`, session.InstanceID, session.BranchID, r.After, result.HeadSequence, result.WorldTime, session.ControlledEntityID, session.ControlledEntityID, session.ControlledEntityID, result.WorldTime, r.Limit+1)
 	if err != nil {
 		return result, err
@@ -169,7 +169,7 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 		}
 		facts, err := tx.conn.QueryContext(ctx, `SELECT subject_agent_id,place_id,observed_world_time,claim_payload FROM observation_records
 		 WHERE source_event_id=? AND observer_agent_id=? AND observed_world_time<=?
-		 AND json_extract(claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action') ORDER BY observation_id`, item.event.EventID, session.ControlledEntityID, result.WorldTime)
+			 AND json_extract(claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received') ORDER BY observation_id`, item.event.EventID, session.ControlledEntityID, result.WorldTime)
 		if err != nil {
 			return result, err
 		}
@@ -185,6 +185,11 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 				Text        string `json:"text"`
 				Description string `json:"description"`
 				Action      string `json:"action"`
+				Channel     string `json:"channel"`
+				Reliability string `json:"claimed_reliability"`
+				MessageID   string `json:"message_id"`
+				MayRelay    bool   `json:"may_relay"`
+				Forwarded   bool   `json:"forwarded"`
 			}
 			if err := json.Unmarshal([]byte(raw), &claim); err != nil {
 				facts.Close()
@@ -196,6 +201,11 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 				fact.Text = claim.Text
 			case "interpersonal_action":
 				fact.Text, fact.Action = claim.Description, claim.Action
+			case "message_received":
+				fact.Text, fact.Channel, fact.Reliability = claim.Text, claim.Channel, claim.Reliability
+				fact.MessageID = claim.MessageID
+				fact.MayRelay, fact.Forwarded = claim.MayRelay, claim.Forwarded
+				fact.PlaceID = "" // Remote receipt is not evidence of sender co-location.
 			}
 			item.event.Facts = append(item.event.Facts, fact)
 		}
@@ -203,6 +213,19 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 		facts.Close()
 		if err != nil {
 			return result, err
+		}
+		for _, fact := range item.event.Facts {
+			if fact.Kind != "message_received" {
+				continue
+			}
+			_, deliveryID, sourceErr := rpInformationRecipientSource(ctx, tx.conn, session.InstanceID,
+				session.BranchID, session.ControlledEntityID, fact.MessageID, result.HeadSequence)
+			if sourceErr != nil {
+				return result, sourceErr
+			}
+			if deliveryID != item.event.EventID {
+				return result, core.NewError(core.CodeProjectionDiverged, "event message differs from delivery source")
+			}
 		}
 		anonymousEvent := false
 		if item.actor != "" {

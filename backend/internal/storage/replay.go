@@ -291,7 +291,11 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	for _, group := range [][]ProjectionDifference{wages, roles, culture, institutions, transit, leaveQueues, locations, journeys, journeyQueues, perception, identity, enrollments, authorities, households, houserent, rentruntime} {
+	information, err := rpInformationProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range [][]ProjectionDifference{wages, roles, culture, institutions, transit, leaveQueues, locations, journeys, journeyQueues, perception, identity, enrollments, authorities, households, houserent, rentruntime, information} {
 		differences = append(differences, group...)
 	}
 	return differences, nil
@@ -306,6 +310,9 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 	var head int64
 	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&head); err != nil {
 		return classifyMissing(err, "branch")
+	}
+	if err := repairRPInformationProjections(ctx, tx.conn, instanceID, branchID, head); err != nil {
+		return err
 	}
 	replay, err := replayRange(ctx, tx.conn, instanceID, branchID, ReplayState{
 		InstanceID: instanceID, BranchID: branchID,

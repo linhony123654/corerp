@@ -119,6 +119,18 @@ type Service interface {
 	RetireRPRequest(context.Context, storage.RPRequestRetireRequest) (storage.RPRequestOutcome, error)
 	DiscoverRPBindings(context.Context, storage.RPDiscoverRequest) (storage.RPDiscovery, error)
 	ReadRPEvents(context.Context, storage.RPEventsReadRequest) (storage.RPClientEvents, error)
+	SendRPInformation(context.Context, storage.RPInformationSendRequest) (storage.RPInformationRecord, error)
+	RelayRPInformation(context.Context, storage.RPInformationRelayRequest) (storage.RPInformationRecord, error)
+	PublishRPOrganizationNotice(context.Context, storage.RPOrganizationNoticePublishRequest) (storage.RPInformationRecord, error)
+	SubmitRPSharedOrganizationNoticePublish(context.Context, storage.RPSharedOrganizationNoticePublishRequest) (storage.RPSharedRound, error)
+	AccessRPOrganizationNotice(context.Context, storage.RPOrganizationNoticeAccessRequest) (storage.RPInformationRecord, error)
+	ReadRPOrganizationNotices(context.Context, core.RPSessionReadRequest) (storage.RPOrganizationNoticeList, error)
+	PublishRPPublicNotice(context.Context, storage.RPPublicNoticePublishRequest) (storage.RPInformationRecord, error)
+	ReadRPNoticePublicationSources(context.Context, storage.RPNoticePublicationSourceReadRequest) (storage.RPNoticePublicationSourceList, error)
+	SubmitRPSharedPublicNoticePublish(context.Context, storage.RPSharedPublicNoticePublishRequest) (storage.RPSharedRound, error)
+	AccessRPPublicNotice(context.Context, storage.RPPublicNoticeAccessRequest) (storage.RPInformationRecord, error)
+	ReadRPPublicNotices(context.Context, core.RPSessionReadRequest) (storage.RPPublicNoticeList, error)
+	RecordRPInformationStance(context.Context, storage.RPInformationStanceRequest) (storage.RPInformationStanceRecord, error)
 	ReadRPMessages(context.Context, storage.RPMessagesReadRequest) (storage.RPMessages, error)
 	ReadRPWork(context.Context, core.RPSessionReadRequest) (storage.RPWork, error)
 	ReadRPNarrative(context.Context, storage.RPNarrativeReadRequest) (storage.RPNarrativeReadResult, error)
@@ -131,6 +143,11 @@ type Service interface {
 	SubmitRPSharedMove(context.Context, storage.RPSharedMoveRequest) (storage.RPSharedRound, error)
 	SubmitRPSharedSleep(context.Context, storage.RPSharedSleepRequest) (storage.RPSharedRound, error)
 	SubmitRPSharedWorkTask(context.Context, storage.RPSharedWorkTaskRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedInformationSend(context.Context, storage.RPSharedInformationSendRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedInformationStance(context.Context, storage.RPSharedInformationStanceRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedInformationRelay(context.Context, storage.RPSharedInformationRelayRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedPublicNoticeAccess(context.Context, storage.RPSharedPublicNoticeAccessRequest) (storage.RPSharedRound, error)
+	SubmitRPSharedOrganizationNoticeAccess(context.Context, storage.RPSharedOrganizationNoticeAccessRequest) (storage.RPSharedRound, error)
 	AdvanceRPSharedRound(context.Context, storage.RPSharedRoundAdvanceRequest) (storage.RPSharedRound, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
@@ -253,6 +270,26 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPObserve(response, request, requestID, principalID)
 	case "/api/v1/rp/context/read":
 		s.handleRPContextRead(response, request, requestID, principalID)
+	case "/api/v1/rp/information/direct/send":
+		s.handleRPInformationSend(response, request, requestID, principalID)
+	case "/api/v1/rp/information/rumor/relay":
+		s.handleRPInformationRelay(response, request, requestID, principalID)
+	case "/api/v1/rp/information/organization/publish":
+		s.handleRPOrganizationNoticePublish(response, request, requestID, principalID)
+	case "/api/v1/rp/information/organization/list":
+		s.handleRPOrganizationNoticeList(response, request, requestID, principalID)
+	case "/api/v1/rp/information/organization/access":
+		s.handleRPOrganizationNoticeAccess(response, request, requestID, principalID)
+	case "/api/v1/rp/information/public/publish":
+		s.handleRPPublicNoticePublish(response, request, requestID, principalID)
+	case "/api/v1/rp/information/public/list":
+		s.handleRPPublicNoticeList(response, request, requestID, principalID)
+	case "/api/v1/rp/information/publication/sources":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPNoticePublicationSourceReadRequest) *string { return &r.PrincipalID }, s.service.ReadRPNoticePublicationSources)
+	case "/api/v1/rp/information/public/access":
+		s.handleRPPublicNoticeAccess(response, request, requestID, principalID)
+	case "/api/v1/rp/information/stance/record":
+		s.handleRPInformationStance(response, request, requestID, principalID)
 	case "/api/v1/rp/requests/retire":
 		s.handleRPRequestRetire(response, request, requestID, principalID)
 	case "/api/v1/rp/events":
@@ -446,6 +483,20 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedSleepRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedSleep)
 	case "/api/v1/rp/rounds/work-task":
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedWorkTaskRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedWorkTask)
+	case "/api/v1/rp/rounds/information-send":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedInformationSendRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedInformationSend)
+	case "/api/v1/rp/rounds/information-stance":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedInformationStanceRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedInformationStance)
+	case "/api/v1/rp/rounds/information-relay":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedInformationRelayRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedInformationRelay)
+	case "/api/v1/rp/rounds/information-public-access":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedPublicNoticeAccessRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedPublicNoticeAccess)
+	case "/api/v1/rp/rounds/information-organization-access":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedOrganizationNoticeAccessRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedOrganizationNoticeAccess)
+	case "/api/v1/rp/rounds/information-public-publish":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedPublicNoticePublishRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedPublicNoticePublish)
+	case "/api/v1/rp/rounds/information-organization-publish":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedOrganizationNoticePublishRequest) *string { return &r.PrincipalID }, s.service.SubmitRPSharedOrganizationNoticePublish)
 	case "/api/v1/rp/rounds/advance":
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPSharedRoundAdvanceRequest) *string { return &r.PrincipalID }, s.service.AdvanceRPSharedRound)
 	case "/api/v1/rp/actions/speak":

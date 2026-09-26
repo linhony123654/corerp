@@ -27,6 +27,12 @@ type RPContextFact struct {
 	SourceEventID    string `json:"source_event_id"`
 	Text             string `json:"text,omitempty"`
 	Action           string `json:"action,omitempty"`
+	Channel          string `json:"channel,omitempty"`
+	Reliability      string `json:"claimed_reliability,omitempty"`
+	MessageID        string `json:"message_id,omitempty"`
+	Stance           string `json:"stance,omitempty"`
+	MayRelay         bool   `json:"may_relay,omitempty"`
+	Forwarded        bool   `json:"forwarded,omitempty"`
 }
 
 type RPClientContext struct {
@@ -101,7 +107,7 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 	 FROM agent_knowledge k JOIN events e ON e.event_id=k.source_event_id
 	 WHERE k.observer_agent_id=? AND e.instance_id=? AND e.branch_id=?
 	 AND e.world_time<=? AND k.learned_world_time<=? AND (?='' OR k.subject_agent_id=?)
-	 AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action')
+	 AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received')
 	 ORDER BY e.event_sequence DESC,k.claim_key LIMIT ?`, session.ControlledEntityID, session.InstanceID, session.BranchID, result.WorldTime, result.WorldTime, subjectID, subjectID, r.Limit+1)
 	if err != nil {
 		return result, err
@@ -118,6 +124,11 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 			Text        string `json:"text"`
 			Description string `json:"description"`
 			Action      string `json:"action"`
+			Channel     string `json:"channel"`
+			Reliability string `json:"claimed_reliability"`
+			MessageID   string `json:"message_id"`
+			MayRelay    bool   `json:"may_relay"`
+			Forwarded   bool   `json:"forwarded"`
 		}
 		if err := json.Unmarshal([]byte(raw), &claim); err != nil {
 			rows.Close()
@@ -129,6 +140,11 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 			fact.Text = claim.Text
 		case "interpersonal_action":
 			fact.Text, fact.Action = claim.Description, claim.Action
+		case "message_received":
+			fact.Text, fact.Channel, fact.Reliability = claim.Text, claim.Channel, claim.Reliability
+			fact.MessageID = claim.MessageID
+			fact.MayRelay, fact.Forwarded = claim.MayRelay, claim.Forwarded
+			fact.PlaceID = "" // Remote receipt is not evidence of sender co-location.
 		}
 		result.Facts = append(result.Facts, fact)
 	}
@@ -145,6 +161,21 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 	}
 	for i := range result.Facts {
 		fact := &result.Facts[i]
+		if fact.Kind == "message_received" {
+			sendID, deliveryID, sourceErr := rpInformationRecipientSource(ctx, tx.conn, session.InstanceID,
+				session.BranchID, session.ControlledEntityID, fact.MessageID, result.ObservationCursor)
+			if sourceErr != nil {
+				return result, sourceErr
+			}
+			if fact.SourceEventID != deliveryID {
+				return result, core.NewError(core.CodeProjectionDiverged, "context message differs from delivery source")
+			}
+			fact.Stance, _, err = rpInformationCurrentStance(ctx, tx.conn, session.InstanceID,
+				session.BranchID, session.ControlledEntityID, fact.MessageID, sendID, deliveryID)
+			if err != nil {
+				return result, err
+			}
+		}
 		originalID := fact.SubjectEntityID
 		fact.SubjectEntityID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, originalID)
 		if err != nil {

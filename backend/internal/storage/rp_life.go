@@ -93,11 +93,16 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 		life.Health.Symptoms = append(life.Health.Symptoms, symptoms...)
 		life.Health.ConditionImpact = conditionImpact
 	}
+	life.Information, err = readRPOwnInformation(ctx, conn, input)
+	if err != nil {
+		return nil, err
+	}
 
 	// Repeat contact supports familiarity, not trust. Other dimensions remain
 	// neutral until there are explicit sourced interpersonal actions.
 	rows, err = conn.QueryContext(ctx, `SELECT subject_agent_id,COUNT(*),MIN(source_event_id),MAX(source_event_id)
  FROM agent_knowledge WHERE observer_agent_id=? AND json_extract(claim_payload,'$.claim_type') IN ('speaker_said','agent_presence')
+ AND claim_key NOT LIKE 'information:%' AND source_event_id NOT IN (SELECT event_id FROM events WHERE event_type='RPInformationDelivered')
  GROUP BY subject_agent_id ORDER BY subject_agent_id`, input.NPCEntityID)
 	if err != nil {
 		return nil, err
@@ -126,6 +131,7 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 
 	rows, err = conn.QueryContext(ctx, `SELECT subject_agent_id,learned_world_time,source_event_id,claim_payload FROM agent_knowledge
  WHERE observer_agent_id=? AND json_extract(claim_payload,'$.claim_type') IN ('speaker_said','agent_presence')
+ AND claim_key NOT LIKE 'information:%' AND source_event_id NOT IN (SELECT event_id FROM events WHERE event_type='RPInformationDelivered')
  ORDER BY last_event_sequence DESC,claim_key LIMIT 8`, input.NPCEntityID)
 	if err != nil {
 		return nil, err

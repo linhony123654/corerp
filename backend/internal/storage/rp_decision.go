@@ -135,8 +135,11 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 	rows.Close()
 	rows, err = conn.QueryContext(ctx, `
 		SELECT k.subject_agent_id, k.place_id, k.source_event_id, k.claim_payload
-		FROM agent_knowledge k WHERE k.observer_agent_id = ?
-		ORDER BY k.last_event_sequence DESC, k.claim_key LIMIT 20`, input.NPCEntityID)
+		FROM agent_knowledge k JOIN events e ON e.event_id=k.source_event_id
+		JOIN observation_records o ON o.observation_id=k.observation_id
+		WHERE k.observer_agent_id = ? AND e.instance_id=? AND e.branch_id=?
+		AND e.event_type<>'RPInformationDelivered' AND o.channel NOT IN ('direct_message','rumor','organization_announcement','public_notice') AND k.claim_key NOT LIKE 'information:%'
+		ORDER BY k.last_event_sequence DESC, k.claim_key LIMIT 20`, input.NPCEntityID, input.InstanceID, input.BranchID)
 	if err != nil {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC own knowledge", err)
 	}

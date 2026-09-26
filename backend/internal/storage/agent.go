@@ -431,7 +431,7 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 	if err := requireStudioWriteRules(ctx, tx.conn, instanceID, branchID); err != nil {
 		return false, err
 	}
-	if item.PhaseID != m2AgentPhaseID && (instanceID != M2DemoInstanceID || branchID != M2DemoBranchID) {
+	if item.PhaseID != m2AgentPhaseID && item.PhaseID != rpInformationPhase && (instanceID != M2DemoInstanceID || branchID != M2DemoBranchID) {
 		return false, core.NewError(core.CodeInvalidArgument, "scheduler phase is not yet enabled for this world")
 	}
 	var currentWorldTime string
@@ -472,6 +472,15 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 	}
 	if item.PhaseID == rpHouseholdRentPhase {
 		if err := s.executeRPHouseholdRent(ctx, tx, item); err != nil {
+			return false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if item.PhaseID == rpInformationPhase {
+		if err := s.executeRPInformationDelivery(ctx, tx, item); err != nil {
 			return false, err
 		}
 		if err := tx.Commit(ctx); err != nil {

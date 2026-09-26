@@ -52,7 +52,13 @@ runtime or grant permission for actions beyond the user's intent.
 tools `corerp_journey_start`, `corerp_journey_cancel`, `corerp_map_survey` and
 `corerp_map_read`, and the F3 participant tools `corerp_round_read`,
 `corerp_round_wait`, `corerp_round_speech`, `corerp_round_move`,
-`corerp_round_sleep`, `corerp_round_work_task`,
+`corerp_round_sleep`, `corerp_round_work_task`, `corerp_round_information_send`,
+`corerp_round_information_stance`, `corerp_round_information_relay`,
+`corerp_round_information_public_access`,
+`corerp_round_information_organization_access`,
+`corerp_notice_publication_sources`,
+`corerp_round_information_public_publish`,
+`corerp_round_information_organization_publish`,
 `corerp_round_advance`. Timed travel enters an actual
 segment; cancellation leaves the traveller there. Map notes are dated beliefs,
 not current route permission. Shared rounds must first be opened by a local
@@ -82,6 +88,34 @@ current sourced employment shift at the workplace. The selected work Event is
 separate from attendance and wages; the round receipt contains no private
 fatigue or illness cause. An authorized manager can separately read only the
 bounded task outcome through the internal business API, not through MCP.
+`corerp_round_information_send` proposes one bounded private claim to a known
+contact. Only a selected proposal writes a send Event; delivery later creates
+recipient-only Knowledge. The round receipt never echoes text, recipient or
+private source IDs. `allow_relay` must be explicitly true to permit the
+recipient's later one-hop rumor. A direct information send cannot bypass an
+active shared round. `corerp_round_information_stance` proposes the current
+recipient's belief, doubt or rejection of an actually delivered message; only
+the selected action writes the private stance Event, never a change to world
+truth. Its round receipt does not echo the reason or evidence source.
+`corerp_round_information_relay` is a separate selected action: only the
+actual recipient may repeat an explicitly relayable direct message to a known
+contact, preserving exact claim and lineage. The resulting rumor cannot be
+relayed again; later delivery, not proposal, teaches its recipient.
+`corerp_round_information_public_access` proposes reading a published public
+board item; only its selected action records that resident's receipt and
+Knowledge. Listing and proposal alone do not teach anyone, and the receipt
+does not establish belief or truth. `corerp_round_information_organization_access`
+requires a current employee's real contract for that announcement; its selected
+action alone records that employee's receipt. Fresh access is denied after
+lawful exit, while historical receipt remains. `corerp_notice_publication_sources`
+lists only the controlled actor's currently authorized law enactments or
+manager-authored layoff decisions as session-bound opaque handles; it never
+returns a raw source Event, employee, contract or principal ID. The two
+publication tools accept only those handles, pin a selected Human-gated child,
+and write an official public or redacted organization send Event. Publication
+alone teaches no recipient; later lawful access creates that person's
+Knowledge. An unselected child cannot publish, and role/source grants remain
+with the original business actor rather than transferring to the controller.
 `corerp_round_advance` may be retried with a different per-call scheduler budget
 when due work remains; the round and accepted child key stay the same. This does
 not change the exact-budget retry contract of direct `corerp_wait`.

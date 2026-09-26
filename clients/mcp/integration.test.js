@@ -55,11 +55,19 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   t.after(() => stop(runtime)); await ready(origin);
   let connected = await connect(origin, token); t.after(() => connected.client.close());
   const tools = await connected.client.listTools();
-  assert.equal(tools.tools.length, 28);
+  assert.equal(tools.tools.length, 36);
   assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_speech'));
   assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_move'));
   assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_sleep'));
   assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_work_task'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_information_send'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_information_stance'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_information_relay'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_information_public_access'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_information_organization_access'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_notice_publication_sources'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_information_public_publish'));
+  assert.ok(tools.tools.some(tool => tool.name === 'corerp_round_information_organization_publish'));
   assert.ok(tools.tools.every(tool => !JSON.stringify(tool.inputSchema).includes('principal_id')));
   const call = async (name, args) => data(await connected.client.callTool({ name, arguments: args }));
   const worlds = await call('corerp_worlds', {});
@@ -67,11 +75,20 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   const { instance_id, branch_id, entity_id } = worlds.bindings[0];
   const session = await call('corerp_session_open', { instance_id, branch_id, entity_id, pov: 'second_person', idempotency_key: randomUUID() });
   const read = { session_id: session.session_id };
+  assert.deepEqual((await call('corerp_notice_publication_sources', { ...read, channel: 'public_notice' })).sources, []);
+  assert.deepEqual((await call('corerp_notice_publication_sources', { ...read, channel: 'organization_announcement' })).sources, []);
   for (const [name, args] of [
     ['corerp_round_read', { ...read, round_id: 'missing-round' }],
     ['corerp_round_wait', { ...read, round_id: 'missing-round', horizon_world_time: '2026-09-22T03:00:00Z', idempotency_key: randomUUID() }],
     ['corerp_round_sleep', { ...read, round_id: 'missing-round', action: 'start', idempotency_key: randomUUID() }],
     ['corerp_round_work_task', { ...read, round_id: 'missing-round', contract_id: 'missing-contract', task_code: 'routine_check', idempotency_key: randomUUID() }],
+    ['corerp_round_information_send', { ...read, round_id: 'missing-round', message_id: 'missing-round-message', recipient_entity_id: 'entity_m2_rp_cai', text: '尚未有共享回合。', idempotency_key: randomUUID() }],
+    ['corerp_round_information_stance', { ...read, round_id: 'missing-round', message_id: 'missing-round-message', stance: 'doubt', idempotency_key: randomUUID() }],
+    ['corerp_round_information_relay', { ...read, round_id: 'missing-round', message_id: 'missing-rumor', forwarded_message_id: 'missing-round-message', recipient_entity_id: 'entity_m2_rp_cai', idempotency_key: randomUUID() }],
+    ['corerp_round_information_public_access', { ...read, round_id: 'missing-round', message_id: 'missing-round-message', idempotency_key: randomUUID() }],
+    ['corerp_round_information_organization_access', { ...read, round_id: 'missing-round', message_id: 'missing-round-message', idempotency_key: randomUUID() }],
+    ['corerp_round_information_public_publish', { ...read, round_id: 'missing-round', message_id: 'missing-publication', source_handle: 'pns_missing', idempotency_key: randomUUID() }],
+    ['corerp_round_information_organization_publish', { ...read, round_id: 'missing-round', message_id: 'missing-publication', source_handle: 'pns_missing', idempotency_key: randomUUID() }],
     ['corerp_round_advance', { ...read, round_id: 'missing-round', budget: 1 }],
   ]) {
     const missing = await connected.client.callTool({ name, arguments: args });
@@ -146,7 +163,7 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   // modern connection so both protocol eras are tested, not merely advertised.
   const modern = await connect(origin, token, true); t.after(() => modern.client.close());
   assert.equal(modern.client.getServerVersion().name, 'corerp-runtime');
-  assert.equal((await modern.client.listTools()).tools.length, 28);
+  assert.equal((await modern.client.listTools()).tools.length, 36);
   assert.deepEqual(data(await modern.client.callTool({ name: 'corerp_context', arguments: read })), await call('corerp_context', read));
 
   let loseReply = true;

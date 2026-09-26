@@ -201,6 +201,25 @@ func rpSharedRoundView(ctx context.Context, q rpQueryer, row rpSharedRoundRow) (
 			default:
 				return RPSharedRound{}, core.NewError(core.CodeProjectionDiverged, "unknown settled shared health action")
 			}
+		} else if row.SettlementKind == "information" {
+			switch row.SelectedActionKind {
+			case "information_send":
+				eventType = "RPInformationSent"
+			case "information_relay":
+				eventType = "RPInformationSent"
+			case "information_stance":
+				eventType = "RPInformationStanceRecorded"
+			case "information_public_access":
+				eventType = "RPInformationDelivered"
+			case "information_organization_access":
+				eventType = "RPInformationDelivered"
+			case "information_public_publish":
+				eventType = "RPInformationSent"
+			case "information_organization_publish":
+				eventType = "RPInformationSent"
+			default:
+				return RPSharedRound{}, core.NewError(core.CodeProjectionDiverged, "unknown settled shared information action")
+			}
 		}
 		if err := q.QueryRowContext(ctx, `SELECT world_time FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_sequence=? AND event_type=?`, row.CompletionEvent, row.Instance, row.Branch, row.SettledSequence, eventType).Scan(&view.CurrentWorldTime); err != nil {
 			return RPSharedRound{}, core.WrapError(core.CodeProjectionDiverged, "settled shared round lacks its typed Event", err)
@@ -386,6 +405,17 @@ func (s *Store) OpenRPSharedRoundLocal(ctx context.Context, r RPSharedRoundOpenR
 		}
 		if accepted != 0 {
 			return empty, core.NewError(core.CodeBranchConflict, "shared-round action child key already has an accepted owner")
+		}
+		informationKey, err := core.HashJSON([]string{principal, childKey})
+		if err != nil {
+			return empty, err
+		}
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM commands WHERE instance_id=? AND branch_id=? AND command_type IN ('SendRPInformation','RecordRPInformationStance','RelayRPInformation','AccessRPPublicNotice','AccessRPOrganizationNotice','PublishRPPublicNotice','PublishRPOrganizationNotice') AND idempotency_key=?`,
+			session.InstanceID, session.BranchID, informationKey).Scan(&accepted); err != nil {
+			return empty, err
+		}
+		if accepted != 0 {
+			return empty, core.NewError(core.CodeBranchConflict, "shared information child key already has an accepted owner")
 		}
 		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_turn_runs WHERE session_id=? AND idempotency_key=?`, session.SessionID, childKey).Scan(&accepted); err != nil {
 			return empty, err
@@ -827,7 +857,7 @@ func rpSharedRoundHumanWaitPriority(ctx context.Context, conn *sql.Conn, row rpS
 		return false, nil
 	}
 	var priorAtSameTime, dueNow int
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_shared_rounds WHERE instance_id=? AND branch_id=? AND status='settled' AND settlement_kind IN ('speech','health') AND baseline_world_time=?`, row.Instance, row.Branch, row.BaselineTime).Scan(&priorAtSameTime); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_shared_rounds WHERE instance_id=? AND branch_id=? AND status='settled' AND settlement_kind IN ('speech','health','information') AND baseline_world_time=?`, row.Instance, row.Branch, row.BaselineTime).Scan(&priorAtSameTime); err != nil {
 		return false, err
 	}
 	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE instance_id=? AND branch_id=? AND status='pending' AND world_time<=?`, row.Instance, row.Branch, row.BaselineTime).Scan(&dueNow); err != nil {
@@ -900,7 +930,7 @@ func (s *Store) advanceRPSharedRoundWithProvider(ctx context.Context, r RPShared
 			// This is independent of arrival/submission order and pins the choice
 			// before any typed world command is attempted.
 			var priorEntity string
-			err := tx.conn.QueryRowContext(ctx, `SELECT p.entity_id FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id AND p.session_id=r.selected_session_id WHERE r.instance_id=? AND r.branch_id=? AND r.status='settled' AND r.settlement_kind IN ('speech','health') ORDER BY r.settled_sequence DESC LIMIT 1`, row.Instance, row.Branch).Scan(&priorEntity)
+			err := tx.conn.QueryRowContext(ctx, `SELECT p.entity_id FROM rp_shared_rounds r JOIN rp_shared_round_participants p ON p.round_id=r.round_id AND p.session_id=r.selected_session_id WHERE r.instance_id=? AND r.branch_id=? AND r.status='settled' AND r.settlement_kind IN ('speech','health','information') ORDER BY r.settled_sequence DESC LIMIT 1`, row.Instance, row.Branch).Scan(&priorEntity)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return empty, err
 			}
@@ -910,6 +940,8 @@ func (s *Store) advanceRPSharedRoundWithProvider(ctx context.Context, r RPShared
 			settlement := "speech"
 			if row.SelectedActionKind == "sleep_start" || row.SelectedActionKind == "sleep_end" || row.SelectedActionKind == "work_task" {
 				settlement = "health"
+			} else if row.SelectedActionKind == "information_send" || row.SelectedActionKind == "information_stance" || row.SelectedActionKind == "information_relay" || row.SelectedActionKind == "information_public_access" || row.SelectedActionKind == "information_organization_access" || row.SelectedActionKind == "information_public_publish" || row.SelectedActionKind == "information_organization_publish" {
+				settlement = "information"
 			}
 			if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_shared_rounds SET status='advancing',settlement_kind=?,selected_session_id=?,selected_action_kind=? WHERE round_id=? AND status='open'`, settlement, row.SelectedSession, row.SelectedActionKind, row.ID); err != nil {
 				return empty, err
@@ -930,7 +962,7 @@ func (s *Store) advanceRPSharedRoundWithProvider(ctx context.Context, r RPShared
 			row.Status, row.SettlementKind, row.AdvanceTarget, row.WaitKey = "advancing", "wait", target, key
 		}
 	}
-	if row.SettlementKind == "speech" || row.SettlementKind == "health" {
+	if row.SettlementKind == "speech" || row.SettlementKind == "health" || row.SettlementKind == "information" {
 		if err := tx.Commit(ctx); err != nil {
 			return empty, err
 		}
@@ -942,6 +974,30 @@ func (s *Store) advanceRPSharedRoundWithProvider(ctx context.Context, r RPShared
 				return s.advanceRPSharedSleep(ctx, r, row)
 			}
 			return empty, core.NewError(core.CodeProjectionDiverged, "unknown selected shared health action")
+		}
+		if row.SettlementKind == "information" {
+			if row.SelectedActionKind == "information_send" {
+				return s.advanceRPSharedInformationSend(ctx, r, row)
+			}
+			if row.SelectedActionKind == "information_stance" {
+				return s.advanceRPSharedInformationStance(ctx, r, row)
+			}
+			if row.SelectedActionKind == "information_relay" {
+				return s.advanceRPSharedInformationRelay(ctx, r, row)
+			}
+			if row.SelectedActionKind == "information_public_access" {
+				return s.advanceRPSharedPublicNoticeAccess(ctx, r, row)
+			}
+			if row.SelectedActionKind == "information_organization_access" {
+				return s.advanceRPSharedOrganizationNoticeAccess(ctx, r, row)
+			}
+			if row.SelectedActionKind == "information_public_publish" {
+				return s.advanceRPSharedPublicNoticePublish(ctx, r, row)
+			}
+			if row.SelectedActionKind == "information_organization_publish" {
+				return s.advanceRPSharedOrganizationNoticePublish(ctx, r, row)
+			}
+			return empty, core.NewError(core.CodeProjectionDiverged, "unknown selected shared information action")
 		}
 		if row.SelectedActionKind == "move" {
 			return s.advanceRPSharedMove(ctx, r, row)

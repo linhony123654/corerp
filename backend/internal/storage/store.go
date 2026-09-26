@@ -16,53 +16,61 @@ import (
 )
 
 const (
-	BaseSchemaVersion                    = "corerp-m0-draft-2026-09-22"
-	RecoverySchemaVersion                = "corerp-m1-recovery-002-2026-09-22"
-	StrictSchemaVersion                  = "corerp-m1-strict-world-003-2026-09-22"
-	AccountingSchemaVersion              = "corerp-m1-obligation-accounting-004-2026-09-22"
-	AuthorizationSchemaVersion           = "corerp-m1-authorization-issuance-005-2026-09-22"
-	CohortSchemaVersion                  = "corerp-m2-cohort-materialization-006-2026-09-22"
-	AgentSchemaVersion                   = "corerp-m2-agent-life-007-2026-09-22"
-	EconomySchemaVersion                 = "corerp-m2-background-economy-008-2026-09-23"
-	StoreSchemaVersion                   = "corerp-m2-finite-store-009-2026-09-23"
-	SupplySchemaVersion                  = "corerp-m2-consumption-supply-010-2026-09-23"
-	ArrearsSchemaVersion                 = "corerp-m2-arrears-grace-011-2026-09-23"
-	InsolvencySchemaVersion              = "corerp-m2-insolvency-012-2026-09-23"
-	ClaimsSchemaVersion                  = "corerp-m2-bankruptcy-claims-013-2026-09-23"
-	AllocationSchemaVersion              = "corerp-m2-claim-allocations-014-2026-09-23"
-	EstateSchemaVersion                  = "corerp-m2-estate-distribution-015-2026-09-23"
-	WageParticipationSchemaVersion       = "corerp-m2-wage-participation-016-2026-09-23"
-	WageAllocationSchemaVersion          = "corerp-m2-wage-allocation-017-2026-09-23"
-	WageClaimOwnershipSchemaVersion      = "corerp-m2-wage-claim-ownership-018-2026-09-23"
-	BankruptcySlotSchemaVersion          = "corerp-m2-bankruptcy-slot-claims-019-2026-09-23"
-	RPSessionSchemaVersion               = "corerp-rp1-sessions-020-2026-09-23"
-	RPRouteSchemaVersion                 = "corerp-rp1-routes-021-2026-09-23"
-	RPWaitSchemaVersion                  = "corerp-rp1-wait-intents-022-2026-09-23"
-	RPSpeechSchemaVersion                = "corerp-rp1-utterances-023-2026-09-23"
-	RPNPCDecisionSchemaVersion           = "corerp-rp1-npc-decisions-024-2026-09-23"
-	RPTurnSchemaVersion                  = "corerp-rp1-turn-runs-025-2026-09-23"
-	RPStyleSchemaVersion                 = "corerp-rp2-styles-026-2026-09-23"
-	RPRequestSchemaVersion               = "corerp-rp7-request-retirement-027-2026-09-24"
-	StudioPackageSchemaVersion           = "corerp-rp8-package-content-028-2026-09-24"
-	StudioActivationSchemaVersion        = "corerp-rp8-package-activation-029-2026-09-24"
-	StudioReadySchemaVersion             = "corerp-rp8-world-ready-030-2026-09-24"
-	RPInteractionSchemaVersion           = "corerp-f1-interactions-031-2026-09-25"
-	RPSpatialLocationSchemaVersion       = "corerp-f2-spatial-locations-032-2026-09-25"
-	RPSpatialJourneySchemaVersion        = "corerp-f2-spatial-journeys-033-2026-09-25"
-	RPSpatialPerceptionSchemaVersion     = "corerp-f2-spatial-perception-034-2026-09-25"
-	RPSpatialIdentitySchemaVersion       = "corerp-f2-spatial-identity-035-2026-09-25"
-	RPControllerEnrollmentSchemaVersion  = "corerp-f3-controller-enrollment-036-2026-09-25"
-	RPControllerAuthoritySchemaVersion   = "corerp-f3-controller-authority-037-2026-09-25"
-	RPSharedRoundsSchemaVersion          = "corerp-f3-shared-rounds-038-2026-09-25"
-	RPControllerLifecycleSchemaVersion   = "corerp-f3-controller-lifecycle-039-2026-09-25"
-	RPSharedActionSchemaVersion          = "corerp-f3-shared-action-rounds-040-2026-09-25"
-	RPSharedMoveSchemaVersion            = "corerp-f3-shared-move-rounds-041-2026-09-25"
-	RPHouseholdSchemaVersion             = "corerp-f4-households-042-2026-09-25"
-	RPHouseholdRentSchemaVersion         = "corerp-f4-household-rent-043-2026-09-25"
-	RPHouseholdContributionSchemaVersion = "corerp-f4-household-rent-contributions-044-2026-09-25"
-	RPHouseholdDependentSchemaVersion    = "corerp-f4-household-dependents-045-2026-09-25"
-	RPSharedHealthSchemaVersion          = "corerp-f5-shared-health-rounds-046-2026-09-25"
-	SchemaVersion                        = RPSharedHealthSchemaVersion
+	BaseSchemaVersion                        = "corerp-m0-draft-2026-09-22"
+	RecoverySchemaVersion                    = "corerp-m1-recovery-002-2026-09-22"
+	StrictSchemaVersion                      = "corerp-m1-strict-world-003-2026-09-22"
+	AccountingSchemaVersion                  = "corerp-m1-obligation-accounting-004-2026-09-22"
+	AuthorizationSchemaVersion               = "corerp-m1-authorization-issuance-005-2026-09-22"
+	CohortSchemaVersion                      = "corerp-m2-cohort-materialization-006-2026-09-22"
+	AgentSchemaVersion                       = "corerp-m2-agent-life-007-2026-09-22"
+	EconomySchemaVersion                     = "corerp-m2-background-economy-008-2026-09-23"
+	StoreSchemaVersion                       = "corerp-m2-finite-store-009-2026-09-23"
+	SupplySchemaVersion                      = "corerp-m2-consumption-supply-010-2026-09-23"
+	ArrearsSchemaVersion                     = "corerp-m2-arrears-grace-011-2026-09-23"
+	InsolvencySchemaVersion                  = "corerp-m2-insolvency-012-2026-09-23"
+	ClaimsSchemaVersion                      = "corerp-m2-bankruptcy-claims-013-2026-09-23"
+	AllocationSchemaVersion                  = "corerp-m2-claim-allocations-014-2026-09-23"
+	EstateSchemaVersion                      = "corerp-m2-estate-distribution-015-2026-09-23"
+	WageParticipationSchemaVersion           = "corerp-m2-wage-participation-016-2026-09-23"
+	WageAllocationSchemaVersion              = "corerp-m2-wage-allocation-017-2026-09-23"
+	WageClaimOwnershipSchemaVersion          = "corerp-m2-wage-claim-ownership-018-2026-09-23"
+	BankruptcySlotSchemaVersion              = "corerp-m2-bankruptcy-slot-claims-019-2026-09-23"
+	RPSessionSchemaVersion                   = "corerp-rp1-sessions-020-2026-09-23"
+	RPRouteSchemaVersion                     = "corerp-rp1-routes-021-2026-09-23"
+	RPWaitSchemaVersion                      = "corerp-rp1-wait-intents-022-2026-09-23"
+	RPSpeechSchemaVersion                    = "corerp-rp1-utterances-023-2026-09-23"
+	RPNPCDecisionSchemaVersion               = "corerp-rp1-npc-decisions-024-2026-09-23"
+	RPTurnSchemaVersion                      = "corerp-rp1-turn-runs-025-2026-09-23"
+	RPStyleSchemaVersion                     = "corerp-rp2-styles-026-2026-09-23"
+	RPRequestSchemaVersion                   = "corerp-rp7-request-retirement-027-2026-09-24"
+	StudioPackageSchemaVersion               = "corerp-rp8-package-content-028-2026-09-24"
+	StudioActivationSchemaVersion            = "corerp-rp8-package-activation-029-2026-09-24"
+	StudioReadySchemaVersion                 = "corerp-rp8-world-ready-030-2026-09-24"
+	RPInteractionSchemaVersion               = "corerp-f1-interactions-031-2026-09-25"
+	RPSpatialLocationSchemaVersion           = "corerp-f2-spatial-locations-032-2026-09-25"
+	RPSpatialJourneySchemaVersion            = "corerp-f2-spatial-journeys-033-2026-09-25"
+	RPSpatialPerceptionSchemaVersion         = "corerp-f2-spatial-perception-034-2026-09-25"
+	RPSpatialIdentitySchemaVersion           = "corerp-f2-spatial-identity-035-2026-09-25"
+	RPControllerEnrollmentSchemaVersion      = "corerp-f3-controller-enrollment-036-2026-09-25"
+	RPControllerAuthoritySchemaVersion       = "corerp-f3-controller-authority-037-2026-09-25"
+	RPSharedRoundsSchemaVersion              = "corerp-f3-shared-rounds-038-2026-09-25"
+	RPControllerLifecycleSchemaVersion       = "corerp-f3-controller-lifecycle-039-2026-09-25"
+	RPSharedActionSchemaVersion              = "corerp-f3-shared-action-rounds-040-2026-09-25"
+	RPSharedMoveSchemaVersion                = "corerp-f3-shared-move-rounds-041-2026-09-25"
+	RPHouseholdSchemaVersion                 = "corerp-f4-households-042-2026-09-25"
+	RPHouseholdRentSchemaVersion             = "corerp-f4-household-rent-043-2026-09-25"
+	RPHouseholdContributionSchemaVersion     = "corerp-f4-household-rent-contributions-044-2026-09-25"
+	RPHouseholdDependentSchemaVersion        = "corerp-f4-household-dependents-045-2026-09-25"
+	RPSharedHealthSchemaVersion              = "corerp-f5-shared-health-rounds-046-2026-09-25"
+	RPInformationSchemaVersion               = "corerp-f7-information-channels-047-2026-09-26"
+	RPSharedInformationSchemaVersion         = "corerp-f7-shared-information-rounds-048-2026-09-26"
+	RPSharedStanceSchemaVersion              = "corerp-f7-shared-information-stance-049-2026-09-26"
+	RPSharedRelaySchemaVersion               = "corerp-f7-shared-information-relay-050-2026-09-26"
+	RPSharedPublicAccessSchemaVersion        = "corerp-f7-shared-public-notice-access-051-2026-09-26"
+	RPSharedOrganizationAccessSchemaVersion  = "corerp-f7-shared-organization-notice-access-052-2026-09-26"
+	RPSharedPublicPublishSchemaVersion       = "corerp-f7-shared-public-notice-publish-053-2026-09-26"
+	RPSharedOrganizationPublishSchemaVersion = "corerp-f7-shared-organization-notice-publish-054-2026-09-26"
+	SchemaVersion                            = RPSharedOrganizationPublishSchemaVersion
 )
 
 const (
@@ -223,6 +231,14 @@ func (s *Store) migrate(ctx context.Context) error {
 		{RPHouseholdContributionSchemaVersion, "044_household_rent_contributions.sql"},
 		{RPHouseholdDependentSchemaVersion, "045_household_dependents.sql"},
 		{RPSharedHealthSchemaVersion, "046_shared_health_rounds.sql"},
+		{RPInformationSchemaVersion, "047_information_channels.sql"},
+		{RPSharedInformationSchemaVersion, "048_shared_information_rounds.sql"},
+		{RPSharedStanceSchemaVersion, "049_shared_information_stance.sql"},
+		{RPSharedRelaySchemaVersion, "050_shared_information_relay.sql"},
+		{RPSharedPublicAccessSchemaVersion, "051_shared_public_notice_access.sql"},
+		{RPSharedOrganizationAccessSchemaVersion, "052_shared_organization_notice_access.sql"},
+		{RPSharedPublicPublishSchemaVersion, "053_shared_public_notice_publish.sql"},
+		{RPSharedOrganizationPublishSchemaVersion, "054_shared_organization_notice_publish.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

@@ -30,6 +30,21 @@ type RPLifeMemory struct {
 	WorldTime       string `json:"world_time"`
 	SourceEventID   string `json:"source_event_id"`
 }
+
+// A delivered claim available to this actor's decision, not a verified world
+// fact. The handle is observer-scoped and cannot be used as an Event/entity ID.
+type RPInformationMemory struct {
+	MessageID          string `json:"message_id"`
+	SenderHandle       string `json:"sender_handle"`
+	SenderName         string `json:"sender_name,omitempty"`
+	Text               string `json:"text"`
+	Channel            string `json:"channel"`
+	ClaimedReliability string `json:"claimed_reliability"`
+	MayRelay           bool   `json:"may_relay,omitempty"`
+	Forwarded          bool   `json:"forwarded,omitempty"`
+	Stance             string `json:"stance,omitempty"`
+	LearnedWorldTime   string `json:"learned_world_time"`
+}
 type RPRelationship struct {
 	SubjectEntityID string   `json:"subject_entity_id"`
 	Familiarity     int      `json:"familiarity"`
@@ -71,6 +86,7 @@ type RPLifeContext struct {
 	Employment             []RPOwnEmployment      `json:"employment"`
 	Relationships          []RPRelationship       `json:"relationships"`
 	SalientMemories        []RPLifeMemory         `json:"salient_memories"`
+	Information            []RPInformationMemory  `json:"information,omitempty"`
 	RecentWork             []RPLifeMemory         `json:"recent_work"`
 	Needs                  []RPNeed               `json:"needs"`
 	Goals                  []RPGoal               `json:"goals"`
