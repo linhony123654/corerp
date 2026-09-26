@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -89,7 +90,7 @@ func TestStudioHistoricalRulePackagesAuthorizationAndIsolation(t *testing.T) {
 	if _, err := s.db.ExecContext(ctx, `UPDATE branches SET head_sequence=20 WHERE instance_id=? AND branch_id=?`, r.InstanceID, r.BranchID); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(); got.Rule.Packages.Lock != lock || got.Rule.EpochID != out.Rule.EpochID {
+	if got := read(); !reflect.DeepEqual(got.Rule.Packages.Lock, lock) || got.Rule.EpochID != out.Rule.EpochID {
 		t.Fatal("read substituted current epoch", got.Rule)
 	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM rule_epochs WHERE instance_id=? AND epoch_id='future-test-epoch'`, r.InstanceID); err != nil {
@@ -112,7 +113,7 @@ func TestStudioHistoricalRulePackagesAuthorizationAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := read(); got.Rule.Packages.Lock != lock {
+	if got := read(); !reflect.DeepEqual(got.Rule.Packages.Lock, lock) {
 		t.Fatal("rebuild/reopen lost historical provenance", got.Rule)
 	}
 }

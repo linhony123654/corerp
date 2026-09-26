@@ -1,0 +1,16 @@
+{
+  "version": "corerp.studio-package.v1",
+  "narrative_style": {
+    "version": "corerp.style.v1",
+    "pov": "first_person",
+    "tense": "past",
+    "verbosity": "detailed",
+    "narrative_density": "long",
+    "dialogue_ratio": 35,
+    "description_density": 75,
+    "inner_monologue_policy": "observed_only",
+    "prose_instructions": "Write a dated life-journal account from observed committed events. Preserve literal speech, uncertainty, and source order; do not invent private thoughts or change outcomes.",
+    "forbidden_patterns": [],
+    "narrative_pack_ref": "builtin/plain@1"
+  }
+}

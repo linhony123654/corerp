@@ -30,11 +30,53 @@ type StudioSystemRules struct {
 	NPCDailyActionBudget int `json:"npc_daily_action_budget"`
 }
 
+// Retail entries are author references. They do not create a posting, issue a
+// credential, schedule work, grant authority, or write an RP memory.
+type StudioRetailCareerCatalog struct {
+	Version        string                  `json:"version"`
+	OrganizationID string                  `json:"organization_id"`
+	Jobs           []StudioRetailCareerJob `json:"jobs"`
+}
+
+type StudioRetailCareerJob struct {
+	PositionID         string                     `json:"position_id"`
+	Title              string                     `json:"title"`
+	OccupationID       string                     `json:"occupation_id"`
+	Grade              string                     `json:"grade"`
+	WageReferenceMinor int64                      `json:"wage_reference_minor"`
+	RequiredCredential CredentialRequirement      `json:"required_credential"`
+	Training           StudioRetailCareerTraining `json:"training"`
+	WorkStartHour      int                        `json:"work_start_hour"`
+	WorkEndHour        int                        `json:"work_end_hour"`
+	NextGrade          string                     `json:"next_grade"`
+}
+
+type StudioRetailCareerTraining struct {
+	ProgramID      string `json:"program_id"`
+	MinimumMinutes int    `json:"minimum_minutes"`
+	ExercisePrompt string `json:"exercise_prompt"`
+}
+
+func (c StudioRetailCareerCatalog) Validate() error {
+	if c.Version != "corerp.retail-career.v1" || validateCareerIDs(c.OrganizationID) != nil || len(c.Jobs) < 1 || len(c.Jobs) > 16 {
+		return NewError(CodeInvalidArgument, "invalid bounded retail career catalog")
+	}
+	positions, programs := map[string]bool{}, map[string]bool{}
+	for _, job := range c.Jobs {
+		if validateCareerIDs(job.PositionID, job.Title, job.OccupationID, job.Grade, job.NextGrade, job.RequiredCredential.Code, job.RequiredCredential.IssuerID, job.Training.ProgramID) != nil || positions[job.PositionID] || programs[job.Training.ProgramID] || job.Grade == job.NextGrade || job.WageReferenceMinor < 1 || job.WageReferenceMinor > MaxJSONSafeInteger || job.WorkStartHour < 0 || job.WorkStartHour > 22 || job.WorkEndHour <= job.WorkStartHour || job.WorkEndHour > 23 || job.Training.MinimumMinutes < 1 || job.Training.MinimumMinutes > 7*24*60 || job.Training.ExercisePrompt == "" || len(job.Training.ExercisePrompt) > 1000 {
+			return NewError(CodeInvalidArgument, "invalid retail career job reference")
+		}
+		positions[job.PositionID], programs[job.Training.ProgramID] = true, true
+	}
+	return nil
+}
+
 // These are declarative values for existing owners, never code or SQL.
 type StudioPackageContent struct {
-	Version        string             `json:"version"`
-	NarrativeStyle *RPStyleProfile    `json:"narrative_style,omitempty"`
-	SystemRules    *StudioSystemRules `json:"system_rules,omitempty"`
+	Version        string                     `json:"version"`
+	NarrativeStyle *RPStyleProfile            `json:"narrative_style,omitempty"`
+	SystemRules    *StudioSystemRules         `json:"system_rules,omitempty"`
+	RetailCareer   *StudioRetailCareerCatalog `json:"retail_career,omitempty"`
 }
 
 type StudioPackageBundle struct {
@@ -75,19 +117,27 @@ func (b StudioPackageBundle) Validate() error {
 	switch m.Kind {
 	case "system":
 		capability, filename = "rules.npc.daily_budget", "system.json"
-		if c.SystemRules == nil || c.NarrativeStyle != nil || c.SystemRules.NPCDailyActionBudget < 1 || c.SystemRules.NPCDailyActionBudget > 64 {
+		if c.SystemRules == nil || c.NarrativeStyle != nil || c.RetailCareer != nil || c.SystemRules.NPCDailyActionBudget < 1 || c.SystemRules.NPCDailyActionBudget > 64 {
 			return bad("system package requires only bounded NPC daily action rules")
 		}
 	case "narrative":
 		capability, filename = "narrative.style", "narrative.json"
-		if c.NarrativeStyle == nil || c.SystemRules != nil {
+		if c.NarrativeStyle == nil || c.SystemRules != nil || c.RetailCareer != nil {
 			return bad("narrative package requires only presentation style")
 		}
 		if err := c.NarrativeStyle.Validate(); err != nil {
 			return err
 		}
+	case "content":
+		capability, filename = "content.career.retail", "content.json"
+		if c.RetailCareer == nil || c.SystemRules != nil || c.NarrativeStyle != nil {
+			return bad("retail content package requires only its typed catalog")
+		}
+		if err := c.RetailCareer.Validate(); err != nil {
+			return err
+		}
 	default:
-		return bad("runtime supports declarative system and narrative packages only")
+		return bad("runtime supports declarative system, narrative and retail content packages only")
 	}
 	if len(m.Capabilities) != 1 || m.Capabilities[0] != capability {
 		return bad("unknown or incompatible package capability")

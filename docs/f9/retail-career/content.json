@@ -1,0 +1,28 @@
+{
+  "version": "corerp.studio-package.v1",
+  "retail_career": {
+    "version": "corerp.retail-career.v1",
+    "organization_id": "actor_m2_coop_employer",
+    "jobs": [
+      {
+        "position_id": "position_retail_floor",
+        "title": "Retail floor assistant",
+        "occupation_id": "retail_service",
+        "grade": "entry",
+        "wage_reference_minor": 16,
+        "required_credential": {
+          "code": "retail_customer_service",
+          "issuer_id": "actor_m2_coop_employer"
+        },
+        "training": {
+          "program_id": "program_retail_customer_service",
+          "minimum_minutes": 60,
+          "exercise_prompt": "Describe how to help a customer and record the stock change accurately."
+        },
+        "work_start_hour": 8,
+        "work_end_hour": 17,
+        "next_grade": "senior"
+      }
+    ]
+  }
+}

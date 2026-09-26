@@ -13,6 +13,7 @@ type StudioPackageActivationRequest struct {
 	Binding            core.CareerBinding   `json:"binding"`
 	SystemPackageID    string               `json:"system_package_id"`
 	NarrativePackageID string               `json:"narrative_package_id"`
+	ContentPackageIDs  []string             `json:"content_package_ids,omitempty"`
 }
 type StudioPackagePin struct {
 	ID             string `json:"id"`
@@ -22,13 +23,14 @@ type StudioPackagePin struct {
 	InstallEventID string `json:"install_event_id"`
 }
 type StudioPackageLock struct {
-	Version           string           `json:"version"`
-	ActivationEventID string           `json:"activation_event_id"`
-	System            StudioPackagePin `json:"system"`
-	Narrative         StudioPackagePin `json:"narrative"`
-	Algorithm         string           `json:"algorithm"`
-	Phase             string           `json:"phase"`
-	ConflictOrder     string           `json:"conflict_order"`
+	Version           string             `json:"version"`
+	ActivationEventID string             `json:"activation_event_id"`
+	System            StudioPackagePin   `json:"system"`
+	Narrative         StudioPackagePin   `json:"narrative"`
+	Content           []StudioPackagePin `json:"content,omitempty"`
+	Algorithm         string             `json:"algorithm"`
+	Phase             string             `json:"phase"`
+	ConflictOrder     string             `json:"conflict_order"`
 }
 type StudioActivationFact struct {
 	Version       string            `json:"version"`
@@ -40,6 +42,7 @@ type StudioActivationFact struct {
 type studioActivePackages struct {
 	System    core.StudioPackageBundle
 	Narrative core.StudioPackageBundle
+	Content   []core.StudioPackageBundle
 	Lock      StudioPackageLock
 }
 
@@ -61,6 +64,16 @@ func (s *Store) ActivateStudioPackages(ctx context.Context, r StudioPackageActiv
 	if !studioID(r.SystemPackageID) || !studioID(r.NarrativePackageID) || r.SystemPackageID == r.NarrativePackageID {
 		return empty, core.NewError(core.CodeInvalidArgument, "distinct installed system and narrative packages required")
 	}
+	if len(r.ContentPackageIDs) > 30 {
+		return empty, core.NewError(core.CodeInvalidArgument, "too many content packages selected")
+	}
+	selected := map[string]bool{r.SystemPackageID: true, r.NarrativePackageID: true}
+	for _, id := range r.ContentPackageIDs {
+		if !studioID(id) || selected[id] {
+			return empty, core.NewError(core.CodeInvalidArgument, "duplicate or invalid content package identity")
+		}
+		selected[id] = true
+	}
 	return executePrivateFactCommand(s, ctx, r.Binding, "ActivateStudioPackages", r, privateFactDomain{"studio_activation", "StudioPackagesActivated", `{"authorization":"sourced-world-create"}`},
 		func(conn *sql.Conn) error { return authorizeSavedStudioGenesis(ctx, conn, r.Genesis) },
 		func(conn *sql.Conn, c privateFactContext) (StudioActivationFact, func() error, error) {
@@ -81,7 +94,21 @@ func (s *Store) ActivateStudioPackages(ctx context.Context, r StudioPackageActiv
 			if !okSystem || !okNarrative || system.Fact.Bundle.Manifest.Kind != "system" || narrative.Fact.Bundle.Manifest.Kind != "narrative" {
 				return fact, nil, core.NewError(core.CodeInvalidArgument, "installed system/narrative pair missing")
 			}
-			if err := core.ValidateStudioPackageSet([]core.StudioPackageBundle{system.Fact.Bundle, narrative.Fact.Bundle}); err != nil {
+			bundles := []core.StudioPackageBundle{system.Fact.Bundle, narrative.Fact.Bundle}
+			contentPins := make([]StudioPackagePin, 0, len(r.ContentPackageIDs))
+			for _, id := range r.ContentPackageIDs {
+				content, present := installed[id]
+				if !present || content.Fact.Bundle.Manifest.Kind != "content" {
+					return fact, nil, core.NewError(core.CodeInvalidArgument, "selected content package missing")
+				}
+				bundles = append(bundles, content.Fact.Bundle)
+				pin, err := studioPackagePin(content)
+				if err != nil {
+					return fact, nil, err
+				}
+				contentPins = append(contentPins, pin)
+			}
+			if err := core.ValidateStudioPackageSet(bundles); err != nil {
 				return fact, nil, err
 			}
 			systemPin, err := studioPackagePin(system)
@@ -92,7 +119,7 @@ func (s *Store) ActivateStudioPackages(ctx context.Context, r StudioPackageActiv
 			if err != nil {
 				return fact, nil, err
 			}
-			lock := StudioPackageLock{Version: "corerp.studio-lock.v1", ActivationEventID: c.EventID, System: systemPin, Narrative: narrativePin, Algorithm: "corerp.scoped-agent.v1", Phase: m2AgentPhaseID, ConflictOrder: "world_time,phase_id,declared_priority,scheduler_item_id"}
+			lock := StudioPackageLock{Version: "corerp.studio-lock.v1", ActivationEventID: c.EventID, System: systemPin, Narrative: narrativePin, Content: contentPins, Algorithm: "corerp.scoped-agent.v1", Phase: m2AgentPhaseID, ConflictOrder: "world_time,phase_id,declared_priority,scheduler_item_id"}
 			hash, err := core.HashJSON(lock)
 			if err != nil {
 				return fact, nil, err
@@ -171,11 +198,23 @@ func readStudioPinnedPackages(ctx context.Context, conn replayQuerier, instance,
 		return nil, err
 	}
 	active := studioActivePackages{Lock: lock}
-	for _, selection := range []struct {
+	selections := []struct {
 		pin    StudioPackagePin
 		kind   string
 		target *core.StudioPackageBundle
-	}{{lock.System, "system", &active.System}, {lock.Narrative, "narrative", &active.Narrative}} {
+	}{{lock.System, "system", &active.System}, {lock.Narrative, "narrative", &active.Narrative}}
+	if len(lock.Content) > 30 {
+		return bad("too many pinned content packages")
+	}
+	active.Content = make([]core.StudioPackageBundle, len(lock.Content))
+	for i, pin := range lock.Content {
+		selections = append(selections, struct {
+			pin    StudioPackagePin
+			kind   string
+			target *core.StudioPackageBundle
+		}{pin, "content", &active.Content[i]})
+	}
+	for _, selection := range selections {
 		p, ok := installed[selection.pin.ID]
 		if !ok || p.Fact.Bundle.Manifest.Kind != selection.kind {
 			return bad("active package content missing")
@@ -196,7 +235,8 @@ func readStudioPinnedPackages(ctx context.Context, conn replayQuerier, instance,
 		}
 		*selection.target = p.Fact.Bundle
 	}
-	if err := core.ValidateStudioPackageSet([]core.StudioPackageBundle{active.System, active.Narrative}); err != nil {
+	bundles := append([]core.StudioPackageBundle{active.System, active.Narrative}, active.Content...)
+	if err := core.ValidateStudioPackageSet(bundles); err != nil {
 		return nil, err
 	}
 	return &active, nil

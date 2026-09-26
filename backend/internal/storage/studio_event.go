@@ -30,9 +30,10 @@ type StudioRuleEvidence struct {
 // Package contents are creator evidence, not an ops diagnostic or an assertion
 // that every rule in the installed pair caused the inspected event.
 type StudioRulePackages struct {
-	Lock      StudioPackageLock        `json:"lock"`
-	System    core.StudioPackageBundle `json:"system"`
-	Narrative core.StudioPackageBundle `json:"narrative"`
+	Lock      StudioPackageLock          `json:"lock"`
+	System    core.StudioPackageBundle   `json:"system"`
+	Narrative core.StudioPackageBundle   `json:"narrative"`
+	Content   []core.StudioPackageBundle `json:"content,omitempty"`
 }
 
 type StudioEventEvidence struct {
@@ -112,7 +113,7 @@ func (s *Store) ReadStudioEvent(ctx context.Context, r StudioEventRequest) (Stud
 					return StudioEventEvidence{}, core.WrapError(core.CodeProjectionDiverged, "historical package provenance differs", err)
 				}
 				out.Rule.PackageStatus = "verified"
-				out.Rule.Packages = &StudioRulePackages{Lock: packages.Lock, System: packages.System, Narrative: packages.Narrative}
+				out.Rule.Packages = &StudioRulePackages{Lock: packages.Lock, System: packages.System, Narrative: packages.Narrative, Content: packages.Content}
 			}
 		}
 		out.ActorID, out.CommandID, out.Payload = actor, command, json.RawMessage(payload)

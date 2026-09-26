@@ -1,0 +1,13 @@
+{
+  "schema_version": "m0-draft-2026-09-22",
+  "id": "content.retail-career",
+  "kind": "content",
+  "version": "1.0.0",
+  "engine_api": "m0-draft-2026-09-22",
+  "requires": [],
+  "optional": [],
+  "capabilities": ["content.career.retail"],
+  "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+  "content_hash": "sha256:6cd7d467a5c32cedbb0709ea2bc8ed3da4c9e72b6cc7bc59ac47b282766e1ecb",
+  "content_files": ["content.json"]
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "m0-draft-2026-09-22",
+  "id": "narrative.life-journal",
+  "kind": "narrative",
+  "version": "1.0.0",
+  "engine_api": "m0-draft-2026-09-22",
+  "requires": [],
+  "optional": [],
+  "capabilities": ["narrative.style"],
+  "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+  "content_hash": "sha256:3ade468a26003337fd30d1991b8176169bc973165010885bc88df34be4510b06",
+  "content_files": ["narrative.json"]
+}

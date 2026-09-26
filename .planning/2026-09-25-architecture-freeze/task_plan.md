@@ -7,6 +7,12 @@ Execute `/tmp/f3aba99d-86cf-4b76-8ad6-c2e6390139e7.md` in strict F0→F13 order:
 Full-project route. Only the current stage may be in implementation. Each stage: read-only source recon and reuse/gap map → representative vertical slice → targeted checks → full stage and relevant regressions → phase report → authorized checkpoint → clean recoverable tree → next stage. Do not claim absent live-provider evidence as passed. Preserve immutable Event authority, permissions, idempotency and replay. Resolve architecture-changing uncertainty before broad build.
 
 ## Current phase
+F10 — World QA & Observer (`not started`). Next stage after F9 checkpoint. Will implement read-only comprehensive world diagnostics across population, employment, finances, households, housing, commute, relationships, events, decisions, knowledge leakage indicators, organization decisions, and orphan references without forming parallel state, plus non-controlling observer mode.
+
+### Completed F9 handoff (historical)
+F9 — Two Real Packs and Author Lifecycle (`local acceptance PASS`, checkpoint in the containing scoped commit). Generic `content` package kind and `StudioRetailCareerCatalog` added to Studio package platform without hardcoded package-ID hacks. Two pure data DLC packs implemented: Retail Career Content Pack (`docs/f9/retail-career/`) and Long-form Life Journal Narrative Pack (`docs/f9/life-journal/`). Full domain integration verified across Education training/credentialing, Career posting/interview/evaluation/offer/acceptance/schedule/progression, RP life memories, and payroll. Alternative narrative presentation renders identical world facts without mutation. Pack platform lifecycle verified: manifest/hash validation, install vs activate distinction, failed upgrade lock preservation, disable/unload with historical provenance, duplicate install idempotency, and dataset swap without Go/Vue host changes. Focused storage/core tests PASS, race detection PASS (core 1.017s, storage 107.280s), fast packages PASS (45.071s), MCP 4/4 PASS (8.627s), static/diff checks PASS. Verify exact F8 parent and clean recoverable F9 worktree after commit, then enter F10. No push or release; full goal remains F0→F13.
+
+### Completed F8 handoff (historical)
 F8 — Organization Agency (`local acceptance PASS`, checkpoint in the containing scoped commit). Manager-defined policy, bounded manual/automatic review, source-first financial/workforce evidence, posting freeze/unfreeze/expansion, preserved hiring evidence and employee-only F7 notices are implemented. The full-posting→scheduled expansion→second hire→Household forecast improvement→notice access path survives restart/Compare. Final-source all-package regression, targeted race, static checks and MCP integration pass. Verify exact F7 parent and clean recoverable F8 worktree after commit, then enter F9. No push or release; full goal remains F0→F13.
 
 ### Latest F8 increment
@@ -43,7 +49,7 @@ The user-approved Play-only redesign and separate HTTPS public preview remain in
 - [x] F6 — education, skills and qualification. Source map/compatibility design, training→credential→Career, revocation at offer/acceptance, real-world expiry, F3 shared-round, program/own qualification reads, sourced work experience and authenticated HTTP vertical slice pass locally; bounded-read limitation is documented. Final all-package/race/static regression and phase report pass; containing scoped commit is the checkpoint.
 - [x] F7 — information and communication network. Unified channel contract, stance, one-hop rumor, Career organization notice, law public notice, seven F3 shared actions, handle-based safe publication discovery and MCP 30 tools pass locally; all-package regression PASS (storage 1575.876s, HTTP 44.905s), focused normal/race and static checks clean; phase report updated and scoped checkpoint commit verified.
 - [x] F8 — source-authorized bounded organization agency, real Career/Household/Information consequences, recovery and final-source regression; containing checkpoint, verify clean tree before F9.
-- [ ] F9 — two real packs and author lifecycle.
+- [x] F9 — two real packs and author lifecycle.
 - [ ] F10 — world QA and observer.
 - [ ] F11 — static HTML manual and maintainer handoff.
 - [ ] F12 — integrated long-run, clients and full engineering evidence.
