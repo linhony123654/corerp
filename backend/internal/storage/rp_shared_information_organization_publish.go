@@ -108,7 +108,7 @@ func (s *Store) SubmitRPSharedOrganizationNoticePublish(ctx context.Context, r R
 	// Check the selected Person before parsing a private Career source. A
 	// different participant cannot use error details to probe layoff facts.
 	var actor string
-	if err := tx.conn.QueryRowContext(ctx, `SELECT actor_id FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded'`,
+	if err := tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN actor_id='system' AND json_extract(payload,'$.kind')='organization_review' THEN json_extract(payload,'$.organization_review.decision_principal_id') ELSE actor_id END FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded'`,
 		sourceID, row.Instance, row.Branch).Scan(&actor); err != nil {
 		return empty, classifyMissing(err, "own scoped Career publication source")
 	}
@@ -124,7 +124,7 @@ func (s *Store) SubmitRPSharedOrganizationNoticePublish(ctx context.Context, r R
 	if entity != speaker {
 		return empty, core.NewError(core.CodeNotFound, "own scoped Career publication source not found")
 	}
-	fact, sourceActor, sourceSequence, _, err := rpOrganizationLayoffSource(ctx, tx.conn, row.Instance, row.Branch, sourceID)
+	fact, sourceActor, sourceSequence, _, _, err := rpOrganizationNoticeSource(ctx, tx.conn, row.Instance, row.Branch, sourceID)
 	if err != nil {
 		return empty, err
 	}

@@ -70,7 +70,9 @@ const (
 	RPSharedOrganizationAccessSchemaVersion  = "corerp-f7-shared-organization-notice-access-052-2026-09-26"
 	RPSharedPublicPublishSchemaVersion       = "corerp-f7-shared-public-notice-publish-053-2026-09-26"
 	RPSharedOrganizationPublishSchemaVersion = "corerp-f7-shared-organization-notice-publish-054-2026-09-26"
-	SchemaVersion                            = RPSharedOrganizationPublishSchemaVersion
+	OrganizationAgencySchemaVersion          = "corerp-f8-organization-agency-055-2026-09-26"
+	OrganizationReviewScheduleSchemaVersion  = "corerp-f8-organization-review-schedule-056-2026-09-26"
+	SchemaVersion                            = OrganizationReviewScheduleSchemaVersion
 )
 
 const (
@@ -239,6 +241,8 @@ func (s *Store) migrate(ctx context.Context) error {
 		{RPSharedOrganizationAccessSchemaVersion, "052_shared_organization_notice_access.sql"},
 		{RPSharedPublicPublishSchemaVersion, "053_shared_public_notice_publish.sql"},
 		{RPSharedOrganizationPublishSchemaVersion, "054_shared_organization_notice_publish.sql"},
+		{OrganizationAgencySchemaVersion, "055_organization_agency.sql"},
+		{OrganizationReviewScheduleSchemaVersion, "056_organization_review_schedule.sql"},
 	}
 	for _, migration := range migrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)

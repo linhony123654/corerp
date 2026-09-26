@@ -118,7 +118,7 @@ func rpInformationExpected(ctx context.Context, q replayQuerier, instanceID, bra
 		if sent.Fact.Channel != "organization_announcement" {
 			continue
 		}
-		career, actor, sourceSequence, sourceWorldTime, err := rpOrganizationLayoffSource(ctx, q, instanceID, branchID, sent.Fact.SourceCareerEventID)
+		career, actor, sourceSequence, sourceWorldTime, noticeText, err := rpOrganizationNoticeSource(ctx, q, instanceID, branchID, sent.Fact.SourceCareerEventID)
 		if err != nil {
 			return nil, nil, core.NewError(core.CodeProjectionDiverged, "organization notice lacks Career source")
 		}
@@ -130,7 +130,7 @@ func rpInformationExpected(ctx context.Context, q replayQuerier, instanceID, bra
 		if career.OrganizationID != sent.Fact.OrganizationID || actor != sent.ActorID ||
 			speakerErr != nil || speakerPrincipal != actor ||
 			sourceSequence >= sent.Sequence || sourceErr != nil || publishErr != nil || publishAt.Before(sourceAt) ||
-			sent.Fact.Text != rpOrganizationLayoffText(career.Exit.EffectiveFromDay) {
+			sent.Fact.Text != noticeText {
 			return nil, nil, core.NewError(core.CodeProjectionDiverged, "organization notice lacks Career source")
 		}
 	}

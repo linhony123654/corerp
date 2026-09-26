@@ -103,6 +103,10 @@ type Service interface {
 	RaiseCareerWage(context.Context, core.CareerRaiseRequest) (storage.CareerRecord, error)
 	ReferCareerCandidate(context.Context, core.CareerReferralRequest) (storage.CareerRecord, error)
 	ReadCareerRecruitmentRecord(context.Context, string, string, string, string, string) (storage.CareerRecord, error)
+	DefineOrganizationAgencyPolicy(context.Context, core.OrganizationAgencyPolicyRequest) (core.OrganizationAgencyPolicy, error)
+	ReadOrganizationAgencyPolicy(context.Context, string, string, string, string) (core.OrganizationAgencyPolicy, error)
+	ConductOrganizationReview(context.Context, core.OrganizationReviewRequest) (core.OrganizationReviewResult, error)
+	ReadOrganizationReviews(context.Context, string, string, string, string, int) ([]core.OrganizationReviewResult, error)
 	DefineEducationProgramLocal(context.Context, storage.EducationProgramRequest) (storage.EducationRecord, error)
 	EnrollEducation(context.Context, storage.EducationEnrollmentRequest) (storage.EducationRecord, error)
 	SubmitEducationExercise(context.Context, storage.EducationExerciseRequest) (storage.EducationRecord, error)
@@ -431,6 +435,14 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		handleCareerCommand(s, response, request, requestID, principalID, func(r *core.CareerReferralRequest) *string { return &r.Binding.PrincipalID }, s.service.ReferCareerCandidate)
 	case "/api/v1/career/records/read":
 		s.handleCareerRecordRead(response, request, requestID, principalID)
+	case "/api/v1/career/agency/policy/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *core.OrganizationAgencyPolicyRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineOrganizationAgencyPolicy)
+	case "/api/v1/career/agency/policy/read":
+		s.handleAgencyPolicyRead(response, request, requestID, principalID)
+	case "/api/v1/career/agency/reviews/conduct":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *core.OrganizationReviewRequest) *string { return &r.Binding.PrincipalID }, s.service.ConductOrganizationReview)
+	case "/api/v1/career/agency/reviews/query":
+		s.handleAgencyReviewsQuery(response, request, requestID, principalID)
 	case "/api/v1/education/programs/define-local":
 		handleEducationCommand(s, response, request, requestID, principalID, func(r *storage.EducationProgramRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineEducationProgramLocal)
 	case "/api/v1/education/enrollments/start":

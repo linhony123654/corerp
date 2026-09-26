@@ -45,6 +45,7 @@ type CareerPostingDefinition struct {
 	// interview assessments in RequiredQualifications.
 	RequiredCredentials []CredentialRequirement `json:"required_credentials,omitempty"`
 	Capabilities        []string                `json:"capabilities,omitempty"`
+	Status              string                  `json:"status,omitempty"`
 }
 
 type CredentialRequirement struct {
@@ -99,6 +100,9 @@ func (r CareerPostingRequest) Validate() error {
 	}
 	if p.Capacity < 1 || p.Capacity > 100 || p.DailyWageMinor < 1 || p.DailyWageMinor > MaxJSONSafeInteger || len(p.RequiredQualifications) > 16 || len(p.RequiredCredentials) > 16 {
 		return NewError(CodeInvalidArgument, "invalid vacancy capacity, wage or requirements")
+	}
+	if p.Status != "" && p.Status != "active" {
+		return NewError(CodeInvalidArgument, "new posting must start active; agency review controls freezing")
 	}
 	seen := map[string]bool{}
 	if len(p.Capabilities) > 1 || (len(p.Capabilities) == 1 && p.Capabilities[0] != CareerPositionManageCapability) {

@@ -114,6 +114,9 @@ func (s *Store) ApplyForCareerPosition(ctx context.Context, r core.CareerApplica
 		if posting.Fact.Posting == nil {
 			return CareerFact{}, nil, core.NewError(core.CodeProjectionDiverged, "posting lacks terms")
 		}
+		if posting.Fact.Posting.Status == "frozen" {
+			return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "posting is frozen by organization policy")
+		}
 		var worldTime string
 		if err := conn.QueryRowContext(ctx, `SELECT current_world_time FROM world_clocks WHERE instance_id=? AND branch_id=?`, b.InstanceID, b.BranchID).Scan(&worldTime); err != nil {
 			return CareerFact{}, nil, err
@@ -195,7 +198,11 @@ func (s *Store) DiscoverCareerPositions(ctx context.Context, principalID, instan
 	if err := authorizeCareerCandidate(ctx, tx.conn, b, candidateID); err != nil {
 		return view, err
 	}
-	rows, err := tx.conn.QueryContext(ctx, `SELECT event_id,event_sequence,payload FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='posting' AND event_sequence>? ORDER BY event_sequence LIMIT 100`, instanceID, branchID, after)
+	rows, err := tx.conn.QueryContext(ctx, `SELECT e.event_id,e.event_sequence,e.payload FROM events e WHERE e.instance_id=? AND e.branch_id=? AND e.event_type='RPCareerFactRecorded'
+	 AND json_extract(e.payload,'$.kind') IN ('posting','organization_review') AND json_extract(e.payload,'$.posting.position_id') IS NOT NULL AND e.event_sequence>?
+	 AND NOT EXISTS (SELECT 1 FROM events n WHERE n.instance_id=e.instance_id AND n.branch_id=e.branch_id AND n.event_type='RPCareerFactRecorded'
+	 AND json_extract(n.payload,'$.kind') IN ('posting','organization_review') AND json_extract(n.payload,'$.posting.position_id')=json_extract(e.payload,'$.posting.position_id') AND n.event_sequence>e.event_sequence)
+	 ORDER BY e.event_sequence LIMIT 100`, instanceID, branchID, after)
 	if err != nil {
 		return view, err
 	}
@@ -231,6 +238,9 @@ func (s *Store) DiscoverCareerPositions(ctx context.Context, principalID, instan
 			return CareerMarket{}, core.NewError(core.CodeProjectionDiverged, "position capacity exceeded")
 		}
 		view.Postings[i].AvailableSlots = view.Postings[i].Posting.Capacity - occupied
+		if view.Postings[i].Posting.Status == "frozen" {
+			view.Postings[i].AvailableSlots = 0
+		}
 	}
 	return view, nil
 }

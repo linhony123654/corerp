@@ -31,30 +31,32 @@ type CareerApplicationFact struct {
 // Each record is an immutable, typed Event snapshot. A mutable recruitment
 // table is not a competing authority. All reads retain scope and source Event.
 type CareerFact struct {
-	AggregateExit          *CareerAggregateExitFact      `json:"aggregate_exit,omitempty"`
-	Version                string                        `json:"version"`
-	Announcement           *CareerAnnouncementFact       `json:"announcement,omitempty"`
-	Exit                   *CareerExitFact               `json:"exit,omitempty"`
-	Kind                   string                        `json:"kind"`
-	RecordID               string                        `json:"record_id"`
-	OrganizationID         string                        `json:"organization_id"`
-	CandidateID            string                        `json:"candidate_id,omitempty"`
-	Organization           *CareerOrganizationFact       `json:"organization,omitempty"`
-	GradeScale             *core.CareerGradeScale        `json:"grade_scale,omitempty"`
-	PositionChange         *CareerPositionChangeFact     `json:"position_change,omitempty"`
-	PositionAssessment     *CareerPositionAssessment     `json:"position_assessment,omitempty"`
-	Posting                *core.CareerPostingDefinition `json:"posting,omitempty"`
-	Application            *CareerApplicationFact        `json:"application,omitempty"`
-	Interview              *CareerInterviewFact          `json:"interview,omitempty"`
-	Evaluation             *CareerEvaluationFact         `json:"evaluation,omitempty"`
-	Offer                  *CareerOfferFact              `json:"offer,omitempty"`
-	Referral               *CareerReferralFact           `json:"referral,omitempty"`
-	Employment             *CareerEmploymentFact         `json:"employment,omitempty"`
-	Performance            *CareerPerformanceFact        `json:"performance,omitempty"`
-	EmploymentChange       *CareerEmploymentChange       `json:"employment_change,omitempty"`
-	Leave                  *CareerLeaveFact              `json:"leave,omitempty"`
-	Overtime               *CareerOvertimeFact           `json:"overtime,omitempty"`
-	AdoptedWorkScheduleIDs []string                      `json:"adopted_work_schedule_ids,omitempty"`
+	AggregateExit          *CareerAggregateExitFact       `json:"aggregate_exit,omitempty"`
+	Version                string                         `json:"version"`
+	Announcement           *CareerAnnouncementFact        `json:"announcement,omitempty"`
+	Exit                   *CareerExitFact                `json:"exit,omitempty"`
+	Kind                   string                         `json:"kind"`
+	RecordID               string                         `json:"record_id"`
+	OrganizationID         string                         `json:"organization_id"`
+	CandidateID            string                         `json:"candidate_id,omitempty"`
+	Organization           *CareerOrganizationFact        `json:"organization,omitempty"`
+	GradeScale             *core.CareerGradeScale         `json:"grade_scale,omitempty"`
+	PositionChange         *CareerPositionChangeFact      `json:"position_change,omitempty"`
+	PositionAssessment     *CareerPositionAssessment      `json:"position_assessment,omitempty"`
+	Posting                *core.CareerPostingDefinition  `json:"posting,omitempty"`
+	Application            *CareerApplicationFact         `json:"application,omitempty"`
+	Interview              *CareerInterviewFact           `json:"interview,omitempty"`
+	Evaluation             *CareerEvaluationFact          `json:"evaluation,omitempty"`
+	Offer                  *CareerOfferFact               `json:"offer,omitempty"`
+	Referral               *CareerReferralFact            `json:"referral,omitempty"`
+	Employment             *CareerEmploymentFact          `json:"employment,omitempty"`
+	Performance            *CareerPerformanceFact         `json:"performance,omitempty"`
+	EmploymentChange       *CareerEmploymentChange        `json:"employment_change,omitempty"`
+	Leave                  *CareerLeaveFact               `json:"leave,omitempty"`
+	Overtime               *CareerOvertimeFact            `json:"overtime,omitempty"`
+	AdoptedWorkScheduleIDs []string                       `json:"adopted_work_schedule_ids,omitempty"`
+	AgencyPolicy           *core.OrganizationAgencyPolicy `json:"agency_policy,omitempty"`
+	OrganizationReview     *core.OrganizationReviewResult `json:"organization_review,omitempty"`
 }
 
 type CareerRecord struct {
@@ -88,12 +90,19 @@ func (s *Store) executeCareerCommand(ctx context.Context, b core.CareerBinding, 
 func readCareerRecord(ctx context.Context, conn *sql.Conn, instanceID, branchID, kind, id string) (CareerRecord, error) {
 	var record CareerRecord
 	var raw string
-	err := conn.QueryRowContext(ctx, `SELECT event_id,event_sequence,world_time,payload FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded' AND ((json_extract(payload,'$.kind')=? AND json_extract(payload,'$.record_id')=?) OR (?='application' AND json_extract(payload,'$.application.application_id')=?) OR (?='employment' AND json_extract(payload,'$.employment.contract_id')=?)) ORDER BY event_sequence DESC LIMIT 1`, instanceID, branchID, kind, id, kind, id, kind, id).Scan(&record.EventID, &record.EventSequence, &record.WorldTime, &raw)
+	err := conn.QueryRowContext(ctx, `SELECT event_id,event_sequence,world_time,payload FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPCareerFactRecorded' AND ((json_extract(payload,'$.kind')=? AND json_extract(payload,'$.record_id')=?) OR (?='application' AND json_extract(payload,'$.application.application_id')=?) OR (?='employment' AND json_extract(payload,'$.employment.contract_id')=?) OR (?='posting' AND json_extract(payload,'$.kind')='organization_review' AND json_extract(payload,'$.posting.position_id')=?)) ORDER BY event_sequence DESC LIMIT 1`, instanceID, branchID, kind, id, kind, id, kind, id, kind, id).Scan(&record.EventID, &record.EventSequence, &record.WorldTime, &raw)
 	if err != nil {
 		return record, classifyMissing(err, "career "+kind)
 	}
 	if err := json.Unmarshal([]byte(raw), &record.Fact); err != nil {
 		return CareerRecord{}, core.WrapError(core.CodeProjectionDiverged, "decode career fact", err)
+	}
+	if kind == "posting" && record.Fact.Kind != kind {
+		if record.Fact.Posting == nil {
+			return CareerRecord{}, core.NewError(core.CodeProjectionDiverged, "posting outcome lacks terms")
+		}
+		f := record.Fact
+		record.Fact = CareerFact{Version: f.Version, Kind: kind, RecordID: id, OrganizationID: f.OrganizationID, Posting: f.Posting}
 	}
 	if kind == "application" && record.Fact.Kind != kind {
 		if record.Fact.Application == nil {

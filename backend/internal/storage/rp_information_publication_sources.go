@@ -91,10 +91,10 @@ func rpNoticePublicationSourcesForSession(ctx context.Context, conn *sql.Conn, s
 	}
 	condition := `event_type='RPInstitutionFactRecorded' AND json_extract(payload,'$.kind')='law_enactment'`
 	if channel == "organization_announcement" {
-		condition = `event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='employment' AND json_extract(payload,'$.exit.kind')='layoff'`
+		condition = `event_type='RPCareerFactRecorded' AND ((json_extract(payload,'$.kind')='employment' AND json_extract(payload,'$.exit.kind')='layoff') OR (json_extract(payload,'$.kind')='organization_review' AND json_extract(payload,'$.organization_review.decision.decision_kind') IN ('freeze_recruitment','unfreeze_recruitment','expand_capacity')))`
 	}
-	rows, err := conn.QueryContext(ctx, `SELECT event_id,world_time FROM events WHERE instance_id=? AND branch_id=? AND actor_id=? AND `+condition+` ORDER BY event_sequence DESC LIMIT 101`,
-		session.InstanceID, session.BranchID, owner)
+	rows, err := conn.QueryContext(ctx, `SELECT event_id,world_time FROM events WHERE instance_id=? AND branch_id=? AND (actor_id=? OR (actor_id='system' AND event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='organization_review' AND json_extract(payload,'$.organization_review.decision_principal_id')=?)) AND `+condition+` ORDER BY event_sequence DESC LIMIT 101`,
+		session.InstanceID, session.BranchID, owner, owner)
 	if err != nil {
 		return result, err
 	}
@@ -139,7 +139,7 @@ func rpNoticePublicationSourcesForSession(ctx context.Context, conn *sql.Conn, s
 			}
 			summary = rpPublicLawText(fact)
 		} else {
-			fact, actor, _, _, err := rpOrganizationLayoffSource(ctx, conn, session.InstanceID, session.BranchID, item.id)
+			fact, actor, _, _, noticeText, err := rpOrganizationNoticeSource(ctx, conn, session.InstanceID, session.BranchID, item.id)
 			if err != nil {
 				return result, err
 			}
@@ -153,7 +153,7 @@ func rpNoticePublicationSourcesForSession(ctx context.Context, conn *sql.Conn, s
 			if err != nil {
 				return result, err
 			}
-			summary = rpOrganizationLayoffText(fact.Exit.EffectiveFromDay)
+			summary = noticeText
 		}
 		handle, err := rpPublicationSourceHandle(channel, session.SessionID, item.id)
 		if err != nil {
@@ -181,10 +181,10 @@ func resolveRPNoticePublicationSource(ctx context.Context, conn *sql.Conn, sessi
 	}
 	condition := `event_type='RPInstitutionFactRecorded' AND json_extract(payload,'$.kind')='law_enactment'`
 	if channel == "organization_announcement" {
-		condition = `event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='employment' AND json_extract(payload,'$.exit.kind')='layoff'`
+		condition = `event_type='RPCareerFactRecorded' AND ((json_extract(payload,'$.kind')='employment' AND json_extract(payload,'$.exit.kind')='layoff') OR (json_extract(payload,'$.kind')='organization_review' AND json_extract(payload,'$.organization_review.decision.decision_kind') IN ('freeze_recruitment','unfreeze_recruitment','expand_capacity')))`
 	}
-	rows, err := conn.QueryContext(ctx, `SELECT event_id FROM events WHERE instance_id=? AND branch_id=? AND actor_id=? AND `+condition+` ORDER BY event_sequence DESC LIMIT 100`,
-		session.InstanceID, session.BranchID, owner)
+	rows, err := conn.QueryContext(ctx, `SELECT event_id FROM events WHERE instance_id=? AND branch_id=? AND (actor_id=? OR (actor_id='system' AND event_type='RPCareerFactRecorded' AND json_extract(payload,'$.kind')='organization_review' AND json_extract(payload,'$.organization_review.decision_principal_id')=?)) AND `+condition+` ORDER BY event_sequence DESC LIMIT 100`,
+		session.InstanceID, session.BranchID, owner, owner)
 	if err != nil {
 		return "", err
 	}

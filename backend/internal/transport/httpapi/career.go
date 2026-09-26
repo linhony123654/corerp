@@ -146,3 +146,60 @@ func (s *Server) handleCareerRecordRead(response http.ResponseWriter, request *h
 	}
 	writeData(response, http.StatusOK, result)
 }
+
+type agencyPolicyRead struct {
+	PrincipalID    string `json:"principal_id"`
+	InstanceID     string `json:"instance_id"`
+	BranchID       string `json:"branch_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (s *Server) handleAgencyPolicyRead(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input agencyPolicyRead
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.ReadOrganizationAgencyPolicy(request.Context(), principalID, input.InstanceID, input.BranchID, input.OrganizationID)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
+type agencyReviewsRead struct {
+	PrincipalID    string `json:"principal_id"`
+	InstanceID     string `json:"instance_id"`
+	BranchID       string `json:"branch_id"`
+	OrganizationID string `json:"organization_id"`
+	Limit          int    `json:"limit"`
+}
+
+func (s *Server) handleAgencyReviewsQuery(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input agencyReviewsRead
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.ReadOrganizationReviews(request.Context(), principalID, input.InstanceID, input.BranchID, input.OrganizationID, input.Limit)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}

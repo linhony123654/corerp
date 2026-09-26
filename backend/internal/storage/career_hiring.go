@@ -254,8 +254,8 @@ func (s *Store) OfferCareerEmployment(ctx context.Context, r core.CareerOfferReq
 		if err != nil {
 			return CareerFact{}, nil, err
 		}
-		if posting.Fact.Posting == nil || application.Fact.Application.PostingEventID != posting.EventID {
-			return CareerFact{}, nil, core.NewError(core.CodeBranchConflict, "application posting terms changed")
+		if err := requireCareerPostingCompatibility(ctx, conn, b, application.Fact.Application.PostingEventID, posting); err != nil {
+			return CareerFact{}, nil, err
 		}
 		if err := requireCareerCredentials(ctx, conn, b, application.Fact.Application.CandidateID, posting.Fact.Posting.RequiredCredentials, c.WorldTime); err != nil {
 			return CareerFact{}, nil, err
