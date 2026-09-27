@@ -38,7 +38,7 @@ Status: **local acceptance PASS**. Live Provider Status: `IMPLEMENTATION_COMPLET
   - **Single-Source Manual Compiler & Tutorial Reproduction**:
     - `backend/cmd/manual-gen/...` PASS 2/2 tests (0.010s).
     - `TestF11TutorialReproduction` PASS (0.808s) across clean 9-step tutorial sequence.
-    - Offline static HTML manual compiled at `docs/manual/dist/index.html` (78,135 bytes).
+    - Offline static HTML manual compiled at `docs/manual/dist/index.html` (78,134 bytes).
   - **Go Package Test Suites**:
     - `backend/internal/core`: PASS (0.040s).
     - `backend/internal/decision`: PASS (0.354s).

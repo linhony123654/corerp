@@ -43,7 +43,7 @@
     - Responsive desktop sidebar and collapsible mobile drawer.
     - Client-side search with keyboard shortcuts (`/` focus, `Esc` clear).
     - Deep anchor links for all sections and code copy buttons.
-    - Built static HTML artifact: `docs/manual/dist/index.html` (78,135 bytes).
+    - Built static HTML artifact: `docs/manual/dist/index.html` (78,134 bytes).
     - Compiler unit tests `backend/cmd/manual-gen/main_test.go` PASS 2/2 (0.010s).
   - Automated 9-step tutorial reproduction test in `backend/internal/storage/f11_reproduction_test.go`:
     - `TestF11TutorialReproduction` PASS (0.808s) across clean `t.TempDir()`.

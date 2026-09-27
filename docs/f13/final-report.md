@@ -187,7 +187,7 @@ CoreRP 最终保留且仅保留 24 项一级核心职责：
    - 证明：**无需修改任何一行 Go 或 Vue 核心代码**，仅通过数据包安装与激活即可扩展全新世界系统。
 2. **单一信源手册与本地静态编译器 (F11)**:
    - 手册正文唯一位于 `docs/manual/`（涵盖 Player, Creator, External Agent, Maintainer 4 类受众）。
-   - 原生 Go 编译器 `backend/cmd/manual-gen` 一键生成无任何外部 CDN 依赖、自带全文检索与深层锚点的纯静态 HTML：`docs/manual/dist/index.html`（大小 78,135 字节）。
+   - 原生 Go 编译器 `backend/cmd/manual-gen` 一键生成无任何外部 CDN 依赖、自带全文检索与深层锚点的纯静态 HTML：`docs/manual/dist/index.html`（大小 78,134 字节）。
    - 9 步全自动重现测试（从创建、游玩、安装 DLC、挂载 MCP、热重启到恢复检查）在全新临时目录下全绿通过。
 
 ---

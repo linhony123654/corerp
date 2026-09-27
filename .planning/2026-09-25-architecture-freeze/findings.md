@@ -16,7 +16,7 @@
 
 ## F11 single-source manual and tutorial reproduction audit (2026-09-26)
 - Markdown sources in `docs/manual/` established as sole authoritative source of truth for Player, Creator, External Agent, and Maintainer.
-- Native Go static compiler in `backend/cmd/manual-gen/main.go` verified: compiles `docs/manual/` into self-contained HTML (`docs/manual/dist/index.html`, 78,135 bytes) with zero CDN or font dependencies (system font stack), client-side search with keyboard shortcuts (`/`, `Esc`), deep anchor links, responsive sidebar/mobile drawer, and code copy buttons.
+- Native Go static compiler in `backend/cmd/manual-gen/main.go` verified: compiles `docs/manual/` into self-contained HTML (`docs/manual/dist/index.html`, 78,134 bytes) with zero CDN or font dependencies (system font stack), client-side search with keyboard shortcuts (`/`, `Esc`), deep anchor links, responsive sidebar/mobile drawer, and code copy buttons.
 - Automated 9-step tutorial reproduction test `TestF11TutorialReproduction` in `backend/internal/storage/f11_reproduction_test.go` PASS (0.808s) across clean `t.TempDir()`.
 
 ## F10 World QA and Observer audit (2026-09-26)

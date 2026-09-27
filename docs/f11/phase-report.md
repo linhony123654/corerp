@@ -12,7 +12,7 @@ Status: **local acceptance PASS**. Baseline is F10 checkpoint `233ef44415cf2db43
     - `external-agent.md`: Complete external agent manual covering MCP integration, controller binding, sensory fencing, and shared round coordination.
     - `maintainer.md`: Complete engineering reference covering event sourcing pipeline, migrations, projection rebuilds, backup, World QA, and race splitting.
   - Native Go static site compiler (`backend/cmd/manual-gen/main.go`):
-    - Parses structured Markdown files and generates responsive offline HTML artifact (`docs/manual/dist/index.html`, 78,135 bytes).
+    - Parses structured Markdown files and generates responsive offline HTML artifact (`docs/manual/dist/index.html`, 78,134 bytes).
     - Desktop sidebar navigation with active section highlighting and collapsible mobile drawer.
     - Full-text search with instant filtering and keyboard shortcuts (`/` to search, `Esc` to dismiss).
     - Anchor links on all headings for direct navigation.
