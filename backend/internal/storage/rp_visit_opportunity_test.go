@@ -172,14 +172,21 @@ func TestRPVisitOpportunityActualMovementAndRecovery(t *testing.T) {
 					if err := s.RebuildProjections(ctx, M2DemoInstanceID, M2DemoBranchID); err != nil {
 						t.Fatal(err)
 					}
+					providerSource := source
+					if source.FriendID != "" {
+						providerSource.FriendID, err = rpAnonymousEntityIDForTest(ctx, s, M2DemoInstanceID, M2DemoBranchID, r.EntityID, source.FriendID)
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
 					calls := 0
 					provider := rpDecisionProviderFunc(func(ctx context.Context, in core.RPDecisionInput) (core.RPDecisionProposal, error) {
 						calls++
-						if in.VisitOpportunity == nil || in.VisitOpportunity.Selected != selected || in.VisitOpportunity.Source != source {
+						if in.VisitOpportunity == nil || in.VisitOpportunity.Selected != selected || in.VisitOpportunity.Source != providerSource {
 							t.Fatalf("lost context: %+v", in.VisitOpportunity)
 						}
 						encoded, _ := json.Marshal(in)
-						if strings.Contains(string(encoded), policy.Policy.StreamSeed) || strings.Contains(string(encoded), "roll_basis_points") {
+						if strings.Contains(string(encoded), policy.Policy.StreamSeed) || strings.Contains(string(encoded), "roll_basis_points") || source.FriendID != "" && strings.Contains(string(encoded), source.FriendID) {
 							t.Fatal("raw draw in provider")
 						}
 						return (core.DeterministicRPDecisionProvider{}).Propose(ctx, in)

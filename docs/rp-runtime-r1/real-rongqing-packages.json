@@ -1,0 +1,61 @@
+[
+  {
+    "content": {
+      "system_rules": {
+        "npc_daily_action_budget": 6
+      },
+      "version": "corerp.studio-package.v1"
+    },
+    "manifest": {
+      "capabilities": [
+        "rules.npc.daily_budget"
+      ],
+      "content_files": [
+        "system.json"
+      ],
+      "content_hash": "sha256:3f1a6459f7bf053e77d762e473dffaaf10d548c5e3a8eae66133acfe46bea990",
+      "engine_api": "m0-draft-2026-09-22",
+      "id": "studio.system",
+      "kind": "system",
+      "optional": [],
+      "requires": [],
+      "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+      "schema_version": "m0-draft-2026-09-22",
+      "version": "1.0.0"
+    }
+  },
+  {
+    "content": {
+      "narrative_style": {
+        "description_density": 70,
+        "dialogue_ratio": 60,
+        "forbidden_patterns": [],
+        "inner_monologue_policy": "none",
+        "narrative_pack_ref": "builtin/plain@1",
+        "pov": "second_person",
+        "prose_instructions": "",
+        "tense": "present",
+        "verbosity": "detailed",
+        "version": "corerp.style.v1"
+      },
+      "version": "corerp.studio-package.v1"
+    },
+    "manifest": {
+      "capabilities": [
+        "narrative.style"
+      ],
+      "content_files": [
+        "narrative.json"
+      ],
+      "content_hash": "sha256:f477265a3245f2c0ca8b1797be0fba564909af9a33f39dd1f645d126dd92ab58",
+      "engine_api": "m0-draft-2026-09-22",
+      "id": "studio.narrative",
+      "kind": "narrative",
+      "optional": [],
+      "requires": [],
+      "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+      "schema_version": "m0-draft-2026-09-22",
+      "version": "1.0.0"
+    }
+  }
+]

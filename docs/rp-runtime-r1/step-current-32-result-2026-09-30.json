@@ -1,0 +1,50 @@
+{
+  "kind": "partial_full32_failure",
+  "model": "step-5-preview",
+  "script_exit_code": 1,
+  "completed_review_samples": 8,
+  "settled_turns": 9,
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "result": "success",
+      "count": 26
+    },
+    {
+      "phase": "decision",
+      "result": "timeout",
+      "count": 1
+    },
+    {
+      "phase": "narrative",
+      "result": "success",
+      "count": 18
+    }
+  ],
+  "failures": [
+    {
+      "phase": "decision",
+      "model": "step-5-preview",
+      "result": "timeout",
+      "attempt_count": 2,
+      "fallback_kind": "silence",
+      "started_at_utc": "2026-09-30T02:30:48.110445969Z",
+      "finished_at_utc": "2026-09-30T02:32:48.159248745Z"
+    }
+  ],
+  "followup_checks": "regeneration/mixed/fault/restart block was not reached",
+  "world_integrity_32_exit": "NOT PASSED",
+  "interpretation": "First eight full browser rounds passed. The ninth settled but one NPC request timed out after two attempts; fallback is not counted as success. All nine Full Prose requests succeeded. This is a technical diagnostic, not an RP experience pass.",
+  "runtime_sha256": "sha256:03205ddc4ef223012eb563e6d5ea4aad356ef829109306d634293d33af707ded",
+  "model_configuration": {
+    "reasoning_effort": "low",
+    "decision_max_tokens": 4096,
+    "interaction_max_tokens": 4096,
+    "total_decision_timeout": "120s",
+    "disable_thinking": false,
+    "configuration_source": "actual browser profile override"
+  },
+  "artifact_directory": "/tmp/corerp-rp3-npc-IxAIZV",
+  "log_path": "/tmp/corerp-r1-step-profile-32-references-20260930.log",
+  "fixture_note": "Existing --rongqing technical regression fixture; not the frozen real-world Golden declaration."
+}

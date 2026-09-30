@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, cp, readFile } from 'node:fs/promises';
+import { access, mkdtemp, cp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -12,7 +12,18 @@ import { checkRP7Retirement, checkRP7OpenRetirement } from './rp7-retirement-che
 import { checkRP7ThreeClients } from './rp7-three-client-checks.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const hostRoot = '/tmp/corerp-rp7-host-RCfN0V';
+const hostRoot = process.env.CORERP_RP7_HOST_ROOT || '/tmp/corerp-rp7-host-RCfN0V';
+const hostPort = Number(process.env.CORERP_RP7_HOST_PORT || '4187');
+const runtimePort = Number(process.env.CORERP_RP7_RUNTIME_PORT || '4188');
+const playPort = Number(process.env.CORERP_RP7_PLAY_PORT || '4189');
+for (const [name, port] of Object.entries({ hostPort, runtimePort, playPort })) {
+  assert.ok(Number.isInteger(port) && port >= 1024 && port <= 65535, `${name} must be an unprivileged TCP port`);
+}
+assert.equal(new Set([hostPort, runtimePort, playPort]).size, 3, 'RP7 fixture ports must be distinct');
+const hostOrigin = `http://127.0.0.1:${hostPort}`;
+const runtimeOrigin = `http://127.0.0.1:${runtimePort}`;
+const playOrigin = `http://127.0.0.1:${playPort}`;
+const hostUITimeout = 120_000;
 const fixture = JSON.parse(await readFile(join(root, 'clients/sillytavern/host-fixture.json'), 'utf8'));
 assert.equal(JSON.parse(await readFile(join(hostRoot, 'package/package.json'), 'utf8')).version, fixture.version);
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp7-extension-'));
@@ -21,17 +32,20 @@ const token = randomBytes(24).toString('hex');
 const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [token]: 'principal_m2_rp_player' }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex'), CORERP_DECISION_PROVIDER: 'deterministic', CORERP_NARRATIVE_PROVIDER: 'deterministic' };
 for (const key of ['CORERP_LLM_ENDPOINT', 'CORERP_LLM_MODEL', 'CORERP_LLM_API_KEY', 'CORERP_NARRATIVE_ENDPOINT', 'CORERP_NARRATIVE_MODEL', 'CORERP_NARRATIVE_API_KEY']) env[key] = '';
 const run = (cmd, args, cwd = root) => execFileSync(cmd, args, { cwd, stdio: 'pipe' });
-run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'server'), './cmd/corerp-server'], join(root, 'backend'));
-run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'setup'), './cmd/corerp-m2'], join(root, 'backend'));
+// Linked/dirty worktrees can make Go's optional VCS metadata probe fail even
+// when Git itself is healthy. These are disposable verification binaries; the
+// source revision/worktree is recorded by the surrounding test evidence.
+run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, 'server'), './cmd/corerp-server'], join(root, 'backend'));
+run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, 'setup'), './cmd/corerp-m2'], join(root, 'backend'));
 run(join(temp, 'setup'), ['-db', database, '-action', 'rp-travel-prepare']);
 await cp(join(root, 'clients/sillytavern'), join(hostRoot, 'data/default-user/extensions/corerp-runtime'), { recursive: true });
 let runtime, host, browser, page;
-const startRuntime = () => spawn(join(temp, 'server'), ['-db', database, '-listen', '127.0.0.1:4188', '-browser-origins', 'http://127.0.0.1:4187,http://127.0.0.1:4189'], { env, stdio: 'ignore' });
+const startRuntime = () => spawn(join(temp, 'server'), ['-db', database, '-listen', '127.0.0.1:4198', '-browser-origins', 'http://127.0.0.1:4187,http://127.0.0.1:4199'], { env, stdio: 'ignore' });
 const startHost = () => spawn(process.execPath, ['server.js', '--configPath', join(hostRoot, 'config.yaml')], { cwd: join(hostRoot, 'package'), stdio: 'ignore' });
 const authoritySnapshot = () => run('sqlite3', [database, "SELECT head_sequence FROM branches WHERE instance_id='inst_m2_t09' AND branch_id='br_main'; SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main'; SELECT COUNT(*) FROM events; SELECT COUNT(*) FROM materialized_entities;"]).toString();
 const identitySnapshot = () => run('sqlite3', [database, 'SELECT entity_id,source_cohort_id,population_count FROM materialized_entities ORDER BY entity_id;']).toString();
 async function ready(url) {
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 600; i++) {
     try { if ((await fetch(url)).ok) return; } catch { /* not yet */ }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -45,21 +59,29 @@ async function stop(child) {
 try {
   runtime = startRuntime();
   host = startHost();
-  await Promise.all([ready('http://127.0.0.1:4188/readyz'), ready('http://127.0.0.1:4187/version')]);
+  await Promise.all([ready('http://127.0.0.1:4198/readyz'), ready('http://127.0.0.1:4187/version')]);
   browser = await chromium.launch({ headless: true });
   const browserContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  await browserContext.route('**/*', route => ['http://127.0.0.1:4187', 'http://127.0.0.1:4188', 'http://127.0.0.1:4189'].includes(new URL(route.request().url()).origin) ? route.continue() : route.abort());
+  await browserContext.route('**/*', route => ['http://127.0.0.1:4187', 'http://127.0.0.1:4198', 'http://127.0.0.1:4199'].includes(new URL(route.request().url()).origin) ? route.continue() : route.abort());
   page = await browserContext.newPage();
-  const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('http://127.0.0.1:4187');
-  const welcome = page.getByRole('heading', { name: 'Persona Name:', exact: true });
-  await page.waitForFunction(() => document.querySelector('#corerp-runtime') || document.body.innerText.includes('Persona Name:'));
-  if (await welcome.isVisible()) {
-    await page.locator('.popup-input:visible').fill('CoreRP test player');
+  page.on('console', message => {
+    // Chromium also emits a generic console error for HTTP failures and
+    // deliberately aborted responses. The requestfailed listener below keeps
+    // URL-specific evidence and still rejects every non-fixture failure.
+    if (message.type() === 'error' && !message.text().startsWith('Failed to load resource:')) errors.push(`console: ${message.text()}`);
+  });
+  page.on('requestfailed', request => {
+    if (!expectedFixtureFailure(request)) errors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`);
+  });
+  await page.goto(hostOrigin);
+  const welcomeInput = page.locator('.popup-input:visible');
+  await page.waitForFunction(() => document.querySelector('#corerp-runtime') || document.body.innerText.includes('Persona Name:'), undefined, { timeout: hostUITimeout });
+  if (await welcomeInput.isVisible()) {
+    await welcomeInput.fill('CoreRP test player');
     await page.locator('.popup-button-ok:visible').click();
   }
-  await page.waitForSelector('#corerp-runtime', { state: 'attached' });
+  await page.waitForSelector('#corerp-runtime', { state: 'attached', timeout: hostUITimeout });
   // Use the actual host's authenticated API to create a disposable presentation
   // card, then its real selection API. This never materializes a runtime NPC.
   const cardAvatar = await page.evaluate(async name => {
@@ -77,13 +99,13 @@ try {
   // Open the actual host extensions drawer, not a fake extension container.
   await page.locator('#extensions-settings-button').click();
   let panel = page.locator('#corerp-runtime');
-  await panel.locator('[name=origin]').fill('http://127.0.0.1:4188');
+  await panel.locator('[name=origin]').fill('http://127.0.0.1:4198');
   await panel.locator('[name=token]').fill(token);
-  await panel.locator('summary').click();
+  await panel.getByText('新建绑定：引用现有世界与角色', { exact: true }).click();
   await panel.locator('[name=instance]').fill('inst_m2_t09');
   await panel.locator('[name=branch]').fill('br_main');
   await panel.locator('[name=entity]').fill('entity_m2_rp_lin');
-  const openRetirement = await checkRP7OpenRetirement({ page, token, cardAvatar, authoritySnapshot });
+  const openRetirement = await checkRP7OpenRetirement({ page, token, cardAvatar, authoritySnapshot, hostUITimeout });
   await panel.locator('[data-action=connect]').click();
   await page.waitForFunction(() => document.querySelector('#corerp-runtime').getAttribute('aria-busy') === 'false');
   assert.ok(await page.evaluate(() => SillyTavern.getContext().chatMetadata.corerp_runtime?.session_id), await panel.locator('[role=status]').textContent());
@@ -103,7 +125,7 @@ try {
   assert.equal(hostMetadata.includes(token), false);
   await page.screenshot({ path: join(temp, 'desktop.png') });
   await page.reload();
-  await page.waitForSelector('#corerp-runtime', { state: 'attached' });
+  await page.waitForSelector('#corerp-runtime', { state: 'attached', timeout: hostUITimeout });
   await page.evaluate(async avatar => {
     const ctx = SillyTavern.getContext();
     await ctx.getCharacters();
@@ -138,12 +160,12 @@ try {
   host = startHost();
   assert.notEqual(runtime.pid, oldRuntimePID);
   assert.notEqual(host.pid, oldHostPID);
-  await Promise.all([ready('http://127.0.0.1:4188/readyz'), ready('http://127.0.0.1:4187/version')]);
+  await Promise.all([ready('http://127.0.0.1:4198/readyz'), ready('http://127.0.0.1:4187/version')]);
   assert.equal(authoritySnapshot(), beforeRestart, 'restart changed authoritative head/time/events/individuals');
   page = await browserContext.newPage();
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('http://127.0.0.1:4187');
-  await page.waitForSelector('#corerp-runtime', { state: 'attached' });
+  await page.goto(hostOrigin);
+  await page.waitForSelector('#corerp-runtime', { state: 'attached', timeout: hostUITimeout });
   panel = page.locator('#corerp-runtime');
   await page.evaluate(async avatar => {
     const ctx = SillyTavern.getContext(); await ctx.getCharacters();
@@ -181,8 +203,8 @@ try {
   await panel.locator('[data-action=retry]').click();
   await page.waitForFunction(() => !SillyTavern.getContext().chatMetadata.corerp_runtime.pending && document.querySelector('#corerp-runtime').getAttribute('aria-busy') === 'false');
   assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSpeechAccepted' AND actor_id='entity_m2_rp_lin';"]).toString().trim(), '3');
-  const retirement = await checkRP7Retirement({ page, browserContext, token, authoritySnapshot });
-  const actions = await checkRP7Actions({ page, token });
+  const retirement = await checkRP7Retirement({ page, browserContext, token, authoritySnapshot, runtimeOrigin });
+  const actions = await checkRP7Actions({ page, token, runtimeOrigin });
   assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSpeechAccepted' AND actor_id='entity_m2_rp_lin';"]).toString().trim(), '4');
   const beforeSwitch = authoritySnapshot();
   const chatSwitch = await checkRP7ChatSwitch({ page, browserContext, token, cardAvatar });
@@ -191,7 +213,7 @@ try {
   assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPWaitCompleted'; SELECT COUNT(*) FROM rp_wait_intents WHERE status='pending';"]).toString().trim(), '2\n0');
   assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSpeechAccepted' AND actor_id='entity_m2_rp_lin';"]).toString().trim(), '4');
   const writeChatSwitch = await checkRP7AcceptedWriteChatSwitch({ page, browserContext, token, cardAvatar, authoritySnapshot });
-  const threeClients = await checkRP7ThreeClients({ page, browserContext, token, cardAvatar, authoritySnapshot, identitySnapshot, temp, restartRuntime: async () => { const oldPID = runtime.pid; await stop(runtime); runtime = startRuntime(); assert.notEqual(runtime.pid, oldPID); await ready('http://127.0.0.1:4188/readyz'); } });
+  const threeClients = await checkRP7ThreeClients({ page, browserContext, token, cardAvatar, authoritySnapshot, identitySnapshot, temp, restartRuntime: async () => { const oldPID = runtime.pid; await stop(runtime); runtime = startRuntime(); assert.notEqual(runtime.pid, oldPID); await ready('http://127.0.0.1:4198/readyz'); } });
   assert.equal(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPSpeechAccepted' AND actor_id='entity_m2_rp_lin';"]).toString().trim(), '8');
   await panel.screenshot({ path: join(temp, 'panel-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -200,10 +222,21 @@ try {
   assert.ok(layout && layout.width > 100 && layout.x >= 0 && layout.x + layout.width <= 390);
   await page.screenshot({ path: join(temp, 'mobile.png') });
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result: 'PASS', scope: 'actual-three-client-world-and-host-recovery', hostVersion: fixture.version, runtimeAndHostRestarted: true, playerSpeechCount: 8, threeClients, openRetirement, retirement, actions, chatSwitch, writeChatSwitch, budgetWait, temp }, null, 2));
+  console.log(JSON.stringify({ result: 'PASS', scope: 'actual-three-client-world-and-host-recovery', hostVersion: fixture.version, runtimeAndHostRestarted: true, playerSpeechCount: 8, groupMapping, draftImportBoundary: draftImport.authority_boundary, threeClients, openRetirement, retirement, actions, chatSwitch, writeChatSwitch, budgetWait, temp }, null, 2));
 } catch (error) {
   if (page && !page.isClosed()) {
-    console.error('Fixture failure:', { temp, status: await page.locator('#corerp-runtime [role=status]').textContent({ timeout: 1000 }).catch(() => 'panel unavailable') });
+    const diagnostic = await page.evaluate(async () => {
+      const extensions = await import('/scripts/extensions.js').catch(() => null);
+      return {
+        url: location.href,
+        readyState: document.readyState,
+        hasContext: typeof globalThis.SillyTavern?.getContext === 'function',
+        hasPanel: Boolean(document.querySelector('#corerp-runtime')),
+        extensionNames: extensions?.extensionNames || [],
+        disabledExtensions: extensions?.extension_settings?.disabledExtensions || [],
+      };
+    }).catch(diagnosticError => ({ error: diagnosticError.message }));
+    console.error('Fixture failure:', { temp, status: await page.locator('#corerp-runtime [role=status]').textContent({ timeout: 1000 }).catch(() => 'panel unavailable'), diagnostic, errors });
     // Password inputs remain masked; never log their values or network bodies.
     await page.screenshot({ path: join(temp, 'failure.png') }).catch(() => {});
   }

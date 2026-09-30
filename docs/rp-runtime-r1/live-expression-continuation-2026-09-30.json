@@ -1,0 +1,82 @@
+{
+  "kind": "real_provider_continuation_from_committed_witnessed_expression_after_restart",
+  "captured_at_utc": "2026-09-30T11:34:24.742473+00:00",
+  "runtime_sha256": "4ad3dad9c8b4f2ed5a428aa74d462754fc3de9b6f831894e2065f6992560df0a",
+  "prior_artifact": "role-ready-lean-contract-2026-09-30.json",
+  "world_spec_sha256": "34a79c05fb62155d3a54f94a4efc941524073b8e5b091053f1b8db04a34aceee",
+  "temp_dir": "/tmp/corerp-r1-live-expression-7anxo0fv",
+  "source_expression": {
+    "event_id": "event_rp_npc_expression_f8b73d37f6f294a972c2dad66d1fbcdb53bffaea5d087266deb3d8076aebd12e",
+    "event_sequence": 19,
+    "action": "smile",
+    "player_visual_observations": 1
+  },
+  "tuning": {
+    "model": "step-5-preview",
+    "timeout_seconds": 120,
+    "decision_max_tokens": 4096,
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "narrative": "deterministic"
+  },
+  "human_acceptance": "NOT VERIFIED",
+  "limits": "A copied isolated fictional author fixture, not Rongqing Golden. Public committed smile alone authorizes the next player reference. No private or uncommitted words saved. Restart and one follow-up do not prove long-term memory or expressive narrator.",
+  "status": "PASS: one real follow-up settled against committed witnessed expression; human text review pending",
+  "input": "Nora，你刚才那一笑，我心里松快了点。你想让我接着聊什么？",
+  "seconds": 47.832,
+  "public_narrative_lines": [
+    "你说：\n「Nora，你刚才那一笑，我心里松快了点。你想让我接着聊什么？」",
+    "Nora 回应：\n「Lin，那就好。不用我点题，你想讲什么就讲什么；要是不想聊深的，我们就说点轻松的。」"
+  ],
+  "replies": [
+    {
+      "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+      "name": "Nora",
+      "action": "respond",
+      "text": "Lin，那就好。不用我点题，你想讲什么就讲什么；要是不想聊深的，我们就说点轻松的。",
+      "event_id": "event_rp_npc_a22a5a47f2e0e806fbd81a3ad224a815badc0cf67bb059de32862f746b03bedc"
+    }
+  ],
+  "provider_calls": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "model_id": "step-5-preview",
+      "attempt_count": 1,
+      "result": "success",
+      "fallback_kind": null
+    }
+  ],
+  "http_records": [
+    {
+      "label": "committed_expression_continuation",
+      "phase": "real_role_turn",
+      "request_bytes": 20625,
+      "context_bytes": 13762,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 9,
+      "model": "step-5-preview",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 6059,
+        "completion_tokens": 2856,
+        "total_tokens": 8915
+      },
+      "content_bytes": 572,
+      "reasoning_bytes": {
+        "reasoning": 11259,
+        "reasoning_content": 11259
+      },
+      "http_status": 200,
+      "seconds": 47.741
+    }
+  ],
+  "expression_not_duplicated_after_restart": true,
+  "source_world_unchanged": true
+}

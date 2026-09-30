@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { clickPlayWait } from './play-ui-helpers.mjs'
 
 // Actual UI commands against the temporary economic world. Initial gifts and
 // policy installation are explicit fixture setup, never counted as UI turns.
@@ -23,7 +24,9 @@ export async function prepareLongPlay({ page, sql, credential, creatorCredential
   const gifts = []
   for (const target of ['entity_m2_rp_cai', npc]) for (let i = 0; i < 2; i++) {
     const view = await call('rp/observe', credential, { session_id: session })
-    const gift = await call('rp/actions/social', credential, { session_id: session, target_entity_id: target, action: 'gift', amount_minor: 1, expected_cursor: view.observation_cursor, idempotency_key: `long-play-gift-${target}-${i}` })
+    const candidates = view.present_entities.filter(person => target === npc ? person.display_name === '陌生人' : person.display_name === 'Cai')
+    assert.equal(candidates.length, 1, `gift target must be uniquely visible: ${JSON.stringify(view.present_entities)}`)
+    const gift = await call('rp/actions/social', credential, { session_id: session, target_entity_id: candidates[0].entity_id, action: 'gift', amount_minor: 1, expected_cursor: view.observation_cursor, idempotency_key: `long-play-gift-${target}-${i}` })
     if (target === npc) gifts.push(gift.event_id)
   }
   const define = (path, body) => call(path, creatorCredential, { binding: { instance_id: 'inst_m2_t09', branch_id: 'br_main', expected_head: Number(sql("SELECT head_sequence FROM branches WHERE instance_id='inst_m2_t09' AND branch_id='br_main'")), idempotency_key: `long-play-${path}` }, ...body })
@@ -38,22 +41,26 @@ export async function playLongSegment({ page, sql, temp, state, segment }) {
     const text = `长程生活 ${segment}-${i + 1}：你好，今天这里怎么样？`
     const response = page.waitForResponse(r => r.url().endsWith('/rp/turns/run'))
     await page.getByLabel('你想说的话').fill(text)
-    await page.getByRole('button', { name: '说出 →', exact: true }).click()
+    await page.getByRole('button', { name: '说出', exact: true }).click()
     const result = await (await response).json()
     assert.ok(result.data?.turn_run_id, JSON.stringify(result))
     assert.ok(!state.turns.has(result.data.turn_run_id), 'every speech must be a distinct committed turn')
     state.turns.add(result.data.turn_run_id)
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
-    assert.ok((await page.getByRole('main', { name: '对话历史' }).innerText()).includes(text), 'latest actual speech stays readable')
+    assert.ok((await page.getByRole('main', { name: '故事对话' }).innerText()).includes(text), 'latest actual speech stays readable')
     const latest = await page.locator('.reading article.turn').last().innerText()
-    if (latest.includes('Nora 回应：「我愿意相信你，接着说吧。')) state.rememberedReplies[segment]++
+    if (latest.includes('陌生人 回应：「我愿意相信你，接着说吧。')) {
+      const decision = Number(sql(`SELECT COUNT(*) FROM rp_npc_decisions d JOIN rp_turn_runs r ON d.parent_turn_id=r.player_turn_id WHERE r.turn_run_id='${result.data.turn_run_id.replaceAll("'", "''")}' AND d.npc_entity_id='${state.npc}' AND json_extract(d.proposal_json,'$.text')='我愿意相信你，接着说吧。'`))
+      assert.equal(decision, 1, 'visible anonymous reply has Nora’s own sourced decision')
+      state.rememberedReplies[segment]++
+    }
     assert.ok(await page.locator('.reading article.turn').count() <= 50, 'bounded history')
     assert.equal(await page.getByRole('alert').count(), 0)
     assert.equal(await page.getByLabel('你想说的话').isEnabled(), true)
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
     if ((i + 1) % 4 === 0) {
       let pending = page.waitForResponse(r => r.url().endsWith('/rp/actions/wait'))
-      await page.getByRole('button', { name: '等四小时', exact: true }).click()
+      await clickPlayWait(page, 4)
       let wait = await (await pending).json()
       for (let drain = 0; wait.data?.status === 'budget_exhausted' && drain < 20; drain++) {
         pending = page.waitForResponse(r => r.url().endsWith('/rp/actions/wait'))
@@ -70,7 +77,7 @@ export async function playLongSegment({ page, sql, temp, state, segment }) {
         const receipt = JSON.parse(sql(`SELECT payload FROM events WHERE event_id='${wait.data.event_id.replaceAll("'", "''")}'`)).contact_opportunities?.find(item => item.actor_id === state.npc)
         assert.equal(receipt?.draw.selected, true, 'actual spontaneous contact requires a selected own-source draw')
         assert.equal(Number(sql(`SELECT COUNT(*) FROM agent_knowledge WHERE observer_agent_id='${state.npc}' AND subject_agent_id='entity_m2_rp_lin' AND source_event_id='${receipt.source_event_id.replaceAll("'", "''")}'`)), 1, 'contact source must be personally known player relationship evidence')
-        assert.ok((await page.getByRole('main', { name: '对话历史' }).innerText()).includes('又见面了，最近过得怎么样？'), 'actual spontaneous speech visible after wait')
+        assert.ok((await page.getByRole('main', { name: '故事对话' }).innerText()).includes('又见面了，最近过得怎么样？'), 'actual spontaneous speech visible after wait')
         state.visibleContacts++
       }
       if (wait.data.initiatives?.every(effect => ['silence', 'wait'].includes(effect.action))) state.quietWaits++

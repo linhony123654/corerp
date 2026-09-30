@@ -1,10 +1,16 @@
 import { createApp } from 'vue'
-import App from './App.vue'
-import PlayWorkspace from './components/PlayWorkspace.vue'
-import StudioWorkspace from './components/StudioWorkspace.vue'
-import StudioCreate from './components/StudioCreate.vue'
 import './styles/fonts.css'
 import './styles/base.css'
 
+// Route-level code splitting: the Play client never downloads Studio/demo bundles.
+const path = location.pathname
+const loader = path === '/demo'
+  ? () => import('./App.vue')
+  : path === '/studio'
+    ? () => import('./components/StudioWorkspace.vue')
+    : path === '/studio/create'
+      ? () => import('./components/StudioCreate.vue')
+      : () => import('./components/PlayWorkspace.vue')
+
 // Historical fixture/inspector remains an explicit demo entry, never the Play default.
-createApp(location.pathname === '/demo' ? App : location.pathname === '/studio' ? StudioWorkspace : location.pathname === '/studio/create' ? StudioCreate : PlayWorkspace).mount('#app')
+void loader().then(({ default: Root }) => createApp(Root).mount('#app'))

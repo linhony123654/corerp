@@ -1,0 +1,49 @@
+{
+  "kind": "real_player_interpretation_postchecks_from_frozen_32_checkpoint",
+  "runtime_sha256": "edf6750ba0e4f417773986980c1841a70afb94cd0191c2c0377c713cf2cf9733",
+  "source_checkpoint": "interaction-contract-verification-2026-09-30.json",
+  "original_checkpoint": "source-refs-32-result-2026-09-30.json",
+  "artifact_directory": "/dev/shm/corerp-r1-interaction-contract-post-_uu2ady5",
+  "status": "FAIL",
+  "mock_requests": 0,
+  "checks": {},
+  "limits": "API-only targeted continuation on a database backup; not a complete rerun of the original browser32 suite or human RP acceptance.",
+  "failure_class": "AssertionError",
+  "failure": "HTTP 400 / INVALID_ARGUMENT",
+  "interpretation_receipts": [
+    {
+      "source": "model",
+      "result": "failed",
+      "reason": "provider_proposal_object_fields",
+      "attempts": 1,
+      "accepted_plan": 0
+    }
+  ],
+  "receipt_summary": [
+    {
+      "phase": "decision",
+      "provider": "chat_completions",
+      "result": "success",
+      "fallback": "",
+      "calls": 96,
+      "attempts": 100
+    },
+    {
+      "phase": "narrative",
+      "provider": "deterministic",
+      "result": "success",
+      "fallback": "",
+      "calls": 32,
+      "attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider": "full_prose",
+      "result": "success",
+      "fallback": "",
+      "calls": 33,
+      "attempts": 33
+    }
+  ],
+  "captured_at_utc": "2026-09-30T15:33:35.018950+00:00"
+}

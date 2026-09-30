@@ -1,0 +1,71 @@
+{
+  "runtime_sha256": "f85f7a508a2373755189243bdfa2a11460a956e595f1077265d2e8f963affd95",
+  "status": "FAIL",
+  "session": 86982,
+  "exit_code": 1,
+  "source_checkpoint": "ready-content-verification-2026-09-30.json",
+  "completed_browser_turns": 16,
+  "settled_turns": 17,
+  "failed_turn": 17,
+  "artifact_directory": "/dev/shm/corerp-rp3-npc-mMWT3r",
+  "receipt_summary": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "failed",
+      "fallback_kind": "silence",
+      "calls": 1,
+      "attempts": 2
+    },
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 50,
+      "attempts": 55
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 17,
+      "attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 17,
+      "attempts": 17
+    }
+  ],
+  "failed_receipts": [
+    {
+      "phase": "decision",
+      "result": "failed",
+      "fallback_kind": "silence",
+      "attempt_count": 2,
+      "started_at_utc": "2026-09-30T13:47:06.598649242Z",
+      "finished_at_utc": "2026-09-30T13:47:59.369820133Z"
+    }
+  ],
+  "safe_debug_sequence": [
+    {
+      "request": 54,
+      "result": "ungrounded_decision",
+      "transport": "complete_content",
+      "response_content_bytes": 1142
+    },
+    {
+      "request": 55,
+      "result": "invalid proposal schema",
+      "transport": "complete_content",
+      "response_content_bytes": 1015
+    }
+  ],
+  "postchecks": "NOT REACHED: mixed object, deliberate failure, regeneration/restart final gates",
+  "limits": "First attempt had unsupported OR duplicate basis ref (existing diagnostic did not distinguish); second failed strict structure before basis validation. No raw proposals/private intent/reasoning stored. This is not a 32-turn pass and not a timeout."
+}

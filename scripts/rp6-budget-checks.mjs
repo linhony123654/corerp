@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
+import { openPlayBusiness, scrollPlayToEnd } from './play-ui-helpers.mjs'
 
 export async function checkContextBudget({ page, sql, credential, restart, getModelCalls }) {
   const settings = page.getByRole('dialog', { name: '叙事设置', exact: true })
   async function setBudget(value) {
-    await page.getByRole('button', { name: '叙事设置', exact: true }).click()
+    await openPlayBusiness(page, '叙事设置')
     await settings.getByLabel('叙述上下文预算').selectOption(value)
     await settings.getByRole('button', { name: '保存叙事设置', exact: true }).click()
     await settings.getByText('已保存。用于之后的新段落，不改写已发生的事。', { exact: true }).waitFor()
@@ -38,10 +39,10 @@ export async function checkContextBudget({ page, sql, credential, restart, getMo
   await turn.locator('summary').click()
   await turn.getByRole('button', { name: '按当前设置重新生成' }).click()
   await turn.getByText('展示已更新，世界事件和原始记录未改变。', { exact: true }).waitFor()
-  assert.ok((await turn.locator(':scope > p').allTextContents()).join('\n').includes(longSpeech))
+  assert.ok((await turn.locator(':scope > .prose > p').allTextContents()).join('\n').includes(longSpeech))
   assert.equal(facts(), committed)
   assert.equal(getModelCalls(), calls)
   page.off('request', count)
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  await scrollPlayToEnd(page)
   console.log(JSON.stringify({ contextBudget: 'PASS', unit: 'UTF-8 JSON bytes (not model tokens)', checks: ['real persisted setting', 'oversized actual accepted speech', 'settlement remains valid', 'budget error before stream', 'restart and saved-original recovery', 'larger explicit regeneration budget', 'no truncation or repeated world/model work'] }))
 }

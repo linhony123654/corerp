@@ -1,0 +1,11 @@
+{
+  "status": "FAIL: environment preflight",
+  "exit_code": 120,
+  "session": 8214,
+  "provider_calls": 0,
+  "turns": 0,
+  "reason": "Disk space exhausted during isolated fixture seed, before runtime or provider requests. Not a model/role failure.",
+  "temp_dir": "/tmp/corerp-r1-selection-ready_private_channel_runtime-ymyhbcmn",
+  "log": "/tmp/corerp-r1-role-ready-private-channel-20260930.log",
+  "next": "Same scenario with TMPDIR=/dev/shm; all assertions/model settings unchanged."
+}

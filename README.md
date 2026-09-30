@@ -8,6 +8,8 @@
 
 ## 一、项目愿景与核心理念
 
+当前另有[独立的临时公网试玩](docs/ui/public-preview.md)：仅供查看与操作隔离世界，人物决策与长篇叙述均使用受约束的模型 provider；它不代表生产部署，也不替代 F3 live Provider 门禁。
+
 **CoreRP** 是一个基于 **Go 1.24+ 与轻量嵌入式 SQLite** 构建的严肃角色扮演世界内核与社会动力学引擎。它旨在解决传统大模型 RP / 虚拟世界中普遍存在的“模型幻觉篡改事实”、“状态缺乏持久物理约束”、“跨智能体通信全知作弊”以及“模拟长跑经济崩溃”等根本性问题。
 
 ### 核心不变量 (Core Invariants)
@@ -121,7 +123,7 @@
 | **静态分析与代码格式** | `/usr/local/go/bin/go vet ./...` 及 `git diff --check` | **PASS** (0 错误, 0 告警) |
 | **前端类型检查与打包** | `vue-tsc --noEmit && vite build` (Vue 3 生产构建) | **PASS** (84 模块编译通过) |
 | **MCP 标准客户端套件** | `npm test` 在 `clients/mcp` (Stdio 协议与控制器隔离) | **PASS** (4/4 tests, 19.811s) |
-| **SillyTavern 酒馆适配器** | `node --test client.test.js` 在 `clients/sillytavern` | **PASS** (5/5 tests, 0.125s) |
+| **SillyTavern 酒馆适配器** | `node --test client.test.js draft.test.js` 在 `clients/sillytavern` | **PASS** (8/8：传输、自动重连退避、群聊映射、草稿边界) |
 
 > **Live Model 说明**: 当前环境保持 `IMPLEMENTATION_COMPLETE / LIVE_VALIDATION_PENDING`，工程结构完全对接标准 LLM OpenAI/Anthropic/Step 网关，不伪造线上验证结论。
 
@@ -199,6 +201,10 @@ npm run build
 ```
 打开浏览器访问 `http://localhost:5173/` 即可进入沉浸式 **Play** 页面；访问 `http://localhost:5173/studio` 可进入 **Studio / Inspector** 创作与审查控制台。
 
+新世界可从 `/studio/create` 创建：填写 NPC 人设，可选填写公开说话风格与玩家背景。已设定的关系需要分别填写双方身份与称呼；未设定的关系保持未知，不从名字推断原著设定。保存回执单独报告 `rp_readiness`，表示创建配置是否齐全，不代表角色体验已验收；旧世界不会因此自动补设定。见[角色创作入口与验证](docs/rp-runtime-r1/role-create-2026-09-30.md)。
+
+新生成的系统包默认由当前交流对象回应，点名熟悉角色可切换；既有或导入包保留其声明的策略。已建立的公开交流不会因一轮等待丢失来源，等待也不能创建交流。当前 R1 仍未通过完整32轮与真人体验出口；最新结果及审计入口见[当前R1审计快照](docs/rp-runtime-r1/conversation-default-review-2026-10-01.md)。
+
 ### 4. 编译与浏览离线开发手册
 ```bash
 # 运行纯 Go 静态站点生成器
@@ -224,9 +230,9 @@ npm test   # 运行标准 Stdio 自动化套件
 通过轻量代理脚本，可直接将 CoreRP 的角色、上下文与事件流桥接至酒馆界面：
 ```bash
 cd clients/sillytavern
-node --test client.test.js
+node --test client.test.js draft.test.js
 ```
-详细配置见 [clients/sillytavern/README.md](clients/sillytavern/README.md)。
+详细配置见 [clients/sillytavern/README.md](clients/sillytavern/README.md)；执行模式、场景物件、观测台和默认关闭的后台推进见 [Living-stage roleplay extensions](docs/rp8/living-stage.md)。
 
 ---
 

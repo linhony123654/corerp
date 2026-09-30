@@ -44,6 +44,7 @@ export class CoreRPClient {
       context: '/api/v1/rp/context/read', dialogue: '/api/v1/rp/turns/run',
       resumeTurn: '/api/v1/rp/turns/resume', move: '/api/v1/rp/actions/move',
       social: '/api/v1/rp/actions/social', wait: '/api/v1/rp/actions/wait',
+      object: '/api/v1/rp/actions/object', nonverbal: '/api/v1/rp/actions/nonverbal',
       retire: '/api/v1/rp/requests/retire',
     };
     if (!Object.hasOwn(paths, operation)) throw new Error('Unsupported CoreRP operation.');

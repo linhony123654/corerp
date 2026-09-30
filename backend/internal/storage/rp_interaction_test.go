@@ -361,7 +361,7 @@ func TestRPInteractionLongNarrativeFixtureStreamRecoveryAndWorldInvariance(t *te
 		streamed = append(streamed, chunk)
 		return nil
 	})
-	if err != nil || !reflect.DeepEqual(after.View, view.View) || len(streamed) != len(view.View.Lines) || streamed[0].EventID != result.Outcomes[0].EventID || streamed[0].Line != view.View.Lines[0] {
+	if err != nil || !reflect.DeepEqual(after.View.Lines, view.View.Lines) || !reflect.DeepEqual(after.View.EventIDs, view.View.EventIDs) || after.View.RenderID != "" || len(streamed) != len(view.View.Lines) || streamed[0].EventID != result.Outcomes[0].EventID || streamed[0].Line != view.View.Lines[0] {
 		t.Fatalf("long stream changed after reopen: %+v chunks=%d %v", after, len(streamed), err)
 	}
 	service, err = NewRPService(store, core.DeterministicRPDecisionProvider{}, "deterministic")

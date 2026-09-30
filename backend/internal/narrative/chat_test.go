@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"corerp.local/backend/internal/core"
+	"corerp.local/backend/internal/endpointpolicy"
 )
 
 const validPlan = `{"pov":"first_person","tense":"past","verbosity":"detailed","dialogue_ratio":100,"description_density":80,"narrative_pack_ref":"builtin/dialogue@1","unsupported_instructions":false}`
@@ -59,9 +60,12 @@ func TestChatStylePlannerHTTPExecutesPreferenceWithoutWorldContext(t *testing.T)
 		fmt.Fprint(w, envelope(validPlan))
 	}))
 	defer server.Close()
-	planner, err := NewChatStylePlanner(Config{Endpoint: server.URL, Model: "fixture-model", APIKey: "fixture-secret"})
+	planner, err := NewChatStylePlanner(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "fixture-model", APIKey: "fixture-secret"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if metadata := planner.ProviderMetadata(); metadata.Kind != "style_planner" || metadata.Model != "fixture-model" {
+		t.Fatalf("unexpected provider metadata: %+v", metadata)
 	}
 	input := core.RPNarrativeInput{ControlledEntityID: "lin", Style: core.DefaultRPStyle(), Facts: []core.RPNarrativeFact{{EventID: "event-secret", ActorID: "lin", ActorName: "Lin", Action: "speak", Text: "accepted-secret-speech", PlaceName: "咖啡馆"}}}
 	input.Style.ProseInstructions = "用第一人称，过去时，台词另起一行。"
@@ -105,7 +109,7 @@ func TestChatStylePlannerRejectsMalformedAndUnsafePlans(t *testing.T) {
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); fmt.Fprint(w, response) }))
 			defer server.Close()
-			p, err := NewChatStylePlanner(Config{Endpoint: server.URL, Model: "fixture", APIKey: "private-key"})
+			p, err := NewChatStylePlanner(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "fixture", APIKey: "private-key"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -123,7 +127,7 @@ func TestChatStylePlannerNoRedirectAndBoundedCancellation(t *testing.T) {
 	defer destination.Close()
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, destination.URL, 307) }))
 	defer redirect.Close()
-	p, err := NewChatStylePlanner(Config{Endpoint: redirect.URL, Model: "fixture", APIKey: "private-key"})
+	p, err := NewChatStylePlanner(Config{Endpoint: redirect.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "fixture", APIKey: "private-key"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +138,7 @@ func TestChatStylePlannerNoRedirectAndBoundedCancellation(t *testing.T) {
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-release }))
 	defer slow.Close()
 	defer close(release)
-	p, err = NewChatStylePlanner(Config{Endpoint: slow.URL, Model: "fixture", Timeout: 30 * time.Millisecond})
+	p, err = NewChatStylePlanner(Config{Endpoint: slow.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "fixture", Timeout: 30 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}

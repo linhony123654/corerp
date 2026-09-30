@@ -1,6 +1,9 @@
 package core
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // Manifest field names and meanings preserve docs/m0/core-contract.schema.json.
 const StudioPackageManifestVersion = "m0-draft-2026-09-22"
@@ -26,8 +29,32 @@ type PackageManifest struct {
 	ContentFiles  []string            `json:"content_files"`
 }
 
+type StudioActivityRule struct {
+	// DurationMinutes is the rule-bound cost of the activity; completion is
+	// committed deterministically when world time passes start+duration.
+	// A model can start an activity but can never declare it done itself.
+	DurationMinutes int `json:"duration_minutes"`
+}
+
+// StudioBackgroundProgression is an explicit, bounded opt-in. Omitting this
+// block (or setting enabled=false with no other values) keeps the world still.
+// Runtime workers may only use the existing scheduler and world-time authority.
+type StudioBackgroundProgression struct {
+	Enabled         bool `json:"enabled"`
+	StepMinutes     int  `json:"step_minutes,omitempty"`
+	SchedulerBudget int  `json:"scheduler_budget,omitempty"`
+}
+
 type StudioSystemRules struct {
 	NPCDailyActionBudget int `json:"npc_daily_action_budget"`
+	// RPExecutionMode opts a world into bounded turn activation. Empty preserves
+	// the legacy all-listeners behavior for already-authored packages.
+	RPExecutionMode       string                       `json:"rp_execution_mode,omitempty"`
+	MaxActiveResponders   int                          `json:"max_active_responders,omitempty"`
+	BackgroundProgression *StudioBackgroundProgression `json:"background_progression,omitempty"`
+	// Activities declares the world's legal activity vocabulary for NPC act
+	// decisions. Codes not declared here are never legal.
+	Activities map[string]StudioActivityRule `json:"activities,omitempty"`
 }
 
 // Retail entries are author references. They do not create a posting, issue a
@@ -77,6 +104,10 @@ type StudioPackageContent struct {
 	NarrativeStyle *RPStyleProfile            `json:"narrative_style,omitempty"`
 	SystemRules    *StudioSystemRules         `json:"system_rules,omitempty"`
 	RetailCareer   *StudioRetailCareerCatalog `json:"retail_career,omitempty"`
+	// ActivityLabels declares prose labels for system-package activity codes
+	// (e.g. tend_accounts -> 理账). Presentation metadata only: rendering shows
+	// the label when present and falls back to the raw code otherwise.
+	ActivityLabels map[string]string `json:"activity_labels,omitempty"`
 }
 
 type StudioPackageBundle struct {
@@ -117,20 +148,57 @@ func (b StudioPackageBundle) Validate() error {
 	switch m.Kind {
 	case "system":
 		capability, filename = "rules.npc.daily_budget", "system.json"
-		if c.SystemRules == nil || c.NarrativeStyle != nil || c.RetailCareer != nil || c.SystemRules.NPCDailyActionBudget < 1 || c.SystemRules.NPCDailyActionBudget > 64 {
+		if c.SystemRules == nil || c.NarrativeStyle != nil || c.RetailCareer != nil || len(c.ActivityLabels) != 0 || c.SystemRules.NPCDailyActionBudget < 1 || c.SystemRules.NPCDailyActionBudget > 64 {
 			return bad("system package requires only bounded NPC daily action rules")
+		}
+		switch c.SystemRules.RPExecutionMode {
+		case "":
+			if c.SystemRules.MaxActiveResponders != 0 {
+				return bad("legacy RP execution cannot set a responder limit")
+			}
+		case "deterministic", "orchestrated", "multi_agent":
+			if c.SystemRules.MaxActiveResponders < 1 || c.SystemRules.MaxActiveResponders > 8 {
+				return bad("RP execution responder limit must be between 1 and 8")
+			}
+			if c.SystemRules.RPExecutionMode == "deterministic" && c.SystemRules.MaxActiveResponders != 1 {
+				return bad("deterministic RP execution requires exactly one active responder")
+			}
+		default:
+			return bad("unsupported RP execution mode")
+		}
+		if progression := c.SystemRules.BackgroundProgression; progression != nil {
+			if !progression.Enabled {
+				if progression.StepMinutes != 0 || progression.SchedulerBudget != 0 {
+					return bad("disabled background progression cannot set runtime budgets")
+				}
+			} else if progression.StepMinutes < 1 || progression.StepMinutes > 24*60 || progression.SchedulerBudget < 1 || progression.SchedulerBudget > 10000 {
+				return bad("background progression requires a 1-1440 minute step and 1-10000 scheduler budget")
+			}
+		}
+		for code, rule := range c.SystemRules.Activities {
+			if !studioLocalKey.MatchString(code) || rule.DurationMinutes < 1 || rule.DurationMinutes > 480 {
+				return bad("invalid activity rule")
+			}
 		}
 	case "narrative":
 		capability, filename = "narrative.style", "narrative.json"
 		if c.NarrativeStyle == nil || c.SystemRules != nil || c.RetailCareer != nil {
-			return bad("narrative package requires only presentation style")
+			return bad("narrative package requires only presentation style and activity labels")
 		}
 		if err := c.NarrativeStyle.Validate(); err != nil {
 			return err
 		}
+		if len(c.ActivityLabels) > 64 {
+			return bad("too many activity labels")
+		}
+		for code, label := range c.ActivityLabels {
+			if !studioLocalKey.MatchString(code) || strings.TrimSpace(label) == "" || len([]rune(label)) > 24 {
+				return bad("invalid activity label")
+			}
+		}
 	case "content":
 		capability, filename = "content.career.retail", "content.json"
-		if c.RetailCareer == nil || c.SystemRules != nil || c.NarrativeStyle != nil {
+		if c.RetailCareer == nil || c.SystemRules != nil || c.NarrativeStyle != nil || len(c.ActivityLabels) != 0 {
 			return bad("retail content package requires only its typed catalog")
 		}
 		if err := c.RetailCareer.Validate(); err != nil {

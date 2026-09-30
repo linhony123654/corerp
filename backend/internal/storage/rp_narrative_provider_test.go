@@ -72,8 +72,11 @@ func TestRPNarrativeProviderIndependentAuthorizedAndOutsideTransaction(t *testin
 	if view.View.Lines[0] == turn.NarrativeLines[0] {
 		t.Fatal("fixture style did not produce actual variant")
 	}
-	jsonView, err := service.ReadRPNarrative(ctx, r)
-	if err != nil || calls != 2 || !reflect.DeepEqual(view, jsonView) {
+	jsonRequest := r
+	secondPerson := "second_person"
+	jsonRequest.StyleOverride = &core.RPStylePatch{POV: &secondPerson}
+	jsonView, err := service.ReadRPNarrative(ctx, jsonRequest)
+	if err != nil || calls != 2 || !reflect.DeepEqual(view.Style, jsonView.Style) || !reflect.DeepEqual(view.View.Lines, jsonView.View.Lines) || view.View.RenderID == "" || jsonView.View.RenderID == "" || view.View.RenderID == jsonView.View.RenderID {
 		t.Fatalf("JSON and stream do not share provider: %v", err)
 	}
 	foreign := r
@@ -88,12 +91,16 @@ func TestRPNarrativeProviderIndependentAuthorizedAndOutsideTransaction(t *testin
 		t.Fatalf("oversized context reached provider: %v calls=%d", err, calls)
 	}
 	fail = true
-	if _, err := service.ReadRPNarrative(ctx, r); err == nil {
+	firstPerson := "first_person"
+	failedVariant := r
+	failedVariant.StyleOverride = &core.RPStylePatch{POV: &firstPerson}
+	if _, err := service.ReadRPNarrative(ctx, failedVariant); err == nil {
 		t.Fatal("provider failure concealed")
 	}
 	observation, err := service.ObserveRPSession(ctx, read)
-	if err != nil || !reflect.DeepEqual(observation.RecentTurns[len(observation.RecentTurns)-1].NarrativeLines, turn.NarrativeLines) {
-		t.Fatal("provider failure erased original")
+	selected := observation.RecentTurns[len(observation.RecentTurns)-1]
+	if err != nil || !reflect.DeepEqual(selected.NarrativeLines, jsonView.View.Lines) || selected.RenderID != jsonView.View.RenderID {
+		t.Fatal("provider failure erased selected presentation")
 	}
 	retry, err := service.PlayRPTurn(ctx, request)
 	if err != nil || !retry.Replayed || calls != 3 {
@@ -102,5 +109,87 @@ func TestRPNarrativeProviderIndependentAuthorizedAndOutsideTransaction(t *testin
 	assertM2Value(t, ctx, s, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, []any{M2DemoInstanceID, M2DemoBranchID}, turn.SettledSequence)
 	if _, err := NewRPServiceWithNarrative(s, core.DeterministicRPDecisionProvider{}, "deterministic", nil); !core.HasCode(err, core.CodeInvalidArgument) {
 		t.Fatalf("nil narrative provider accepted: %v", err)
+	}
+}
+
+func TestRPOfficialNarrativePersistsAcrossSelectedVariantAndRestart(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "official-narrative.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, read, initial := newRPWaitTestSession(t, ctx, s)
+	turn, err := s.PlayRPTurn(ctx, core.RPSpeechRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, ExpectedCursor: initial.ObservationCursor, IdempotencyKey: "official-turn", Text: "请问你是谁？"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	providerCalls := 0
+	provider := narrativeProviderFixture{call: func(_ context.Context, in core.RPNarrativeInput, emit func(core.RPNarrativeChunk) error) (core.RPNarrativeView, error) {
+		providerCalls++
+		eventIDs := make([]string, 0, len(in.Facts))
+		for _, fact := range in.Facts {
+			eventIDs = append(eventIDs, fact.EventID)
+		}
+		line := "正式长篇叙述保留了对白：「请问你是谁？」"
+		if providerCalls > 1 {
+			line = "临时改写仍保留对白：「请问你是谁？」"
+		}
+		if emit != nil {
+			if err := emit(core.RPNarrativeChunk{Index: 0, EventIDs: eventIDs, Line: line}); err != nil {
+				return core.RPNarrativeView{}, err
+			}
+		}
+		return core.RPNarrativeView{Lines: []string{line}, EventIDs: eventIDs, Warnings: []string{}}, nil
+	}}
+	service, err := NewRPServiceWithNarrative(s, core.DeterministicRPDecisionProvider{}, "deterministic", provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := RPNarrativeReadRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, TurnRunID: turn.TurnRunID}
+	official, err := service.ReadRPNarrative(ctx, r)
+	if err != nil || providerCalls != 1 {
+		t.Fatalf("official narrative not generated once: %+v %v calls=%d", official, err, providerCalls)
+	}
+	originalObservation, err := service.ObserveRPSession(ctx, read)
+	if err != nil || len(originalObservation.RecentTurns) == 0 || originalObservation.RecentTurns[len(originalObservation.RecentTurns)-1].RenderID != "" || !reflect.DeepEqual(originalObservation.RecentTurns[len(originalObservation.RecentTurns)-1].NarrativeLines, official.View.Lines) {
+		t.Fatalf("canonical narrative should display without a variant selection: %+v %v", originalObservation.RecentTurns, err)
+	}
+	secondPerson := "second_person"
+	variantRequest := r
+	variantRequest.StyleOverride = &core.RPStylePatch{POV: &secondPerson}
+	variant, err := service.ReadRPNarrative(ctx, variantRequest)
+	if err != nil || providerCalls != 2 || reflect.DeepEqual(variant.View.Lines, official.View.Lines) {
+		t.Fatalf("temporary variant not generated independently: %+v %v calls=%d", variant, err, providerCalls)
+	}
+	observed, err := service.ObserveRPSession(ctx, read)
+	if err != nil || !reflect.DeepEqual(observed.RecentTurns[len(observed.RecentTurns)-1].NarrativeLines, variant.View.Lines) {
+		t.Fatalf("selected variant was not shown: %+v %v", observed.RecentTurns, err)
+	}
+	var presentationMode string
+	if err := s.db.QueryRowContext(ctx, `SELECT narrative_presentation_mode FROM rp_turn_runs WHERE turn_run_id=?`, turn.TurnRunID).Scan(&presentationMode); err != nil || presentationMode != "custom" {
+		t.Fatalf("official narrative mode not persisted: %q %v", presentationMode, err)
+	}
+	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_turn_runs WHERE turn_run_id=? AND narrative_presented_at_utc IS NOT NULL`, []any{turn.TurnRunID}, 1)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	reloadedCalls := 0
+	reloadedProvider := narrativeProviderFixture{call: func(context.Context, core.RPNarrativeInput, func(core.RPNarrativeChunk) error) (core.RPNarrativeView, error) {
+		reloadedCalls++
+		return core.RPNarrativeView{}, errors.New("saved narrative should bypass provider")
+	}}
+	reloadedService, err := NewRPServiceWithNarrative(s, core.DeterministicRPDecisionProvider{}, "deterministic", reloadedProvider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := reloadedService.ReadRPNarrative(ctx, r)
+	if err != nil || reloadedCalls != 0 || !reflect.DeepEqual(reloaded.View.Lines, official.View.Lines) {
+		t.Fatalf("official narrative did not survive restart: %+v %v calls=%d", reloaded, err, reloadedCalls)
 	}
 }

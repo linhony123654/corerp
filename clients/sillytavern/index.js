@@ -1,4 +1,5 @@
 import { CoreRPClient } from './client.js';
+import { buildStudioImportDraft, presentationMapping, reconnectDelay, samePresentationMapping } from './draft.js';
 
 const KEY = 'corerp_runtime';
 const context = () => SillyTavern.getContext();
@@ -28,10 +29,10 @@ globalThis.corerpRuntimeInterceptor = (_chat, _size, abort) => {
 function scope() {
   const host = context();
   if (host.getCurrentChatId() == null) throw new Error('请先打开一个酒馆角色聊天。');
-  if (host.groupId != null) throw new Error('当前版本仅支持单角色聊天绑定。');
   const metadata = host.chatMetadata;
   const chatID = host.getCurrentChatId();
   const avatar = host.characters[host.characterId]?.avatar;
+  const group = host.groupId != null;
   const captured = epoch;
   return {
     metadata,
@@ -45,18 +46,27 @@ function scope() {
       this.check();
       // The pinned host catches save failures rather than rejecting its Promise.
       // Read back our binding/intent before any runtime command may be sent.
-      const response = await fetch('/api/chats/get', {
+      const response = await fetch(group ? '/api/chats/group/get' : '/api/chats/get', {
         method: 'POST', headers: context().getRequestHeaders(),
-        body: JSON.stringify({ avatar_url: avatar, file_name: chatID }),
+        body: JSON.stringify(group ? { id: chatID } : { avatar_url: avatar, file_name: chatID }),
       });
       if (!response.ok) throw new Error('无法确认酒馆保存结果；尚未发送新的世界命令。');
       const saved = await response.json();
       this.check();
-      if (JSON.stringify(saved[0]?.chat_metadata?.[KEY] ?? null) !== expected) {
+      const savedMetadata = saved[0]?.chat_metadata ?? saved.chat_metadata;
+      if (JSON.stringify(savedMetadata?.[KEY] ?? null) !== expected) {
         throw new Error('酒馆未保存绑定或重试记录，请恢复连接后原样重试。');
       }
     },
   };
+}
+
+function waitForReconnect(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException('连接已取消。', 'AbortError'));
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('连接已取消。', 'AbortError')); }, { once: true });
+  });
 }
 
 function disconnect() {
@@ -130,22 +140,46 @@ async function subscribe(captured) {
   const activeClient = client;
   const signal = controller.signal;
   const binding = state();
-  try {
-    for await (const frame of activeClient.events(binding.session_id, binding.cursor, signal)) {
-      captured.check();
-      if (busy) continue; // do not persist a cursor for an unprocessed frame
-      if (frame.type === 'rp_checkpoint') {
-        setBusy(true);
-        try {
-          await refresh(captured);
-          binding.cursor = frame.id;
-          await captured.save();
-        } finally { if (!signal.aborted) setBusy(false); }
+  let attempt = 0;
+  while (!signal.aborted && client === activeClient) {
+    try {
+      for await (const frame of activeClient.events(binding.session_id, binding.cursor, signal)) {
+        captured.check();
+        attempt = 0;
+        if (busy) continue; // leave cursor unchanged; reconnect can replay it
+        if (frame.type === 'rp_checkpoint') {
+          setBusy(true);
+          try {
+            await refresh(captured);
+            binding.cursor = frame.id;
+            await captured.save();
+          } finally { if (!signal.aborted) setBusy(false); }
+        }
+      }
+      if (!signal.aborted) throw new Error('事件连接已结束。');
+    } catch (error) {
+      if (signal.aborted || client !== activeClient) return;
+      if (attempt >= 5) {
+        clearPrompt();
+        status(`自动重连已停止：${error.message}。令牌仍只在本页内存中，可手动连接继续。`);
+        return;
+      }
+      const delay = reconnectDelay(attempt++);
+      status(`事件流中断，${delay / 1000} 秒后自动重连（${attempt}/5）…`);
+      try {
+        await waitForReconnect(delay, signal);
+        await activeClient.call('resume', { session_id: binding.session_id }, signal);
+        captured.check();
+        await refresh(captured);
+      } catch (retryError) {
+        if (signal.aborted || client !== activeClient) return;
+        if (attempt >= 5) {
+          clearPrompt();
+          status(`自动重连已停止：${retryError.message}。请手动连接。`);
+          return;
+        }
       }
     }
-    if (!signal.aborted && client === activeClient) { clearPrompt(); status('事件连接已结束。重新连接以确认权限并续传。'); }
-  } catch (error) {
-    if (!signal.aborted && client === activeClient) { clearPrompt(); status(`事件流已停止：${error.message}`); }
   }
 }
 
@@ -191,36 +225,66 @@ async function connect(captured) {
   const origin = new URL(field('origin').value).origin;
   if (state()?.origin && state().origin !== origin) throw new Error('当前聊天已绑定其他来源，请先解除绑定。');
   const next = new CoreRPClient(field('origin').value, field('token').value);
+  const nextController = new AbortController();
   field('token').value = '';
   controller?.abort();
-  controller = new AbortController();
+  controller = nextController;
   client = next;
-  captured.metadata[KEY] ??= { origin };
-  const binding = state();
-  if (!binding.session_id && !binding.pending) {
-    const sessionID = field('session').value.trim();
-    if (sessionID) binding.session_id = sessionID;
-    else {
-      for (const name of ['instance', 'branch', 'entity']) {
-        if (!field(name).value.trim()) throw new Error('新建绑定需要填写世界实例、分支和控制角色。');
-      }
-      binding.pending = {
-      origin, operation: 'open', body: {
-        instance_id: field('instance').value.trim(), branch_id: field('branch').value.trim(),
-        entity_id: field('entity').value.trim(), pov: 'second_person', idempotency_key: crypto.randomUUID(),
-      },
-      };
+  try {
+    captured.metadata[KEY] ??= { origin };
+    const binding = state();
+    const mapping = presentationMapping(context());
+    if (binding.presentation && !samePresentationMapping(binding.presentation, mapping)) {
+      throw new Error('当前聊天的角色/群组成员与已保存映射不同；为防止控制权漂移，请新建聊天或先解除本地绑定。');
     }
-    await captured.save();
+    binding.presentation ??= mapping;
+    if (!binding.session_id && !binding.pending) {
+      const sessionID = field('session').value.trim();
+      if (sessionID) binding.session_id = sessionID;
+      else {
+        for (const name of ['instance', 'branch', 'entity']) {
+          if (!field(name).value.trim()) throw new Error('新建绑定需要填写世界实例、分支和控制角色。');
+        }
+        binding.pending = {
+        origin, operation: 'open', body: {
+          instance_id: field('instance').value.trim(), branch_id: field('branch').value.trim(),
+          entity_id: field('entity').value.trim(), pov: 'second_person', idempotency_key: crypto.randomUUID(),
+        },
+        };
+      }
+      await captured.save();
+    }
+    if (binding.pending?.operation === 'open') await runPending(captured);
+    if (!binding.session_id) throw new Error('尚未取得会话绑定。');
+    await next.call('resume', { session_id: binding.session_id }, nextController.signal);
+    captured.check();
+    await refresh(captured);
+    panel.querySelector('details').open = false;
+    // Start after this button operation has left its busy region.
+    setTimeout(() => { try { captured.check(); void subscribe(captured); } catch { /* changed chat */ } }, 0);
+  } catch (error) {
+    // A failed connect has no usable subscription. Release its transport
+    // resources while preserving the durable binding/pending intent so an
+    // exact retry or retirement can be performed after reconnecting.
+    nextController.abort();
+    if (controller === nextController) controller = undefined;
+    if (client === next) client = undefined;
+    throw error;
   }
-  if (binding.pending?.operation === 'open') await runPending(captured);
-  if (!binding.session_id) throw new Error('尚未取得会话绑定。');
-  await client.call('resume', { session_id: binding.session_id }, controller.signal);
+}
+
+function createImportDraft(captured) {
   captured.check();
-  await refresh(captured);
-  panel.querySelector('details').open = false;
-  // Start after this button operation has left its busy region.
-  setTimeout(() => { try { captured.check(); void subscribe(captured); } catch { /* changed chat */ } }, 0);
+  const draft = buildStudioImportDraft({ host: context(), worldInfoJSON: field('world_info').value });
+  field('draft_output').value = JSON.stringify(draft, null, 2);
+  const blob = new Blob([field('draft_output').value], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `corerp-studio-import-draft-${Date.now()}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  status('已生成本地 Studio 草稿；未创建角色、未激活包、未向 CoreRP 发送任何事实。');
 }
 
 async function submit(captured) {
@@ -258,10 +322,17 @@ function initialize() {
     </details>
     <div class="corerp-actions"><button class="menu_button" data-action="connect">连接 / 恢复</button><button class="menu_button" data-action="refresh">刷新见闻</button><button class="menu_button" data-action="retry">原样重试</button><button class="menu_button" data-action="retire">停用未接受请求</button><button class="menu_button" data-action="detach">解除本地绑定</button></div>
     <p>停用由服务端核实：仅未接受的请求会被永久停用；已接受的请求仍须原样恢复，不会回滚。</p>
+    <p data-role="mapping">单聊或群聊都只绑定一个 CoreRP 玩家会话；酒馆角色卡仅负责展示，不会克隆或控制世界 NPC。</p>
     <pre aria-label="世界见闻"></pre>
-    <label>提交类型<select class="text_pole" name="operation"><option value="dialogue">说话</option><option value="wait">等待（JSON）</option><option value="move">移动（JSON）</option><option value="social">社交行动（JSON）</option></select></label>
+    <label>提交类型<select class="text_pole" name="operation"><option value="dialogue">说话</option><option value="wait">等待（JSON）</option><option value="move">移动（JSON）</option><option value="social">社交行动（JSON）</option><option value="object">物件行动（JSON，须有真实来源）</option><option value="nonverbal">无声动作（JSON）</option></select></label>
     <label>发言或动作参数<textarea class="text_pole" name="command" rows="3"></textarea></label>
-    <button class="menu_button" data-action="submit">提交到世界</button>`;
+    <button class="menu_button" data-action="submit">提交到世界</button>
+    <details><summary>角色卡 / 世界书 → Studio 草稿</summary>
+      <p>只生成本地待审 JSON；导入文本不是世界事实，也不会自动创建实体或激活包。</p>
+      <label>可选：粘贴世界书 JSON<textarea class="text_pole" name="world_info" rows="4"></textarea></label>
+      <button class="menu_button" data-action="draft">生成并下载草稿</button>
+      <label>草稿预览<textarea class="text_pole" name="draft_output" rows="8" readonly></textarea></label>
+    </details>`;
   document.querySelector('#extensions_settings2').append(panel);
   panel.addEventListener('click', async event => {
     const action = event.target.closest('button[data-action]')?.dataset.action;
@@ -276,6 +347,7 @@ function initialize() {
       if (action === 'retry') await runPending(captured);
       if (action === 'retire') await retirePending(captured);
       if (action === 'submit') await submit(captured);
+      if (action === 'draft') createImportDraft(captured);
       if (action === 'detach') {
         if (state()?.pending) throw new Error('未确认命令不能丢弃；请先核实或重试。');
         delete captured.metadata[KEY];

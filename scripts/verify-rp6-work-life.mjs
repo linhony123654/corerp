@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 import { checkWork } from './rp6-work-checks.mjs'
 import { checkMessages, prepareMessageInvitations } from './rp6-messages-checks.mjs'
 import { prepareLongPlay, playLongSegment, verifyLongPlay } from './rp6-long-play-checks.mjs'
+import { clickPlayWait } from './play-ui-helpers.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp6-work-'))
@@ -54,7 +55,7 @@ try {
   // real player wait action instead of changing the clock or projection by SQL.
   for (let hour = 0; hour < 24; hour += 4) {
     let response = page.waitForResponse(r => r.url().endsWith('/rp/actions/wait'))
-    await page.getByRole('button', { name: '等四小时', exact: true }).click()
+    await clickPlayWait(page, 4)
     let result = await (await response).json()
     for (let drain = 0; result.data?.status === 'budget_exhausted' && drain < 20; drain++) {
       response = page.waitForResponse(r => r.url().endsWith('/rp/actions/wait'))

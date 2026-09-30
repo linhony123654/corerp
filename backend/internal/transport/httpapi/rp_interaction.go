@@ -11,7 +11,10 @@ func (s *Server) handleRPInteractionRun(w http.ResponseWriter, r *http.Request, 
 	if !requireMethod(w, requestID, r, http.MethodPost) {
 		return
 	}
-	var input core.RPInteractionRequest
+	var input struct {
+		core.RPInteractionRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(w, r, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(w, requestID, err)
 		return
@@ -20,7 +23,12 @@ func (s *Server) handleRPInteractionRun(w http.ResponseWriter, r *http.Request, 
 		writeError(w, requestID, err)
 		return
 	}
-	result, err := s.service.RunRPInteraction(r.Context(), input)
+	provider, err := resolveRPDecisionOverride(input.Model, s.endpointPolicy)
+	if err != nil {
+		writeError(w, requestID, err)
+		return
+	}
+	result, err := s.service.RunRPInteractionWith(r.Context(), input.RPInteractionRequest, provider)
 	if err != nil {
 		writeError(w, requestID, err)
 		return
@@ -32,7 +40,10 @@ func (s *Server) handleRPInteractionResume(w http.ResponseWriter, r *http.Reques
 	if !requireMethod(w, requestID, r, http.MethodPost) {
 		return
 	}
-	var input storage.RPInteractionResumeRequest
+	var input struct {
+		storage.RPInteractionResumeRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(w, r, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(w, requestID, err)
 		return
@@ -41,7 +52,12 @@ func (s *Server) handleRPInteractionResume(w http.ResponseWriter, r *http.Reques
 		writeError(w, requestID, err)
 		return
 	}
-	result, err := s.service.ResumeRPInteraction(r.Context(), input)
+	provider, err := resolveRPDecisionOverride(input.Model, s.endpointPolicy)
+	if err != nil {
+		writeError(w, requestID, err)
+		return
+	}
+	result, err := s.service.ResumeRPInteractionWith(r.Context(), input.RPInteractionResumeRequest, provider)
 	if err != nil {
 		writeError(w, requestID, err)
 		return

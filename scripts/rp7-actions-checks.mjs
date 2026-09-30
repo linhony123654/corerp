@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
 // Actual installed host UI + authoritative HTTP reads, never a second world.
-export async function checkRP7Actions({ page, token }) {
+export async function checkRP7Actions({ page, token, runtimeOrigin = 'http://127.0.0.1:4188' }) {
   const panel = page.locator('#corerp-runtime');
   const binding = await page.evaluate(() => structuredClone(SillyTavern.getContext().chatMetadata.corerp_runtime));
   const read = { session_id: binding.session_id };
   async function api(route, body) {
-    const response = await fetch(`http://127.0.0.1:4188/api/v1/rp/${route}`, {
+    const response = await fetch(`http://127.0.0.1:4198/api/v1/rp/${route}`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body), redirect: 'error',
     });

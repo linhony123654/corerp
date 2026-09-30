@@ -62,6 +62,9 @@ func TestRPStyleHTTPPermissionsAndFactPreservingView(t *testing.T) {
 	response = performJSON(t, handler, "/api/v1/rp/narrative/render", rpPlayerToken, render)
 	assertStatus(t, response, http.StatusOK)
 	variant := decodeData[storage.RPNarrativeReadResult](t, response)
+	if variant.View.RenderID == "" {
+		t.Fatal("successful render did not return durable version ID")
+	}
 	if variant.Style.SessionRevision != nil {
 		t.Fatal("live revision leaked into pinned narrative style")
 	}
@@ -84,19 +87,48 @@ func TestRPStyleHTTPPermissionsAndFactPreservingView(t *testing.T) {
 	}
 	for i, raw := range frames {
 		var frame struct {
-			Type  string                `json:"type"`
-			Chunk core.RPNarrativeChunk `json:"chunk"`
-			Count int                   `json:"count"`
+			Type     string                `json:"type"`
+			Chunk    core.RPNarrativeChunk `json:"chunk"`
+			Count    int                   `json:"count"`
+			EventIDs []string              `json:"event_ids"`
 		}
 		if err := json.Unmarshal([]byte(raw), &frame); err != nil {
 			t.Fatal(err)
 		}
 		if i == len(variant.View.Lines) {
-			if frame.Type != "done" || frame.Count != i {
-				t.Fatal("invalid completion marker")
+			if frame.Type != "done" || frame.Count != i || len(frame.EventIDs) != len(variant.View.EventIDs) {
+				t.Fatal("invalid completion marker or source set")
+			}
+			for j, id := range frame.EventIDs {
+				if id != variant.View.EventIDs[j] {
+					t.Fatal("completion source differs from accepted facts")
+				}
 			}
 		} else if frame.Type != "line" || frame.Chunk.Index != i || frame.Chunk.Line != variant.View.Lines[i] || frame.Chunk.EventID != variant.View.EventIDs[i] {
 			t.Fatal("stream lost ordering or attributed fact")
 		}
+	}
+	selection := storage.RPNarrativeSelectRequest{SessionID: session.SessionID, TurnRunID: turn.TurnRunID, RenderID: variant.View.RenderID}
+	response = performJSON(t, handler, "/api/v1/rp/narrative/select", creatorToken, selection)
+	assertAPIError(t, response, http.StatusNotFound, core.CodeNotFound)
+	response = performJSON(t, handler, "/api/v1/rp/narrative/select", rpPlayerToken, selection)
+	assertStatus(t, response, http.StatusOK)
+	chosen := decodeData[storage.RPNarrativeSelectResult](t, response)
+	if chosen.RenderID != variant.View.RenderID || strings.Join(chosen.Lines, "\n") != strings.Join(variant.View.Lines, "\n") {
+		t.Fatal("selected render did not return saved lines")
+	}
+	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
+	assertStatus(t, response, http.StatusOK)
+	observed = decodeData[storage.RPObservation](t, response)
+	last := observed.RecentTurns[len(observed.RecentTurns)-1]
+	if last.RenderID != selection.RenderID || strings.Join(last.NarrativeLines, "\n") != strings.Join(chosen.Lines, "\n") {
+		t.Fatal("observe did not use selected render")
+	}
+	selection.RenderID = ""
+	response = performJSON(t, handler, "/api/v1/rp/narrative/select", rpPlayerToken, selection)
+	assertStatus(t, response, http.StatusOK)
+	restored := decodeData[storage.RPNarrativeSelectResult](t, response)
+	if strings.Join(restored.Lines, "\n") != strings.Join(turn.NarrativeLines, "\n") {
+		t.Fatal("restore did not return canonical turn narrative")
 	}
 }

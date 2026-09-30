@@ -1,0 +1,131 @@
+{
+  "kind": "step_token_parameter_compatibility_probe",
+  "date": "2026-09-30",
+  "model": "step-5-preview",
+  "sources": [
+    "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
+    "https://platform.stepfun.com/docs/zh/guides/models/step-5-preview"
+  ],
+  "short_prompt": {
+    "kind": "token_parameter_compatibility_probe",
+    "model": "step-5-preview",
+    "records": [
+      {
+        "budget_field": "max_completion_tokens",
+        "budget": 64,
+        "http_status": 200,
+        "finish_reason": "stop",
+        "content_length": 11,
+        "reasoning_length": 97,
+        "usage": {
+          "prompt_tokens": 32,
+          "completion_tokens": 31,
+          "total_tokens": 63,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "elapsed_seconds": 2.683
+      },
+      {
+        "budget_field": "max_tokens",
+        "budget": 64,
+        "http_status": 200,
+        "finish_reason": "stop",
+        "content_length": 11,
+        "reasoning_length": 110,
+        "usage": {
+          "prompt_tokens": 32,
+          "completion_tokens": 32,
+          "total_tokens": 64,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "elapsed_seconds": 4.262
+      },
+      {
+        "budget_field": "max_completion_tokens",
+        "budget": 64,
+        "http_status": 200,
+        "finish_reason": "stop",
+        "content_length": 11,
+        "reasoning_length": 65,
+        "usage": {
+          "prompt_tokens": 32,
+          "completion_tokens": 23,
+          "total_tokens": 55,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "elapsed_seconds": 1.587
+      }
+    ],
+    "note": "Minimal diagnostic with 64-token cap, no world or private RP content; not production decision budget or full32 acceptance."
+  },
+  "forced_long_prompt": {
+    "kind": "token_parameter_compatibility_probe",
+    "model": "step-5-preview",
+    "records": [
+      {
+        "budget_field": "max_completion_tokens",
+        "budget": 64,
+        "http_status": 200,
+        "finish_reason": "length",
+        "content_length": 0,
+        "reasoning_length": 307,
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 64,
+          "total_tokens": 114,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "elapsed_seconds": 2.99
+      },
+      {
+        "budget_field": "max_tokens",
+        "budget": 64,
+        "http_status": 200,
+        "finish_reason": "length",
+        "content_length": 0,
+        "reasoning_length": 286,
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 64,
+          "total_tokens": 114,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "elapsed_seconds": 2.822
+      },
+      {
+        "budget_field": "max_completion_tokens",
+        "budget": 64,
+        "http_status": 200,
+        "finish_reason": "length",
+        "content_length": 0,
+        "reasoning_length": 291,
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 64,
+          "total_tokens": 114,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        "elapsed_seconds": 2.589
+      }
+    ],
+    "note": "Forced long public diagnostic with 64-token cap, no world or private RP content; not production decision budget or full32 acceptance."
+  },
+  "conclusion": "Both max_completion_tokens and max_tokens enforce the tested 64-token completion cap on this relay. This does not establish real RP latency or compatibility at every budget. No adapter field change is justified by these six probes.",
+  "limits": [
+    "Six public diagnostic requests only, no world/persona/private RP content.",
+    "HTTP 200 alone was insufficient; the forced-long requests all returned finish_reason=length and completion_tokens=64.",
+    "The relay reports reasoning_tokens=0 despite nonempty reasoning_content, so that usage subdivision cannot establish disabled reasoning."
+  ]
+}

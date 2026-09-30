@@ -38,7 +38,7 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 		if r.SessionID != "" {
 			return out, core.NewError(core.CodeInvalidArgument, "open keys are principal scoped")
 		}
-	case "dialogue", "wait", "move", "social", "interaction":
+	case "dialogue", "wait", "move", "social", "object", "nonverbal", "interaction":
 		if strings.TrimSpace(r.SessionID) == "" {
 			return out, core.NewError(core.CodeInvalidArgument, "session required")
 		}
@@ -88,12 +88,9 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status='completed' THEN 'completed' ELSE 'in_progress' END FROM rp_wait_intents WHERE session_id=? AND idempotency_key=?`, r.SessionID, r.IdempotencyKey).Scan(&status)
 	case "interaction":
 		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status IN ('settled','stopped','clarification') THEN 'completed' ELSE 'in_progress' END FROM rp_interactions WHERE session_id=? AND idempotency_key=?`, r.SessionID, r.IdempotencyKey).Scan(&status)
-	case "move", "social":
-		commandType := "RPPlayerMove"
-		if r.Operation == "social" {
-			commandType = "RPSocial"
-		}
-		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status='committed' THEN 'completed' ELSE 'in_progress' END FROM commands WHERE instance_id=? AND branch_id=? AND command_type=? AND idempotency_key=?`, session.InstanceID, session.BranchID, commandType, "rp_"+r.Operation+":"+r.SessionID+":"+r.IdempotencyKey).Scan(&status)
+	case "move", "social", "object", "nonverbal":
+		commandTypes := map[string]string{"move": "RPPlayerMove", "social": "RPSocial", "object": "RPObjectInteraction", "nonverbal": "RPNonverbalAction"}
+		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status='committed' THEN 'completed' ELSE 'in_progress' END FROM commands WHERE instance_id=? AND branch_id=? AND command_type=? AND idempotency_key=?`, session.InstanceID, session.BranchID, commandTypes[r.Operation], "rp_"+r.Operation+":"+r.SessionID+":"+r.IdempotencyKey).Scan(&status)
 	}
 	if err == nil {
 		out.Status = status
@@ -148,6 +145,8 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 	}
 	if r.Operation == "interaction" {
 		_, err = tx.conn.ExecContext(ctx, `INSERT INTO rp_interaction_retirements(principal_id,session_id,idempotency_key,retired_at_utc) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, r.PrincipalID, r.SessionID, r.IdempotencyKey, s.now().UTC().Format(time.RFC3339Nano))
+	} else if r.Operation == "object" || r.Operation == "nonverbal" {
+		_, err = tx.conn.ExecContext(ctx, `INSERT INTO rp_typed_action_retirements(principal_id,operation,session_id,idempotency_key,retired_at_utc) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`, r.PrincipalID, r.Operation, r.SessionID, r.IdempotencyKey, s.now().UTC().Format(time.RFC3339Nano))
 	} else {
 		_, err = tx.conn.ExecContext(ctx, `INSERT INTO rp_request_retirements(principal_id,operation,session_scope,idempotency_key,retired_at_utc) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`, r.PrincipalID, r.Operation, r.SessionID, r.IdempotencyKey, s.now().UTC().Format(time.RFC3339Nano))
 	}
@@ -173,4 +172,21 @@ func checkRPRequestRetirement(ctx context.Context, conn *sql.Conn, principal, op
 		return core.WrapError(core.CodeStorageFailure, "check RP request retirement", err)
 	}
 	return core.NewError(core.CodeRequestRetired, "request key permanently retired before acceptance")
+}
+
+// Typed owner keys live outside 027's frozen operation CHECK. Call only inside
+// the owner's BEGIN IMMEDIATE acceptance transaction, before writing a command.
+func checkRPTypedActionRetirement(ctx context.Context, conn *sql.Conn, principal, operation, session, key string) error {
+	if operation != "object" && operation != "nonverbal" {
+		return core.NewError(core.CodeInvalidArgument, "unknown typed RP action operation")
+	}
+	var found int
+	err := conn.QueryRowContext(ctx, `SELECT 1 FROM rp_typed_action_retirements WHERE principal_id=? AND operation=? AND session_id=? AND idempotency_key=?`, principal, operation, session, key).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return core.WrapError(core.CodeStorageFailure, "check typed RP action retirement", err)
+	}
+	return core.NewError(core.CodeRequestRetired, "typed RP action key retired before acceptance")
 }

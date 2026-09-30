@@ -1,0 +1,90 @@
+{
+  "kind": "unified_context_current_frozen_golden_terminal",
+  "captured_at_utc": "2026-09-30T09:32:52.957926+00:00",
+  "script_exit_code": 0,
+  "capture_status": "COMPLETE; experience NOT PASSED",
+  "runtime_sha256": "sha256:f6c9677840beaeb1100a215084cf1b37c8bbcebd8f52263504ba77d56910a67b",
+  "world_head": 52,
+  "model_configuration": {
+    "decision_timeout": "120s",
+    "decision_max_tokens": "4096",
+    "reasoning_effort": "low",
+    "decision_attempts": "2",
+    "narrative_timeout": "90s",
+    "narrative_attempts": "2"
+  },
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "attempt_count": 1,
+      "count": 16
+    },
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "attempt_count": 2,
+      "count": 1
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "attempt_count": 0,
+      "count": 15
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "attempt_count": 1,
+      "count": 1
+    }
+  ],
+  "event_counts": [
+    {
+      "event_type": "CohortMaterialized",
+      "count": 11
+    },
+    {
+      "event_type": "RPNPCDecisionRecorded",
+      "count": 2
+    },
+    {
+      "event_type": "RPPlayerMoved",
+      "count": 3
+    },
+    {
+      "event_type": "RPSpeechAccepted",
+      "count": 30
+    },
+    {
+      "event_type": "StudioPackageInstalled",
+      "count": 2
+    },
+    {
+      "event_type": "StudioPackagesActivated",
+      "count": 1
+    },
+    {
+      "event_type": "StudioSpatialPrepared",
+      "count": 1
+    },
+    {
+      "event_type": "StudioWorldPrepared",
+      "count": 1
+    },
+    {
+      "event_type": "StudioWorldReady",
+      "count": 1
+    }
+  ],
+  "expressions": 0,
+  "artifact_directory": "/tmp/corerp-rp-runtime-r1-after-CdZRzD",
+  "artifact": "context-selection-golden-2026-09-30.json",
+  "comparability": "Same frozen spec/package/stimuli, same Step tuning as prior Step capture, stochastic. Original frozen Gemini pair is cross-model and not a causal quality comparison. No new canon or human rubric approved.",
+  "human_rp_exit": "NOT PASSED",
+  "world_integrity_32_exit": "NOT PASSED; current full32 failed at turn9 on output truncation/120s timeout"
+}

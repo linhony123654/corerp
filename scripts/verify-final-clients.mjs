@@ -10,6 +10,7 @@ import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { runFinalClientStory } from './final-client-story.mjs';
 import { finalLongActions, prepareFinalClientFriendships, runFinalClientLong } from './final-client-long.mjs';
+import { setPlayInputMode } from './play-ui-helpers.mjs';
 
 // First runnable slice of Final: real Play + MCP wire + process recovery on the
 // actual Final composition. This smoke run is explicitly NOT 300-turn evidence.
@@ -105,6 +106,7 @@ try {
     await page.getByLabel('玩家访问凭证').fill(token);
     await page.getByRole('button', { name: resume ? '继续这段生活 →' : '进入世界 →', exact: true }).click();
     await page.getByRole('button', { name: '环顾四周', exact: true }).waitFor();
+    await setPlayInputMode(page, 'speech');
   }
   await enter(false);
   const playSession = await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).session);

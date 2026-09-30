@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { openPlayBusiness, openPlayTools, scrollPlayToEnd } from './play-ui-helpers.mjs'
 
 export async function checkStyle({ page, sql, temp, credential, restart, speak }) {
   const facts = () => sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_utterances)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)")
   const revisions = () => Number(sql('SELECT COUNT(*) FROM rp_style_revisions'))
   const before = facts(), initialRevisions = revisions()
   const oldHistory = await page.locator('.reading').innerText()
-  const open = () => page.getByRole('button', { name: '叙事设置', exact: true }).click()
+  const open = () => openPlayBusiness(page, '叙事设置')
   const dialog = page.getByRole('dialog', { name: '叙事设置', exact: true })
   const close = async () => { await dialog.getByRole('button', { name: '关闭叙事设置' }).click(); await dialog.waitFor({ state: 'hidden' }) }
   await page.route('**/api/v1/rp/style/read', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: '测试读取暂不可用' } }) }), { times: 1 })
@@ -22,6 +23,7 @@ export async function checkStyle({ page, sql, temp, credential, restart, speak }
   assert.equal(await dialog.getByLabel('回应详略').inputValue(), 'detailed')
   await dialog.getByRole('button', { name: '日常', exact: true }).click()
   await dialog.getByLabel('叙述视角').selectOption('first_person')
+  await dialog.getByLabel('叙述篇幅').selectOption('long')
   await dialog.getByLabel('自定义文风').fill('像记日记一样。')
   assert.match(await dialog.innerText(), /暂不会被执行/)
   assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth), true)
@@ -39,7 +41,9 @@ export async function checkStyle({ page, sql, temp, credential, restart, speak }
   assert.ok(intent)
   assert.ok(!intent.includes(credential))
   await close()
-  assert.equal(await page.getByRole('button', { name: '等一小时' }).isDisabled(), true)
+  const blockedTools = await openPlayTools(page)
+  assert.equal(await blockedTools.getByRole('button', { name: /^等一小时/ }).isDisabled(), true)
+  await blockedTools.getByRole('button', { name: '关闭详情' }).click()
   await restart()
   await page.reload()
   await page.getByLabel('玩家访问凭证').fill(credential)
@@ -53,13 +57,14 @@ export async function checkStyle({ page, sql, temp, credential, restart, speak }
   await dialog.getByText('已保存。用于之后的新段落，不改写已发生的事。', { exact: true }).waitFor()
   assert.equal(revisions(), initialRevisions + 1)
   assert.equal(await dialog.getByLabel('叙述视角').inputValue(), 'first_person')
+  assert.equal(await dialog.getByLabel('叙述篇幅').inputValue(), 'long')
   assert.equal(await dialog.getByLabel('自定义文风').inputValue(), '像记日记一样。')
   assert.equal(await page.evaluate(key => localStorage.getItem(key), pendingKey), null)
   await close()
   assert.equal(facts(), before, 'style recovery cannot add world facts')
   assert.equal(await page.locator('.reading').innerText(), oldHistory, 'settings do not rewrite old history')
   await speak('新的叙述视角。')
-  assert.match(await page.locator('.turn').last().innerText(), /我说：.*新的叙述视角/)
+  assert.match(await page.locator('.turn').last().innerText(), /我说：\s*「新的叙述视角。/)
 
   const beforeConflict = facts()
   await open()
@@ -86,7 +91,9 @@ export async function checkStyle({ page, sql, temp, credential, restart, speak }
   await close()
   assert.equal(facts(), beforeConflict)
   assert.equal(revisions(), initialRevisions + 3)
-  assert.equal(await page.getByRole('button', { name: '等一小时' }).isEnabled(), true)
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  const readyTools = await openPlayTools(page)
+  assert.equal(await readyTools.getByRole('button', { name: /^等一小时/ }).isEnabled(), true)
+  await readyTools.getByRole('button', { name: '关闭详情' }).click()
+  await scrollPlayToEnd(page)
   console.log(JSON.stringify({ styleUIScenario: 'PASS', checks: ['presets and custom preference', 'save before send', 'lost response plus service/browser reload', 'exact-key replay no duplicate revision', 'stale revision refuses overwrite', 'explicit conflict recovery', 'new POV used in actual next turn', 'old history and world facts preserved'] }))
 }

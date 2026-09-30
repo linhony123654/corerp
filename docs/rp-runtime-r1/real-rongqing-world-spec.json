@@ -1,0 +1,175 @@
+{
+  "links": [
+    {
+      "from": "yihongyuan",
+      "minutes": 3,
+      "to": "qinfangting"
+    },
+    {
+      "from": "xiaoxiangguan",
+      "minutes": 3,
+      "to": "qinfangting"
+    },
+    {
+      "from": "hengwuyuan",
+      "minutes": 4,
+      "to": "qinfangting"
+    },
+    {
+      "from": "qiushuangzhai",
+      "minutes": 3,
+      "to": "qinfangting"
+    },
+    {
+      "from": "daoxiangcun",
+      "minutes": 5,
+      "to": "qinfangting"
+    },
+    {
+      "from": "longcuian",
+      "minutes": 4,
+      "to": "daoxiangcun"
+    },
+    {
+      "from": "rongqingtang",
+      "minutes": 2,
+      "to": "fengjieyuan"
+    },
+    {
+      "from": "rongqingtang",
+      "minutes": 6,
+      "to": "qinfangting"
+    },
+    {
+      "from": "yihongyuan",
+      "minutes": 8,
+      "to": "rongqingtang"
+    },
+    {
+      "from": "xiaoxiangguan",
+      "minutes": 4,
+      "to": "yihongyuan"
+    }
+  ],
+  "name": "红楼梦·大观园",
+  "opening_money_minor": 100000,
+  "opening_stock_minor": 500,
+  "people": [
+    {
+      "key": "player",
+      "name": "贾宝玉",
+      "place": "yihongyuan",
+      "player": true
+    },
+    {
+      "key": "lin_daiyu",
+      "name": "林黛玉",
+      "place": "xiaoxiangguan",
+      "player": false
+    },
+    {
+      "key": "xue_baochai",
+      "name": "薛宝钗",
+      "place": "hengwuyuan",
+      "player": false
+    },
+    {
+      "key": "jia_mu",
+      "name": "贾母",
+      "place": "rongqingtang",
+      "player": false
+    },
+    {
+      "key": "wang_xifeng",
+      "name": "王熙凤",
+      "place": "fengjieyuan",
+      "player": false
+    },
+    {
+      "key": "li_wan",
+      "name": "李纨",
+      "place": "daoxiangcun",
+      "player": false
+    },
+    {
+      "key": "miao_yu",
+      "name": "妙玉",
+      "place": "longcuian",
+      "player": false
+    },
+    {
+      "key": "jia_tanchun",
+      "name": "贾探春",
+      "place": "qiushuangzhai",
+      "player": false
+    },
+    {
+      "key": "xi_ren",
+      "name": "袭人",
+      "place": "yihongyuan",
+      "player": false
+    },
+    {
+      "key": "qing_wen",
+      "name": "晴雯",
+      "place": "yihongyuan",
+      "player": false
+    },
+    {
+      "key": "zi_juan",
+      "name": "紫鹃",
+      "place": "xiaoxiangguan",
+      "player": false
+    }
+  ],
+  "places": [
+    {
+      "key": "yihongyuan",
+      "kind": "home",
+      "name": "怡红院"
+    },
+    {
+      "key": "xiaoxiangguan",
+      "kind": "home",
+      "name": "潇湘馆"
+    },
+    {
+      "key": "hengwuyuan",
+      "kind": "home",
+      "name": "蘅芜苑"
+    },
+    {
+      "key": "daoxiangcun",
+      "kind": "home",
+      "name": "稻香村"
+    },
+    {
+      "key": "qiushuangzhai",
+      "kind": "home",
+      "name": "秋爽斋"
+    },
+    {
+      "key": "fengjieyuan",
+      "kind": "home",
+      "name": "凤姐院"
+    },
+    {
+      "key": "longcuian",
+      "kind": "public",
+      "name": "栊翠庵"
+    },
+    {
+      "key": "rongqingtang",
+      "kind": "public",
+      "name": "荣庆堂"
+    },
+    {
+      "key": "qinfangting",
+      "kind": "public",
+      "name": "沁芳亭"
+    }
+  ],
+  "population": 300,
+  "start_world_time": "2026-09-22T00:00:00Z",
+  "version": "corerp.studio-world.v1"
+}

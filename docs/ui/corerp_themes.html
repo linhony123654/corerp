@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="claude">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#F2F0E9">
+<meta name="color-scheme" content="light">
+<title>CoreRP · 故事</title>
+<script>
+// This file stays offline. Match a stored palette before first paint when storage is available.
+try{const saved=JSON.parse(localStorage.getItem('corerp.ui.final.v1')||'null');
+const colors={claude:'#F2F0E9',cream:'#F3EDDE',sage:'#EDF1EC',white:'#F7F7F5'};
+const id=saved?.settings?.theme;if(Object.prototype.hasOwnProperty.call(colors,id)){
+document.documentElement.dataset.theme=id;document.querySelector('meta[name="theme-color"]').content=colors[id];}}
+catch{ /* Keep the warm default when local storage is unavailable. */ }
+</script>
+<style>/* Semantic light palettes: surfaces, type, controls and translucent edges all share the same tokens. */
+:root, :root[data-theme="claude"]{
+  --paper:#F2F0E9;--surface:#FAF9F6;--sheet:#F7F5EF;--drawer:#ECEAE2;--outer:#E6E3DA;--ink:#2C2A25;--secondary:#605D55;--muted:#716D63;--line:#DAD7CE;--soft:#EAE7DF;--hover:#E3DFD5;--accent:#9C5138;--accent-soft:#EFE1D7;--accent-line:#DEC4B3;--primary:#292722;--secondary-soft:#E8E3D9;--secondary-ink:#706452;--sheen:#ACA69A;
+  --paper-rgb:242,240,233;--surface-rgb:250,249,246;--ink-rgb:44,42,37;--line-rgb:218,215,206;
+}
+:root[data-theme="cream"]{
+  --paper:#F3EDDE;--surface:#FBF7ED;--sheet:#F8F2E5;--drawer:#EDE4D2;--outer:#E4DBCA;--ink:#352F26;--secondary:#685E4F;--muted:#766A58;--line:#DED3BF;--soft:#EDE4D4;--hover:#E4D9C5;--accent:#895B31;--accent-soft:#EDE0CB;--accent-line:#D8C29E;--primary:#352F26;--secondary-soft:#EAE1D2;--secondary-ink:#776349;--sheen:#AEA18C;
+  --paper-rgb:243,237,222;--surface-rgb:251,247,237;--ink-rgb:53,47,38;--line-rgb:222,211,191;
+}
+:root[data-theme="sage"]{
+  --paper:#EDF1EC;--surface:#F8FAF6;--sheet:#F3F6F0;--drawer:#E5EBE2;--outer:#DFE6DC;--ink:#28322E;--secondary:#57675F;--muted:#657168;--line:#D2DCD0;--soft:#E3EAE1;--hover:#D9E2D6;--accent:#39756A;--accent-soft:#DDECE4;--accent-line:#C3D8CC;--primary:#25352E;--secondary-soft:#EAE5DA;--secondary-ink:#786B52;--sheen:#A2B1A5;
+  --paper-rgb:237,241,236;--surface-rgb:248,250,246;--ink-rgb:40,50,46;--line-rgb:210,220,208;
+}
+:root[data-theme="white"]{
+  --paper:#F7F7F5;--surface:#FFFFFF;--sheet:#FCFCFA;--drawer:#F0F0ED;--outer:#E8E8E5;--ink:#292B29;--secondary:#626660;--muted:#6F736D;--line:#DEDFD9;--soft:#EFEFEC;--hover:#E5E6E1;--accent:#596958;--accent-soft:#E8ECE5;--accent-line:#D0D9CA;--primary:#222522;--secondary-soft:#EBE9E2;--secondary-ink:#766F60;--sheen:#AFB3AA;
+  --paper-rgb:247,247,245;--surface-rgb:255,255,255;--ink-rgb:41,43,41;--line-rgb:222,223,217;
+}
+
+/* Single-file, offline UI prototype. No fonts, images, libraries or APIs are downloaded. */
+:root{
+  color-scheme:light;--danger:#B34F49;--on-primary:#FFFFFF;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  --serif:"Songti SC","STSong","Noto Serif CJK SC","Noto Serif SC",serif;
+  --reading-font:var(--serif);--reading-size:17px;--motion:180ms;--chrome-h:98px;
+  --dock-bottom:max(25px,calc(env(safe-area-inset-bottom,0px) + 10px));--dock-clearance:164px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--outer);color:var(--ink);font-family:var(--ui);-webkit-text-size-adjust:100%;text-size-adjust:100%}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;touch-action:manipulation}
+button:disabled{cursor:default;opacity:.4}
+input,textarea{border:0;outline:0}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+button:focus:not(:focus-visible){outline:none}
+[hidden]{display:none!important}
+svg.icon{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block;flex:none}
+.app{position:fixed;left:50%;top:0;transform:translate(-50%,var(--app-top,0px));width:min(100%,720px);height:var(--app-height,100dvh);background:var(--paper);overflow:hidden;isolation:isolate;box-shadow:0 0 0 1px rgba(var(--ink-rgb),.03)}
+.workspace{position:absolute;inset:0}
+.icon-button{width:42px;height:42px;display:grid;place-items:center;border-radius:50%;flex:none;transition:background var(--motion),transform var(--motion)}
+.icon-button:active,.circle-button:active{background:var(--hover);transform:scale(.95)}
+/* Only the story scrolls. The top chrome and composer are independent overlay layers. */
+.scrollport{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-width:thin;scrollbar-color:rgba(var(--ink-rgb),.24) transparent;outline:none;scroll-padding-top:140px;scroll-padding-bottom:var(--dock-clearance)}
+.transcript{max-width:640px;margin:auto;padding:calc(119px + env(safe-area-inset-top,0px)) 21px var(--dock-clearance);overflow-wrap:anywhere}
+.date-rule{font:11px/1.5 var(--ui);color:var(--muted);text-align:center;letter-spacing:.03em;margin:0 0 28px}
+.turn{margin:0 0 28px;scroll-margin-top:135px}
+.speaker{display:flex;align-items:center;gap:8px;font-size:13px;line-height:24px;margin:0 0 8px}
+.speaker strong{font-weight:600}
+.speaker .time{margin-left:auto;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.initial{width:24px;height:24px;border-radius:8px;background:var(--soft);color:var(--secondary);display:grid;place-items:center;font:600 11px/1 var(--ui);flex:none}
+.initial.tone-2{background:var(--secondary-soft);color:var(--secondary-ink)}
+.speaker-note{color:var(--muted);font-size:10px;margin-left:2px}
+.prose{font-family:var(--reading-font);font-size:var(--reading-size);line-height:1.96;letter-spacing:.01em}
+.prose p{margin:0 0 12px}
+.prose p:last-child{margin-bottom:0}
+.prose .action{color:var(--secondary)}
+.prose .dialogue{color:var(--ink);font-weight:500}
+.narrator-label{display:flex;align-items:center;gap:7px;margin-bottom:8px;font-size:11px;color:var(--muted)}
+.narrator-label:before{content:"";width:14px;height:1px;background:var(--line)}
+.turn.narrator .prose{color:var(--secondary);font-size:calc(var(--reading-size) - 1px)}
+.player-turn{width:fit-content;max-width:92%;margin:8px 0 28px auto;padding:1px 0 1px 13px;border-left:2px solid var(--line)}
+.player-label{font:11px/1.5 var(--ui);color:var(--muted);margin-bottom:6px}
+.player-text{font-size:calc(var(--reading-size) - 1px);line-height:1.85;color:var(--secondary);white-space:pre-wrap;font-family:var(--reading-font)}
+.world-event{display:flex;align-items:center;justify-content:center;gap:9px;color:var(--secondary);font:11px/1.6 var(--ui);margin:4px 0 26px}
+.world-event:before,.world-event:after{content:"";flex:1;height:1px;background:var(--line)}
+.world-event .icon{width:14px;height:14px}
+.collapsed-prose{max-height:154px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 0%,#000 64%,transparent 100%);mask-image:linear-gradient(#000 0%,#000 64%,transparent 100%)}
+.read-link{display:flex;align-items:center;gap:7px;color:var(--accent);font-size:12px;min-height:40px;margin-top:0;padding:4px 3px 4px 0;border-radius:6px}
+.read-link .icon{width:15px;height:15px}.read-link span:last-child{font-size:10px;color:var(--muted);margin-left:2px}
+/* A transparent, single-line status above the reply. No card, pill or backdrop. */
+.thinking-line{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:44px;
+  margin:1px 0 18px;padding:7px 0;border:0;border-radius:0;
+  background:transparent;box-shadow:none;text-align:left;
+  color:var(--muted);font:400 15px/1.6 var(--ui);letter-spacing:0;
+}
+.thinking-line:active{color:var(--secondary);background:transparent}
+.thinking-line .thinking-clock{width:18px;height:18px;flex:none;overflow:visible}
+.thinking-clock .clock-hand{transform-origin:12px 12px}
+.thinking-copy{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thinking-line>.icon{width:15px;height:15px;flex:none;margin-left:3px;opacity:.72}
+.thinking-line.is-running .clock-hand{animation:clock-turn 2.6s linear infinite}
+.thinking-line.is-running .thinking-copy{
+  background-image:linear-gradient(105deg,var(--muted) 32%,var(--sheen) 47%,var(--muted) 63%);
+  background-size:230% 100%;background-position:110% 0;
+  background-clip:text;-webkit-background-clip:text;color:transparent;
+  animation:status-sheen 2.6s linear infinite;
+}
+.pending-turn{margin-bottom:28px;min-height:44px}
+.pending-turn .thinking-line{margin-bottom:0}
+@keyframes clock-turn{to{transform:rotate(360deg)}}
+@keyframes status-sheen{from{background-position:110% 0}to{background-position:-110% 0}}
+/* Public, high-level status summaries; the timeline reveals only the stages reached. */
+.sheet.thinking-sheet{background:var(--sheet);min-height:min(54%,430px)}
+.sheet.thinking-sheet .sheet-header{display:grid;grid-template-columns:38px minmax(0,1fr) 38px;gap:7px;border-bottom:0}
+.sheet.thinking-sheet .sheet-title-group{grid-column:2;grid-row:1;text-align:center}
+.sheet.thinking-sheet .sheet-title-group h2{font-size:17px}
+.sheet.thinking-sheet .sheet-title-group p{font-size:10px;color:var(--muted)}
+.sheet.thinking-sheet .sheet-header>[data-dismiss]{grid-column:1;grid-row:1;background:transparent}
+.sheet.thinking-sheet .sheet-content{padding-top:12px}
+.summary-timeline{margin:0;padding:0;list-style:none}
+.summary-step{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);column-gap:16px;padding:0 0 23px}
+.summary-step:not(:last-child):before{content:"";position:absolute;top:25px;bottom:0;left:10px;width:1px;background:var(--line)}
+.summary-mark{width:22px;height:24px;display:grid;place-items:center;color:var(--muted)}
+.summary-mark .icon,.summary-mark .thinking-clock{width:17px;height:17px}
+.summary-step.is-current .clock-hand{animation:clock-turn 2.6s linear infinite}
+.summary-copy b{display:block;font-size:14px;line-height:1.75;font-weight:450;color:var(--ink)}
+.summary-copy p{margin:5px 0 0;font-size:12px;line-height:1.8;color:var(--muted)}
+.summary-step.is-current .summary-copy b{color:var(--secondary)}
+.summary-note{margin:6px 0 0;padding:12px 0 0;border-top:1px solid var(--line);font:11px/1.85 var(--ui);color:var(--muted)}
+.summary-end{display:flex;align-items:center;gap:8px;font:12px/1.6 var(--ui);color:var(--secondary);margin:0 0 18px;padding-left:38px}
+.primary-button .stop-icon{display:none}
+.composer-tools .primary-button.is-thinking .continue-icon,.composer-tools .primary-button.is-thinking .send-icon{display:none}
+.primary-button.is-thinking .stop-icon{display:block}
+@media(prefers-reduced-motion:reduce){
+  .thinking-line.is-running .thinking-copy{background:none;color:var(--muted);animation:none}
+  .thinking-line.is-running .clock-hand,.summary-step.is-current .clock-hand{animation:none}
+}
+.empty-state{padding:50px 10px;text-align:center;color:var(--secondary)}
+.empty-state h2{font-size:21px;font-weight:500;margin:14px 0 10px;font-family:var(--serif)}
+.empty-state p{font-size:13px;line-height:1.8;margin:0}.empty-state>.icon{margin:auto;width:28px;height:28px;color:var(--secondary)}
+/* Progressive translucent edges. Effects never wrap the controls themselves. */
+.top-chrome{position:absolute;left:0;right:0;top:0;z-index:20;padding-top:env(safe-area-inset-top,0px);pointer-events:none}
+.top-glass{position:absolute;inset:0 0 -37px;pointer-events:none;z-index:-1}
+.top-glass:before{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(var(--paper-rgb),.98) 0%,rgba(var(--paper-rgb),.96) 46%,rgba(var(--paper-rgb),.72) 72%,rgba(var(--paper-rgb),0) 100%);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);-webkit-mask-image:linear-gradient(#000 0%,#000 53%,#0009 79%,transparent);mask-image:linear-gradient(#000 0%,#000 53%,#0009 79%,transparent)}
+.top-glass:after{content:"";position:absolute;inset:42% 0 -3px;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);-webkit-mask-image:linear-gradient(#0008,transparent);mask-image:linear-gradient(#0008,transparent)}
+.header{height:55px;display:grid;grid-template-columns:42px 1fr 42px;align-items:center;padding:0 13px;pointer-events:auto;transition:height var(--motion)}
+.heading{min-width:0;text-align:center}.heading h1{margin:0;font-size:17px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:font-size var(--motion)}
+.heading p{font-size:10px;color:var(--muted);margin:4px 0 0;max-height:16px;opacity:1;overflow:hidden;transition:opacity var(--motion),max-height var(--motion),margin var(--motion)}
+.top-chrome.compact .header{height:49px}.top-chrome.compact .heading h1{font-size:16px}.top-chrome.compact .heading p{max-height:0;opacity:0;margin-top:0}
+.capsules{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;padding:0 17px 3px;height:43px;pointer-events:auto}
+.capsules::-webkit-scrollbar{display:none}.capsule{position:relative;flex:none;min-height:40px;display:flex;align-items:center;gap:6px;padding:0 11px;font-size:11px;color:var(--secondary);isolation:isolate;white-space:nowrap;border-radius:20px}
+.capsule:before{content:"";position:absolute;inset:6px 0;border-radius:20px;border:1px solid var(--line);background:rgba(var(--surface-rgb),.56);z-index:-1;transition:background var(--motion)}
+.capsule:first-child{color:var(--secondary)}.capsule:first-child:before{background:var(--soft);border-color:var(--line)}
+.capsule .icon{width:13px;height:13px}.capsule .small-chevron{width:10px;height:10px;opacity:.65}.capsule:active:before{background:var(--hover)}
+/* The input floats above the text. Measured padding keeps the last line reachable. */
+.bottom-haze{position:absolute;left:0;right:0;bottom:0;height:calc(var(--dock-clearance) + 25px);pointer-events:none;z-index:21;background:linear-gradient(to bottom,transparent 0%,rgba(var(--paper-rgb),.08) 17%,rgba(var(--paper-rgb),.30) 40%,rgba(var(--paper-rgb),.65) 71%,rgba(var(--paper-rgb),.91) 100%);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);-webkit-mask-image:linear-gradient(transparent 0%,#0006 32%,#000 66%);mask-image:linear-gradient(transparent 0%,#0006 32%,#000 66%)}
+.composer-dock{position:absolute;left:12px;right:12px;bottom:var(--dock-bottom);z-index:24;max-width:616px;margin-inline:auto}
+.composer{background:rgba(var(--surface-rgb),.94);border:1px solid rgba(var(--ink-rgb),.12);border-radius:27px;padding:12px 10px 10px;box-shadow:0 5px 19px rgba(var(--ink-rgb),.06),0 1px 3px rgba(var(--ink-rgb),.03);-webkit-backdrop-filter:blur(15px);backdrop-filter:blur(15px);transition:border-color var(--motion)}
+.composer:focus-within{border-color:rgba(var(--ink-rgb),.32)}.composer textarea{display:block;width:100%;resize:none;background:transparent;border-radius:8px;min-height:37px;max-height:132px;line-height:1.5;font-size:16px;padding:1px 8px 9px;overflow-y:auto;scrollbar-width:thin}
+.composer textarea:focus-visible{outline:none}.composer textarea::placeholder{color:var(--muted);opacity:1}
+.composer-tools{display:flex;align-items:center;gap:7px;padding-top:4px;min-width:0}
+.circle-button{display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:50%;background:var(--soft);transition:background var(--motion),transform var(--motion)}
+.circle-button .icon{width:21px;height:21px}.model-pill{height:39px;min-width:0;max-width:158px;display:flex;align-items:center;gap:5px;border-radius:22px;padding:0 11px;background:var(--soft);font-size:12px;color:var(--secondary);flex:0 1 auto}
+.model-pill span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.model-pill .icon{width:12px;height:12px;color:var(--muted)}.tool-spacer{flex:1;min-width:0}
+.mode-button{background:transparent;position:relative}.mode-button.is-custom:after{content:"";position:absolute;top:6px;right:5px;width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.primary-button{width:44px;height:44px;display:grid;place-items:center;flex:none;background:var(--primary);color:var(--on-primary);border-radius:50%;transition:transform var(--motion)}
+.primary-button:active{transform:scale(.94)}.primary-button .icon{width:22px;height:22px}.primary-button .send-icon{display:none}.primary-button.has-text .send-icon{display:block}.primary-button.has-text .continue-icon{display:none}
+.jump-button{position:absolute;left:50%;bottom:calc(var(--dock-clearance) + 1px);transform:translateX(-50%);width:37px;height:37px;border-radius:50%;border:1px solid var(--line);background:rgba(var(--surface-rgb),.94);color:var(--secondary);display:grid;place-items:center;box-shadow:0 3px 12px rgba(var(--ink-rgb),.03);z-index:23;transition:opacity var(--motion),transform var(--motion)}
+.jump-button.invisible{opacity:0;pointer-events:none;transform:translate(-50%,6px)}.jump-button .icon{width:18px;height:18px}
+.app.keyboard-open{--dock-bottom:10px}
+/* Overlay system: one surface at a time, never a sheet beneath another sheet. */
+.scrim{position:absolute;inset:0;z-index:40;background:rgba(var(--ink-rgb),.20);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);animation:fade-in var(--motion) ease}
+.scrim.menu-scrim{background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none}
+.drawer{position:absolute;inset:0 auto 0 0;width:min(86%,320px);background:var(--drawer);z-index:42;display:flex;flex-direction:column;padding:calc(22px + env(safe-area-inset-top,0px)) 16px max(18px,env(safe-area-inset-bottom,0px));box-shadow:12px 0 28px rgba(var(--ink-rgb),.06);animation:drawer-in 220ms ease;outline:none}
+.drawer-brand{display:flex;align-items:center;justify-content:space-between;margin:0 5px 20px 9px}.drawer-brand strong{font:500 31px/1 Georgia,"Times New Roman",serif;letter-spacing:-1.2px}
+.drawer-brand .icon-button{color:var(--secondary);width:34px;height:34px}
+.drawer-nav{display:grid;gap:3px}.nav-item{width:100%;display:flex;gap:13px;align-items:center;min-height:43px;padding:10px 13px;text-align:left;border-radius:12px;font-size:14px;color:var(--secondary)}.nav-item .icon{width:19px;height:19px}.nav-item.current{background:var(--soft);color:var(--ink);font-weight:550}
+.nav-item:active,.recent-item:active{background:var(--hover)}.drawer-history{border-top:1px solid var(--line);margin-top:19px;padding-top:17px;min-height:80px;flex:1;display:flex;flex-direction:column}
+.drawer-section-title{font-size:11px;color:var(--muted);padding:0 13px;margin:0 0 9px;font-weight:500;letter-spacing:.03em}
+.recent-list{overflow:auto;scrollbar-width:thin;min-height:0}.recent-item{display:flex;gap:8px;align-items:center;border-radius:11px;width:100%;text-align:left;padding:10px 13px;min-height:43px;font-size:13px;color:var(--secondary)}
+.recent-item span{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.recent-item.selected{background:var(--soft);color:var(--ink)}.recent-item .icon{width:12px;height:12px;color:var(--muted)}.recent-indicator{width:5px;height:5px;border-radius:50%;background:var(--sheen);flex:none}.recent-item.selected .recent-indicator{background:var(--accent)}
+.drawer-footer{padding:13px 3px 0;border-top:1px solid var(--line);flex:none}.local-label{margin:0 9px 10px;color:var(--muted);font-size:10px;display:flex;align-items:center;gap:5px}
+.local-label i{width:4px;height:4px;background:var(--accent);border-radius:50%}.profile-button{display:flex;align-items:center;gap:10px;width:100%;padding:7px 7px 14px;text-align:left}.profile-avatar{width:34px;height:34px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;font-size:13px;color:var(--accent)}.profile-name{flex:1}.profile-name b{font-size:13px;font-weight:500;display:block}.profile-name small{font-size:10px;color:var(--muted);display:block;margin-top:2px}.profile-button>.icon{width:17px;height:17px;color:var(--muted)}
+.new-story-button{width:100%;min-height:45px;display:flex;justify-content:center;align-items:center;gap:8px;border-radius:24px;background:var(--primary);color:var(--on-primary);font-size:13px}.new-story-button .icon{width:17px;height:17px}
+/* Button-anchored overflow menu; intentionally compact and without a dimmed page. */
+.popover{position:absolute;z-index:43;width:min(54%,216px);padding:7px;background:var(--surface);border:1px solid rgba(var(--ink-rgb),.12);border-radius:17px;box-shadow:0 9px 27px rgba(var(--ink-rgb),.12),0 1px 4px rgba(var(--ink-rgb),.06);transform-origin:top right;animation:menu-in 140ms ease;max-height:calc(100% - 16px);overflow-y:auto;outline:none}
+.menu-title{margin:0;padding:5px 10px 6px;font-size:10px;color:var(--muted);white-space:nowrap;text-overflow:ellipsis;overflow:hidden}.menu-item{display:flex;gap:11px;align-items:center;width:100%;min-height:43px;padding:9px 10px;text-align:left;border-radius:9px;font-size:13px;line-height:1.3}.menu-item .icon{width:17px;height:17px;color:var(--muted)}.menu-item:hover,.menu-item:focus-visible{background:var(--hover)}.menu-item:focus-visible{outline:none}.menu-item.danger,.menu-item.danger .icon{color:var(--danger)}.menu-divider{height:1px;margin:4px 7px;background:var(--line)}
+/* Shared detail surface. */
+.sheet{position:absolute;bottom:0;left:0;right:0;z-index:44;max-height:calc(88% - env(safe-area-inset-top,0px));display:flex;flex-direction:column;background:var(--sheet);border-radius:25px 25px 0 0;box-shadow:0 -9px 30px rgba(var(--ink-rgb),.06);outline:none;animation:sheet-in 220ms cubic-bezier(.2,.8,.2,1)}
+.sheet.reader-full{max-height:100%;height:100%;border-radius:0;padding-top:env(safe-area-inset-top,0px)}
+.sheet-handle{height:19px;display:flex;align-items:center;justify-content:center;flex:none;touch-action:none;cursor:grab}.sheet-handle:after{content:"";width:34px;height:4px;border-radius:5px;background:var(--line)}.reader-full .sheet-handle{display:none}
+.sheet-header{display:flex;align-items:center;gap:8px;padding:4px 16px 12px;flex:none;border-bottom:1px solid var(--line)}.sheet-title-group{flex:1;min-width:0}.sheet-title-group h2{font-size:17px;font-weight:600;margin:0;line-height:1.5}.sheet-title-group p{margin:2px 0 0;font-size:11px;color:var(--muted);line-height:1.5}.sheet-header .icon-button{width:35px;height:35px;color:var(--secondary)}.sheet-header .icon-button .icon{width:19px;height:19px}
+.sheet-content{overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 20px calc(24px + env(safe-area-inset-bottom,0px));min-height:0;outline:none}
+.sheet.reader-full .sheet-content{flex:1}.sheet-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 20px max(16px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);flex:none;background:var(--sheet)}
+.detail-note{font-size:12px;line-height:1.75;color:var(--secondary);margin:0 0 17px}.section-heading{margin:19px 0 8px;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.035em}.section-heading:first-child{margin-top:0}
+.detail-row{display:flex;width:100%;align-items:center;gap:12px;min-height:66px;padding:12px 0;border-bottom:1px solid var(--line);text-align:left}.detail-row:last-child{border-bottom:0}.row-symbol{height:33px;width:33px;display:grid;place-items:center;border-radius:11px;background:var(--soft);color:var(--secondary);flex:none}.row-symbol .icon{width:18px;height:18px}.row-symbol.initial-symbol{font-size:13px}.row-copy{flex:1;min-width:0}.row-copy strong{display:block;font-size:14px;line-height:1.5;font-weight:500}.row-copy small{display:block;font-size:11px;line-height:1.7;color:var(--muted);margin-top:3px}.row-end{font-size:11px;color:var(--muted);flex:none}.row-end .icon{width:17px;height:17px}.detail-row.clickable:active{background:var(--hover)}
+.setting-group{border-radius:17px;background:var(--surface);padding:0 14px;margin-bottom:13px;border:1px solid var(--line)}.setting-group .detail-row{min-height:62px}
+.switch{width:35px;height:21px;border-radius:13px;background:var(--soft);flex:none;position:relative;transition:background var(--motion)}.switch:after{content:"";position:absolute;width:17px;height:17px;top:2px;left:2px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px #0001;transition:transform var(--motion)}
+[aria-checked="true"] .switch{background:var(--accent)}[aria-checked="true"] .switch:after{transform:translateX(14px)}
+.tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.tool-card{min-height:89px;text-align:left;padding:13px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface);display:grid;grid-template-columns:22px 1fr;column-gap:9px;align-content:center}.tool-card .icon{width:19px;height:19px;grid-row:1/3;color:var(--accent);margin-top:1px}.tool-card b{font-size:13px;line-height:1.6;font-weight:500}.tool-card small{font-size:10px;line-height:1.6;color:var(--muted);margin-top:2px}.tool-card:active{background:var(--hover)}
+.option-row[aria-checked="true"] .row-copy strong{color:var(--accent)}.option-row[aria-checked="true"] .row-end{color:var(--accent)}
+.form-label{display:block;font-size:12px;color:var(--secondary);margin:4px 0 7px}.text-field{display:block;width:100%;border:1px solid var(--line);background:var(--surface);border-radius:12px;font-size:16px;line-height:1.5;padding:11px 12px;outline:none}.text-field:focus{border-color:var(--accent)}
+.form-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}.flat-button,.solid-button,.danger-button{min-height:41px;padding:10px 16px;border-radius:13px;font-size:13px;background:var(--soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;gap:7px}.solid-button{background:var(--primary);color:var(--on-primary)}.danger-button{background:var(--danger);color:var(--on-primary)}
+.reader-content{max-width:630px;margin-inline:auto;padding:1px 2px 12px}.reader-content .prose{line-height:2.03}.reader-content .prose p{margin-bottom:19px}.reader-byline{font-size:11px;color:var(--muted);margin-bottom:22px}
+.type-controls{display:flex;gap:4px;align-items:center}.type-controls button{min-width:35px;height:36px;border-radius:10px;font:16px Georgia,serif}.type-controls button:active{background:var(--hover)}.type-controls span{font-size:11px;color:var(--muted);width:27px;text-align:center}.reader-back{font-size:12px;color:var(--accent);padding:10px 0 10px 12px;min-height:38px}
+.segmented{display:flex;gap:5px;padding:4px;background:var(--soft);border-radius:12px}.segmented button{flex:1;padding:8px 12px;border-radius:9px;font-size:12px;min-height:35px}.segmented button.selected{background:var(--surface);box-shadow:0 1px 4px rgba(var(--ink-rgb),.06);color:var(--accent)}
+.dice-result{font:500 60px/1.5 var(--serif);text-align:center;color:var(--ink);font-variant-numeric:tabular-nums;margin:10px 0}.center-actions{display:flex;justify-content:center}.timeline-entry{border-left:1px solid var(--line);padding:0 0 20px 16px;margin-left:5px;position:relative}.timeline-entry:before{content:"";position:absolute;left:-4px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--accent-line)}.timeline-entry time{font-size:10px;color:var(--muted)}.timeline-entry p{margin:5px 0 0;font-size:13px;line-height:1.7;color:var(--secondary)}
+.toast{position:absolute;left:50%;bottom:calc(var(--dock-clearance) + 4px);transform:translateX(-50%);z-index:70;max-width:calc(100% - 34px);width:max-content;background:rgba(var(--ink-rgb),.94);color:var(--on-primary);box-shadow:0 3px 15px rgba(var(--ink-rgb),.06);border-radius:13px;padding:10px 14px;font-size:11px;line-height:1.6;text-align:center;pointer-events:none;animation:fade-in var(--motion) ease}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}@keyframes menu-in{from{opacity:0;transform:translateY(-5px) scale(.98)}to{opacity:1;transform:none}}@keyframes drawer-in{from{transform:translateX(-100%)}to{transform:none}}@keyframes sheet-in{from{transform:translateY(35px);opacity:0}to{transform:none;opacity:1}}
+@media(min-width:760px){.transcript{padding-inline:32px}.header{padding-inline:25px}.capsules{padding-inline:29px}.composer-dock{left:28px;right:28px}.sheet{left:34px;right:34px;border-radius:25px 25px 0 0}.sheet.reader-full{left:0;right:0}.sheet-content{padding-inline:27px}}
+@media(max-width:350px){.transcript{padding-inline:17px}.composer-dock{left:9px;right:9px}.composer{padding:10px 8px}.composer-tools{gap:5px}.circle-button{width:37px;height:37px}.model-pill{max-width:119px;padding-inline:9px;font-size:11px}.primary-button{width:41px;height:41px}.capsules{padding-inline:12px;gap:4px}.capsule{padding-inline:9px}.sheet-content{padding-inline:16px}.tool-grid{gap:7px}.tool-card{padding:11px}.popover{width:190px}}
+@media(max-height:520px){.drawer-brand{margin-bottom:8px}.drawer-nav{grid-template-columns:1fr 1fr;gap:1px}.nav-item{font-size:12px;gap:7px;min-height:35px;padding:6px}.drawer-history{margin-top:8px;padding-top:8px}.drawer-footer{padding-top:6px}.local-label,.profile-button{display:none}.sheet{max-height:94%}.sheet-content{padding-top:12px}.composer textarea{max-height:76px}}
+@media(prefers-reduced-motion:reduce){:root{--motion:0ms}*,*:before,*:after{animation-duration:0ms!important;transition-duration:0ms!important;scroll-behavior:auto!important}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.top-glass:before{background:linear-gradient(var(--paper) 0%,rgba(var(--paper-rgb),.98) 68%,transparent 100%)}.composer{background:var(--surface)}}
+
+/* Themes are global preferences, never a story state or a permanent chat toolbar. */
+.app,.drawer,.sheet,.sheet-footer,.popover,.composer,.setting-group,
+.model-pill,.circle-button,.row-symbol,.profile-avatar,.theme-preview,
+.theme-choice,.theme-choice-check,.theme-mini-compose{
+  transition-property:background-color,border-color,color,box-shadow;
+  transition-duration:160ms;transition-timing-function:ease;
+}
+::selection{background:var(--accent-soft);color:var(--ink)}
+.theme-preview{position:relative;margin:0 0 17px;border:1px solid var(--line);border-radius:18px;padding:17px 18px 15px;background:var(--paper)}
+.theme-preview-meta{display:flex;align-items:center;gap:6px;font:11px/1.5 var(--ui);color:var(--muted);margin-bottom:11px}
+.theme-preview-meta .icon{width:13px;height:13px}
+.theme-preview-quote{font:500 19px/1.8 var(--reading-font);color:var(--ink);margin:0 0 3px}
+.theme-preview-text{font:13px/1.8 var(--reading-font);color:var(--secondary);margin:0 0 12px}
+.theme-mini-compose{display:flex;align-items:center;gap:10px;min-height:36px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:7px 10px;font:11px var(--ui);color:var(--muted)}
+.theme-mini-compose .icon{width:13px;height:13px}.theme-mini-compose span{flex:1}
+.theme-mini-send{display:grid;place-items:center;border-radius:50%;width:23px;height:23px;background:var(--primary);color:var(--on-primary);font-style:normal;flex:none}
+.theme-choices{display:grid;gap:7px}
+.theme-choice{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:10px 12px;border:1px solid transparent;border-radius:14px;background:transparent;text-align:left}
+.theme-choice:hover{background:var(--soft)}
+.theme-choice[aria-checked="true"]{background:var(--surface);border-color:var(--accent-line)}
+.theme-swatches{position:relative;flex:none;width:45px;height:36px;display:block}
+.theme-swatch{position:absolute;inset:0 auto auto 0;width:31px;height:34px;border:1px solid rgba(var(--ink-rgb),.13);border-radius:10px;background:var(--swatch-paper);box-shadow:0 1px 2px rgba(var(--ink-rgb),.03)}
+.theme-swatch:nth-child(2){left:14px;top:5px;width:30px;height:30px;background:var(--swatch-surface)}
+.theme-swatch:nth-child(2):after{content:"";position:absolute;width:7px;height:7px;right:5px;bottom:5px;border-radius:50%;background:var(--swatch-accent)}
+.theme-choice-copy{flex:1;min-width:0}
+.theme-choice-title{display:flex;align-items:center;gap:7px;color:var(--ink);font-size:14px;font-weight:500;line-height:1.6}
+.theme-default-tag{font:10px/1.4 var(--ui);padding:2px 6px;border-radius:5px;background:var(--soft);color:var(--secondary)}
+.theme-choice-copy small{display:block;color:var(--muted);font:11px/1.6 var(--ui);margin-top:2px}
+.theme-choice-check{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);flex:none;color:transparent}
+.theme-choice-check .icon{width:12px;height:12px;stroke-width:2}
+.theme-choice[aria-checked="true"] .theme-choice-check{background:var(--accent);border-color:var(--accent);color:var(--on-primary)}
+.theme-footnote{font:11px/1.7 var(--ui);color:var(--muted);margin:14px 2px 0}
+.theme-save-status{font-size:11px;color:var(--secondary);min-width:0;line-height:1.6}
+.theme-done{min-width:70px}
+@media(max-height:660px){.theme-preview{padding:10px 14px;margin-bottom:11px}.theme-preview-meta{margin-bottom:5px}.theme-preview-text{margin-bottom:7px}.theme-choice{min-height:60px}.theme-choices{gap:3px}}
+@media(prefers-reduced-motion:reduce){.app,.drawer,.sheet,.sheet-footer,.popover,.composer,.setting-group,.model-pill,.circle-button,.row-symbol,.profile-avatar,.theme-preview,.theme-choice,.theme-choice-check,.theme-mini-compose{transition:none}}
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 0 18h1a2 2 0 0 0 1.8-2.8l-.3-.6A1.8 1.8 0 0 1 16.1 15H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="10" r=".8" fill="currentColor"/><circle cx="10" cy="6.8" r=".8" fill="currentColor"/><circle cx="14" cy="6.8" r=".8" fill="currentColor"/><circle cx="17" cy="10" r=".8" fill="currentColor"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h12M4 18h8"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+<symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.7" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-continue" viewBox="0 0 24 24"><path d="m6 6 8 6-8 6V6ZM18 6v12"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M3 4.5c3-.8 6-.3 9 1.5 3-1.8 6-2.3 9-1.5v14c-3-.8-6-.3-9 1.5-3-1.8-6-2.3-9-1.5v-14ZM12 6v14"/></symbol>
+<symbol id="i-location" viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+<symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M17 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5"/></symbol>
+<symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.8 13.1A9 9 0 0 1 10.9 3.2a9 9 0 1 0 9.9 9.9Z"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 1-8 8H8l-5 3 1.5-6A8 8 0 1 1 20 11Z"/></symbol>
+<symbol id="i-world" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></symbol>
+<symbol id="i-memory" viewBox="0 0 24 24"><path d="M7 3h11a1 1 0 0 1 1 1v17H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3ZM7 3v18M10 8h6M10 12h5"/></symbol>
+<symbol id="i-plugin" viewBox="0 0 24 24"><path d="M9 3H4v6h3a2 2 0 1 1 0 4H4v7h6v-3a2 2 0 1 1 4 0v3h6v-6h-3a2 2 0 1 1 0-4h3V4h-6V3a2.5 2.5 0 1 0-5 0Z"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" style="fill:var(--sheet)"/><circle cx="16" cy="12" r="2" style="fill:var(--sheet)"/><circle cx="10" cy="18" r="2" style="fill:var(--sheet)"/></symbol>
+<symbol id="i-export" viewBox="0 0 24 24"><path d="M4 12v8h16v-8M12 3v12m-5-7 5-5 5 5"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 1-5L16 4a2.1 2.1 0 0 1 3 3L8 19l-4 1Zm10-14 3 3"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M8 3h8l-1 7 3 3H6l3-3-1-7Zm4 10v8"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6M12 7v6l4 2"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4 10-10"/></symbol>
+<symbol id="i-door" viewBox="0 0 24 24"><path d="M3 21h18M6 21V3h12v18M14 12h.01"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5Zm6-2v16m6-14v16"/></symbol>
+<symbol id="i-bag" viewBox="0 0 24 24"><path d="M8 6V4h8v2M6 8h12l2 12H4L6 8Zm2 6h8"/><path d="M8 8a4 4 0 0 0 8 0"/></symbol>
+<symbol id="i-dice" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01" stroke-width="3"/></symbol>
+<symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol>
+<symbol id="i-collapse" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></symbol>
+</defs></svg>
+<div class="app" id="app">
+  <div class="workspace" id="workspace">
+    <main class="scrollport" id="scrollport" aria-label="故事对话" tabindex="0"><div class="transcript" id="transcript"></div></main>
+    <div class="top-chrome" id="topChrome">
+      <div class="top-glass" aria-hidden="true"></div>
+      <header class="header">
+        <button class="icon-button" id="drawerButton" aria-label="打开侧边栏" aria-controls="drawer" aria-expanded="false"><svg class="icon"><use href="#i-menu"/></svg></button>
+        <div class="heading"><h1 id="storyTitle">白鸦酒馆</h1><p id="storySubtitle">雾港 · 雨夜</p></div>
+        <button class="icon-button" id="moreButton" aria-label="故事操作" aria-haspopup="menu" aria-controls="overflowMenu" aria-expanded="false"><svg class="icon"><use href="#i-more"/></svg></button>
+      </header>
+      <nav class="capsules" aria-label="当前场景">
+        <button class="capsule" data-view="location" aria-haspopup="dialog"><svg class="icon"><use href="#i-location"/></svg><span id="locationLabel">主厅</span><svg class="icon small-chevron"><use href="#i-down"/></svg></button>
+        <button class="capsule" data-view="people" aria-haspopup="dialog"><svg class="icon"><use href="#i-people"/></svg><span id="peopleLabel">在场 3</span><svg class="icon small-chevron"><use href="#i-down"/></svg></button>
+        <button class="capsule" data-view="environment" aria-haspopup="dialog"><svg class="icon"><use href="#i-moon"/></svg><span id="environmentLabel">深夜 · 小雨</span></button>
+      </nav>
+    </div>
+    <div class="bottom-haze" aria-hidden="true"></div>
+    <button class="jump-button" id="jumpButton" aria-label="回到最新消息" title="回到最新消息"><svg class="icon"><use href="#i-down"/></svg></button>
+    <div class="composer-dock" id="composerDock">
+      <form class="composer" id="composerForm">
+        <textarea id="prompt" aria-label="输入对话或行动" placeholder="你想做什么……" rows="1" maxlength="6000" spellcheck="false"></textarea>
+        <div class="composer-tools">
+          <button type="button" class="circle-button" data-view="tools" aria-label="行动与插件" title="行动与插件" aria-haspopup="dialog"><svg class="icon"><use href="#i-plus"/></svg></button>
+          <button type="button" class="model-pill" data-view="models" aria-label="选择模型" aria-haspopup="dialog"><span id="modelLabel">默认模型</span><svg class="icon"><use href="#i-down"/></svg></button>
+          <div class="tool-spacer"></div>
+          <button type="button" class="circle-button mode-button" id="modeButton" data-view="mode" aria-label="叙事偏好：自动" title="叙事偏好：自动" aria-haspopup="dialog"><svg class="icon"><use href="#i-book"/></svg></button>
+          <button type="submit" class="primary-button" id="primaryButton" aria-label="继续剧情" title="继续剧情（预置演示）"><svg class="icon continue-icon"><use href="#i-continue"/></svg><svg class="icon send-icon"><use href="#i-send"/></svg><svg class="icon stop-icon"><use href="#i-stop"/></svg></button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" tabindex="-1" hidden>
+    <div class="drawer-brand"><strong id="drawerTitle">CoreRP</strong><button class="icon-button" data-dismiss aria-label="关闭侧边栏"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <nav class="drawer-nav" aria-label="主导航">
+      <button class="nav-item current" data-dismiss><svg class="icon"><use href="#i-chat"/></svg>当前故事</button>
+      <button class="nav-item" data-view="world"><svg class="icon"><use href="#i-world"/></svg>世界</button>
+      <button class="nav-item" data-view="people"><svg class="icon"><use href="#i-people"/></svg>角色</button>
+      <button class="nav-item" data-view="memory"><svg class="icon"><use href="#i-memory"/></svg>记忆</button>
+      <button class="nav-item" data-view="plugins"><svg class="icon"><use href="#i-plugin"/></svg>插件</button>
+    </nav>
+    <div class="drawer-history"><h2 class="drawer-section-title">最近故事</h2><div class="recent-list" id="recentList"></div></div>
+    <div class="drawer-footer">
+      <p class="local-label"><i></i>本地演示 · 未连接模型</p>
+      <button class="profile-button" data-view="settings"><span class="profile-avatar">旅</span><span class="profile-name"><b>旅人</b><small>主题 · 阅读与界面</small></span><svg class="icon"><use href="#i-settings"/></svg></button>
+      <button class="new-story-button" data-view="new"><svg class="icon"><use href="#i-plus"/></svg>新故事</button>
+    </div>
+  </aside>
+  <div class="popover" id="overflowMenu" role="menu" aria-labelledby="moreButton" tabindex="-1" hidden>
+    <p class="menu-title" id="menuTitle">白鸦酒馆</p>
+    <button class="menu-item" role="menuitem" data-command="export"><svg class="icon"><use href="#i-export"/></svg>导出故事</button>
+    <button class="menu-item" role="menuitem" data-view="rename"><svg class="icon"><use href="#i-edit"/></svg>重命名</button>
+    <button class="menu-item" role="menuitem" data-command="pin"><svg class="icon"><use href="#i-pin"/></svg><span id="pinLabel">置顶故事</span></button>
+    <button class="menu-item" role="menuitem" data-view="settings"><svg class="icon"><use href="#i-settings"/></svg>故事设置</button>
+    <button class="menu-item" role="menuitem" data-view="history"><svg class="icon"><use href="#i-history"/></svg>故事记录</button>
+    <div class="menu-divider" role="separator"></div>
+    <button class="menu-item danger" role="menuitem" data-view="delete"><svg class="icon"><use href="#i-trash"/></svg>删除故事</button>
+  </div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1" hidden>
+    <div class="sheet-handle" id="sheetHandle" aria-hidden="true"></div>
+    <header class="sheet-header">
+      <button class="icon-button" id="sheetBack" aria-label="返回上一层" hidden><svg class="icon"><use href="#i-back"/></svg></button>
+      <div class="sheet-title-group"><h2 id="sheetTitle"></h2><p id="sheetSubtitle" hidden></p></div>
+      <button class="icon-button" id="readerExpand" aria-label="全屏阅读" title="全屏阅读" hidden><svg class="icon"><use href="#i-expand"/></svg></button>
+      <button class="icon-button" data-dismiss aria-label="关闭详情"><svg class="icon"><use href="#i-close"/></svg></button>
+    </header>
+    <div class="sheet-content" id="sheetContent" tabindex="0"></div>
+    <footer class="sheet-footer" id="sheetFooter" hidden></footer>
+  </section>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+<script>
+'use strict';
+/* All story text below is fictional, local demo data. No model request is made. */
+(() => {
+const $ = (id) => document.getElementById(id);
+const icon = (name, extra = '') => {
+  const s = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  s.setAttribute('class',`icon ${extra}`);s.setAttribute('aria-hidden','true');
+  const u = document.createElementNS('http://www.w3.org/2000/svg','use');u.setAttribute('href',`#i-${name}`);s.append(u);return s;
+};
+const el = (tag, cls, text) => {const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
+const button = (text, cls, fn) => {const n=el('button',cls,text);n.type='button';if(fn)n.addEventListener('click',fn);return n;};
+const para = (text,kind='action') => ({text,kind});
+const freshCopy = (x) => JSON.parse(JSON.stringify(x));
+const now = () => new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false});
+const uid = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+const seedMessages = [
+ {id:'intro',kind:'narration',time:'23:17',paragraphs:[para('雨敲着窗棂。壁炉只剩一点火，你把湿外套搭在椅背上。')]},
+ {id:'a1',kind:'npc',name:'艾琳',initial:'艾',time:'23:17',paragraphs:[para('“你比约定的时间晚了两个小时。”','dialogue'),para('她把杯子放回吧台，抬眼看你，指尖仍停在杯沿。')]},
+ {id:'u1',kind:'user',time:'23:18',text:'……路上遇到了一点麻烦。'},
+ {id:'a2',kind:'npc',name:'艾琳',initial:'艾',time:'23:19',paragraphs:[para('她轻轻笑了一下，拿起干净的手巾。'),para('“总是有麻烦的人啊。”','dialogue')]},
+ {id:'e1',kind:'event',time:'23:19',text:'铜铃响起，一位陌生人进了门'},
+ {id:'a3',kind:'npc',name:'艾琳',initial:'艾',time:'23:19',long:true,paragraphs:[
+  para('艾琳朝门口看了一眼，手里的杯子停在半空。那一瞬很短，短得你几乎以为只是烛火晃了一下。'),
+  para('一个披着灰色斗篷的男人收起雨伞，靴底在木地板上留下几处湿印。他没有走向吧台，而是选了靠窗的角落。'),
+  para('雨伞尖端滴下的水落在地上，一滴，又一滴。酒保放慢了擦杯子的动作，顺着你的视线望过去。'),
+  para('“门带上。”','dialogue'),
+  para('艾琳的声音不高。陌生人回身推紧门，风声于是被隔在外面，只剩雨点敲击玻璃的细响。'),
+  para('男人把湿斗篷搭到椅背上，露出一件颜色很旧的外套。你看见他的右手戴着手套，左手却没有；他把裸露的手掌靠近桌上的烛台，又很快收了回去。'),
+  para('你的位置看不清那张桌子上的东西。能确认的只有一只空杯、一盏蜡烛，以及他刚放下的小布包。布包被压在胳膊下，表面的绳结并没有解开。'),
+  para('吧台下传来陶器相碰的轻响。艾琳从柜子里拿出另一个杯子，倒了热水，推到你面前。杯口浮着薄薄的白气。'),
+  para('“先暖暖手。”','dialogue'),
+  para('你伸手时，她没有马上松开杯子，而是将杯柄转向你。你们的目光在半空碰了一下。她随即低头继续整理手巾，没解释刚才的停顿。'),
+  para('角落里响了一声椅脚挪动的摩擦。陌生人坐下了。他隔着几张桌子望向吧台，但在你转头看过去以前，已经将目光移到了窗外。'),
+  para('玻璃上流下的雨水把街灯分成了几道模糊的光。有人从外面经过，脚步被雨声盖住，只留下一个转瞬即逝的轮廓。'),
+  para('艾琳将擦好的杯子倒扣在木架上，重新面对你。她没有提那个人。'),
+  para('“那么，”她轻声说，“你刚才说的麻烦呢？”','dialogue')
+ ]},
+ {id:'b1',kind:'npc',name:'酒保',initial:'酒',tone:2,time:'23:20',paragraphs:[para('“还要添些柴吗？”','dialogue'),para('他向壁炉的方向抬了抬下巴，声音压得很低。')]},
+ {"id":"a4","kind":"npc","name":"艾琳","initial":"艾","time":"23:20","thought":{"source":"demo","status":"done","label":"已整理场景与角色回应","steps":[{"title":"已整理当前场景与最近对话","detail":"示例上下文：白鸦酒馆主厅，以及最近几轮对白。"},{"title":"已回顾已知人物与线索","detail":"示例线索：在场人物，以及对话中已经提到的经历。"},{"title":"已组织下一段角色回应","detail":"此处展示预先写好的角色回复，不会调用真实模型。"}]},"paragraphs":[{"text":"“再添一点。”","kind":"dialogue"},{"text":"她把热水推近了些，重新看向你。","kind":"action"},{"text":"“慢慢说。我在听。”","kind":"dialogue"}]}
+];
+const demoReplies = [{"kind":"npc","name":"艾琳","initial":"艾","paragraphs":[{"text":"她没有催促，只把靠近门边的那盏灯拨亮了一点。","kind":"action"},{"text":"“从你离开码头的时候说起吧。”","kind":"dialogue"}]},{"kind":"npc","name":"酒保","initial":"酒","tone":2,"paragraphs":[{"text":"酒保抱着木柴回来，在壁炉旁蹲下。火星轻轻升起，又落进了灰里。","kind":"action"},{"text":"“外面的雨一时半会儿停不了。”","kind":"dialogue"}]},{"kind":"npc","name":"艾琳","initial":"艾","paragraphs":[{"text":"她将一把空椅子拉近吧台，示意你坐。","kind":"action"},{"text":"“今晚不赶时间。”","kind":"dialogue"}]}];
+const demoPhases = [{"title":"整理当前场景与最近对话","done":"已整理当前场景与最近对话","detail":"示例上下文：白鸦酒馆主厅，以及最近几轮对白。","ms":1700},{"title":"回顾已知人物与线索","done":"已回顾已知人物与线索","detail":"示例线索：在场人物，以及对话中已经提到的经历。","ms":1800},{"title":"组织下一段角色回应","done":"已组织下一段角色回应","detail":"此处展示预先写好的角色回复，不会调用真实模型。","ms":1900}];
+const THEMES={"claude":{"name":"Claude 风格","description":"暖米灰底色 · 陶土点缀","paper":"#F2F0E9","surface":"#FAF9F6","accent":"#9C5138"},"cream":{"name":"奶油纸","description":"浅杏纸色 · 温和棕灰","paper":"#F3EDDE","surface":"#FBF7ED","accent":"#895B31"},"sage":{"name":"雾青","description":"浅灰绿底色 · 低饱和青色","paper":"#EDF1EC","surface":"#F8FAF6","accent":"#39756A"},"white":{"name":"纯净白","description":"中性浅白 · 克制灰阶","paper":"#F7F7F5","surface":"#FFFFFF","accent":"#596958"}};
+const defaultState = () => ({version:1,active:'tavern',settings:{font:'serif',fontSize:17,theme:'claude'},plugins:{memory:true,map:true,dice:true,bag:true},stories:[
+ {id:'tavern',title:'白鸦酒馆',scene:'tavern',model:'默认模型',mode:'自动',pinned:false,draft:'',demoIndex:0,messages:freshCopy(seedMessages)},
+ {id:'dock',title:'雾港 · 第七码头',scene:'dock',model:'默认模型',mode:'自动',pinned:false,draft:'',demoIndex:0,messages:[
+  {id:'d1',kind:'narration',time:'21:06',paragraphs:[para('潮水漫过最下面一层石阶，系船绳绷紧，又缓缓松开。')]},
+  {id:'d2',kind:'npc',name:'洛恩',initial:'洛',time:'21:07',paragraphs:[para('“最后一班船已经走了。”','dialogue'),para('他将灯笼提高，让你看清泊位旁新钉上的告示。')]},
+  {id:'d3',kind:'user',time:'21:08',text:'我凑近灯笼，看看告示写了什么。'},
+  {id:'d4',kind:'npc',name:'洛恩',initial:'洛',time:'21:08',paragraphs:[para('“明早六点重开。”','dialogue'),para('他替你挡住吹向灯芯的风，等你读完。')]}
+ ]}
+]});
+const scenes = {
+ tavern:{subtitle:'雾港 · 雨夜',location:'主厅',full:'白鸦酒馆 · 主厅',weather:'深夜 · 小雨',time:'23:20',position:'靠近壁炉的座位',ambient:'杯子的轻响、柴火声，以及窗外持续的雨声。',people:[['艾琳','艾','吧台后 · 正在与你交谈','约 3 米'],['酒保','酒','壁炉旁 · 正在添柴','约 2 米'],['陌生男人','？','靠窗的角落 · 身份未知','约 9 米']],exits:[['吧台','沿主厅走近艾琳','约 3 米'],['二楼楼梯','通向客房区域','约 8 米'],['酒馆正门','门外是雾港街道','约 10 米']],memories:[['迟到的约定','你与艾琳约好在今晚见面。','23:17'],['一个新来的客人','陌生男人进了酒馆，坐在靠窗的角落。','23:19']]},
+ dock:{subtitle:'雾港 · 夜潮',location:'第七码头',full:'雾港 · 第七码头',weather:'夜晚 · 海风',time:'21:08',position:'泊位旁的告示牌前',ambient:'绳索绷紧的吱呀声、海浪和风声。',people:[['洛恩','洛','告示牌旁 · 举着灯笼','约 1 米']],exits:[['告示牌','查看明早的开船时间','就在眼前'],['堤岸','沿石阶回到岸上','约 6 米']],memories:[['下一班船','码头的告示写着明早六点重开。','21:08']]}
+};
+function validMessage(m){
+ if(!m||typeof m!=='object'||typeof m.id!=='string'||!['user','event','npc','narration'].includes(m.kind))return false;
+ if(m.time!==undefined&&typeof m.time!=='string')return false;
+ if(m.kind==='user'||m.kind==='event')return typeof m.text==='string'&&m.text.length<=12000;
+ return Array.isArray(m.paragraphs)&&m.paragraphs.length<=100&&m.paragraphs.every(p=>p&&typeof p.text==='string'&&p.text.length<=12000)&&(m.name===undefined||typeof m.name==='string');
+}
+function validStory(s){
+ return s&&typeof s.id==='string'&&typeof s.title==='string'&&s.title.length<=120&&Array.isArray(s.messages)&&s.messages.length<=200&&s.messages.every(validMessage)&&['model','mode','draft','scene'].every(k=>s[k]===undefined||typeof s[k]==='string');
+}
+const KEY='corerp.ui.final.v1';let state=defaultState(),storageOK=true,saveTimer=null;
+try{const raw=localStorage.getItem(KEY);if(raw){const loaded=JSON.parse(raw);if(loaded.version===1&&Array.isArray(loaded.stories)&&loaded.stories.length&&loaded.stories.length<=50&&loaded.stories.every(validStory)){state={...defaultState(),...loaded};state.settings={...defaultState().settings,...loaded.settings};state.plugins={...defaultState().plugins,...loaded.plugins};}}localStorage.setItem(KEY,JSON.stringify(state));}catch{storageOK=false;}
+if(!state.stories.some(s=>s.id===state.active))state.active=state.stories[0].id;
+state.settings.theme=Object.prototype.hasOwnProperty.call(THEMES,state.settings.theme)?state.settings.theme:'claude';
+state.settings.fontSize=Math.min(21,Math.max(15,Number(state.settings.fontSize)||17));
+for(const s of state.stories){
+ const example=s.messages.find(m=>m.id==='a4'&&m.name==='艾琳'&&m.paragraphs?.some(p=>p.text==='“慢慢说。我在听。”'));
+ if(example)example.thought=freshCopy(seedMessages.find(m=>m.id==='a4').thought);
+}
+const current=()=>state.stories.find(s=>s.id===state.active);
+const scene=()=>scenes[current().scene]||scenes.tavern;
+const app=$('app'),workspace=$('workspace'),scrollport=$('scrollport'),prompt=$('prompt');
+let activeOverlay=null,returnFocus=null,sheetStack=[],currentView=null,readerMessage=null,toastTimer=null,framePending=false,thinkingState=null;
+const scrollPositions=new Map();
+function persist(){clearTimeout(saveTimer);try{localStorage.setItem(KEY,JSON.stringify(state));storageOK=true;}catch{storageOK=false;}}
+function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(persist,220);}
+function toast(text){clearTimeout(toastTimer);$('toast').textContent=text;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,3000);}
+function applyTheme(save=false){
+ const id=Object.prototype.hasOwnProperty.call(THEMES,state.settings.theme)?state.settings.theme:'claude';
+ state.settings.theme=id;document.documentElement.dataset.theme=id;
+ document.querySelector('meta[name="theme-color"]').content=THEMES[id].paper;
+ if(save)persist();
+}
+function applyPreferences(){applyTheme();app.style.setProperty('--reading-size',`${state.settings.fontSize}px`);app.style.setProperty('--reading-font',state.settings.font==='sans'?'var(--ui)':'var(--serif)');}
+function proseNode(paragraphs){const node=el('div','prose');for(const p of paragraphs||[]){node.append(el('p',p.kind==='dialogue'?'dialogue':'action',String(p.text??'')));}return node;}
+function messageText(msg){return msg.text??(msg.paragraphs||[]).map(p=>p.text).join('\n\n');}
+function storyById(id){return state.stories.find(s=>s.id===id);}
+function thinkingClock(){
+ const n=document.createElementNS('http://www.w3.org/2000/svg','svg');
+ n.setAttribute('viewBox','0 0 24 24');n.setAttribute('class','icon thinking-clock');n.setAttribute('aria-hidden','true');
+ const ring=document.createElementNS(n.namespaceURI,'path');
+ ring.setAttribute('d','M12 3a9 9 0 1 1-9 9M3.3 9.5l.2-.6M4.5 6.8l.4-.5M7 4.7l.6-.3M9.6 3.3l.6-.1');
+ const hand=document.createElementNS(n.namespaceURI,'path');hand.setAttribute('d','M12 6.5V12l3.7 2.2');hand.setAttribute('class','clock-hand');
+ n.append(ring,hand);return n;
+}
+function thinkingLine(id,label,running=false){
+ const b=button('','thinking-line'+(running?' is-running':''),()=>openSheet('thinking',{messageId:id}));
+ b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-controls','sheet');
+ b.title='查看思考摘要（本地演示）';
+ const copy=el('span','thinking-copy',label);
+ copy.setAttribute('aria-live','polite');copy.setAttribute('aria-atomic','true');
+ b.append(thinkingClock(),copy,icon('right'));return b;
+}
+function normalizeThought(thought){
+ const steps=(Array.isArray(thought?.steps)?thought.steps:[]).filter(x=>x&&typeof x.title==='string').slice(0,12)
+  .map(x=>({title:x.title.slice(0,140),detail:typeof x.detail==='string'?x.detail.slice(0,600):''}));
+ return {...thought,steps,label:typeof thought?.label==='string'?thought.label:'已整理场景与角色回应'};
+}
+function renderMessage(msg){
+ let node;
+ if(msg.kind==='user'){node=el('article','player-turn');node.append(el('div','player-label',`你 · ${msg.time||''}`),el('div','player-text',String(msg.text||'')));}
+ else if(msg.kind==='event'){node=el('div','world-event');node.append(icon('door'),el('span','',String(msg.text||'')));}
+ else{
+  node=el('article',`turn ${msg.kind==='narration'?'narrator':''}`);
+  if(msg.thought){const thought=normalizeThought(msg.thought);node.append(thinkingLine(msg.id,thought.label));}
+  if((msg.paragraphs||[]).length){
+   if(msg.kind==='narration')node.append(el('div','narrator-label','旁白'));
+   else{const h=el('header','speaker');h.append(el('span',`initial ${msg.tone===2?'tone-2':''}`,msg.initial||'人'),el('strong','',msg.name||'角色'));if(msg.demo)h.append(el('span','speaker-note','预置片段'));h.append(el('time','time',msg.time||''));node.append(h);}
+   const prose=proseNode(msg.paragraphs);if(msg.long)prose.classList.add('collapsed-prose');node.append(prose);
+  }
+  if(msg.long){const b=button('', 'read-link',()=>openSheet('reader',{messageId:msg.id}));const count=messageText(msg).replace(/\s/g,'').length;b.append(icon('book'),el('span','','阅读完整剧情'),el('span','',`约 ${Math.round(count/10)*10} 字`));b.setAttribute('aria-haspopup','dialog');node.append(b);}
+ }
+ node.id=`turn-${msg.id}`;return node;
+}
+function renderStory(restore=true){
+ const s=current(),c=scene();document.title=`${s.title} · CoreRP`;$('storyTitle').textContent=s.title;$('storySubtitle').textContent=c.subtitle;
+ $('locationLabel').textContent=c.location;$('peopleLabel').textContent=`在场 ${c.people.length}`;$('environmentLabel').textContent=c.weather;
+ $('modelLabel').textContent=s.model||'默认模型';$('modelLabel').parentElement.title=`模型：${s.model||'默认模型'}（演示配置）`;
+ const mode=s.mode||'自动';$('modeButton').setAttribute('aria-label',`叙事偏好：${mode}`);$('modeButton').title=`叙事偏好：${mode}`;$('modeButton').classList.toggle('is-custom',mode!=='自动');
+ $('menuTitle').textContent=s.title;$('pinLabel').textContent=s.pinned?'取消置顶':'置顶故事';
+ const t=$('transcript');t.replaceChildren();
+ if(s.messages.length){t.append(el('p','date-rule',`${c.full} · 故事记录`));for(const m of s.messages)t.append(renderMessage(m));}
+ else{const n=el('div','empty-state');n.append(icon('book'),el('h2','','从一句话开始'),el('p','','写下你的对白或行动。'),el('p','','此页面是本地原型，尚未连接模型。'));t.append(n);}
+ prompt.value=s.draft||'';fitInput();renderRecents();applyPreferences();
+ requestAnimationFrame(()=>{if(restore)scrollport.scrollTop=scrollPositions.get(s.id)||0;syncChrome();});
+}
+function renderRecents(){const list=$('recentList');list.replaceChildren();for(const s of [...state.stories].sort((a,b)=>Number(b.pinned)-Number(a.pinned))){const b=button('',`recent-item ${s.id===state.active?'selected':''}`,()=>switchStory(s.id));b.append(s.pinned?icon('pin'):el('i','recent-indicator'),el('span','',s.title));if(s.id===state.active)b.setAttribute('aria-current','true');list.append(b);}}
+function switchStory(id){if(!state.stories.some(s=>s.id===id))return;removeThinkingIndicator();scrollPositions.set(state.active,scrollport.scrollTop);state.active=id;closeOverlay();persist();renderStory();}
+function syncChrome(){const y=scrollport.scrollTop;$('topChrome').classList.toggle('compact',y>40||(y>16&&$('topChrome').classList.contains('compact')));const near=scrollport.scrollHeight-scrollport.clientHeight-y<75;$('jumpButton').classList.toggle('invisible',near);$('jumpButton').tabIndex=near?-1:0;if(activeOverlay==='menu')positionMenu();framePending=false;}
+scrollport.addEventListener('scroll',()=>{if(!framePending){framePending=true;requestAnimationFrame(syncChrome);}},{passive:true});
+function scrollBottom(smooth=true){scrollport.scrollTo({top:scrollport.scrollHeight,behavior:smooth&&!matchMedia('(prefers-reduced-motion: reduce)').matches?'smooth':'auto'});}
+$('jumpButton').addEventListener('click',()=>scrollBottom());
+function measureDock(){
+ const dock=$('composerDock'),bottom=parseFloat(getComputedStyle(dock).bottom)||25;
+ const wasAtBottom=scrollport.scrollHeight-scrollport.clientHeight-scrollport.scrollTop<16;
+ const clearance=`${Math.ceil(dock.offsetHeight+bottom+24)}px`;
+ if(app.style.getPropertyValue('--dock-clearance')!==clearance){app.style.setProperty('--dock-clearance',clearance);if(wasAtBottom)scrollBottom(false);}
+ syncChrome();
+}
+function syncPrimary(){
+ const filled=!!prompt.value.trim(),running=!!thinkingState;
+ $('primaryButton').classList.toggle('has-text',filled);
+ $('primaryButton').classList.toggle('is-thinking',running);
+ $('primaryButton').setAttribute('aria-label',running?'停止演示':filled?'发送消息':'继续剧情');
+ $('primaryButton').title=running?'停止本次动效演示':filled?'发送到本地对话':'继续剧情（预置演示）';
+}
+function fitInput(){
+ prompt.style.height='auto';const cap=app.clientHeight<520?76:132;
+ prompt.style.height=`${Math.min(Math.max(prompt.scrollHeight,37),cap)}px`;
+ syncPrimary();requestAnimationFrame(measureDock);
+}
+prompt.addEventListener('input',()=>{fitInput();current().draft=prompt.value;saveSoon();});
+prompt.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&!e.isComposing){e.preventDefault();sendMessage();}});
+$('composerForm').addEventListener('submit',e=>{e.preventDefault();sendMessage();});
+$('primaryButton').addEventListener('pointerdown',e=>{if(document.activeElement===prompt)e.preventDefault();});
+function nearLatest(){return scrollport.scrollHeight-scrollport.clientHeight-scrollport.scrollTop<100;}
+function appendMessageToStory(storyId,msg,scroll=true){
+ const s=storyById(storyId);if(!s)return false;
+ if(s.messages.length>=200){if(storyId===state.active)toast('本地演示最多保留 200 条消息，请先导出或新建故事。');return false;}
+ const wasEmpty=!s.messages.length;s.messages.push(msg);persist();
+ if(storyId===state.active){if(wasEmpty)renderStory(false);else $('transcript').append(renderMessage(msg));if(scroll)requestAnimationFrame(()=>scrollBottom());}
+ return true;
+}
+function appendMessage(msg){return appendMessageToStory(state.active,msg,true);}
+function removeThinkingIndicator(){
+ if(!thinkingState)return;
+ clearTimeout(thinkingState.timer);thinkingState.node.remove();thinkingState=null;syncPrimary();
+}
+function setPhaseText(job){
+ const stage=job.phases[job.index];
+ job.line.querySelector('.thinking-copy').textContent=stage.title+'…';
+ if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+  job.line.querySelector('.thinking-copy').animate?.([{opacity:.3,transform:'translateY(2px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'ease-out'});
+ }
+ refreshThinkingSheet(job.id);
+}
+function finishDemo(cancelled=false){
+ const job=thinkingState;if(!job)return;
+ clearTimeout(job.timer);
+ const follow=nearLatest(),story=storyById(job.storyId);
+ const oldLine=job.line,focusWasHere=document.activeElement===oldLine;
+ const elapsed=((performance.now()-job.startedAt)/1000).toFixed(1)+' 秒';
+ const count=cancelled?job.index+1:job.phases.length;
+ const thought={source:'demo',status:cancelled?'cancelled':'done',
+  label:cancelled?'已停止本次演示':'已整理场景与角色回应',duration:elapsed,
+  steps:job.phases.slice(0,count).map((p,i)=>({title:cancelled&&i===job.index?p.title+'（已停止）':p.done,detail:p.detail}))};
+ const message=cancelled?{id:job.id,kind:'narration',paragraphs:[],time:now(),demo:true,thought}:
+  {...job.reply,id:job.id,time:now(),demo:true,thought};
+ thinkingState=null;syncPrimary();
+ if(!story){job.node.remove();return;}
+ if(story.messages.length>=200){job.node.remove();toast('本地消息已达到上限，请先整理故事。');refreshThinkingSheet(job.id);return;}
+ story.messages.push(message);if(!cancelled)story.demoIndex=job.sequence+1;
+ if(job.storyId===state.active){
+  const rendered=renderMessage(message);job.node.replaceWith(rendered);
+  const newLine=rendered.querySelector('.thinking-line');
+  if(returnFocus===oldLine)returnFocus=newLine;
+  if(focusWasHere)newLine.focus({preventScroll:true});
+  if(follow&&!activeOverlay)requestAnimationFrame(()=>scrollBottom());
+ }
+ persist();refreshThinkingSheet(job.id);syncChrome();
+}
+function queueDemoReply(){
+ if(thinkingState)return;
+ const s=current();
+ if(s.scene!=='tavern'){toast('此故事暂无预置回复；当前未连接模型。');return;}
+ if(s.messages.length>=200){toast('本地消息已达到上限，请先整理故事。');return;}
+ const sequence=Math.max(0,Math.floor(Number(s.demoIndex)||0)),reply=freshCopy(demoReplies[sequence%demoReplies.length]);
+ const id=uid(),node=el('article','turn pending-turn');node.id=`turn-${id}`;
+ const line=thinkingLine(id,demoPhases[0].title+'…',true);node.append(line);
+ const job={id,storyId:s.id,sequence,reply,node,line,phases:freshCopy(demoPhases),index:0,startedAt:performance.now(),timer:null};
+ thinkingState=job;$('transcript').querySelector('.empty-state')?.remove();$('transcript').append(node);syncPrimary();
+ // These timers simulate arrival of public stage events in an offline prototype.
+ // In production drive setPhaseText and finishDemo with actual server events; do not invent steps.
+ const advance=()=>{
+  if(thinkingState!==job)return;
+  if(job.index+1>=job.phases.length){finishDemo();return;}
+  job.index++;setPhaseText(job);job.timer=setTimeout(advance,job.phases[job.index].ms);
+ };
+ job.timer=setTimeout(advance,job.phases[0].ms);
+ requestAnimationFrame(()=>scrollBottom());
+}
+function sendMessage(){
+ if(thinkingState){finishDemo(true);return;}
+ const value=prompt.value.trim();if(!value){queueDemoReply();return;}
+ if(appendMessage({id:uid(),kind:'user',text:value,time:now()})){
+  current().draft='';prompt.value='';fitInput();persist();
+  if(current().scene==='tavern')queueDemoReply();else toast('消息已加入本地对话 · 未调用模型');
+ }
+}
+function continueStory(){queueDemoReply();}
+function prefill(text){closeOverlay(false);prompt.value=text;current().draft=text;fitInput();saveSoon();prompt.focus({preventScroll:true});}
+/* Modal focus, scroll locking and outside-click behavior. */
+function hideSurfaces(){for(const id of ['drawer','overflowMenu','sheet'])$(id).hidden=true;$('readerExpand').hidden=true;$('sheet').classList.remove('reader-full','thinking-sheet');$('sheet').style.transform='';}
+function showOverlay(type){
+ if(!activeOverlay){returnFocus=document.activeElement;}
+ hideSurfaces();activeOverlay=type;workspace.inert=true;$('scrim').hidden=false;$('scrim').classList.toggle('menu-scrim',type==='menu');
+ $('drawerButton').setAttribute('aria-expanded',String(type==='drawer'));$('moreButton').setAttribute('aria-expanded',String(type==='menu'));
+ const target=$(type==='drawer'?'drawer':type==='menu'?'overflowMenu':'sheet');target.hidden=false;
+ requestAnimationFrame(()=>{if(activeOverlay===type)target.focus({preventScroll:true});});
+}
+function closeOverlay(restore=true){if(!activeOverlay)return;const focus=returnFocus;activeOverlay=null;hideSurfaces();$('scrim').hidden=true;workspace.inert=false;$('drawerButton').setAttribute('aria-expanded','false');$('moreButton').setAttribute('aria-expanded','false');sheetStack=[];currentView=null;readerMessage=null;if(restore&&focus?.isConnected&&!focus.closest('[hidden]'))focus.focus({preventScroll:true});else if(restore)$('moreButton').focus({preventScroll:true});returnFocus=null;}
+$('drawerButton').addEventListener('click',()=>{renderRecents();showOverlay('drawer');});
+function positionMenu(){const a=app.getBoundingClientRect(),b=$('moreButton').getBoundingClientRect(),m=$('overflowMenu');const left=Math.max(9,Math.min(b.right-a.left-m.offsetWidth,app.clientWidth-m.offsetWidth-9));m.style.left=`${left}px`;m.style.top=`${Math.max(7,Math.min(b.bottom-a.top+3,app.clientHeight-m.offsetHeight-9))}px`;}
+$('moreButton').addEventListener('click',()=>{if(activeOverlay==='menu'){closeOverlay();return;}$('menuTitle').textContent=current().title;$('pinLabel').textContent=current().pinned?'取消置顶':'置顶故事';showOverlay('menu');positionMenu();requestAnimationFrame(()=>{if(activeOverlay==='menu')$('overflowMenu').querySelector('[role=menuitem]').focus({preventScroll:true});});});
+$('scrim').addEventListener('click',()=>closeOverlay());
+document.addEventListener('click',e=>{const dismiss=e.target.closest('[data-dismiss]');if(dismiss){closeOverlay();return;}const v=e.target.closest('[data-view]');if(v){openSheet(v.dataset.view);return;}const cmd=e.target.closest('[data-command]');if(!cmd)return;if(cmd.dataset.command==='pin'){current().pinned=!current().pinned;persist();renderRecents();closeOverlay();toast(current().pinned?'已置顶此故事':'已取消置顶');}if(cmd.dataset.command==='export'){exportStory();closeOverlay();}});
+function focusables(surface){return [...surface.querySelectorAll('button:not(:disabled),input,textarea,a[href],[tabindex="0"]')].filter(x=>!x.closest('[hidden]')&&x.getClientRects().length);}
+document.addEventListener('keydown',e=>{
+ if(!activeOverlay)return;if(e.key==='Escape'){e.preventDefault();if(activeOverlay==='sheet'&&sheetStack.length)goBack();else closeOverlay();return;}
+ const surface=$(activeOverlay==='drawer'?'drawer':activeOverlay==='menu'?'overflowMenu':'sheet');
+ if(activeOverlay==='menu'&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const items=focusables(surface),n=items.length,i=items.indexOf(document.activeElement);const next=e.key==='Home'?0:e.key==='End'?n-1:e.key==='ArrowDown'?(i+1)%n:(i+n-1)%n;items[next]?.focus({preventScroll:true});}
+ if(e.key==='Tab'){const list=focusables(surface);if(!list.length){e.preventDefault();return;}const i=list.indexOf(document.activeElement);if(e.shiftKey&&(i<=0)){e.preventDefault();list.at(-1).focus();}else if(!e.shiftKey&&(i===list.length-1||i===-1)){e.preventDefault();list[0].focus();}}
+});
+function goBack(){const prev=sheetStack.pop();if(!prev){closeOverlay();return;}buildSheet(prev.name,prev.data);requestAnimationFrame(()=>$('sheetContent').scrollTop=prev.scroll||0);}
+$('sheetBack').addEventListener('click',goBack);
+function openSheet(name,data={},push=false){if(push&&currentView)sheetStack.push({...currentView,scroll:$('sheetContent').scrollTop});else sheetStack=[];showOverlay('sheet');buildSheet(name,data);}
+function subSheet(name,data={}){openSheet(name,data,true);}
+function setSheetTitle(title,subtitle=''){ $('sheetTitle').textContent=title;$('sheetSubtitle').textContent=subtitle;$('sheetSubtitle').hidden=!subtitle;}
+function note(text){return el('p','detail-note',text);}
+function section(text){return el('h3','section-heading',text);}
+function row(title,description='',symbol='right',tail='',fn=null){const n=fn?button('','detail-row clickable',fn):el('div','detail-row');const mark=el('span','row-symbol');if(symbol.length===1){mark.classList.add('initial-symbol');mark.textContent=symbol;}else mark.append(icon(symbol));const copy=el('span','row-copy');copy.append(el('strong','',title));if(description)copy.append(el('small','',description));n.append(mark,copy);if(tail){const t=el('span','row-end');if(tail==='>')t.append(icon('right'));else if(tail==='check')t.append(icon('check'));else t.textContent=tail;n.append(t);}return n;}
+function option(title,desc,selected,fn){const n=row(title,desc,'book',selected?'check':'',fn);n.classList.add('option-row');n.setAttribute('role','radio');n.setAttribute('aria-checked',String(selected));return n;}
+function tool(title,desc,symbol,fn){const n=button('','tool-card',fn);n.append(icon(symbol),el('b','',title),el('small','',desc));return n;}
+function formInput(id,label,value='',placeholder=''){const wrap=el('div');const l=el('label','form-label',label);l.htmlFor=id;const input=el('input','text-field');input.id=id;input.value=value;input.placeholder=placeholder;input.maxLength=48;wrap.append(l,input);return {wrap,input};}
+function paintThinkingSheet(data){
+ const running=thinkingState&&thinkingState.id===data.messageId&&thinkingState.storyId===state.active?thinkingState:null;
+ const msg=current().messages.find(m=>m.id===data.messageId);
+ const content=$('sheetContent'),savedScroll=content.scrollTop;content.replaceChildren();
+ if(!running&&!msg?.thought){setSheetTitle('思考摘要');content.append(note('没有可显示的记录。'));return;}
+ const thought=running?null:normalizeThought(msg.thought);
+ setSheetTitle('思考摘要',running?'演示进行中':thought.status==='cancelled'?'演示已停止':`演示已完成${thought.duration?' · '+thought.duration:''}`);
+ const steps=running?running.phases.slice(0,running.index+1).map((p,i)=>({title:i===running.index?p.title+'…':p.done,detail:p.detail,active:i===running.index})):thought.steps;
+ const timeline=el('ol','summary-timeline');timeline.setAttribute('aria-label','公开阶段摘要');
+ steps.forEach(step=>{
+  const n=el('li','summary-step'+(step.active?' is-current':''));
+  const mark=el('span','summary-mark');mark.setAttribute('aria-hidden','true');mark.append(step.active?thinkingClock():icon('check'));
+  const copy=el('div','summary-copy');copy.append(el('b','',step.title));if(step.detail)copy.append(el('p','',step.detail));
+  n.append(mark,copy);timeline.append(n);
+ });
+ content.append(timeline);
+ if(!running)content.append(el('p','summary-end',thought.status==='cancelled'?'已停止，未追加角色回复。':'摘要已收起，角色回复保留在对话中。'));
+ content.append(el('p','summary-note','本地动效演示：阶段文字与回复均为预设示例，未调用真实模型，也不是模型内部思维链。'));
+ content.scrollTop=savedScroll;
+}
+function refreshThinkingSheet(id){
+ if(activeOverlay==='sheet'&&currentView?.name==='thinking'&&currentView.data.messageId===id)paintThinkingSheet(currentView.data);
+}
+function buildSheet(name,data={}){
+ currentView={name,data};$('readerExpand').replaceChildren(icon('expand'));$('readerExpand').setAttribute('aria-label','全屏阅读');$('readerExpand').title='全屏阅读';$('sheetContent').replaceChildren();$('sheetContent').scrollTop=0;$('sheetFooter').replaceChildren();$('sheetFooter').hidden=true;$('sheetBack').hidden=!sheetStack.length;$('readerExpand').hidden=true;$('sheet').classList.remove('reader-full');readerMessage=null;
+ $('sheet').classList.toggle('thinking-sheet',name==='thinking');
+ const body=$('sheetContent'),s=current(),c=scene();
+ switch(name){
+ case 'thinking':paintThinkingSheet(data);break;
+ case 'location':
+  setSheetTitle(c.full,'地点与可前往的区域');body.append(section('你的位置'),row(c.position,'根据当前故事中已经出现的信息','location'));
+  body.append(section('附近'));for(const [title,desc,distance] of c.exits)body.append(row(title,desc,'right',distance,()=>prefill(`我走向${title}。`)));
+  body.append(note('选择地点会填写行动草稿，不会直接改变世界状态。'));break;
+ case 'people':
+  setSheetTitle('在场人物',`${c.people.length} 位 · 仅展示故事中已知的信息`);
+  for(const [person,initial,desc,distance] of c.people)body.append(row(person,desc,initial,distance,()=>subSheet('person',{person})));
+  break;
+ case 'person':{
+  const p=c.people.find(x=>x[0]===data.person);if(!p){setSheetTitle('人物');body.append(note('没有可显示的信息。'));break;}
+  setSheetTitle(p[0],'当前已知');body.append(row(p[0],p[2],p[1],p[3]),note(p[0]==='陌生男人'?'你还没有得知他的姓名。这里不会补充他的真实身份或内心想法。':'此处只保留角色在当前故事中表现出来的信息。'));
+  const actions=el('div','form-actions');actions.append(button('与其交谈','solid-button',()=>prefill(`我对${p[0]}说：“`)));body.append(actions);break;}
+ case 'environment':
+  setSheetTitle('环境与状态',c.full);body.append(row(c.weather,`故事时间 · ${c.time}`,'moon'),row('你能听见',c.ambient,'eye'),row('当前情境',s.scene==='dock'?'你正在码头查看告示。':'你正在与艾琳交谈，尚未出现明显冲突。','chat'));break;
+ case 'world':
+  setSheetTitle('世界','雾港 · 已知的地方');body.append(note('从当前故事已经接触过的信息开始。'),row(c.full,'查看当前位置与附近出口','location','>',()=>subSheet('location')),row('世界记忆','回顾你已经知道的线索','memory','>',()=>subSheet('memory')),section('故事存档'));
+  for(const st of state.stories)body.append(row(st.title,st.id===s.id?'当前故事':'切换到本地存档','book',st.id===s.id?'当前':'>',()=>switchStory(st.id)));break;
+ case 'memory':{
+  setSheetTitle('记忆','已知事件 · 本地示例');const label=el('label','form-label','查找线索');label.htmlFor='memorySearch';const input=el('input','text-field');input.id='memorySearch';input.placeholder='搜索记忆';const results=el('div');
+  const update=()=>{results.replaceChildren();const filtered=c.memories.filter(m=>m.join(' ').includes(input.value.trim()));for(const [t,desc,time] of filtered)results.append(row(t,desc,'memory',time));if(!filtered.length)results.append(note('没有匹配的记忆。'));};input.addEventListener('input',update);body.append(label,input,results);update();break;}
+ case 'tools':{
+  setSheetTitle('行动与插件','需要时打开，不占用对话空间');body.append(section('行动'));const grid=el('div','tool-grid');grid.append(tool('观察','留意眼前的细节','eye',()=>prefill('我仔细观察周围的环境。')),tool('移动','选择附近的地点','location',()=>subSheet('location')),tool('交谈','选择在场的人物','people',()=>subSheet('people')),tool('使用物品','查看携带物品','bag',()=>state.plugins.bag?subSheet('bag'):subSheet('plugins')));body.append(grid,section('已启用的扩展'));const ext=el('div','tool-grid');for(const [key,title,desc,symbol] of [['map','地图','已知区域与路径','map'],['memory','记忆','回顾故事线索','memory'],['dice','骰子','一次简单的随机判定','dice'],['bag','背包','随身携带的物品','bag']]){if(state.plugins[key])ext.append(tool(title,desc,symbol,()=>subSheet(key)));}if(ext.children.length)body.append(ext);else body.append(note('尚未启用扩展。'));body.append(row('管理插件','调整此处显示的扩展入口','plugin','>',()=>subSheet('plugins')));break;}
+ case 'plugins':{
+  setSheetTitle('插件','当前故事的扩展入口');body.append(note('这里的开关控制本地演示入口，未加载第三方插件。'));const group=el('div','setting-group');
+  for(const [key,title,desc,symbol] of [['map','地图','查看已知地点','map'],['memory','记忆检索','在已知线索中查找','memory'],['dice','骰子','本地随机掷骰','dice'],['bag','背包','查看示例物品','bag']]){const n=row(title,desc,symbol,'');n.classList.add('clickable');n.setAttribute('role','switch');n.setAttribute('tabindex','0');n.setAttribute('aria-label',title);n.setAttribute('aria-checked',String(!!state.plugins[key]));n.append(el('span','switch'));const toggle=()=>{state.plugins[key]=!state.plugins[key];n.setAttribute('aria-checked',String(state.plugins[key]));persist();};n.addEventListener('click',toggle);n.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();toggle();}});group.append(n);}body.append(group);break;}
+ case 'map':
+  setSheetTitle('已知地图',c.full);body.append(row(c.location,'你在这里','location','当前'),section('相邻地点'));for(const [title,desc,distance] of c.exits)body.append(row(title,desc,'map',distance,()=>prefill(`我走向${title}。`)));body.append(note('未探索的区域不在此图中显示。'));break;
+ case 'bag':
+  setSheetTitle('随身物品','演示背包');body.append(row('旧外套','雨水还没有干透','bag','1',()=>prefill('我检查外套口袋。')),row('手记','记着路上的零散线索','book','1',()=>prefill('我翻开手记。')),row('零钱袋','几枚沿途留下的硬币','bag','1',()=>prefill('我拿出零钱袋。')),note('选择物品仅填写行动草稿。'));break;
+ case 'dice':{
+  setSheetTitle('骰子','1D20 · 本地随机');body.append(note('结果仅记录在这个演示面板中，不会自动决定剧情。'));const result=el('div','dice-result','—');result.setAttribute('aria-live','polite');const actions=el('div','center-actions');actions.append(button('掷一次','solid-button',()=>{let n;if(window.crypto?.getRandomValues){const buffer=new Uint32Array(1),limit=Math.floor(4294967296/20)*20;do{crypto.getRandomValues(buffer);}while(buffer[0]>=limit);n=buffer[0]%20+1;}else n=Math.floor(Math.random()*20)+1;result.textContent=String(n);}));body.append(result,actions);break;}
+ case 'models':{
+  setSheetTitle('选择模型','输入框显示名称');body.append(note('当前未配置 API。这里仅演示模型选择，不代表已连接某项服务。'));const group=el('div');group.setAttribute('role','radiogroup');group.setAttribute('aria-label','模型配置');const names=[...new Set(['默认模型','备用模型',s.model||'默认模型'])];for(const model of names)group.append(option(model,'本地配置占位',s.model===model,()=>{s.model=model;persist();updateComposerLabels();closeOverlay();}));body.append(group,section('自定义名称'));const field=formInput('customModel','模型显示名称','','填写你实际使用的模型名称');const actions=el('div','form-actions');actions.append(button('应用名称','solid-button',()=>{const text=field.input.value.trim();if(!text){field.input.focus();return;}s.model=text.slice(0,40);persist();updateComposerLabels();closeOverlay();toast('已更新显示名称，未建立模型连接');}));body.append(field.wrap,actions);break;}
+ case 'mode':{
+  setSheetTitle('叙事偏好','只调整表达方式，不改变世界规则');body.append(note('此原型会保存你的选择；实际生成策略需要后端接入。'));const group=el('div');group.setAttribute('role','radiogroup');group.setAttribute('aria-label','叙事偏好');for(const [mode,desc] of [['自动','让对话与叙述自然交替'],['简短互动','以对白和直接动作推进'],['长篇叙事','保留更完整的场景与行动描写']])group.append(option(mode,desc,(s.mode||'自动')===mode,()=>{s.mode=mode;persist();updateComposerLabels();closeOverlay();}));body.append(group);break;}
+ case 'reader':{
+  const message=s.messages.find(m=>m.id===data.messageId);if(!message){setSheetTitle('剧情');body.append(note('没有找到这条消息。'));break;}readerMessage=message;$('readerExpand').hidden=false;setSheetTitle('完整剧情',s.title);const article=el('article','reader-content');article.append(el('div','reader-byline',`${message.name||'旁白'} · ${message.time||''}`),proseNode(message.paragraphs));body.append(article);const foot=$('sheetFooter');foot.hidden=false;foot.append(typeControls(),button('返回对话','reader-back',()=>closeOverlay()));break;}
+ case 'appearance':{
+  setSheetTitle('主题与外观','浅色主题 · 所有故事共用');
+  const preview=el('div','theme-preview');preview.setAttribute('aria-label','当前主题预览');
+  const meta=el('div','theme-preview-meta');meta.append(icon('book'),el('span','','白鸦酒馆 · 阅读预览'));
+  preview.append(meta,el('p','theme-preview-quote','“慢慢说，我在听。”'),el('p','theme-preview-text','窗外雨声渐密，杯口升起一缕热气。'));
+  const mini=el('div','theme-mini-compose');mini.setAttribute('aria-hidden','true');const send=el('i','theme-mini-send');send.append(icon('send'));mini.append(icon('plus'),el('span','','你想做什么……'),send);preview.append(mini);body.append(preview);
+  const choices=el('div','theme-choices');choices.setAttribute('role','radiogroup');choices.setAttribute('aria-label','浅色主题');
+  const foot=$('sheetFooter');foot.hidden=false;const saved=el('span','theme-save-status');saved.setAttribute('role','status');
+  const update=()=>{
+   for(const n of choices.children){const chosen=n.dataset.themeChoice===state.settings.theme;n.setAttribute('aria-checked',String(chosen));n.tabIndex=chosen?0:-1;}
+   saved.textContent=storageOK?'已保存到此浏览器':'已应用 · 当前浏览器无法保存';
+  };
+  const select=(id)=>{state.settings.theme=id;applyTheme(true);update();};
+  for(const [id,t] of Object.entries(THEMES)){
+   const n=button('','theme-choice',()=>select(id));n.dataset.themeChoice=id;n.setAttribute('role','radio');n.setAttribute('aria-label',t.name+(id==='claude'?'，默认主题':''));
+   const swatches=el('span','theme-swatches');swatches.setAttribute('aria-hidden','true');swatches.style.setProperty('--swatch-paper',t.paper);swatches.style.setProperty('--swatch-surface',t.surface);swatches.style.setProperty('--swatch-accent',t.accent);swatches.append(el('i','theme-swatch'),el('i','theme-swatch'));
+   const copy=el('span','theme-choice-copy'),title=el('span','theme-choice-title',t.name);if(id==='claude')title.append(el('span','theme-default-tag','默认'));copy.append(title,el('small','',t.description));
+   const check=el('span','theme-choice-check');check.setAttribute('aria-hidden','true');check.append(icon('check'));n.append(swatches,copy,check);choices.append(n);
+  }
+  choices.addEventListener('keydown',e=>{
+   if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft','Home','End'].includes(e.key))return;
+   e.preventDefault();const nodes=[...choices.children],i=nodes.indexOf(document.activeElement),count=nodes.length;
+   const next=e.key==='Home'?0:e.key==='End'?count-1:(i+(['ArrowUp','ArrowLeft'].includes(e.key)?-1:1)+count)%count;
+   nodes[next].focus({preventScroll:true});select(nodes[next].dataset.themeChoice);
+  });
+  body.append(choices,el('p','theme-footnote','点选即可预览。背景、输入框、侧栏与弹窗同步换色，透明思考状态保持不变。'));
+  foot.append(saved,button('完成','solid-button theme-done',()=>closeOverlay()));update();break;
+ }
+ case 'settings':{
+  setSheetTitle('阅读与故事设置',s.title);body.append(section('外观'));const appearance=el('div','setting-group');appearance.append(row('主题与外观',THEMES[state.settings.theme].name,'palette','>',()=>subSheet('appearance')));body.append(appearance,section('阅读'));const group=el('div','setting-group');const textRow=row('正文字号','', 'book');textRow.append(typeControls());group.append(textRow);const fontRow=el('div','detail-row');fontRow.append(el('span','row-copy','正文字体'));const segmented=el('div','segmented');for(const [key,label] of [['serif','宋体'],['sans','系统']]){const b=button(label,state.settings.font===key?'selected':'',()=>{state.settings.font=key;applyPreferences();persist();for(const btn of segmented.children)btn.classList.remove('selected');b.classList.add('selected');});segmented.append(b);}fontRow.append(segmented);group.append(fontRow);body.append(group,section('当前故事'));const settingsGroup=el('div','setting-group');settingsGroup.append(row('模型',s.model||'默认模型','settings','>',()=>subSheet('models')),row('叙事偏好',s.mode||'自动','book','>',()=>subSheet('mode')),row('扩展能力','管理行动菜单中的插件','plugin','>',()=>subSheet('plugins')));body.append(settingsGroup,section('本地原型'),note(storageOK?'设置、草稿和对话保存在当前浏览器中。此文件不发送网络请求，清除浏览器数据会移除存档。':'当前浏览器不允许本地存储，设置与对话仅保留在本次打开期间。请通过菜单导出需要保存的内容。'),note('输入框：Enter 换行，Ctrl / ⌘ + Enter 发送。空输入时的黑色按钮用于演示阶段切换与预置回复；运行时可按同一按钮停止。'),row('导出当前故事','保存为 Markdown 文本','export','>',()=>exportStory()));break;}
+ case 'history':
+  setSheetTitle('故事记录',s.title);for(const m of s.messages){const entry=el('div','timeline-entry');entry.append(el('time','',m.time||''),el('p','',`${m.kind==='user'?'你':m.name|| (m.kind==='event'?'场景变化':'旁白')} · ${messageText(m).slice(0,68)}${messageText(m).length>68?'…':''}`));body.append(entry);}if(!s.messages.length)body.append(note('这个故事还没有消息。'));break;
+ case 'rename':{
+  setSheetTitle('重命名故事');const f=el('form'),field=formInput('renameTitle','故事名称',s.title);const actions=el('div','form-actions');actions.append(button('取消','flat-button',()=>closeOverlay()));const submit=button('保存','solid-button');submit.type='submit';actions.append(submit);f.append(field.wrap,actions);f.addEventListener('submit',e=>{e.preventDefault();const value=field.input.value.trim();if(!value){field.input.focus();return;}s.title=value.slice(0,48);persist();$('storyTitle').textContent=s.title;document.title=`${s.title} · CoreRP`;renderRecents();closeOverlay();toast('故事名称已更新');});body.append(f);break;}
+ case 'new':{
+  setSheetTitle('新故事','本地空白存档');const f=el('form'),field=formInput('newTitle','故事名称','','给这段故事起一个名字');body.append(note('新故事以白鸦酒馆为演示场景，不会覆盖现有存档。'));const actions=el('div','form-actions');actions.append(button('取消','flat-button',()=>closeOverlay()));const submit=button('创建故事','solid-button');submit.type='submit';actions.append(submit);f.append(field.wrap,actions);f.addEventListener('submit',e=>{e.preventDefault();if(state.stories.length>=50){toast('演示最多保存 50 个故事，请先导出并整理。');return;}const value=field.input.value.trim();if(!value){field.input.focus();return;}const story={id:uid(),title:value.slice(0,48),scene:'tavern',model:s.model||'默认模型',mode:'自动',pinned:false,draft:'',demoIndex:0,messages:[]};state.stories.unshift(story);switchStory(story.id);});body.append(f);break;}
+ case 'delete':{
+  setSheetTitle('删除这个故事？');body.append(note(`将删除「${s.title}」在此浏览器中的本地记录。此操作不可撤销，建议先导出。`));const actions=el('div','form-actions');actions.append(button('保留故事','flat-button',()=>closeOverlay()),button('确认删除','danger-button',()=>{removeThinkingIndicator();state.stories=state.stories.filter(x=>x.id!==s.id);if(!state.stories.length)state.stories=[{id:uid(),title:'新的故事',scene:'tavern',model:'默认模型',mode:'自动',pinned:false,draft:'',demoIndex:0,messages:[]}];state.active=state.stories[0].id;persist();closeOverlay();renderStory();toast('已删除本地故事');}));body.append(actions);break;}
+ default:setSheetTitle('详情');body.append(note('没有可显示的内容。'));
+ }
+ $('sheetBack').hidden=!sheetStack.length;
+}
+function typeControls(){const group=el('div','type-controls'),label=el('span','font-size-value',String(state.settings.fontSize));const change=(n)=>{state.settings.fontSize=Math.min(21,Math.max(15,state.settings.fontSize+n));applyPreferences();persist();document.querySelectorAll('.font-size-value').forEach(x=>x.textContent=String(state.settings.fontSize));};const minus=button('A−','',()=>change(-1));minus.setAttribute('aria-label','缩小正文字号');const plus=button('A+','',()=>change(1));plus.setAttribute('aria-label','放大正文字号');group.append(minus,label,plus);return group;}
+function updateComposerLabels(){$('modelLabel').textContent=current().model||'默认模型';$('modelLabel').parentElement.title=`模型：${current().model||'默认模型'}（演示配置）`;const mode=current().mode||'自动';$('modeButton').title=`叙事偏好：${mode}`;$('modeButton').setAttribute('aria-label',`叙事偏好：${mode}`);$('modeButton').classList.toggle('is-custom',mode!=='自动');}
+$('readerExpand').addEventListener('click',()=>{const full=$('sheet').classList.toggle('reader-full');$('readerExpand').setAttribute('aria-label',full?'退出全屏阅读':'全屏阅读');$('readerExpand').title=full?'退出全屏阅读':'全屏阅读';$('readerExpand').replaceChildren(icon(full?'collapse':'expand'));});
+function exportStory(){const s=current(),lines=[`# ${s.title}`,'',`> CoreRP 本地演示存档 · ${new Date().toLocaleString('zh-CN')}`,''];for(const msg of s.messages){const who=msg.kind==='user'?'你':msg.kind==='event'?'场景变化':msg.name||'旁白';lines.push(`## ${who}${msg.time?' · '+msg.time:''}${msg.demo?'（预置片段）':''}`,'',messageText(msg),'');}const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/markdown;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${s.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_')||'CoreRP'}.md`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);toast('已发起故事文件导出');}
+// Drag only the handle, never the readable content. Buttons and Escape remain available.
+let drag=null;$('sheetHandle').addEventListener('pointerdown',e=>{if($('sheet').classList.contains('reader-full'))return;drag={y:e.clientY,id:e.pointerId};e.currentTarget.setPointerCapture(e.pointerId);});
+$('sheetHandle').addEventListener('pointermove',e=>{if(drag)$('sheet').style.transform=`translateY(${Math.max(0,e.clientY-drag.y)}px)`;});
+function finishDrag(e){if(!drag)return;const dist=e.clientY-drag.y;drag=null;$('sheet').style.transform='';if(dist>85)closeOverlay();}
+$('sheetHandle').addEventListener('pointerup',finishDrag);$('sheetHandle').addEventListener('pointercancel',()=>{drag=null;$('sheet').style.transform='';});
+// Follow the visual viewport when mobile browsers raise the keyboard.
+let initialHeight=window.innerHeight;
+function viewportChanged(){const vv=window.visualViewport;if(vv&&Math.abs(vv.scale-1)<.05){app.style.setProperty('--app-height',`${vv.height}px`);app.style.setProperty('--app-top',`${vv.offsetTop}px`);const editing=['INPUT','TEXTAREA'].includes(document.activeElement?.tagName);app.classList.toggle('keyboard-open',editing&&vv.height<initialHeight*.8);}else if(!vv){app.style.setProperty('--app-height',`${window.innerHeight}px`);}requestAnimationFrame(()=>{measureDock();if(activeOverlay==='menu')positionMenu();});}
+window.visualViewport?.addEventListener('resize',viewportChanged);window.visualViewport?.addEventListener('scroll',viewportChanged);window.addEventListener('resize',viewportChanged);window.addEventListener('orientationchange',()=>{setTimeout(()=>{initialHeight=window.innerHeight;viewportChanged();},250);});
+prompt.addEventListener('focus',viewportChanged);prompt.addEventListener('blur',()=>setTimeout(viewportChanged,80));
+if(window.ResizeObserver){new ResizeObserver(measureDock).observe($('composerDock'));}
+window.addEventListener('pagehide',()=>{removeThinkingIndicator();persist();});
+renderStory();viewportChanged();
+})();
+</script>
+</body>
+</html>

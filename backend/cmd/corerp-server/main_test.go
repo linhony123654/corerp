@@ -13,6 +13,7 @@ import (
 )
 
 func TestBrowserOriginConfigurationFailsBeforeOpeningDatabase(t *testing.T) {
+	t.Setenv(backgroundIntervalEnvironment, "")
 	path := filepath.Join(t.TempDir(), "must-not-create.db")
 	err := runWithProviders(context.Background(), path, "127.0.0.1:0", `{"player-token":"principal_player"}`, "cursor-test-secret-at-least-32-bytes", slog.New(slog.NewTextHandler(io.Discard, nil)), core.DeterministicRPDecisionProvider{}, "deterministic", core.DeterministicRPNarrativeProvider{}, "*")
 	if !core.HasCode(err, core.CodeInvalidArgument) {
@@ -39,6 +40,7 @@ func TestParseTokenConfiguration(t *testing.T) {
 }
 
 func TestRunPerformsBoundedGracefulShutdown(t *testing.T) {
+	t.Setenv(backgroundIntervalEnvironment, "")
 	// A fixed cancellation delay can interrupt migrations instead of exercising
 	// server shutdown. Wait for completed initialization / HTTP serve entry, then
 	// independently bound shutdown and require its completion log.
@@ -80,6 +82,20 @@ func TestRunPerformsBoundedGracefulShutdown(t *testing.T) {
 	case <-stopped:
 	default:
 		t.Fatal("server did not complete its graceful shutdown path")
+	}
+}
+
+func TestParseBackgroundInterval(t *testing.T) {
+	for raw, expected := range map[string]time.Duration{"": 0, "30s": 30 * time.Second, "5m": 5 * time.Minute, "1h": time.Hour} {
+		actual, err := parseBackgroundInterval(raw)
+		if err != nil || actual != expected {
+			t.Fatalf("parse %q: %v %v", raw, actual, err)
+		}
+	}
+	for _, raw := range []string{"29s", "61m", "always", "-1m"} {
+		if _, err := parseBackgroundInterval(raw); !core.HasCode(err, core.CodeInvalidArgument) {
+			t.Fatalf("invalid interval %q: %v", raw, err)
+		}
 	}
 }
 

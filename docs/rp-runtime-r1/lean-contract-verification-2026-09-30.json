@@ -1,0 +1,99 @@
+{
+  "kind": "lean_role_execution_contract_source_checkpoint",
+  "captured_at_utc": "2026-09-30T11:29:31.089745+00:00",
+  "branch": "rp-preview-integration-20260929",
+  "head": "7fc3b3ba7be229b11341130d6cdd4275e231274f",
+  "base_checkpoint": "role-create-verification-2026-09-30.json",
+  "base_source_archive": "/tmp/corerp-r1-role-create-source-20260930",
+  "source_delta_archive": "/tmp/corerp-r1-lean-source-20260930",
+  "source_changes": {
+    "backend/internal/decision/chat.go": {
+      "before": "54ad811e0e9a904db0ac8632094e40721f6dc262cbb08a0bb331e7bca21148dc",
+      "after": "3dacd57643401c8170cffce1fa3145697528081ffd4bab476f5f418e202d650f"
+    }
+  },
+  "binaries": {
+    "runtime": {
+      "path": "/dev/shm/corerp-r1-lean-runtime-20260930",
+      "sha256": "4ad3dad9c8b4f2ed5a428aa74d462754fc3de9b6f831894e2065f6992560df0a"
+    },
+    "m1": {
+      "path": "/dev/shm/corerp-r1-lean-m1-20260930",
+      "sha256": "e8e266fbe521870fe5f816d1be9ae8e550743422ce44faf3acc3ef64b83b9f6d"
+    },
+    "setup": {
+      "path": "/dev/shm/corerp-r1-lean-setup-20260930",
+      "sha256": "82418eeaf7e3cebb9b32a47d091e6e14778229cd179b5d3059c90664c044efd3"
+    },
+    "admin": {
+      "path": "/dev/shm/corerp-r1-lean-admin-20260930",
+      "sha256": "57c18631ad97416e95de9ee0cbe668199a8de1922186a3a077fbedc13123c586"
+    }
+  },
+  "change": "Only model execution instruction simplified, 6258 to 2475 bytes. No canon/schema/parser/context/owner/narrator/budget/timeout changes.",
+  "checks": {
+    "decision_core_narrative": {
+      "status": "PASS",
+      "exit_code": 0,
+      "log": "/tmp/corerp-r1-lean-contract-packages-20260930.log"
+    },
+    "observable_private_boundaries": {
+      "status": "PASS",
+      "exit_code": 0,
+      "log": "/tmp/corerp-r1-lean-boundaries-20260930.log"
+    },
+    "vet_five_packages": {
+      "status": "PASS",
+      "exit_code": 0,
+      "log": "/tmp/corerp-r1-lean-vet-20260930.log"
+    },
+    "binary_build": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "full_backend": {
+      "status": "NOT VERIFIED for changed instruction; unchanged core/storage full suite passed at ac0 checkpoint",
+      "previous_exit_code": 0,
+      "previous_log": "/tmp/corerp-r1-role-create-backend-ram-20260930.log",
+      "tested_packages": 12,
+      "no_test_packages": 1
+    },
+    "four_real_turns": {
+      "status": "PASS: four settled, four real HTTP calls, zero mock/repair/fallback; human NOT VERIFIED",
+      "session": 81313,
+      "log": "/tmp/corerp-r1-role-ready-lean-contract-20260930.log",
+      "exit_code": 0,
+      "artifact": "role-ready-lean-contract-2026-09-30.json"
+    },
+    "original_32": {
+      "status": "FAIL",
+      "last_ac0_status": "FAIL",
+      "last_result": "role-create-32-result-2026-09-30.json",
+      "session": 42092,
+      "exit_code": 1,
+      "artifact": "lean-contract-32-result-2026-09-30.json"
+    },
+    "human_experience": {
+      "status": "NOT VERIFIED",
+      "reason": "Existing request for canon and prior four-turn human review unanswered. No fullR1 acceptance."
+    },
+    "committed_expression_continuation": {
+      "status": "PASS: one real follow-up after restart; public witnessed smile source retained; human NOT VERIFIED",
+      "exit_code": 0,
+      "artifact": "live-expression-continuation-2026-09-30.json"
+    },
+    "json_mode_contract_probe": {
+      "status": "RUNNING",
+      "session": 82496,
+      "log": "/tmp/corerp-r1-json-contract-probe-20260930.log"
+    }
+  },
+  "diagnostics": {
+    "json_schema_vs_json_object": "decision-format-probe-2026-09-30.json",
+    "disable_thinking": "decision-thinking-probe-2026-09-30.json",
+    "lean_instruction_same_context": "decision-lean-contract-probe-2026-09-30.json"
+  },
+  "R1": "NOT DONE",
+  "production_changed": false,
+  "git_commit_or_push": false
+}

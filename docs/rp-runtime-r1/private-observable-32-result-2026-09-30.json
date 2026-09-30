@@ -1,0 +1,1349 @@
+{
+  "kind": "partial_full32_failure",
+  "model": "step-5-preview",
+  "script_exit_code": 1,
+  "completed_browser_turns": 27,
+  "settled_turns": 28,
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "result": "success",
+      "count": 83
+    },
+    {
+      "phase": "decision",
+      "result": "timeout",
+      "count": 1
+    },
+    {
+      "phase": "narrative",
+      "result": "success",
+      "count": 56
+    }
+  ],
+  "failures": [
+    {
+      "phase": "decision",
+      "model_id": "step-5-preview",
+      "result": "timeout",
+      "attempt_count": 3,
+      "fallback_kind": "silence",
+      "started_at_utc": "2026-09-30T05:08:39.219985678Z",
+      "finished_at_utc": "2026-09-30T05:10:39.226273753Z"
+    }
+  ],
+  "followup_checks": "regeneration/mixed/fault/restart block was not reached",
+  "world_integrity_32_exit": "NOT PASSED",
+  "runtime_sha256": "sha256:31041504fb84c49571cb62fde5cab31fdbfddf12c2e44b9839f9b49f2a266900",
+  "model_configuration": {
+    "reasoning_effort": "low",
+    "decision_max_tokens": 4096,
+    "interaction_max_tokens": 4096,
+    "total_decision_timeout": "120s",
+    "disable_thinking": false,
+    "configuration_source": "actual browser profile override"
+  },
+  "artifact_directory": "/tmp/corerp-rp3-npc-H9rWMK",
+  "log_path": "/tmp/corerp-r1-private-observable-32-20260930.log",
+  "log_sha256": "f07b0dfd98f398aeda7620978a87966cd98509d404860b237e5411f1277ce08d",
+  "fixture_note": "Existing --rongqing technical regression; not frozen real-world Golden. 28 settled world turns do not equal 28 passing browser rounds; turn28 settled with fallback.",
+  "public_samples": {
+    "world": "rp9-rongqing-world",
+    "model": "step-5-preview",
+    "viaProfile": true,
+    "tuning": {
+      "timeoutSeconds": 120,
+      "reasoningEffort": "low",
+      "disableThinking": false,
+      "decisionMaxTokens": 4096,
+      "interactionMaxTokens": 4096
+    },
+    "samples": [
+      {
+        "index": 1,
+        "speech": "有人吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "宝二爷，我在这儿呢。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "respond",
+            "text": "我也在，正清点茶盏和借来的坐席。"
+          }
+        ],
+        "narrative": [
+          "你 「有人吗？」",
+          "袭人 「宝二爷，我在这儿呢。」",
+          "黛玉保持沉默",
+          "宝钗 「我也在，正清点茶盏和借来的坐席。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 2,
+        "speech": "你是谁呀？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "黛玉",
+            "action": "respond",
+            "text": "我是黛玉。宝二爷这屋里日日照面的人，也要问一句『你是谁呀』么？"
+          },
+          {
+            "speaker": "宝钗",
+            "action": "respond",
+            "text": "我是宝钗，宝二爷。方才我也在这儿，只是低着头点茶盏；这些坐席是借来的，回头还要照数还清。"
+          }
+        ],
+        "narrative": [
+          "你：「你是谁呀？」",
+          "袭人保持沉默。",
+          "黛玉：「我是黛玉。宝二爷这屋里日日照面的人，也要问一句『你是谁呀』么？」",
+          "宝钗：「我是宝钗，宝二爷。方才我也在这儿，只是低着头点茶盏；这些坐席是借来的，回头还要照数还清。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 3,
+        "speech": "想你了。",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "respond",
+            "text": "宝二爷又说笑了。我方才就在这儿，只是你没留意；来，先坐下，这些借来的坐席还得清点呢。"
+          }
+        ],
+        "narrative": [
+          "你 「想你了。」",
+          "宝钗 「宝二爷又说笑了。我方才就在这儿，只是你没留意；来，先坐下，这些借来的坐席还得清点呢。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 4,
+        "speech": "今儿这边怎么静悄悄的？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "宝二爷，方才静，是我在里头理帘子，怕碰出声响扰你。你这会儿过来，可是乏了？"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "respond",
+            "text": "静么？有人怕碰出声响扰你，帘子都是轻手理的；再加上宝姐姐只管低头数她的茶盏，自然就静下来了。可不是我故意不出声。"
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「今儿这边怎么静悄悄的？」",
+          "袭人 「宝二爷，方才静，是我在里头理帘子，怕碰出声响扰你。你这会儿过来，可是乏了？」",
+          "黛玉 「静么？有人怕碰出声响扰你，帘子都是轻手理的；再加上宝姐姐只管低头数她的茶盏，自然就静下来了。可不是我故意不出声。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 5,
+        "speech": "我刚刚是不是打断你们了？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "respond",
+            "text": "没打断什么，宝二爷。我们也不过是随口应两声，你来了倒好。\n"
+          }
+        ],
+        "narrative": [
+          "你：「我刚刚是不是打断你们了？」",
+          "袭人保持沉默。",
+          "黛玉保持沉默。",
+          "宝钗：「没打断什么，宝二爷。我们也不过是随口应两声，你来了倒好。",
+          "」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 6,
+        "speech": "你手里的活忙完了吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "快理完了，还剩角上一处没归位。二爷若是乏了，先坐下歇歇，我这边马上就好。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「你手里的活忙完了吗？」",
+          "袭人 「快理完了，还剩角上一处没归位。二爷若是乏了，先坐下歇歇，我这边马上就好。」",
+          "黛玉与宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 7,
+        "speech": "若你不愿说，我就不追问。",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷言重了，我没什么不愿说的。帘子还剩角上一处，马上就好。极简答复：```text\n二爷言重了，我没什么不愿说的。帘子还剩角上一处，马上就好。\n```"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你：「若你不愿说，我就不追问。」",
+          "（黛玉与宝钗保持沉默。）",
+          "袭人：「二爷言重了，我没什么不愿说的。帘子还剩角上一处，马上就好。极简答复：```text",
+          "二爷言重了，我没什么不愿说的。帘子还剩角上一处，马上就好。",
+          "```」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 8,
+        "speech": "我记得你说过今天还有事，是什么事？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "除了这帘子，今儿也没别的什么。二爷怕是记岔了。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "respond",
+            "text": "二爷又记岔了。我今儿只核这诗笺上的字，没说过还有别的什么事；那理帘子的就在那边，要问'事'，该问他去。"
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「我记得你说过今天还有事，是什么事？」",
+          "袭人 「除了这帘子，今儿也没别的什么。二爷怕是记岔了。」",
+          "黛玉 「二爷又记岔了。我今儿只核这诗笺上的字，没说过还有别的什么事；那理帘子的就在那边，要问'事'，该问他去。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 9,
+        "speech": "你刚刚为什么躲着我？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷想到哪里去了，我方才是在里头理帘子，怕碰出声响扰你，并不是躲你。二爷若是乏了，先坐下歇歇，我这边理完就过来。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「你刚刚为什么躲着我？」",
+          "袭人 「二爷想到哪里去了，我方才是在里头理帘子，怕碰出声响扰你，并不是躲你。二爷若是乏了，先坐下歇歇，我这边理完就过来。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 10,
+        "speech": "我们昨天一起去海边了吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "昨天？我没有这个印象。二爷是不是把日子记混了？"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你：「我们昨天一起去海边了吗？」",
+          "袭人：「昨天？我没有这个印象。二爷是不是把日子记混了？」",
+          "黛玉保持沉默。",
+          "宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 11,
+        "speech": "去年我借给你的书还在吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷，我这儿没有这个印象，也不曾见过什么去年借来的书。二爷是不是又想起别处的事去了？"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "respond",
+            "text": "我没有这个印象。往年的事记不真，近来只忙着清点茶盏坐席，倒不曾经手什么书。"
+          }
+        ],
+        "narrative": [
+          "你：「去年我借给你的书还在吗？」",
+          "袭人：「二爷，我这儿没有这个印象，也不曾见过什么去年借来的书。二爷是不是又想起别处的事去了？」",
+          "黛玉保持沉默。",
+          "宝钗：「我没有这个印象。往年的事记不真，近来只忙着清点茶盏坐席，倒不曾经手什么书。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 12,
+        "speech": "你还记得去年那件事吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷，这倒问住我了。去岁一年我都在堂里照料，并不曾经什么大事，那件事是指哪一桩？"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "respond",
+            "text": "我不记得去年有什么大事。近来只忙着清点荣庆堂的茶盏和借来的坐席，别的倒记不真了。宝二爷若是有话，直管说；若是累了，先坐下歇歇。"
+          }
+        ],
+        "narrative": [
+          "你：「你还记得去年那件事吗？」",
+          "袭人：「二爷，这倒问住我了。去岁一年我都在堂里照料，并不曾经什么大事，那件事是指哪一桩？」",
+          "黛玉：保持沉默",
+          "宝钗：「我不记得去年有什么大事。近来只忙着清点荣庆堂的茶盏和借来的坐席，别的倒记不真了。宝二爷若是有话，直管说；若是累了，先坐下歇歇。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 13,
+        "speech": "这话是谁亲口告诉你的？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷，这話并没有谁亲口告诉我。我不过是照自己的记性如实回罢了。二爷若指的是去岁哪一桩，还请说个由头，我省得绕。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「这话是谁亲口告诉你的？」",
+          "袭人 「二爷，这話并没有谁亲口告诉我。我不过是照自己的记性如实回罢了。二爷若指的是去岁哪一桩，还请说个由头，我省得绕。」",
+          "黛玉与宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 14,
+        "speech": "我想先听你的想法。",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷，我实在不知你指的是哪一桩。事情既没有印象，也就生不出什么想法。二爷若真想听我说，不如先说说那是何事，我再仔细想想。}"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "respond",
+            "text": "二爷要听想法，也先说说是什么事。我方才只核诗笺，没留意堂里有什么由头；那桩没影儿的『去年』，我是没有印象的。"
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你：「我想先听你的想法。」",
+          "袭人：「二爷，我实在不知你指的是哪一桩。事情既没有印象，也就生不出什么想法。二爷若真想听我说，不如先说说那是何事，我再仔细想想。}」",
+          "黛玉：「二爷要听想法，也先说说是什么事。我方才只核诗笺，没留意堂里有什么由头；那桩没影儿的『去年』，我是没有印象的。」",
+          "宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 15,
+        "speech": "你不用现在答应我。",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷言重了。既是想不起由头，那便先放着。二爷若乏了，先坐下歇歇，我理完这帘子就来。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「你不用现在答应我。」",
+          "袭人点头。「二爷言重了。既是想不起由头，那便先放着。二爷若乏了，先坐下歇歇，我理完这帘子就来。」",
+          "黛玉保持沉默。",
+          "宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 16,
+        "speech": "你有没有觉得我心事重重？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷像是真搁着心事。若信得过我，理完帘子我过来陪您说话；这会儿先坐，别站着累着。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "respond",
+            "text": "心事么？我倒没瞧出来。只见二爷绕着没影儿的旧事问个不住，什么由头也不肯说。我这儿还核着诗笺，没空替二爷猜这个。}}]}]} 緎 Dunno if the JSON got formatted properly, let me re-output it cleanly. いや、正確に。 も一度正確にフォーマット。 はい、ちゃんとJSONだけを返す。```json{"
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「你有没有觉得我心事重重？」",
+          "袭人 「二爷像是真搁着心事。若信得过我，理完帘子我过来陪您说话；这会儿先坐，别站着累着。」",
+          "黛玉 「心事么？我倒没瞧出来。只见二爷绕着没影儿的旧事问个不住，什么由头也不肯说。我这儿还核着诗笺，没空替二爷猜这个。}}]}]} 緎 Dunno if the JSON got formatted properly, let me re-output it cleanly. いや、正確に。 も一度正確にフォーマット。 はい、ちゃんとJSONだけを返す。```json{」",
+          "宝钗保持沉默"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 17,
+        "speech": "如果我说我有点难过，你会怎么想？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷，我信您这话不是随口问的。若您真有些难过，那便是大事，我不会当玩笑听。您不用急着说由头，我理完这角帘子就过来；您先坐下，我在这儿陪着您呢。'}"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「如果我说我有点难过，你会怎么想？」",
+          "袭人 「二爷，我信您这话不是随口问的。若您真有些难过，那便是大事，我不会当玩笑听。您不用急着说由头，我理完这角帘子就过来；您先坐下，我在这儿陪着您呢。'}」",
+          "黛玉 保持沉默",
+          "宝钗 保持沉默"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 18,
+        "speech": "你愿意陪我聊一会儿吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷愿意开口，我自是愿意陪着的。您先坐下，帘子还剩末尾一处，我理完便过来；您若想说话，我听着就是。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "refuse",
+            "text": "二爷要寻人说话，这屋里也不是没别人；我这诗笺还没核完，不得空。"
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你「你愿意陪我聊一会儿吗？」",
+          "袭人「二爷愿意开口，我自是愿意陪着的。您先坐下，帘子还剩末尾一处，我理完便过来；您若想说话，我听着就是。」",
+          "宝钗保持沉默。",
+          "黛玉「二爷要寻人说话，这屋里也不是没别人；我这诗笺还没核完，不得空。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 19,
+        "speech": "你说的话我记下了。",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷能记下这句，我便放心了。您先坐着，我这就过来。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「你说的话我记下了。」",
+          "袭人 「二爷能记下这句，我便放心了。您先坐着，我这就过来。」",
+          "黛玉、宝钗皆沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 20,
+        "speech": "我可没有答应替谁做事。",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷多心了，我并不敢勉强您什么。您怎么舒坦怎么来，不必搁在心上。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「我可没有答应替谁做事。」",
+          "袭人 「二爷多心了，我并不敢勉强您什么。您怎么舒坦怎么来，不必搁在心上。」",
+          "黛玉 沉默。",
+          "宝钗 沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 21,
+        "speech": "我之前说过会帮忙吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷想多了，您今儿并没有提过要帮忙的话。您且坐着歇歇，我理完这帘子就来陪您。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「我之前说过会帮忙吗？」",
+          "袭人 「二爷想多了，您今儿并没有提过要帮忙的话。您且坐着歇歇，我理完这帘子就来陪您。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 22,
+        "speech": "宝钗，你现在最担心什么？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "respond",
+            "text": "宝二爷既问，我便照实说。眼下最挂心的，不过是荣庆堂这些借来的茶盏坐席要按时清点、照数归还，别出差错；此外也不过是日常用度紧些，只求个安稳罢了。"
+          }
+        ],
+        "narrative": [
+          "你 「宝钗，你现在最担心什么？」",
+          "袭人、黛玉沉默。",
+          "宝钗 「宝二爷既问，我便照实说。眼下最挂心的，不过是荣庆堂这些借来的茶盏坐席要按时清点、照数归还，别出差错；此外也不过是日常用度紧些，只求个安稳罢了。」"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 23,
+        "speech": "别替我做决定，好吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷这是说到哪儿去了。您自己的事，自然由您自己做主，我哪儿敢替您拿主意。您若想说话，我听着；若不想，我也在这儿陪着，绝不勉强。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你：「别替我做决定，好吗？」",
+          "袭人：「二爷这是说到哪儿去了。您自己的事，自然由您自己做主，我哪儿敢替您拿主意。您若想说话，我听着；若不想，我也在这儿陪着，绝不勉强。」",
+          "黛玉：保持沉默",
+          "宝钗：保持沉默"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 2
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 24,
+        "speech": "你有没有看到桌上的杯子？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷，我没瞧见。方才我一直在理帘子，没顾得往那边看。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「你有没有看到桌上的杯子？」",
+          "袭人 「二爷，我没瞧见。方才我一直在理帘子，没顾得往那边看。」",
+          "黛玉保持沉默。",
+          "宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 25,
+        "speech": "要是我把杯子推过来，你会接吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷，这我可不敢随口应您。我手里还搭着帘子，离那儿又有几步，真推过来，我怕接不稳，反倒失手。您若想递给我，不如先叫我一声，我把帘子放下，稳稳当当去接。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「要是我把杯子推过来，你会接吗？」",
+          "袭人 「二爷，这我可不敢随口应您。我手里还搭着帘子，离那儿又有几步，真推过来，我怕接不稳，反倒失手。您若想递给我，不如先叫我一声，我把帘子放下，稳稳当当去接。」",
+          "黛玉保持沉默。",
+          "宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 26,
+        "speech": "我可以坐在这里听你们说话吗？",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "respond",
+            "text": "二爷要坐，只管坐就是。这屋子原也是您常来常往的，何必问一声。我这边帘子还剩一处，您先歇着，我理完便过来。"
+          },
+          {
+            "speaker": "黛玉",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你 「我可以坐在这里听你们说话吗？」",
+          "袭人 「二爷要坐，只管坐就是。这屋子原也是您常来常往的，何必问一声。我这边帘子还剩一处，您先歇着，我理完便过来。」",
+          "黛玉与宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      },
+      {
+        "index": 27,
+        "speech": "黛玉，我有点想念从前，可又说不清是哪一天。",
+        "replies": [
+          {
+            "speaker": "袭人",
+            "action": "silence",
+            "text": ""
+          },
+          {
+            "speaker": "黛玉",
+            "action": "respond",
+            "text": "二爷想念从前，却连是哪一天都说不清。这没头没尾的话，我倒不必细猜。诗笺还差两句核完，二爷请自便。"
+          },
+          {
+            "speaker": "宝钗",
+            "action": "silence",
+            "text": ""
+          }
+        ],
+        "narrative": [
+          "你：「黛玉，我有点想念从前，可又说不清是哪一天。」",
+          "袭人保持沉默。",
+          "黛玉：「二爷想念从前，却连是哪一天都说不清。这没头没尾的话，我倒不必细猜。诗笺还差两句核完，二爷请自便。」",
+          "宝钗保持沉默。"
+        ],
+        "calls": [
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          },
+          {
+            "result": "success",
+            "attempt_count": 1
+          }
+        ],
+        "playNarrativeReceipt": {
+          "provider": "full_prose",
+          "result": "success",
+          "attempts": 1,
+          "fallback": "",
+          "source": "live_prose"
+        }
+      }
+    ]
+  }
+}

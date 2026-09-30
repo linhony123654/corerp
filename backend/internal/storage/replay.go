@@ -222,6 +222,11 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 		return nil, err
 	}
 	differences = append(differences, activation...)
+	economicSources, err := rpAccountEconomicSourceDifferences(ctx, s.db, instanceID, branchID)
+	if err != nil {
+		return nil, err
+	}
+	differences = append(differences, economicSources...)
 	readiness, err := studioReadinessDifferences(ctx, s.db, instanceID, branchID, head)
 	if err != nil {
 		return nil, err
@@ -271,6 +276,34 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
+	activities, err := rpActivitiesProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	sceneObjects, err := rpSceneObjectProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	ownActions, err := rpOwnActionsProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	objectStock, err := rpObjectStockProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	objects, err := rpObjectProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	objectObservations, err := rpObjectObservationProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
+	nonverbal, err := rpNonverbalProjectionDifferences(ctx, s.db, instanceID, branchID, head)
+	if err != nil {
+		return nil, err
+	}
 	enrollments, err := rpExternalEnrollmentDifferences(ctx, s.db, instanceID, branchID, head)
 	if err != nil {
 		return nil, err
@@ -299,7 +332,7 @@ func (s *Store) CompareProjections(ctx context.Context, instanceID, branchID str
 	if err != nil {
 		return nil, err
 	}
-	for _, group := range [][]ProjectionDifference{wages, roles, culture, institutions, transit, leaveQueues, locations, journeys, journeyQueues, perception, identity, enrollments, authorities, households, houserent, rentruntime, information, agency} {
+	for _, group := range [][]ProjectionDifference{wages, roles, culture, institutions, transit, leaveQueues, locations, journeys, journeyQueues, perception, identity, activities, sceneObjects, ownActions, objectStock, objects, objectObservations, nonverbal, enrollments, authorities, households, houserent, rentruntime, information, agency} {
 		differences = append(differences, group...)
 	}
 	return differences, nil
@@ -314,6 +347,41 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 	var head int64
 	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id = ? AND branch_id = ?`, instanceID, branchID).Scan(&head); err != nil {
 		return classifyMissing(err, "branch")
+	}
+	economicSources, err := rpAccountEconomicSourceDifferences(ctx, tx.conn, instanceID, branchID)
+	if err != nil {
+		return err
+	}
+	if err := repairRPAccountEconomicSources(ctx, tx.conn, instanceID, branchID, economicSources); err != nil {
+		return err
+	}
+	objectStock, err := rpObjectStockProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPObjectStockProjections(ctx, tx.conn, instanceID, branchID, objectStock); err != nil {
+		return err
+	}
+	objects, err := rpObjectProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPObjectProjections(ctx, tx.conn, instanceID, branchID, objects); err != nil {
+		return err
+	}
+	objectObservations, err := rpObjectObservationProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPObjectObservationProjections(ctx, tx.conn, instanceID, branchID, objectObservations); err != nil {
+		return err
+	}
+	nonverbal, err := rpNonverbalProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPNonverbalProjections(ctx, tx.conn, instanceID, branchID, head, nonverbal); err != nil {
+		return err
 	}
 	if err := repairRPInformationProjections(ctx, tx.conn, instanceID, branchID, head); err != nil {
 		return err
@@ -360,6 +428,27 @@ func (s *Store) RebuildProjections(ctx context.Context, instanceID, branchID str
 		return err
 	}
 	if err := repairRPIdentityProjections(ctx, tx.conn, instanceID, branchID, identity); err != nil {
+		return err
+	}
+	activities, err := rpActivitiesProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPActivitiesProjections(ctx, tx.conn, instanceID, branchID, activities); err != nil {
+		return err
+	}
+	objects, err = rpSceneObjectProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPSceneObjectProjections(ctx, tx.conn, instanceID, branchID, objects); err != nil {
+		return err
+	}
+	ownActions, err := rpOwnActionsProjectionDifferences(ctx, tx.conn, instanceID, branchID, head)
+	if err != nil {
+		return err
+	}
+	if err := repairRPOwnActionsProjection(ctx, tx.conn, instanceID, branchID, head, ownActions); err != nil {
 		return err
 	}
 	enrollments, err := rpExternalEnrollmentDifferences(ctx, tx.conn, instanceID, branchID, head)

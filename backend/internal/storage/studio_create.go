@@ -26,6 +26,9 @@ type StudioCreateResult struct {
 	EventSequence     int64  `json:"event_sequence"`
 	Status            string `json:"status"`
 	Replayed          bool   `json:"replayed"`
+	// Setup completeness of the pinned creator declaration, independent of
+	// world readiness. This creator-only receipt is not an NPC/public view.
+	RPReadiness core.StudioRPReadiness `json:"rp_readiness"`
 }
 
 // CreateStudioWorld coordinates existing recoverable authority owners. Each
@@ -78,8 +81,16 @@ func (s *Store) CreateStudioWorld(ctx context.Context, r StudioCreateRequest) (S
 	if _, err := s.PrepareStudioSpatial(ctx, g); err != nil {
 		return empty, err
 	}
+	if len(r.Spec.Acquaintances) > 0 {
+		if _, err := s.PrepareStudioIdentities(ctx, g); err != nil {
+			return empty, err
+		}
+	}
 	id := func(key string) string { v, _ := core.StudioWorldObjectID(r.InstanceID, "create_key", key); return v }
 	binding := core.CareerBinding{PrincipalID: r.PrincipalID, InstanceID: r.InstanceID, BranchID: "br_main", ExpectedHead: int64(len(r.Spec.People) + 2)}
+	if len(r.Spec.Acquaintances) > 0 {
+		binding.ExpectedHead++
+	}
 	packages := []core.StudioPackageBundle{r.SystemPackage, r.NarrativePackage}
 	for _, dependency := range r.SystemPackage.Manifest.Requires {
 		if dependency.ID == r.NarrativePackage.Manifest.ID {
@@ -104,5 +115,5 @@ func (s *Store) CreateStudioWorld(ctx context.Context, r StudioCreateRequest) (S
 	if err != nil {
 		return empty, err
 	}
-	return StudioCreateResult{InstanceID: r.InstanceID, BranchID: "br_main", EntityID: ready.Fact.EntityID, PlayerPrincipalID: ready.Fact.PlayerPrincipalID, ReadyEventID: ready.EventID, EventSequence: ready.EventSequence, Status: "ready", Replayed: ready.Replayed}, nil
+	return StudioCreateResult{InstanceID: r.InstanceID, BranchID: "br_main", EntityID: ready.Fact.EntityID, PlayerPrincipalID: ready.Fact.PlayerPrincipalID, ReadyEventID: ready.EventID, EventSequence: ready.EventSequence, Status: "ready", Replayed: ready.Replayed, RPReadiness: r.Spec.RPConfigurationReadiness()}, nil
 }

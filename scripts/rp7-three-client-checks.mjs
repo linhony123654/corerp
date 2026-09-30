@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { createServer } from 'vite';
+import { setPlayInputMode } from './play-ui-helpers.mjs';
 
 const requireMCP = createRequire(new URL('../clients/mcp/package.json', import.meta.url));
 const { Client } = requireMCP('@modelcontextprotocol/client');
@@ -12,14 +13,14 @@ const root = resolve(import.meta.dirname, '..');
 // Actual Play Vue page + installed SillyTavern + MCP wire subprocess. API reads
 // below inspect the same real Runtime; none replace one of these three clients.
 export async function checkRP7ThreeClients({ page: tavern, browserContext, token, cardAvatar, restartRuntime, authoritySnapshot, identitySnapshot, temp }) {
-  const vite = await createServer({ root, server: { host: '127.0.0.1', port: 4189, strictPort: true, proxy: { '/api': 'http://127.0.0.1:4188' } }, logLevel: 'error' });
+  const vite = await createServer({ root, server: { host: '127.0.0.1', port: 4199, strictPort: true, proxy: { '/api': 'http://127.0.0.1:4198' } }, logLevel: 'error' });
   await vite.listen();
   let play, mcp;
   const errors = [];
   const identities = identitySnapshot();
   async function connectMCP() {
     const client = new Client({ name: 'corerp-three-client-fixture', version: '1.0.0' });
-    const transport = new StdioClientTransport({ command: process.execPath, args: [join(root, 'clients/mcp/index.js')], env: { CORERP_ORIGIN: 'http://127.0.0.1:4188', CORERP_TOKEN: token }, stderr: 'pipe' });
+    const transport = new StdioClientTransport({ command: process.execPath, args: [join(root, 'clients/mcp/index.js')], env: { CORERP_ORIGIN: 'http://127.0.0.1:4198', CORERP_TOKEN: token }, stderr: 'pipe' });
     try { await client.connect(transport); return client; } catch (error) { await transport.close(); throw error; }
   }
   async function tool(name, args) {
@@ -44,7 +45,7 @@ export async function checkRP7ThreeClients({ page: tavern, browserContext, token
   }
   try {
     play = await browserContext.newPage(); play.on('pageerror', error => errors.push(error.message));
-    await play.goto('http://127.0.0.1:4189');
+    await play.goto('http://127.0.0.1:4199');
     await play.getByLabel('玩家访问凭证').fill(token);
     const opened = play.waitForResponse(r => r.url().endsWith('/rp/sessions/open'));
     await play.getByRole('button', { name: '进入世界' }).click();
@@ -58,6 +59,7 @@ export async function checkRP7ThreeClients({ page: tavern, browserContext, token
     const session = await tool('corerp_session_open', { instance_id: binding.instance_id, branch_id: binding.branch_id, entity_id: binding.entity_id, pov: 'second_person', idempotency_key: randomUUID() });
     assert.equal(new Set([playSession, tavernSession, session.session_id]).size, 3, 'must test three real independent sessions');
     assert.equal(identitySnapshot(), identities, 'opening clients materialized extra NPCs');
+    await setPlayInputMode(play, 'speech');
     const read = { session_id: session.session_id };
     const words = { play: 'Play 页面发出的同世界联合验收发言。', tavern: '酒馆页面发出的同世界联合验收发言。', mcp: 'MCP 工具发出的同世界联合验收发言。' };
 
@@ -106,6 +108,11 @@ export async function checkRP7ThreeClients({ page: tavern, browserContext, token
     const before = await compareAll();
     await play.screenshot({ path: join(temp, 'three-client-play.png'), fullPage: true });
     const authority = authoritySnapshot();
+    await restartRuntime();
+    await tavern.waitForFunction(() => document.querySelector('#corerp-runtime [role=status]')?.textContent?.includes('已连接 · 世界见闻已同步'), undefined, { timeout: 35_000 });
+    assert.equal(authoritySnapshot(), authority, 'automatic stream reconnect changed shared authority');
+    const afterAutomaticReconnect = await compareAll();
+    assert.deepEqual(history(afterAutomaticReconnect), history(before));
     await mcp.close(); mcp = undefined;
     await play.reload(); await tavern.reload(); // release streams and page-memory tokens
     await restartRuntime();
@@ -116,7 +123,7 @@ export async function checkRP7ThreeClients({ page: tavern, browserContext, token
     await play.getByRole('button', { name: '继续这段生活' }).click();
     await play.getByRole('button', { name: '环顾四周', exact: true }).waitFor();
     assert.equal(await play.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).session), playSession);
-    await tavern.waitForSelector('#corerp-runtime', { state: 'attached' });
+    await tavern.waitForSelector('#corerp-runtime', { state: 'attached', timeout: hostUITimeout });
     await tavern.evaluate(async avatar => { const ctx = SillyTavern.getContext(); await ctx.getCharacters(); const id = SillyTavern.getContext().characters.findIndex(c => c.avatar === avatar); await SillyTavern.getContext().selectCharacterById(String(id)); }, cardAvatar);
     assert.equal(await tavern.evaluate(() => SillyTavern.getContext().chatMetadata.corerp_runtime.session_id), tavernSession);
     assert.equal(await panel.locator('[name=token]').inputValue(), '');
@@ -128,7 +135,7 @@ export async function checkRP7ThreeClients({ page: tavern, browserContext, token
     const after = await compareAll(); assert.deepEqual(history(after), history(before));
     assert.equal(authoritySnapshot(), authority, 'recovery duplicated shared effects');
     assert.deepEqual(errors, []);
-    return { clients: ['Play UI', 'SillyTavern1.19.0 UI', 'MCP stdio'], independentSessions: 3, sameObserver: binding.entity_id, worldTime: after.world_time, place: after.place_id, head: after.observation_cursor, sharedHistory: true, samePeopleAfterRestart: true, originalMCPRetryNoDuplicate: true };
+    return { clients: ['Play UI', 'SillyTavern1.19.0 UI', 'MCP stdio'], independentSessions: 3, sameObserver: binding.entity_id, worldTime: after.world_time, place: after.place_id, head: after.observation_cursor, sharedHistory: true, automaticStreamReconnect: true, samePeopleAfterRestart: true, originalMCPRetryNoDuplicate: true };
   } finally {
     await mcp?.close(); await play?.close(); await vite.close();
   }

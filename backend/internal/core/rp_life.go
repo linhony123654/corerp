@@ -27,6 +27,7 @@ type RPLifeMemory struct {
 	Kind            string `json:"kind"`
 	SubjectEntityID string `json:"subject_entity_id"`
 	Text            string `json:"text,omitempty"`
+	TextFromEvent   bool   `json:"text_from_event,omitempty"`
 	WorldTime       string `json:"world_time"`
 	SourceEventID   string `json:"source_event_id"`
 }

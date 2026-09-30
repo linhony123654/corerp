@@ -1,0 +1,56 @@
+{
+  "kind": "frozen_golden_private_continuity_capture",
+  "runtime_sha256": "sha256:31041504fb84c49571cb62fde5cab31fdbfddf12c2e44b9839f9b49f2a266900",
+  "artifact_directory": "/tmp/corerp-rp-runtime-r1-after-DdT9CG",
+  "script_exit_code": 0,
+  "scope": "Private-continuity source31041504, before subsequent expression-target/movement/wait guard fixes; diagnostic, not final-source Golden.",
+  "model": "step-5-preview",
+  "model_config": {
+    "decision_timeout": "120s",
+    "decision_max_tokens": "4096",
+    "reasoning_effort": "low",
+    "decision_attempts": "2",
+    "narrative_timeout": "90s",
+    "narrative_attempts": "2"
+  },
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "result": "success",
+      "count": 15
+    },
+    {
+      "phase": "decision",
+      "result": "timeout",
+      "count": 2
+    },
+    {
+      "phase": "narrative",
+      "result": "success",
+      "count": 16
+    }
+  ],
+  "failures": [
+    {
+      "phase": "decision",
+      "result": "timeout",
+      "attempt_count": 2,
+      "fallback_kind": "silence",
+      "started_at_utc": "2026-09-30T05:22:17.756194849Z",
+      "finished_at_utc": "2026-09-30T05:24:17.804982144Z"
+    },
+    {
+      "phase": "decision",
+      "result": "timeout",
+      "attempt_count": 3,
+      "fallback_kind": "silence",
+      "started_at_utc": "2026-09-30T05:24:17.899782785Z",
+      "finished_at_utc": "2026-09-30T05:26:17.908241058Z"
+    }
+  ],
+  "nonverbal_events": 0,
+  "world_head": 52,
+  "rp_experience_exit": "NOT PASSED",
+  "interpretation": "G4 and firstG5 timed out and used silence fallback; JiaMu continues stranger treatment/identity demands; committed format residue remains. Capture exit0 is not an acceptance pass. No human canon/role review is received.",
+  "log_sha256": "ca5df54d9db714b4e7cb1840555d915c9ed61d7d1be805f83878046c06eda49c"
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function checkRP7OpenRetirement({ page, token, cardAvatar, authoritySnapshot }) {
+export async function checkRP7OpenRetirement({ page, token, cardAvatar, authoritySnapshot, hostUITimeout = 120_000 }) {
   const panel = page.locator('#corerp-runtime');
   const before = authoritySnapshot();
   await panel.locator('[name=instance]').fill('invalid-world-for-retirement-test');
@@ -10,7 +10,7 @@ export async function checkRP7OpenRetirement({ page, token, cardAvatar, authorit
   assert.equal(pending.operation, 'open');
   assert.equal(await page.evaluate(() => SillyTavern.getContext().chatMetadata.corerp_runtime.session_id), undefined);
   await page.reload();
-  await page.waitForSelector('#corerp-runtime', { state: 'attached' });
+  await page.waitForSelector('#corerp-runtime', { state: 'attached', timeout: hostUITimeout });
   await page.evaluate(async avatar => {
     const ctx = SillyTavern.getContext(); await ctx.getCharacters();
     const id = SillyTavern.getContext().characters.findIndex(character => character.avatar === avatar);
@@ -28,7 +28,7 @@ export async function checkRP7OpenRetirement({ page, token, cardAvatar, authorit
   page.off('request', countOpen);
   assert.equal(unexpectedOpens, 0, 'retirement implicitly retried invalid open');
   assert.equal(authoritySnapshot(), before, 'invalid open/retirement changed world');
-  await panel.locator('summary').click();
+  await panel.getByText('新建绑定：引用现有世界与角色', { exact: true }).click();
   await panel.locator('[name=instance]').fill('inst_m2_t09');
   await panel.locator('[name=branch]').fill('br_main');
   await panel.locator('[name=entity]').fill('entity_m2_rp_lin');
@@ -36,7 +36,7 @@ export async function checkRP7OpenRetirement({ page, token, cardAvatar, authorit
   return { invalidOpenReloaded: true, retiredWithoutRetryingOpen: true, worldUnchanged: true };
 }
 
-export async function checkRP7Retirement({ page, browserContext, token, authoritySnapshot }) {
+export async function checkRP7Retirement({ page, browserContext, token, authoritySnapshot, runtimeOrigin = 'http://127.0.0.1:4188' }) {
   const panel = page.locator('#corerp-runtime');
   const before = authoritySnapshot();
   await panel.locator('[name=operation]').selectOption('wait');
@@ -61,7 +61,7 @@ export async function checkRP7Retirement({ page, browserContext, token, authorit
 
   // A delayed original request cannot start even though the client missed the
   // fence acknowledgement. Use a syntactically valid but now retired request.
-  const late = await fetch('http://127.0.0.1:4188/api/v1/rp/actions/wait', {
+  const late = await fetch('http://127.0.0.1:4198/api/v1/rp/actions/wait', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(pending.body), redirect: 'error',
   });

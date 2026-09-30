@@ -3,7 +3,7 @@ package core
 import "testing"
 
 func studioSpecFixture() StudioWorldSpec {
-	return StudioWorldSpec{Version: StudioWorldSpecVersion, Name: "新世界", StartWorldTime: StudioWorldStart, Population: 20, OpeningMoneyMinor: 10000, OpeningStockMinor: 100, Places: []StudioWorldPlace{{"home", "住所", "home"}, {"square", "广场", "public"}}, Links: []StudioWorldLink{{"home", "square", 5}}, People: []StudioWorldPerson{{"lin", "Lin", "home", true}, {"cai", "Cai", "square", false}}}
+	return StudioWorldSpec{Version: StudioWorldSpecVersion, Name: "新世界", StartWorldTime: StudioWorldStart, Population: 20, OpeningMoneyMinor: 10000, OpeningStockMinor: 100, Places: []StudioWorldPlace{{"home", "住所", "home"}, {"square", "广场", "public"}}, Links: []StudioWorldLink{{"home", "square", 5}}, People: []StudioWorldPerson{{Key: "lin", Name: "Lin", Place: "home", Player: true}, {Key: "cai", Name: "Cai", Place: "square"}}, Objects: []StudioWorldObject{{Key: "front_door", Name: "前门", Place: "home", Kind: "door", InitialState: "closed"}}}
 }
 
 func TestStudioWorldSpecificationBoundsAndTopology(t *testing.T) {
@@ -20,6 +20,10 @@ func TestStudioWorldSpecificationBoundsAndTopology(t *testing.T) {
 		"unknown-place":  func(s *StudioWorldSpec) { s.People[0].Place = "missing" }, "two-players": func(s *StudioWorldSpec) { s.People[1].Player = true },
 		"no-player": func(s *StudioWorldSpec) { s.People[0].Player = false }, "duplicate-person": func(s *StudioWorldSpec) { s.People[1].Key = "lin" },
 		"bad-name": func(s *StudioWorldSpec) { s.Name = "\x00" }, "bad-key": func(s *StudioWorldSpec) { s.People[0].Key = "../lin" },
+		"bad-object-kind":  func(s *StudioWorldSpec) { s.Objects[0].Kind = "script" },
+		"bad-object-state": func(s *StudioWorldSpec) { s.Objects[0].InitialState = "locked" },
+		"object-place":     func(s *StudioWorldSpec) { s.Objects[0].Place = "missing" },
+		"duplicate-object": func(s *StudioWorldSpec) { s.Objects = append(s.Objects, s.Objects[0]) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := studioSpecFixture()
@@ -55,5 +59,18 @@ func TestStudioWorldIdentityIsStableAndNamespaced(t *testing.T) {
 	after, _ := HashJSON(s)
 	if before == after {
 		t.Fatal("settings omitted from request hash")
+	}
+}
+
+func TestStudioWorldRoutineUsesChronologicalInstants(t *testing.T) {
+	valid := studioSpecFixture()
+	valid.People[1].Routine = []StudioWorldRoutineEntry{{WorldTime: "2026-09-22T02:00:00+02:00", Place: "square", ActivityCode: "open_shop"}}
+	if err := valid.Validate(); err != nil {
+		t.Fatal("same instant as world start should be accepted", err)
+	}
+	beforeStart := studioSpecFixture()
+	beforeStart.People[1].Routine = []StudioWorldRoutineEntry{{WorldTime: "2026-09-22T00:30:00+02:00", Place: "square", ActivityCode: "open_shop"}}
+	if !HasCode(beforeStart.Validate(), CodeInvalidArgument) {
+		t.Fatal("chronologically pre-start routine accepted")
 	}
 }

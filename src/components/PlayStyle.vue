@@ -108,7 +108,8 @@ onBeforeUnmount(() => { active = false; dialog.value?.close() })
         <p id="context-budget-hint" class="hint">限制整段叙述输入的 UTF-8 JSON 字节数（1 KiB = 1024 字节），不是模型 token。超限不会删掉对白或阻止行动提交，可改读已保存原文；不改变人物决策上下文。</p>
         <label>自定义文风<textarea v-model="profile.prose_instructions" maxlength="2000" rows="3" aria-describedby="style-capability" placeholder="记录你希望的叙述方式"></textarea></label>
       </fieldset>
-      <p v-if="narrativeMode === 'style_planner'" id="style-capability" class="hint">当前使用模型文风解释器：自定义指令会在上述设置基础上调整视角、时态、详略、对话排版和已知场景呈现；未指定的设置保留。不支持任意文学扩写、改写台词或补写心理。超出能力会提示；模型只接收文风偏好，不接收人物事实或对白。自定义呈现仅在本页展示，刷新后回到保存的原叙述。这与人物决策是否使用 AI 无关。</p>
+      <p v-if="narrativeMode === 'style_planner'" id="style-capability" class="hint">当前使用模型文风解释器：自定义指令会在上述设置基础上调整视角、时态、详略、对话排版和已知场景呈现；未指定的设置保留。不支持任意文学扩写、改写台词或补写心理。超出能力会提示；模型只接收文风偏好，不接收人物事实或对白。成功生成的版本会保存为当前展示，刷新后仍可见。这与人物决策是否使用 AI 无关。</p>
+      <p v-else-if="narrativeMode === 'full_prose'" id="style-capability" class="hint">当前使用长文叙事器：正文由模型把已确认的事实（环境、动作、对白、场景变化）连续组织成小说段落；台词逐字保留，校验不通过会自动回退到标准事实叙述，回退原因可在回合记录中查到。模型只接收已确认事实，不能新增事件或对白。</p>
       <p v-else-if="narrativeMode === 'custom'" id="style-capability" class="hint">当前使用独立叙述执行器，但它未声明自定义文风能力；保存偏好不代表所有要求都会执行。请以实际输出与执行器提示为准。</p>
       <p v-else id="style-capability" class="hint">当前使用本地事实叙述器：支持视角、详略及有限的场景表达；比例是偏好，不会删掉真实对白。自由文风指令可保存，但暂不会被执行。这与人物是否使用 AI 无关。</p>
       <p class="hint">保存将把表单中的偏好设为当前会话设置；地点专属风格如存在，仍优先适用。未确认的保存请求会留在此浏览器中以便恢复，不含访问凭证。</p>

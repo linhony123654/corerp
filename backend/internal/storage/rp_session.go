@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"corerp.local/backend/internal/core"
@@ -22,6 +23,7 @@ type RPSession struct {
 	ControllerInstanceID string `json:"controller_instance_id,omitempty"`
 	POV                  string `json:"pov"`
 	ObservationCursor    int64  `json:"observation_cursor"`
+	ChapterStartSequence int64  `json:"chapter_start_sequence"`
 	TurnCursor           string `json:"turn_cursor"`
 	TurnState            string `json:"turn_state"`
 	Status               string `json:"status"`
@@ -51,6 +53,7 @@ type RPObservation struct {
 	PresentEntities   []RPVisibleEntity          `json:"present_entities"`
 	ObservationCursor int64                      `json:"observation_cursor"`
 	ReachablePlaces   []RPVisiblePlace           `json:"reachable_places"`
+	SceneObjects      []RPVisibleSceneObject     `json:"scene_objects"`
 	ActiveJourney     *RPJourneyView             `json:"active_journey,omitempty"`
 	RecentTurns       []RPHistoryTurn            `json:"recent_turns"`
 }
@@ -72,9 +75,11 @@ type RPVisiblePlace struct {
 }
 
 type RPHistoryTurn struct {
-	TurnRunID      string   `json:"turn_run_id"`
-	NarrativeLines []string `json:"narrative_lines"`
-	CanRegenerate  bool     `json:"can_regenerate"`
+	TurnRunID      string           `json:"turn_run_id"`
+	NarrativeLines []string         `json:"narrative_lines"`
+	RenderID       string           `json:"render_id,omitempty"`
+	ProviderCalls  []RPProviderCall `json:"provider_calls,omitempty"`
+	CanRegenerate  bool             `json:"can_regenerate"`
 }
 
 func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenRequest) (RPSession, error) {
@@ -109,6 +114,9 @@ func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenReq
 		}
 		session.Replayed = true
 		return session, nil
+	}
+	if err := s.requireNoRunningRPBackgroundProgression(ctx, tx.conn, request.InstanceID, request.BranchID); err != nil {
+		return RPSession{}, err
 	}
 	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, request.InstanceID, request.BranchID, request.EntityID); err != nil {
 		return RPSession{}, err
@@ -341,6 +349,31 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	}
 	view.PresentEntities = visible
 	view.ReachablePlaces = make([]RPVisiblePlace, 0)
+	view.SceneObjects = make([]RPVisibleSceneObject, 0)
+	sceneObjectsAvailable, err := rpSceneObjectProjectionAvailable(ctx, tx.conn)
+	if err != nil {
+		return RPObservation{}, err
+	}
+	if sceneObjectsAvailable {
+		rows, err = tx.conn.QueryContext(ctx, `SELECT object_id,object_key,display_name,object_kind,state_code FROM rp_scene_objects WHERE instance_id=? AND branch_id=? AND place_id=? ORDER BY object_key`, session.InstanceID, session.BranchID, view.PlaceID)
+		if err != nil {
+			return RPObservation{}, err
+		}
+		for rows.Next() {
+			var object RPVisibleSceneObject
+			if err := rows.Scan(&object.ObjectID, &object.Key, &object.DisplayName, &object.Kind, &object.State); err != nil {
+				rows.Close()
+				return RPObservation{}, err
+			}
+			object.Actions = sceneObjectActions(object.Kind, object.State)
+			view.SceneObjects = append(view.SceneObjects, object)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return RPObservation{}, err
+		}
+		rows.Close()
+	}
 	var activeJourney int
 	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_journeys WHERE instance_id=? AND branch_id=? AND agent_id=? AND status='active'`, session.InstanceID, session.BranchID, session.ControlledEntityID).Scan(&activeJourney); err != nil {
 		return RPObservation{}, err
@@ -406,41 +439,65 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 	// Settled history belongs to the controlled observer, not a particular client.
 	// Other sessions' prose can be read but only this session's turns are offered
 	// for regeneration; narrative mutation endpoints retain their own authorization.
+	// A witnessed NPC expression in an already-settled turn belongs to that
+	// observer's turn narration. Keep the standalone receipt for unfinished
+	// turns and other observers, who cannot read that turn's narration.
 	view.RecentTurns = make([]RPHistoryTurn, 0)
-	rows, err = tx.conn.QueryContext(ctx, `SELECT turn_run_id, narrative_json, can_regenerate FROM
-		(SELECT r.turn_run_id, r.narrative_json, r.settled_sequence, CASE WHEN r.session_id=? THEN 1 ELSE 0 END AS can_regenerate
+	turnSessions := make([]string, 0)
+	rows, err = tx.conn.QueryContext(ctx, `SELECT turn_run_id, narrative_json, can_regenerate, origin_session_id FROM
+		(SELECT r.turn_run_id, r.narrative_json, r.settled_sequence, CASE WHEN r.session_id=? THEN 1 ELSE 0 END AS can_regenerate, r.session_id AS origin_session_id
 		 FROM rp_turn_runs r JOIN rp_sessions h ON h.session_id=r.session_id
-		 WHERE h.instance_id=? AND h.branch_id=? AND h.controlled_entity_id=? AND r.status='settled'
+		 WHERE h.instance_id=? AND h.branch_id=? AND h.controlled_entity_id=? AND r.status='settled' AND r.settled_sequence>?
 		 UNION ALL
 		 SELECT e.event_id, json_array(CASE e.event_type
 		 WHEN 'RPPlayerMoved' THEN '你前往了 ' || p.display_name || '。'
 		 WHEN 'RPInterpersonalAction' THEN json_extract(e.payload,'$.description')
-		 ELSE '你等待至 ' || json_extract(e.payload, '$.target_world_time') || '。' END), e.event_sequence, 0
+			 WHEN 'RPObjectInteracted' THEN json_extract(e.payload,'$.description')
+			 WHEN 'RPNonverbalAction' THEN json_extract(e.payload,'$.description')
+		 ELSE '你等待至 ' || json_extract(e.payload, '$.target_world_time') || '。' END), e.event_sequence, 0, ''
 		 FROM events e LEFT JOIN agent_places p ON p.place_id = json_extract(e.payload, '$.to_place_id')
-		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ?
-		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction')
+		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ? AND e.event_sequence>?
+		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction', 'RPObjectInteracted', 'RPNonverbalAction')
 		 UNION ALL
 		 SELECT e.event_id,json_array(CASE e.event_type
 		 WHEN 'RPSpeechAccepted' THEN n.display_name || '说：“' || u.speech_text || '”'
-		 ELSE n.display_name || '前往了 ' || p.display_name || '。' END),e.event_sequence,0
+		 ELSE n.display_name || '前往了 ' || p.display_name || '。' END),e.event_sequence,0,''
 		 FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id
 		 JOIN rp_sessions h ON h.session_id=json_extract(e.payload,'$.session_id') AND h.instance_id=e.instance_id AND h.branch_id=e.branch_id
 		 JOIN materialized_entities n ON n.entity_id=e.actor_id
 		 LEFT JOIN rp_utterances u ON u.event_id=e.event_id
 		 LEFT JOIN agent_places p ON p.place_id=json_extract(e.payload,'$.to_place_id')
-		 WHERE c.command_type='RPNPCInitiative' AND e.instance_id=? AND e.branch_id=? AND h.controlled_entity_id=?
+		 WHERE c.command_type='RPNPCInitiative' AND e.instance_id=? AND e.branch_id=? AND h.controlled_entity_id=? AND e.event_sequence>?
 		 AND (e.event_type='RPNPCMoved' OR (e.event_type='RPSpeechAccepted' AND EXISTS (SELECT 1 FROM observation_records o WHERE o.source_event_id=e.event_id AND o.observer_agent_id=?)))
-		 ORDER BY settled_sequence DESC LIMIT 50)
-		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID,
-		session.InstanceID, session.BranchID, session.ControlledEntityID,
-		session.InstanceID, session.BranchID, session.ControlledEntityID, session.ControlledEntityID)
+		 UNION ALL
+			 SELECT e.event_id,json_array(json_extract(o.claim_payload,'$.description')),e.event_sequence,0,'witness:'||o.subject_agent_id
+			 FROM observation_records o JOIN events e ON e.event_id=o.source_event_id
+			 WHERE e.instance_id=? AND e.branch_id=? AND o.observer_agent_id=? AND e.event_sequence>?
+			 AND e.event_type IN ('RPNonverbalAction','RPObjectInteracted')
+			 AND json_extract(o.claim_payload,'$.claim_type') IN ('nonverbal_action','object_interaction')
+			 AND o.observed_world_time<=? AND e.world_time<=?
+			 AND NOT (e.event_type='RPNonverbalAction' AND EXISTS (
+				 SELECT 1 FROM events parent
+				 JOIN rp_npc_decisions d ON d.event_id=parent.event_id
+				 JOIN rp_turn_runs r ON r.session_id=d.session_id AND r.player_turn_id=d.parent_turn_id
+				 JOIN rp_sessions h ON h.session_id=r.session_id
+				 WHERE parent.batch_id=e.batch_id AND parent.event_id=e.causation_event_id
+				 AND parent.actor_id=e.actor_id AND parent.instance_id=e.instance_id AND parent.branch_id=e.branch_id
+				 AND h.instance_id=e.instance_id AND h.branch_id=e.branch_id AND h.controlled_entity_id=o.observer_agent_id
+				 AND r.status='settled' AND r.settled_sequence>?
+			 ))
+			 ORDER BY settled_sequence DESC LIMIT 50)
+		ORDER BY settled_sequence`, session.SessionID, session.InstanceID, session.BranchID, session.ControlledEntityID, session.ChapterStartSequence,
+		session.InstanceID, session.BranchID, session.ControlledEntityID, session.ChapterStartSequence,
+		session.InstanceID, session.BranchID, session.ControlledEntityID, session.ChapterStartSequence, session.ControlledEntityID,
+		session.InstanceID, session.BranchID, session.ControlledEntityID, session.ChapterStartSequence, view.WorldTime, view.WorldTime, session.ChapterStartSequence)
 	if err != nil {
 		return RPObservation{}, err
 	}
 	for rows.Next() {
 		var turn RPHistoryTurn
-		var raw string
-		if err := rows.Scan(&turn.TurnRunID, &raw, &turn.CanRegenerate); err != nil {
+		var raw, originSessionID string
+		if err := rows.Scan(&turn.TurnRunID, &raw, &turn.CanRegenerate, &originSessionID); err != nil {
 			rows.Close()
 			return RPObservation{}, err
 		}
@@ -449,12 +506,52 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 			return RPObservation{}, err
 		}
 		view.RecentTurns = append(view.RecentTurns, turn)
+		turnSessions = append(turnSessions, originSessionID)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return RPObservation{}, err
 	}
 	rows.Close()
+	renderSelectionsAvailable, err := rpTableAvailableBeforeMigration(ctx, tx.conn, "rp_narrative_selections", RPNarrativeRendersSchemaVersion)
+	if err != nil {
+		return RPObservation{}, err
+	}
+	for i, originSessionID := range turnSessions {
+		if strings.HasPrefix(originSessionID, "witness:") {
+			subject := strings.TrimPrefix(originSessionID, "witness:")
+			known, err := rpIdentityKnown(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, subject)
+			if err != nil {
+				return RPObservation{}, err
+			}
+			if !known {
+				view.RecentTurns[i].TurnRunID, err = rpAnonymousEvidenceID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, view.RecentTurns[i].TurnRunID)
+				if err != nil {
+					return RPObservation{}, err
+				}
+			}
+			continue
+		}
+		if originSessionID == "" {
+			continue
+		}
+		if renderSelectionsAvailable {
+			var selectedID, selectedJSON string
+			err = tx.conn.QueryRowContext(ctx, `SELECT r.render_id,r.lines_json FROM rp_narrative_selections s JOIN rp_narrative_renders r ON r.render_id=s.render_id AND r.turn_run_id=s.turn_run_id WHERE s.turn_run_id=?`, view.RecentTurns[i].TurnRunID).Scan(&selectedID, &selectedJSON)
+			if err == nil {
+				if err := json.Unmarshal([]byte(selectedJSON), &view.RecentTurns[i].NarrativeLines); err != nil {
+					return RPObservation{}, core.WrapError(core.CodeProjectionDiverged, "decode selected narrative history", err)
+				}
+				view.RecentTurns[i].RenderID = selectedID
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return RPObservation{}, core.WrapError(core.CodeStorageFailure, "read selected narrative history", err)
+			}
+		}
+		view.RecentTurns[i].ProviderCalls, err = readRPTurnProviderCalls(ctx, tx.conn, originSessionID, view.RecentTurns[i].TurnRunID)
+		if err != nil {
+			return RPObservation{}, err
+		}
+	}
 	view.Environment, err = readRPLocalEnvironment(ctx, tx.conn, session.InstanceID, session.BranchID, view.PlaceID, view.WorldTime)
 	if err != nil {
 		return RPObservation{}, err
@@ -496,12 +593,20 @@ func loadRPSession(ctx context.Context, q rpQueryer, principalID, sessionID stri
 // authorize a new world effect or access to the current observation.
 func loadRPSessionRecord(ctx context.Context, q rpQueryer, principalID, sessionID string) (RPSession, error) {
 	var session RPSession
-	err := q.QueryRowContext(ctx, `
-		SELECT session_id, instance_id, branch_id, controlled_entity_id, pov, observation_cursor,
+	chapterColumn := `0`
+	chapterAvailable, err := rpSessionChapterAvailable(ctx, q)
+	if err != nil {
+		return RPSession{}, err
+	}
+	if chapterAvailable {
+		chapterColumn = `chapter_start_sequence`
+	}
+	err = q.QueryRowContext(ctx, `
+		SELECT session_id, instance_id, branch_id, controlled_entity_id, pov, observation_cursor, `+chapterColumn+`,
 		       turn_cursor, turn_state, status, created_at_utc, resumed_at_utc, control_generation, controller_instance_id
 		FROM rp_sessions WHERE session_id = ? AND principal_id = ?`, sessionID, principalID,
 	).Scan(&session.SessionID, &session.InstanceID, &session.BranchID, &session.ControlledEntityID,
-		&session.POV, &session.ObservationCursor, &session.TurnCursor, &session.TurnState,
+		&session.POV, &session.ObservationCursor, &session.ChapterStartSequence, &session.TurnCursor, &session.TurnState,
 		&session.Status, &session.CreatedAtUTC, &session.ResumedAtUTC, &session.ControlGeneration, &session.ControllerInstanceID)
 	if err != nil {
 		return RPSession{}, classifyMissing(err, "RP session")

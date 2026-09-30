@@ -19,6 +19,12 @@ type RPEventsReadRequest struct {
 type RPClientAction struct {
 	Kind            string `json:"kind"`
 	Text            string `json:"text,omitempty"`
+	Action          string `json:"action,omitempty"`
+	ObjectID        string `json:"object_id,omitempty"`
+	AnchorID        string `json:"anchor_id,omitempty"`
+	OfferID         string `json:"offer_id,omitempty"`
+	TargetEntityID  string `json:"target_entity_id,omitempty"`
+	GestureCode     string `json:"gesture_code,omitempty"`
 	JourneyID       string `json:"journey_id,omitempty"`
 	SegmentPlaceID  string `json:"segment_place_id,omitempty"`
 	PlaceID         string `json:"place_id,omitempty"`
@@ -100,10 +106,10 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 	}
 	rows, err := tx.conn.QueryContext(ctx, `SELECT e.event_id,e.event_sequence,e.world_time,e.actor_id,e.event_type,e.payload
 	 FROM events e WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence>? AND e.event_sequence<=? AND e.world_time<=?
-	 AND ((e.actor_id=? AND e.event_type IN ('RPSpeechAccepted','RPPlayerMoved','RPWaitCompleted'))
+	 AND ((e.actor_id=? AND e.event_type IN ('RPSpeechAccepted','RPPlayerMoved','RPWaitCompleted','RPObjectInteracted','RPNonverbalAction'))
 	 OR (e.event_type IN ('RPJourneyStarted','RPJourneyDelayed','RPJourneyArrived','RPJourneyCancelled') AND json_extract(e.payload,'$.agent_id')=?)
 	 OR EXISTS (SELECT 1 FROM observation_records o WHERE o.source_event_id=e.event_id AND o.observer_agent_id=? AND o.observed_world_time<=?
-	 AND json_extract(o.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received')))
+	 AND json_extract(o.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received','nonverbal_action','object_interaction')))
 	 ORDER BY e.event_sequence LIMIT ?`, session.InstanceID, session.BranchID, r.After, result.HeadSequence, result.WorldTime, session.ControlledEntityID, session.ControlledEntityID, session.ControlledEntityID, result.WorldTime, r.Limit+1)
 	if err != nil {
 		return result, err
@@ -136,6 +142,13 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 			var payload struct {
 				AgentID         string `json:"agent_id"`
 				Text            string `json:"text"`
+				Action          string `json:"action"`
+				Description     string `json:"description"`
+				ObjectID        string `json:"object_id"`
+				AnchorID        string `json:"anchor_id"`
+				OfferID         string `json:"offer_id"`
+				TargetEntityID  string `json:"target_entity_id"`
+				GestureCode     string `json:"gesture_code"`
 				JourneyID       string `json:"journey_id"`
 				SegmentPlaceID  string `json:"segment_place_id"`
 				PlaceID         string `json:"place_id"`
@@ -156,6 +169,10 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 					item.event.OwnAction = &RPClientAction{Kind: "move", FromPlaceID: payload.FromPlaceID, ToPlaceID: payload.ToPlaceID}
 				case "RPWaitCompleted":
 					item.event.OwnAction = &RPClientAction{Kind: "wait", FromWorldTime: payload.FromWorldTime, TargetWorldTime: payload.TargetWorldTime}
+				case "RPObjectInteracted":
+					item.event.OwnAction = &RPClientAction{Kind: "object", Action: payload.Action, Text: payload.Description, ObjectID: payload.ObjectID, AnchorID: payload.AnchorID, OfferID: payload.OfferID, TargetEntityID: payload.TargetEntityID}
+				case "RPNonverbalAction":
+					item.event.OwnAction = &RPClientAction{Kind: "nonverbal", Action: payload.Action, Text: payload.Description, TargetEntityID: payload.TargetEntityID, GestureCode: payload.GestureCode}
 				case "RPJourneyStarted":
 					item.event.OwnAction = &RPClientAction{Kind: "journey_started", JourneyID: payload.JourneyID, FromPlaceID: payload.FromPlaceID, ToPlaceID: payload.ToPlaceID, SegmentPlaceID: payload.SegmentPlaceID}
 				case "RPJourneyDelayed":
@@ -169,7 +186,7 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 		}
 		facts, err := tx.conn.QueryContext(ctx, `SELECT subject_agent_id,place_id,observed_world_time,claim_payload FROM observation_records
 		 WHERE source_event_id=? AND observer_agent_id=? AND observed_world_time<=?
-			 AND json_extract(claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received') ORDER BY observation_id`, item.event.EventID, session.ControlledEntityID, result.WorldTime)
+		 AND json_extract(claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received','nonverbal_action','object_interaction') ORDER BY observation_id`, item.event.EventID, session.ControlledEntityID, result.WorldTime)
 		if err != nil {
 			return result, err
 		}
@@ -185,6 +202,7 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 				Text        string `json:"text"`
 				Description string `json:"description"`
 				Action      string `json:"action"`
+				Target      string `json:"target_entity_id"`
 				Channel     string `json:"channel"`
 				Reliability string `json:"claimed_reliability"`
 				MessageID   string `json:"message_id"`
@@ -199,13 +217,13 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 			switch claim.Kind {
 			case "speaker_said":
 				fact.Text = claim.Text
-			case "interpersonal_action":
+			case "interpersonal_action", "nonverbal_action", "object_interaction":
 				fact.Text, fact.Action = claim.Description, claim.Action
+				fact.TargetEntityID = claim.Target
 			case "message_received":
 				fact.Text, fact.Channel, fact.Reliability = claim.Text, claim.Channel, claim.Reliability
-				fact.MessageID = claim.MessageID
-				fact.MayRelay, fact.Forwarded = claim.MayRelay, claim.Forwarded
-				fact.PlaceID = "" // Remote receipt is not evidence of sender co-location.
+				fact.MessageID, fact.MayRelay, fact.Forwarded = claim.MessageID, claim.MayRelay, claim.Forwarded
+				fact.PlaceID = "" // A remote receipt does not prove sender co-location.
 			}
 			item.event.Facts = append(item.event.Facts, fact)
 		}
@@ -243,6 +261,18 @@ func (s *Store) ReadRPEvents(ctx context.Context, r RPEventsReadRequest) (RPClie
 				return result, err
 			}
 			anonymousEvent = anonymousEvent || fact.SubjectEntityID != originalID
+			if fact.TargetEntityID != "" {
+				fact.TargetEntityID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, fact.TargetEntityID)
+				if err != nil {
+					return result, err
+				}
+			}
+		}
+		if item.event.OwnAction != nil && item.event.OwnAction.TargetEntityID != "" {
+			item.event.OwnAction.TargetEntityID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, item.event.OwnAction.TargetEntityID)
+			if err != nil {
+				return result, err
+			}
 		}
 		if anonymousEvent {
 			item.event.EventID, err = rpAnonymousEvidenceID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, item.event.EventID)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 const RPStyleVersion = "corerp.style.v1"
@@ -12,18 +13,23 @@ const DefaultRPNarrativeContextBudgetBytes = 64 * 1024
 
 // Presentation only. These fields never enter a DecisionProvider context.
 type RPStyleProfile struct {
-	ContextBudgetBytes   int      `json:"context_budget_bytes,omitempty"`
-	Version              string   `json:"version"`
-	POV                  string   `json:"pov"`
-	Tense                string   `json:"tense"`
-	Verbosity            string   `json:"verbosity"`
-	NarrativeDensity     string   `json:"narrative_density,omitempty"`
-	DialogueRatio        int      `json:"dialogue_ratio"`
-	DescriptionDensity   int      `json:"description_density"`
-	InnerMonologuePolicy string   `json:"inner_monologue_policy"`
-	ProseInstructions    string   `json:"prose_instructions"`
-	ForbiddenPatterns    []string `json:"forbidden_patterns"`
-	NarrativePackRef     string   `json:"narrative_pack_ref"`
+	ContextBudgetBytes   int    `json:"context_budget_bytes,omitempty"`
+	Version              string `json:"version"`
+	POV                  string `json:"pov"`
+	Tense                string `json:"tense"`
+	Verbosity            string `json:"verbosity"`
+	NarrativeDensity     string `json:"narrative_density,omitempty"`
+	DialogueRatio        int    `json:"dialogue_ratio"`
+	DescriptionDensity   int    `json:"description_density"`
+	InnerMonologuePolicy string `json:"inner_monologue_policy"`
+	// FullProse is the declarative long-form switch at the same layer as
+	// dialogue_ratio: the world asks for novel-paragraph narrative. Rendering
+	// still honors it only when a full_prose-capable provider is configured;
+	// otherwise the fallback reason is recorded, never silently dropped.
+	FullProse         bool     `json:"full_prose,omitempty"`
+	ProseInstructions string   `json:"prose_instructions"`
+	ForbiddenPatterns []string `json:"forbidden_patterns"`
+	NarrativePackRef  string   `json:"narrative_pack_ref"`
 }
 
 // nil inherits a setting; an explicit zero/empty value replaces it.
@@ -36,6 +42,7 @@ type RPStylePatch struct {
 	DialogueRatio        *int     `json:"dialogue_ratio,omitempty"`
 	DescriptionDensity   *int     `json:"description_density,omitempty"`
 	InnerMonologuePolicy *string  `json:"inner_monologue_policy,omitempty"`
+	FullProse            *bool    `json:"full_prose,omitempty"`
 	ProseInstructions    *string  `json:"prose_instructions,omitempty"`
 	ForbiddenPatterns    []string `json:"forbidden_patterns"`
 	NarrativePackRef     *string  `json:"narrative_pack_ref,omitempty"`
@@ -77,6 +84,9 @@ func OverlayRPStyle(s RPStyleProfile, layers ...RPStylePatch) (RPStyleProfile, e
 		}
 		if p.InnerMonologuePolicy != nil {
 			s.InnerMonologuePolicy = *p.InnerMonologuePolicy
+		}
+		if p.FullProse != nil {
+			s.FullProse = *p.FullProse
 		}
 		if p.ProseInstructions != nil {
 			s.ProseInstructions = *p.ProseInstructions
@@ -134,19 +144,43 @@ func (s RPStyleProfile) Validate() error {
 }
 
 type RPNarrativeFact struct {
-	EventID   string `json:"event_id"`
-	ActorID   string `json:"actor_id"`
-	ActorName string `json:"actor_name"`
-	Action    string `json:"action"`
-	Text      string `json:"text,omitempty"`
-	WorldTime string `json:"world_time,omitempty"`
-	PlaceName string `json:"place_name,omitempty"`
+	EventID      string `json:"event_id"`
+	ActorID      string `json:"actor_id"`
+	ActorName    string `json:"actor_name"`
+	Action       string `json:"action"`
+	Text         string `json:"text,omitempty"`
+	ActivityCode string `json:"activity_code,omitempty"`
+	// ActivityLabel is the world-declared prose label for the activity
+	// (studio narrative package); empty means the code is shown as-is.
+	ActivityLabel  string `json:"activity_label,omitempty"`
+	ObjectName     string `json:"object_name,omitempty"`
+	ObjectState    string `json:"object_state,omitempty"`
+	ExpressionCode string `json:"expression_code,omitempty"`
+	// Targets come from the player's frozen observation, never a raw decision
+	// or an unseen target in the underlying Event. Unknown identities are masked.
+	TargetActorID   string `json:"target_actor_id,omitempty"`
+	TargetActorName string `json:"target_actor_name,omitempty"`
+	WorldTime       string `json:"world_time,omitempty"`
+	PlaceName       string `json:"place_name,omitempty"`
+}
+
+// An explicitly authored, player-safe character cue. It is not the NPC's
+// private persona, intent or knowledge, and is never a new scene fact.
+type RPPublicPresentation struct {
+	ActorID       string `json:"actor_id"`
+	ActorName     string `json:"actor_name"`
+	Text          string `json:"text"`
+	SourceEventID string `json:"source_event_id"`
 }
 
 type RPNarrativeInput struct {
-	ControlledEntityID string            `json:"controlled_entity_id"`
-	Style              RPStyleProfile    `json:"style"`
-	Facts              []RPNarrativeFact `json:"committed_facts"`
+	ControlledEntityID  string                 `json:"controlled_entity_id"`
+	Style               RPStyleProfile         `json:"style"`
+	Facts               []RPNarrativeFact      `json:"committed_facts"`
+	PublicPresentations []RPPublicPresentation `json:"public_presentations,omitempty"`
+	// ActivityLabels maps activity codes to world-declared prose labels.
+	// Presentation metadata from the studio narrative package, never facts.
+	ActivityLabels map[string]string `json:"activity_labels,omitempty"`
 }
 
 // ValidateReadBudget bounds the complete serialized presentation input, not
@@ -155,6 +189,21 @@ type RPNarrativeInput struct {
 func (in RPNarrativeInput) ValidateReadBudget() error {
 	if err := in.Style.Validate(); err != nil {
 		return err
+	}
+	if len(in.PublicPresentations) > 16 {
+		return NewError(CodeInvalidArgument, "too many public RP presentations")
+	}
+	for _, cue := range in.PublicPresentations {
+		if cue.ActorID == "" || cue.ActorID == in.ControlledEntityID || cue.ActorName == "" || cue.SourceEventID == "" || cue.Text == "" || !utf8.ValidString(cue.Text) || utf8.RuneCountInString(cue.Text) > 500 || strings.ContainsAny(cue.Text, "\x00\r") {
+			return NewError(CodeInvalidArgument, "invalid public RP presentation")
+		}
+		found := false
+		for _, fact := range in.Facts {
+			found = found || fact.ActorID == cue.ActorID && fact.ActorName == cue.ActorName
+		}
+		if !found {
+			return NewError(CodeInvalidArgument, "public RP presentation has no public actor fact")
+		}
 	}
 	limit := in.Style.ContextBudgetBytes
 	if limit == 0 {
@@ -174,6 +223,12 @@ type RPNarrativeView struct {
 	Lines    []string `json:"lines"`
 	EventIDs []string `json:"event_ids"`
 	Warnings []string `json:"warnings"`
+	RenderID string   `json:"render_id,omitempty"`
+	// FallbackReason is the sanitized, queryable reason presentation fell
+	// back to the deterministic renderer (e.g. prose validation failure or
+	// a world-declared full_prose without a prose provider). Empty = the
+	// displayed lines came from the requested provider.
+	FallbackReason string `json:"fallback_reason,omitempty"`
 }
 
 type RPNarrativeProvider interface {
@@ -187,13 +242,17 @@ type RPStreamingNarrativeProvider interface {
 	RenderStream(context.Context, RPNarrativeInput, func(RPNarrativeChunk) error) (RPNarrativeView, error)
 }
 type RPNarrativeChunk struct {
-	Index   int    `json:"index"`
-	EventID string `json:"event_id"`
-	Line    string `json:"line"`
+	Index    int      `json:"index"`
+	EventID  string   `json:"event_id,omitempty"`
+	EventIDs []string `json:"event_ids,omitempty"`
+	Line     string   `json:"line"`
 }
 type DeterministicRPNarrativeProvider struct{}
 
 func (DeterministicRPNarrativeProvider) NarrativeMode() string { return "deterministic" }
+func (DeterministicRPNarrativeProvider) ProviderMetadata() RPProviderMetadata {
+	return RPProviderMetadata{Kind: "deterministic"}
+}
 
 // Literal rendering changes presentation only. Even a requested zero dialogue
 // ratio or forbidden phrase cannot erase/rewrite accepted speech or an action.
@@ -228,6 +287,15 @@ func (DeterministicRPNarrativeProvider) RenderStream(ctx context.Context, in RPN
 			}
 		}
 		var framing string
+		activityLabel := func() string {
+			if fact.ActivityLabel != "" {
+				return fact.ActivityLabel
+			}
+			if label, ok := in.ActivityLabels[fact.ActivityCode]; ok && label != "" {
+				return label
+			}
+			return fact.ActivityCode
+		}
 		switch fact.Action {
 		case "speak":
 			framing = name + "说"
@@ -235,12 +303,67 @@ func (DeterministicRPNarrativeProvider) RenderStream(ctx context.Context, in RPN
 			framing = name + " 回应"
 		case "refuse":
 			framing = name + " 拒绝了"
+		case "expression":
+			verbs := map[string]string{"smile": "笑了笑", "nod": "点了点头", "shake_head": "摇了摇头", "turn_away": "转过身", "frown": "皱了皱眉", "beckon": "招了招手"}
+			verb := verbs[fact.ExpressionCode]
+			if verb == "" {
+				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "unknown committed NPC expression")
+			}
+			target := fact.TargetActorName
+			if fact.TargetActorID == in.ControlledEntityID && fact.TargetActorID != "" {
+				switch in.Style.POV {
+				case "first_person":
+					target = "我"
+				case "second_person":
+					target = "你"
+				}
+			}
+			if fact.TargetActorID != "" && target != "" {
+				preposition := "向"
+				if fact.ExpressionCode == "turn_away" {
+					preposition = "背向"
+				}
+				framing = name + " " + preposition + target + verb + "。"
+			} else {
+				framing = name + " " + verb + "。"
+			}
 		case "silence":
 			framing = name + " 保持沉默。"
 		case "wait":
 			framing = name + " 选择等待。"
 		case "leave":
 			framing = name + " 离开了。"
+		case "act":
+			if fact.ActivityCode == "" {
+				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "activity fact lacks accepted activity code")
+			}
+			framing = name + " 开始了 " + activityLabel() + "。"
+		case "activity_done":
+			if fact.ActivityCode == "" {
+				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "activity fact lacks accepted activity code")
+			}
+			framing = name + " 做完了 " + activityLabel() + "。"
+		case "activity_interrupted":
+			if fact.ActivityCode == "" {
+				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "activity fact lacks accepted activity code")
+			}
+			framing = name + " 停下了手头的 " + activityLabel() + "。"
+		case "arrive":
+			if fact.PlaceName == "" {
+				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "arrival fact lacks accepted place")
+			}
+			framing = name + " 来到了 " + fact.PlaceName + "。"
+		case "depart":
+			if fact.PlaceName == "" {
+				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "departure fact lacks accepted place")
+			}
+			framing = name + " 离开了 " + fact.PlaceName + "。"
+		case "object_open", "object_close", "object_switch_on", "object_switch_off":
+			if fact.ObjectName == "" || fact.ObjectState == "" {
+				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "scene object fact lacks accepted object state")
+			}
+			verb := map[string]string{"object_open": "打开了", "object_close": "关上了", "object_switch_on": "开启了", "object_switch_off": "关闭了"}[fact.Action]
+			framing = name + verb + fact.ObjectName + "（" + fact.ObjectState + "）。"
 		default:
 			return RPNarrativeView{}, NewError(CodeProjectionDiverged, "unknown narrative fact action")
 		}

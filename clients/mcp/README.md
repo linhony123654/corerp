@@ -45,7 +45,7 @@ runtime or grant permission for actions beyond the user's intent.
 
 `corerp_worlds`, `corerp_session_open`, `corerp_session_read`,
 `corerp_session_resume`, `corerp_observe`, `corerp_context`, `corerp_dialogue`,
-`corerp_turn_resume`, `corerp_wait`, `corerp_command` (move/social),
+`corerp_turn_resume`, `corerp_wait`, `corerp_command` (move/social/object/nonverbal),
 `corerp_interaction`, `corerp_interaction_resume`, `corerp_interaction_stop`,
 `corerp_interaction_default`, `corerp_interaction_default_set`,
 `corerp_request_retire`, `corerp_events` (bounded pages), plus the F2 spatial
@@ -75,7 +75,12 @@ immediate route, not a timed journey. Every participant, including Human, must
 first submit a wait or action. At an action boundary, one selected typed action
 is accepted at the current world time; other proposals return
 `deferred_no_effect` and require a fresh observation/new round. Direct typed
-RP actions cannot bypass an active round. A selected speech's internal-NPC
+RP actions cannot bypass an active round. `corerp_command` object actions require
+sourced stock: `stage` serializes one real unit into a physical item escrow,
+`place`/`take` change its position, and explicit `stow` returns a held,
+unoffered unit to the current owner's ordinary inventory while retiring that
+object ID. Neither an offer nor its acceptance transfers ownership; a distinct
+authorized `give`/`receive` is required. Stow is not inferred from free text. A selected speech's internal-NPC
 response settles before the round closes. If Human chooses to wait again at
 the same world time, the next round gives the wait/scheduler boundary priority
 over repeated external actions; Human can still choose an action instead.
@@ -152,8 +157,12 @@ discovery/open/observe, dialogue and process-restart recovery, permissions, mism
 move/social, budget wait, retirement, and a real accepted-but-lost HTTP reply through
 a fixture proxy. The current fixture verifies four distinct player speeches
 (legacy dialogue plus move/wait mixed plans), each accepted exactly once, and
-the same-world F2 map/journey/cancel path. F2's local gate and scoped limits are
-recorded in [its phase report](../../docs/f2/phase-report.md).
+the same-world F2 map/journey/cancel path. A separate disposable Studio world
+also authors one named cup SKU and exercises actual MCP `stage → place → take →
+stow` with exact-key replays, a creation movement, balanced escrow returns and
+no offer or phantom object. This is a deterministic local Runtime fixture, not
+live-model semantic evidence. F2's local gate and scoped limits are recorded in
+[its phase report](../../docs/f2/phase-report.md).
 The F3 integration now also exercises two separate service-credential MCP
 stdio clients and one Human client against the same Go Runtime and SQLite
 world. A local operator command enrolls/assigns the two residents (and can

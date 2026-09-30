@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { openPlayTools } from './play-ui-helpers.mjs'
 
 export async function checkTurnStream({ page, sql, temp, credential, restart, getModelCalls }) {
   let commands = 0
@@ -15,7 +16,9 @@ export async function checkTurnStream({ page, sql, temp, credential, restart, ge
   await page.getByLabel('你想说的话').fill('主对话断流后继续。')
   await page.getByRole('button', { name: '说出' }).click()
   await page.getByRole('button', { name: '继续读取叙述', exact: true }).waitFor()
-  assert.match(await page.getByRole('alert').innerText(), /行动已经提交/)
+  const recoveryAlert = await page.getByRole('alert').innerText()
+  assert.match(recoveryAlert, /行动已提交.*重新读取不会重做行动/)
+  assert.doesNotMatch(recoveryAlert, /。。/, 'recovery notice must not duplicate terminal punctuation')
   const bookmark = await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')))
   assert.equal(bookmark.pending.path, 'turns/run')
   assert.ok(bookmark.pending.narrative_turn_id)
@@ -55,8 +58,10 @@ export async function checkTurnStream({ page, sql, temp, credential, restart, ge
   await page.getByRole('button', { name: '说出' }).click()
   const preview = page.getByRole('region', { name: '当前回合叙述流' })
   await preview.getByText(/正在逐段接收/).waitFor()
-  assert.match(await preview.innerText(), /尚未读完/)
-  assert.equal(await page.getByRole('button', { name: '等一小时' }).isDisabled(), true)
+  assert.match(await page.locator('.thinking-line').innerText(), /行动已提交 · 正在接收叙述/)
+  const tools = await openPlayTools(page)
+  assert.equal(await tools.getByRole('button', { name: /^等一小时/ }).isDisabled(), true)
+  await tools.getByRole('button', { name: '关闭详情' }).click()
   assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).pending.narrative_turn_id))
   await page.screenshot({ path: join(temp, 'primary-stream-mobile.png') })
   await page.evaluate(() => { window.__rp6FinishTurnStream(); delete window.__rp6FinishTurnStream })

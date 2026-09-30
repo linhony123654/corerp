@@ -1,0 +1,98 @@
+/* Real Play states absent from the offline visual reference; all use its surfaces and spacing. */
+.play-app :is(h1,h2,h3,h4) { color: var(--ink); font-family: var(--ui); }
+.play-app :is(button,input,textarea,select) { color: inherit; }
+.play-app .heading .presence { color: var(--muted); font: 10px/1.5 var(--ui); margin: 4px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.play-app .heading .mode { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.play-app .top-chrome .heading h1 { color: var(--ink); }
+.play-app .top-chrome .heading { position: relative; }
+.play-app .capsule time { font-variant-numeric: tabular-nums; }
+.play-app .narrator .prose p, .play-app .reader-content .prose p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.play-app .narrator .prose { font-size: var(--reading-size); color: var(--secondary); }
+.play-app .turn .narrative-tools summary { color: var(--accent); }
+.play-app .play-symbols { position: absolute; pointer-events: none; }
+.play-app .new-story-button { border: 0; text-decoration: none; font-family: var(--ui); }
+.play-app .new-story-button:hover { color: var(--on-primary); }
+.play-app .timeline-entry.clickable { display: block; background: transparent; width: calc(100% - 5px); border-block: 0; border-right: 0; border-top: 0; text-align: left; border-radius: 0; min-height: 48px; cursor: pointer; }
+.play-app .timeline-entry.clickable:hover { color: var(--accent); }
+.play-app .timeline-entry p { overflow-wrap: anywhere; }
+.play-app .detail-row.clickable { color: var(--ink); }
+.play-app .detail-row.clickable:disabled { opacity: .48; }
+.play-app .sheet-title-group h2, .play-app .empty-state h2 { color: var(--ink); }
+.play-app .sheet-content .flat-button { margin-top: 16px; }
+.play-app .sheet-content .tool-card:disabled { opacity: .48; }
+.play-app .sheet-content .wait-intent { margin: 14px 2px 20px; font-size: 12px; }
+.play-app .sheet-content .wait-intent label { display: flex; align-items: center; gap: 9px; min-height: 44px; cursor: pointer; }
+.play-app .sheet-content .wait-intent input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.play-app .sheet-content .wait-intent p { margin: 0; color: var(--muted); line-height: 1.7; }
+.play-app .sheet-content .summary-copy b { color: var(--ink); }
+.play-app .sheet-header .icon-button { padding: 0; }
+.play-app .sheet-header .sheet-title-group { min-width: 0; }
+.play-app .sheet-content .prose { color: var(--secondary); }
+.play-app .sheet-content .theme-choice { color: var(--ink); }
+.play-app .theme-choice-copy small { color: var(--muted); }
+.play-app .form-actions .solid-button, .play-app .sheet-footer .solid-button { color: var(--on-primary); }
+.play-app .form-actions .danger-button { color: var(--on-primary); }
+.play-app .sheet-content .text-field { color: var(--ink); }
+.play-app .composer-dock .composer { margin: 0; }
+.play-app .composer-alerts { max-height: min(26vh, 150px); overflow: auto; padding: 5px 12px 8px; margin: 0 9px 5px; border-radius: 13px; background: rgba(var(--surface-rgb),.96); border: 1px solid var(--line); font-size: 11px; line-height: 1.65; }
+.play-app .composer-alerts p { margin: 3px 0; overflow-wrap: anywhere; }
+.play-app .composer-alerts .error { color: var(--danger); }
+.play-app .composer-alerts .notice, .play-app .composer-alerts .journey-status { color: var(--secondary); }
+.play-app .recovery-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.play-app .composer-alerts button { color: var(--accent); padding: 4px 0; min-height: 32px; text-decoration: underline; }
+.play-app .composer-alerts button:disabled { opacity: .5; }
+.play-app .primary-button, .play-app .solid-button { color: var(--on-primary); }
+.play-app .primary-button:disabled { opacity: .45; }
+.play-app .composer textarea { color: var(--ink); }
+.play-app .composer .model-pill { color: var(--secondary); }
+.play-app .entry-chrome { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 12px; height: 60px; padding: 0 21px; border-bottom: 1px solid var(--line); color: var(--secondary); font-size: 11px; }
+.play-app .entry-chrome strong { color: var(--ink); font: 500 25px/1 Georgia,serif; letter-spacing: -.8px; }
+.play-app .arrival { position: absolute; inset: 60px 0 0; overflow-y: auto; padding: max(54px, 9vh) max(24px, calc((100% - 500px)/2)) 40px; color: var(--ink); }
+.play-app .arrival > * { animation: arrival-rise 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.play-app .arrival > *:nth-child(2) { animation-delay: 50ms; }
+.play-app .arrival > *:nth-child(3) { animation-delay: 100ms; }
+.play-app .arrival > *:nth-child(4) { animation-delay: 150ms; }
+.play-app .arrival > *:nth-child(5) { animation-delay: 200ms; }
+@keyframes arrival-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.play-app .arrival .entry-kicker { color: var(--accent); font-size: 12px; margin: 0 0 10px; }
+.play-app .arrival h1 { font: 500 29px/1.5 var(--serif); }
+.play-app .arrival .entry-intro { color: var(--secondary); font: 15px/1.95 var(--serif); margin: 10px 0 30px; }
+.play-app .arrival .entry label, .play-app .arrival .form-label { display: block; font-size: 12px; color: var(--secondary); margin: 0 0 8px; }
+.play-app .arrival .entry input { display: block; width: 100%; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); padding: 12px; min-height: 46px; font-size: 16px; }
+.play-app .arrival .entry input { transition: border-color var(--motion), box-shadow var(--motion); }
+.play-app .arrival .entry input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.play-app .arrival .hint { font-size: 11px; color: var(--muted); line-height: 1.75; margin: 11px 0 17px; }
+.play-app .arrival .entry button { margin-right: 8px; }
+.play-app .arrival .entry .solid-button { color: var(--on-primary); }
+.play-app .arrival .world-picker { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 23px; }
+.play-app .arrival .world-picker h2 { font: 500 19px/1.5 var(--serif); }
+.play-app .arrival .world-picker ul { padding: 0; list-style: none; }
+.play-app .arrival .world-picker li { border-bottom: 1px solid var(--line); }
+.play-app .arrival .world-picker li button { width: 100%; min-height: 59px; text-align: left; display: grid; gap: 2px; border-radius: 0; padding: 7px 0; }
+@media(hover:hover) and (pointer:fine) {
+  .play-app .arrival .world-picker li button:hover:not(:disabled) strong { color: var(--accent); }
+  .play-app .arrival .world-picker li button:hover:not(:disabled) { background: linear-gradient(to right, var(--soft), transparent 82%); }
+}
+@media(prefers-reduced-motion:reduce) { .play-app .arrival > * { animation: none; } }
+.play-app .arrival .world-picker li strong { font-size: 14px; font-weight: 500; }
+.play-app .arrival .world-picker li span { font-size: 11px; color: var(--muted); }
+.play-app .arrival .error { color: var(--danger); font-size: 12px; }
+
+/* Existing feature dialogs retain their data/retry logic, but share the approved sheet material. */
+#app .play-app dialog[class$="-sheet"] { width: min(720px,100%); max-width: 100%; max-height: min(88dvh, 810px); margin: auto auto 0; border: 0; border-radius: 25px 25px 0 0; padding: 19px 24px max(22px, env(safe-area-inset-bottom,0px)); background: var(--sheet); color: var(--ink); box-shadow: 0 -9px 30px rgba(var(--ink-rgb),.08); font-family: var(--ui); animation: sheet-in 320ms cubic-bezier(0.16, 1, 0.3, 1); will-change: transform; }
+#app .play-app dialog[class$="-sheet"]::backdrop { background: rgba(var(--ink-rgb),.20); backdrop-filter: blur(2px); animation: fade-in 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+#app .play-app dialog[class$="-sheet"] :is(header,footer) { border-color: var(--line); }
+#app .play-app dialog[class$="-sheet"] header { align-items: center; gap: 10px; padding-bottom: 13px; border-bottom: 1px solid var(--line); }
+#app .play-app dialog[class$="-sheet"] :is(h2,h3,h4) { color: var(--ink); }
+#app .play-app dialog[class$="-sheet"] header h2 { font: 600 17px/1.5 var(--ui); }
+#app .play-app dialog[class$="-sheet"] header .eyebrow, #app .play-app dialog[class$="-sheet"] header .wallet-eyebrow { color: var(--muted); font-size: 10px; letter-spacing: 0; margin: 0 0 2px; }
+#app .play-app dialog[class$="-sheet"] button { border-radius: 11px; color: var(--accent); }
+#app .play-app dialog[class$="-sheet"] button:hover:not(:disabled) { background: var(--hover); }
+#app .play-app dialog[class$="-sheet"] :is(.intro,.wallet-owner,.hint,footer) { color: var(--secondary); }
+#app .play-app dialog[class$="-sheet"] :is(input,select,textarea) { border-color: var(--line); border-radius: 11px; background: var(--surface); color: var(--ink); }
+#app .play-app dialog[class$="-sheet"] :is(.error,.wallet-error,.render-error) { color: var(--danger); }
+#app .play-app dialog[class$="-sheet"] .save-style { background: var(--primary); color: var(--on-primary); }
+#app .play-app dialog[class$="-sheet"] :is(li,.wallet-content,ul,footer,h3) { border-color: var(--line); }
+#app .play-app dialog[class$="-sheet"] .here { border-color: var(--accent); color: var(--accent); }
+@media(max-width:600px) { #app .play-app dialog[class$="-sheet"] { width: 100%; padding-inline: 20px; } }
+@media(prefers-reduced-motion:reduce) { #app .play-app dialog[class$="-sheet"] { animation: none !important; } #app .play-app dialog[class$="-sheet"]::backdrop { backdrop-filter: none; animation: none !important; } }

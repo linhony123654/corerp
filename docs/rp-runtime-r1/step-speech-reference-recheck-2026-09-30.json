@@ -1,0 +1,82 @@
+{
+  "kind": "fresh_public_prose_diagnostic",
+  "model": "step-5-preview",
+  "binary_sha256": "03205ddc4ef223012eb563e6d5ea4aad356ef829109306d634293d33af707ded",
+  "world_facts_unchanged": true,
+  "new_provider_receipts": 1,
+  "fallback_reason": "",
+  "lines": [
+    "宝玉：「你是谁呀？」",
+    "袭人：「是我，袭人。方才那声也是我应的。宝玉找什么？我能搭把手就搭把手。」",
+    "黛玉：「我是黛玉。方才只顾核对诗笺，没留意你连我也认不得了。},」",
+    "宝钗保持沉默。"
+  ],
+  "receipt": {
+    "result": "success",
+    "attempt_count": 1,
+    "fallback_kind": ""
+  },
+  "public_facts": [
+    {
+      "actor": "宝玉",
+      "action": "说",
+      "text": "你是谁呀？",
+      "quote_token": "[[corerp-speech:0]]",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂",
+      "controlled": true
+    },
+    {
+      "actor": "袭人",
+      "action": "回应",
+      "text": "是我，袭人。方才那声也是我应的。宝玉找什么？我能搭把手就搭把手。",
+      "quote_token": "[[corerp-speech:1]]",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂"
+    },
+    {
+      "actor": "黛玉",
+      "action": "回应",
+      "text": "我是黛玉。方才只顾核对诗笺，没留意你连我也认不得了。},",
+      "quote_token": "[[corerp-speech:2]]",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂"
+    },
+    {
+      "actor": "宝钗",
+      "action": "保持沉默",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂"
+    }
+  ],
+  "model_draft": "宝玉：[[corerp-speech:0]]  \n袭人：[[corerp-speech:1]]  \n黛玉：[[corerp-speech:2]]  \n宝钗保持沉默。",
+  "source_event_ids": [
+    "event_rp_speech_3c211432c5fae5d7c5ec3c0014aa8e3f869b4b20bd754b147a2e537d41acc8d2",
+    "event_rp_npc_077239b365a8ecd8e6371b9f25ce60b122c938b44b0580d2ec66c0ec913de952",
+    "event_rp_npc_44ecb684c1238da3ae4e0cc08e2d60cff502d77a30f3d38e6178ff094766cd36",
+    "event_rp_npc_dd4f6e20aa3b499935623a3529b2e0c80ff059ff233203e040146e231fead4aa"
+  ],
+  "prior_prose_receipts": [
+    {
+      "result": "failed",
+      "attempt_count": 2,
+      "fallback_kind": "prose_validation_failure",
+      "started_at_utc": "2026-09-30T01:45:08.00774294Z"
+    },
+    {
+      "result": "failed",
+      "attempt_count": 2,
+      "fallback_kind": "prose_validation_failure",
+      "started_at_utc": "2026-09-30T01:52:25.349718474Z"
+    }
+  ],
+  "prior_same_turn_diagnostic": {
+    "observed_validation_categories": [
+      "speech_changed",
+      "speech_changed"
+    ],
+    "original_failed_script_drafts_captured": false,
+    "diagnostic_raw_drafts_retained": false
+  },
+  "scope": "Actual Step re-render of the same committed turn after renderer-owned speech references. Copied source text including suspected output-format residue is preserved, not silently repaired. Model outputs are stochastic and prior rejected drafts are not retained; do not treat this as a success-rate estimate, full32 pass or human experience acceptance."
+}

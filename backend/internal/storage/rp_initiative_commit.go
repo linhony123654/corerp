@@ -23,23 +23,29 @@ type RPInitiativeResult struct {
 // Keep accepted speech at the usual top-level fields. CanonicalJSON deliberately
 // does not flatten embedded Go structs; authority payloads use explicit fields.
 type rpInitiativeEvent struct {
-	ReasonCode      string                  `json:"reason_code,omitempty"`
-	SessionID       string                  `json:"session_id"`
-	TurnID          string                  `json:"turn_id,omitempty"`
-	UtteranceID     string                  `json:"utterance_id,omitempty"`
-	SpeakerEntityID string                  `json:"speaker_entity_id,omitempty"`
-	PlaceID         string                  `json:"place_id,omitempty"`
-	Text            string                  `json:"text,omitempty"`
-	SpeechAct       string                  `json:"speech_act,omitempty"`
-	ListenerIDs     []string                `json:"listener_ids,omitempty"`
-	NPCEntityID     string                  `json:"npc_entity_id"`
-	TriggerEventID  string                  `json:"trigger_event_id"`
-	InputHash       string                  `json:"input_hash"`
-	Proposal        core.RPDecisionProposal `json:"proposal"`
-	Action          string                  `json:"action"`
-	Status          string                  `json:"status"`
-	FromPlaceID     string                  `json:"from_place_id,omitempty"`
-	ToPlaceID       string                  `json:"to_place_id,omitempty"`
+	ReasonCode       string                  `json:"reason_code,omitempty"`
+	SessionID        string                  `json:"session_id"`
+	TurnID           string                  `json:"turn_id,omitempty"`
+	UtteranceID      string                  `json:"utterance_id,omitempty"`
+	SpeakerEntityID  string                  `json:"speaker_entity_id,omitempty"`
+	PlaceID          string                  `json:"place_id,omitempty"`
+	Text             string                  `json:"text,omitempty"`
+	SpeechAct        string                  `json:"speech_act,omitempty"`
+	ListenerIDs      []string                `json:"listener_ids,omitempty"`
+	IntroduceSelf    bool                    `json:"introduce_self,omitempty"`
+	NPCEntityID      string                  `json:"npc_entity_id"`
+	TriggerEventID   string                  `json:"trigger_event_id"`
+	InputHash        string                  `json:"input_hash"`
+	Proposal         core.RPDecisionProposal `json:"proposal"`
+	Action           string                  `json:"action"`
+	Status           string                  `json:"status"`
+	FromPlaceID      string                  `json:"from_place_id,omitempty"`
+	ToPlaceID        string                  `json:"to_place_id,omitempty"`
+	ActivityID       string                  `json:"activity_id,omitempty"`
+	ActivityCode     string                  `json:"activity_code,omitempty"`
+	ActorID          string                  `json:"actor_id,omitempty"`
+	StartedWorldTime string                  `json:"started_world_time,omitempty"`
+	DurationMinutes  int                     `json:"duration_minutes,omitempty"`
 }
 
 func (e rpInitiativeEvent) speech() rpSpeechEvent {
@@ -60,7 +66,7 @@ func readCommittedRPInitiative(ctx context.Context, conn *sql.Conn, r core.RPIni
 		return out, false, err
 	}
 	var raw string
-	err = conn.QueryRowContext(ctx, `SELECT e.event_id,e.event_sequence,e.payload FROM commands c JOIN event_batches b ON b.command_id=c.command_id JOIN events e ON e.batch_id=b.batch_id WHERE c.command_type='RPNPCInitiative' AND c.instance_id=? AND c.branch_id=? AND c.idempotency_key=? AND c.status='committed'`, session.InstanceID, session.BranchID, key).Scan(&out.EventID, &out.EventSequence, &raw)
+	err = conn.QueryRowContext(ctx, `SELECT e.event_id,e.event_sequence,e.payload FROM commands c JOIN event_batches b ON b.command_id=c.command_id JOIN events e ON e.batch_id=b.batch_id WHERE c.command_type='RPNPCInitiative' AND c.instance_id=? AND c.branch_id=? AND c.idempotency_key=? AND c.status='committed' AND e.batch_index=0`, session.InstanceID, session.BranchID, key).Scan(&out.EventID, &out.EventSequence, &raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, false, nil
 	}
@@ -93,7 +99,7 @@ func rpInitiativeEligible(ctx context.Context, conn *sql.Conn, input core.RPDeci
 	if hour < start {
 		start = hour
 	}
-	err = conn.QueryRowContext(ctx, `SELECT COALESCE(SUM(CASE WHEN e.world_time>=? THEN 1 ELSE 0 END),0),COALESCE(SUM(CASE WHEN e.world_time>? THEN 1 ELSE 0 END),0) FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id WHERE c.command_type='RPNPCInitiative' AND e.instance_id=? AND e.branch_id=? AND e.actor_id=? AND e.world_time>=?`, day, hour, input.InstanceID, input.BranchID, input.NPCEntityID, start).Scan(&daily, &recent)
+	err = conn.QueryRowContext(ctx, `SELECT COALESCE(SUM(CASE WHEN e.world_time>=? THEN 1 ELSE 0 END),0),COALESCE(SUM(CASE WHEN e.world_time>? THEN 1 ELSE 0 END),0) FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id WHERE c.command_type='RPNPCInitiative' AND e.batch_index=0 AND e.instance_id=? AND e.branch_id=? AND e.actor_id=? AND e.world_time>=?`, day, hour, input.InstanceID, input.BranchID, input.NPCEntityID, start).Scan(&daily, &recent)
 	if err != nil {
 		return false, err
 	}
@@ -145,9 +151,17 @@ func (s *Store) RunRPInitiative(ctx context.Context, r core.RPInitiativeRequest,
 		return RPInitiativeResult{NPCEntityID: r.NPCEntityID, Action: "silence", Status: "cooldown", EventSequence: input.HeadSequence}, nil
 	}
 	tx.Rollback(ctx)
+	scope := rpProviderCallScope{SessionID: r.SessionID, SubjectID: r.TriggerEventID, NPCEntityID: r.NPCEntityID, Phase: "decision"}
 	if core.RPContactOpportunitySuppressed(input) {
 		inputHash, err := core.HashJSON(input)
 		if err != nil {
+			return empty, err
+		}
+		callID, err := s.beginRPProviderCall(ctx, scope, rpProviderMetadata(provider, "not_configured"))
+		if err != nil {
+			return empty, err
+		}
+		if err := s.finishRPProviderCall(ctx, callID, "not_used", "opportunity_quiet", "", 0); err != nil {
 			return empty, err
 		}
 		return s.commitRPInitiative(ctx, r, key, inputHash, core.RPDecisionProposal{Action: "silence"}, "opportunity_quiet", "contact_opportunity_suppressed")
@@ -155,17 +169,41 @@ func (s *Store) RunRPInitiative(ctx context.Context, r core.RPInitiativeRequest,
 	if provider == nil {
 		return empty, core.NewError(core.CodeInvalidArgument, "initiative requires decision provider")
 	}
-	proposal, providerErr := provider.Propose(ctx, input)
+	providerInput, err := s.rpDecisionProviderView(ctx, input)
+	if err != nil {
+		return empty, err
+	}
+	metadata := rpProviderMetadata(provider, "custom")
+	callID, err := s.beginRPProviderCall(ctx, scope, metadata)
+	if err != nil {
+		return empty, err
+	}
+	var trace core.RPProviderTrace
+	proposal, providerErr := provider.Propose(core.WithRPProviderTrace(ctx, &trace), providerInput)
 	status := "validated"
 	reason := ""
 	if providerErr != nil {
 		reason = "provider_failure"
 	} else {
-		reason, _ = core.ValidateRPDecisionProposalEvidence(input, proposal)
+		reason, _ = core.ValidateRPDecisionProposalEvidence(providerInput, proposal)
+		if reason == "" {
+			reason, _ = core.ValidateRPDecisionProposalEvidence(input, proposal)
+		}
 	}
 	if reason != "" {
+		fallback := "invalid_proposal"
+		result := "failed"
+		if providerErr != nil {
+			fallback = "silence"
+			result = rpProviderErrorResult(ctx, providerErr)
+		}
+		if err := s.finishRPProviderCall(ctx, callID, result, fallback, "", trace.AttemptCount()); err != nil {
+			return empty, err
+		}
 		proposal = core.RPDecisionProposal{Action: "silence"}
 		status = "provider_fallback"
+	} else if err := s.finishRPProviderCall(ctx, callID, "success", "", "", trace.AttemptCount()); err != nil {
+		return empty, err
 	}
 	inputHash, err := core.HashJSON(input)
 	if err != nil {
@@ -222,20 +260,59 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 	}
 	suffix := key[7:]
 	commandID, attemptID, batchID, eventID := "cmd_rp_initiative_"+suffix, "attempt_rp_initiative_"+suffix, "batch_rp_initiative_"+suffix, "event_rp_initiative_"+suffix
+	childTurnID := "turn_rp_initiative_" + suffix
 	eventType := "RPNPCDecisionRecorded"
-	event := rpInitiativeEvent{ReasonCode: reason, SessionID: r.SessionID, NPCEntityID: r.NPCEntityID, TriggerEventID: r.TriggerEventID, InputHash: inputHash, Proposal: proposal, Action: proposal.Action, Status: status}
-	if proposal.Action == "respond" {
+	// The immutable decision row retains the full approved proposal. Its
+	// private sketch must never be copied into an observable world Event.
+	observableProposal := proposal
+	observableProposal.Private = nil
+	event := rpInitiativeEvent{ReasonCode: reason, SessionID: r.SessionID, NPCEntityID: r.NPCEntityID, TriggerEventID: r.TriggerEventID, InputHash: inputHash, Proposal: observableProposal, Action: proposal.Action, Status: status}
+	event.PlaceID = input.PlaceID
+	activityID := "activity_rp_initiative_" + suffix
+	activityDuration := 0
+	if proposal.Action == "respond" || proposal.Action == "refuse" {
 		eventType = "RPSpeechAccepted"
 		listeners, err := rpPerceivedEntityIDs(ctx, tx.conn, input.InstanceID, input.BranchID, input.PlaceID, r.NPCEntityID, "audio", "voice")
 		if err != nil {
 			return empty, err
 		}
-		event.TurnID, event.UtteranceID = "turn_rp_initiative_"+suffix, "utterance_rp_initiative_"+suffix
+		event.TurnID, event.UtteranceID = childTurnID, "utterance_rp_initiative_"+suffix
 		event.SpeakerEntityID, event.PlaceID, event.Text, event.SpeechAct, event.ListenerIDs = r.NPCEntityID, input.PlaceID, proposal.Text, "statement", listeners
+		event.IntroduceSelf = proposal.IntroduceSelf && core.ExplicitSelfIntroduction(proposal.Text, input.NPCName)
 	} else if proposal.Action == "leave" {
 		eventType = "RPNPCMoved"
 		event.FromPlaceID = input.PlaceID
 		event.ToPlaceID = proposal.DestinationPlaceID
+	} else if proposal.Action == "act" {
+		rules, err := readRPActivityRules(ctx, tx.conn, input.InstanceID, input.BranchID)
+		if err != nil {
+			return empty, err
+		}
+		duration, legal := rules[proposal.ActivityCode]
+		if !legal {
+			return empty, core.NewError(core.CodeInvalidArgument, "activity is not legal at initiative commit")
+		}
+		eventType = "AgentActivityStarted"
+		event.ActivityID, event.ActivityCode = activityID, proposal.ActivityCode
+		event.PlaceID, event.ToPlaceID = input.PlaceID, input.PlaceID
+		event.ActorID, event.StartedWorldTime, event.DurationMinutes = r.NPCEntityID, input.WorldTime, duration
+		activityDuration = duration
+	}
+	expression, err := prepareRPNPCExpression(ctx, tx.conn, r.SessionID, input, proposal.ExpressionCode)
+	if err != nil {
+		return empty, err
+	}
+	expressionID := "event_rp_initiative_expression_" + suffix
+	lastSequence, eventCount := sequence, 1
+	if expression != nil {
+		lastSequence, eventCount = sequence+1, 2
+		var lastEpoch string
+		if err := tx.conn.QueryRowContext(ctx, `SELECT epoch_id FROM rule_epochs WHERE instance_id=? AND branch_id=? AND start_sequence<=? AND (end_sequence IS NULL OR ?<end_sequence)`, input.InstanceID, input.BranchID, lastSequence, lastSequence).Scan(&lastEpoch); err != nil {
+			return empty, classifyMissing(err, "initiative expression Rule Epoch")
+		}
+		if lastEpoch != epoch {
+			return empty, core.NewError(core.CodeBranchConflict, "initiative expression crosses a rule epoch boundary")
+		}
 	}
 	payload, err := core.CanonicalJSON(event)
 	if err != nil {
@@ -250,6 +327,18 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 	if err != nil {
 		return empty, err
 	}
+	if expression != nil {
+		batchHash, err = core.HashJSON(struct {
+			CommandID  string
+			Sequence   int64
+			WorldTime  string
+			Payload    rpInitiativeEvent
+			Expression *core.RPNonverbalFact
+		}{commandID, sequence, input.WorldTime, event, expression})
+		if err != nil {
+			return empty, err
+		}
+	}
 	proposalHash, err := core.HashJSON(proposal)
 	if err != nil {
 		return empty, err
@@ -261,37 +350,81 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 	}{
 		{"initiative command", `INSERT INTO commands(command_id,instance_id,branch_id,command_type,idempotency_key,request_hash,expected_head,principal_id,command_policy,status,created_at_utc) VALUES (?,?,?,'RPNPCInitiative',?,?,?,?,'{"authorization":"rp-scoped-time-trigger"}','pending',?)`, []any{commandID, input.InstanceID, input.BranchID, key, key, input.HeadSequence, r.PrincipalID, now}},
 		{"initiative attempt", `INSERT INTO command_attempts(command_id,attempt_no,attempt_id,status,lease_owner,lease_until_utc,proposal_hash,created_at_utc) VALUES (?,1,?,'ready','corerp-rp2',?,?,?)`, []any{commandID, attemptID, s.now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano), proposalHash, now}},
-		{"initiative batch", `INSERT INTO event_batches(batch_id,command_id,attempt_no,instance_id,branch_id,epoch_id,expected_head,first_sequence,last_sequence,event_count,world_time,batch_hash,committed_at_utc) VALUES (?,?,1,?,?,?,?,?,?,1,?,?,?)`, []any{batchID, commandID, input.InstanceID, input.BranchID, epoch, input.HeadSequence, sequence, sequence, input.WorldTime, batchHash, now}},
+		{"initiative batch", `INSERT INTO event_batches(batch_id,command_id,attempt_no,instance_id,branch_id,epoch_id,expected_head,first_sequence,last_sequence,event_count,world_time,batch_hash,committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, []any{batchID, commandID, input.InstanceID, input.BranchID, epoch, input.HeadSequence, sequence, lastSequence, eventCount, input.WorldTime, batchHash, now}},
 		{"initiative event", `INSERT INTO events(event_id,batch_id,instance_id,branch_id,event_sequence,batch_index,event_type,actor_id,world_time,payload) VALUES (?,?,?,?,?,0,?,?,?,?)`, []any{eventID, batchID, input.InstanceID, input.BranchID, sequence, eventType, r.NPCEntityID, input.WorldTime, string(payload)}},
 	} {
 		if err := execAgentOne(ctx, tx.conn, stmt.name, stmt.query, stmt.args...); err != nil {
 			return empty, err
 		}
 	}
-	if proposal.Action == "respond" {
+	if proposal.Action == "respond" || proposal.Action == "refuse" {
 		if err := execAgentOne(ctx, tx.conn, "initiative utterance", `INSERT INTO rp_utterances(utterance_id,event_id,session_id,turn_id,speaker_entity_id,place_id,world_time,speech_text,speech_act,listener_count) VALUES (?,?,?,?,?,?,?,?,'statement',?)`, event.UtteranceID, eventID, r.SessionID, event.TurnID, r.NPCEntityID, input.PlaceID, input.WorldTime, proposal.Text, len(event.ListenerIDs)); err != nil {
 			return empty, err
 		}
 		if err := insertRPSpeechHearings(ctx, tx.conn, eventID, sequence, r.NPCEntityID, input.PlaceID, input.WorldTime, event.UtteranceID, proposal.Text, "statement", event.ListenerIDs); err != nil {
 			return empty, err
 		}
+		if event.IntroduceSelf {
+			for _, listener := range event.ListenerIDs {
+				if _, err := tx.conn.ExecContext(ctx, `INSERT OR IGNORE INTO rp_identity_familiarity(observer_agent_id,subject_agent_id,instance_id,branch_id,source_event_id,learned_world_time,origin_kind) VALUES (?,?,?,?,?,?,'introduction')`, listener, r.NPCEntityID, input.InstanceID, input.BranchID, eventID, input.WorldTime); err != nil {
+					return empty, core.WrapError(core.CodeStorageFailure, "record heard initiative self-introduction", err)
+				}
+			}
+		}
 	} else if proposal.Action == "leave" {
 		if err := commitRPNPCMovement(ctx, tx.conn, input.InstanceID, input.BranchID, eventID, sequence, r.NPCEntityID, input.PlaceID, proposal.DestinationPlaceID, input.WorldTime, day, "initiative_"+suffix); err != nil {
 			return empty, err
 		}
+	} else if proposal.Action == "act" {
+		if err := execAgentOne(ctx, tx.conn, "initiative activity state", `INSERT INTO rp_activities(activity_id,actor_id,place_id,activity_code,started_world_time,duration_minutes,status,start_event_id,instance_id,branch_id,last_event_sequence) VALUES (?,?,?,?,?,?,'in_progress',?,?,?,?)`, activityID, r.NPCEntityID, input.PlaceID, proposal.ActivityCode, input.WorldTime, activityDuration, eventID, input.InstanceID, input.BranchID, sequence); err != nil {
+			return empty, err
+		}
+		if err := execAgentOne(ctx, tx.conn, "initiative activity position", `UPDATE agent_positions SET activity_code=?,effective_world_time=?,projection_version=projection_version+1,last_event_sequence=? WHERE agent_id=? AND place_id=?`, proposal.ActivityCode, input.WorldTime, sequence, r.NPCEntityID, input.PlaceID); err != nil {
+			return empty, err
+		}
+	}
+	proposalJSON, err := core.CanonicalJSON(proposal)
+	if err != nil {
+		return empty, err
+	}
+	if err := execAgentOne(ctx, tx.conn, "initiative committed decision", `INSERT INTO rp_npc_decisions(decision_id,session_id,parent_turn_id,npc_entity_id,event_id,action,input_hash,proposal_hash,proposal_json) VALUES (?,?,?,?,?,?,?,?,?)`, "decision_rp_initiative_"+suffix, r.SessionID, childTurnID, r.NPCEntityID, eventID, proposal.Action, inputHash, proposalHash, string(proposalJSON)); err != nil {
+		return empty, err
+	}
+	switch proposal.Action {
+	case "respond", "refuse":
+		if err := insertRPOwnAction(ctx, tx.conn, r.NPCEntityID, eventID, "speech", "", proposal.Text, input.PlaceID, input.WorldTime, "", input.InstanceID, input.BranchID, sequence); err != nil {
+			return empty, err
+		}
+	case "leave":
+		if err := insertRPOwnAction(ctx, tx.conn, r.NPCEntityID, eventID, "leave", "", "", proposal.DestinationPlaceID, input.WorldTime, "", input.InstanceID, input.BranchID, sequence); err != nil {
+			return empty, err
+		}
+	case "act":
+		if err := insertRPOwnAction(ctx, tx.conn, r.NPCEntityID, eventID, "activity", proposal.ActivityCode, "", input.PlaceID, input.WorldTime, "in_progress", input.InstanceID, input.BranchID, sequence); err != nil {
+			return empty, err
+		}
+	default:
+		if err := insertRPOwnAction(ctx, tx.conn, r.NPCEntityID, eventID, proposal.Action, "", "", input.PlaceID, input.WorldTime, "", input.InstanceID, input.BranchID, sequence); err != nil {
+			return empty, err
+		}
+	}
+	if err := commitRPNPCExpression(ctx, tx.conn, input, expression, expressionID, eventID, batchID, lastSequence); err != nil {
+		return empty, err
 	}
 	if err := s.insertAgentAudit(ctx, tx.conn, "audit_"+commandID, "agent_decision", eventID, commandID, attemptID, input.WorldTime, now, payload); err != nil {
 		return empty, err
 	}
-	if proposal.Action == "respond" || proposal.Action == "leave" {
+	if proposal.Action == "respond" || proposal.Action == "refuse" || proposal.Action == "leave" || proposal.Action == "act" {
 		audience := []string{input.InterlocutorEntityID}
-		if proposal.Action == "respond" {
+		if proposal.Action == "respond" || proposal.Action == "refuse" {
 			audience = event.ListenerIDs
 		}
 		// Publish only the visible effect, never the private proposal/context hash.
 		visible := any(rpNPCActionEvent{SessionID: r.SessionID, NPCEntityID: r.NPCEntityID, Action: proposal.Action, FromPlaceID: input.PlaceID, ToPlaceID: proposal.DestinationPlaceID})
-		if proposal.Action == "respond" {
+		if proposal.Action == "respond" || proposal.Action == "refuse" {
 			visible = event.speech()
+		} else if proposal.Action == "act" {
+			visible = rpActivityStartedEvent{ActivityID: activityID, ActorID: r.NPCEntityID, ToPlaceID: input.PlaceID, ActivityCode: proposal.ActivityCode, StartedWorldTime: input.WorldTime, DurationMinutes: activityDuration}
 		}
 		public, err := core.CanonicalJSON(visible)
 		if err != nil {
@@ -305,8 +438,8 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 		name, query string
 		args        []any
 	}{
-		{"initiative clock", `UPDATE world_clocks SET projection_version=projection_version+1,last_event_sequence=? WHERE instance_id=? AND branch_id=? AND current_world_time=?`, []any{sequence, input.InstanceID, input.BranchID, input.WorldTime}},
-		{"initiative branch", `UPDATE branches SET head_sequence=? WHERE instance_id=? AND branch_id=? AND head_sequence=?`, []any{sequence, input.InstanceID, input.BranchID, input.HeadSequence}},
+		{"initiative clock", `UPDATE world_clocks SET projection_version=projection_version+1,last_event_sequence=? WHERE instance_id=? AND branch_id=? AND current_world_time=?`, []any{lastSequence, input.InstanceID, input.BranchID, input.WorldTime}},
+		{"initiative branch", `UPDATE branches SET head_sequence=? WHERE instance_id=? AND branch_id=? AND head_sequence=?`, []any{lastSequence, input.InstanceID, input.BranchID, input.HeadSequence}},
 		{"initiative commit attempt", `UPDATE command_attempts SET status='committed',finished_at_utc=? WHERE command_id=? AND attempt_no=1 AND status='ready'`, []any{now, commandID}},
 		{"initiative commit command", `UPDATE commands SET status='committed' WHERE command_id=? AND status='pending'`, []any{commandID}},
 	} {

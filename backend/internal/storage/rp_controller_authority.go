@@ -38,6 +38,9 @@ func (s *Store) AssignRPExternalControllerLocal(ctx context.Context, r RPExterna
 		privateFactDomain{"rp_controller_authority", "RPExternalControllerAssigned", `{"authorization":"local-operator-committed-listener-assignment-v1"}`},
 		privateFactOptions{pendingListenerID: r.EntityID},
 		func(conn *sql.Conn) error {
+			if err := s.requireNoRunningRPBackgroundProgression(ctx, conn, r.Binding.InstanceID, r.Binding.BranchID); err != nil {
+				return err
+			}
 			var role string
 			if err := conn.QueryRowContext(ctx, `SELECT principal_type FROM principals WHERE principal_id=? AND status='active'`, r.Binding.PrincipalID).Scan(&role); err != nil {
 				return classifyMissing(err, "active local operator")

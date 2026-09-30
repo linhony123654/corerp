@@ -8,20 +8,20 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"corerp.local/backend/internal/core"
+	"corerp.local/backend/internal/endpointpolicy"
 )
 
 type Config struct {
 	Endpoint, Model, APIKey string
 	Timeout                 time.Duration
 	Attempts                int
+	EndpointPolicy          endpointpolicy.Policy
 }
 type Error struct{ Kind string }
 
@@ -34,20 +34,11 @@ type ChatStylePlanner struct {
 }
 
 func NewChatStylePlanner(c Config) (*ChatStylePlanner, error) {
-	u, err := url.Parse(c.Endpoint)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "https" && u.Scheme != "http") {
-		return nil, failure("invalid endpoint")
+	if strings.TrimSpace(c.Model) == "" || len(c.Model) > 200 || strings.ContainsAny(c.APIKey, "\r\n") {
+		return nil, failure("invalid model configuration")
 	}
-	ip := net.ParseIP(u.Hostname())
-	local := u.Hostname() == "localhost" || (ip != nil && ip.IsLoopback())
-	if !local && u.Scheme != "https" {
-		return nil, failure("remote endpoint requires HTTPS")
-	}
-	if strings.TrimSpace(c.Model) == "" || len(c.Model) > 200 {
-		return nil, failure("model is required")
-	}
-	if (!local && strings.TrimSpace(c.APIKey) == "") || strings.ContainsAny(c.APIKey, "\r\n") {
-		return nil, failure("invalid API key")
+	if strings.TrimSpace(c.APIKey) == "" && !c.EndpointPolicy.AllowsLocal(c.Endpoint) {
+		return nil, failure("remote API key is required")
 	}
 	if c.Timeout == 0 {
 		c.Timeout = 10 * time.Second
@@ -58,7 +49,16 @@ func NewChatStylePlanner(c Config) (*ChatStylePlanner, error) {
 	if c.Timeout < time.Millisecond || c.Timeout > 30*time.Second || c.Attempts < 1 || c.Attempts > 3 {
 		return nil, failure("invalid request budget")
 	}
-	return &ChatStylePlanner{config: c, client: &http.Client{Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	endpoint, client, err := c.EndpointPolicy.PrepareChatCompletions(c.Endpoint, c.Timeout)
+	if err != nil {
+		return nil, failure("endpoint is not permitted")
+	}
+	c.Endpoint = endpoint
+	return &ChatStylePlanner{config: c, client: client}, nil
+}
+
+func (p *ChatStylePlanner) ProviderMetadata() core.RPProviderMetadata {
+	return core.RPProviderMetadata{Kind: "style_planner", Model: p.config.Model}
 }
 
 const instruction = `Interpret prose_instructions as presentation preferences, starting from the supplied resolved style.
@@ -128,9 +128,13 @@ func (p *ChatStylePlanner) attempt(ctx context.Context, body []byte, base core.R
 	if p.config.APIKey != "" {
 		r.Header.Set("Authorization", "Bearer "+p.config.APIKey)
 	}
+	core.RecordRPProviderHTTPAttempt(ctx)
 	response, err := p.client.Do(r)
 	if err != nil {
-		return empty, ctx.Err() == nil, 0, failure("transport unavailable")
+		if ctx.Err() != nil {
+			return empty, false, 0, failure("timeout or cancellation")
+		}
+		return empty, true, 0, failure("transport unavailable")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {

@@ -1,0 +1,54 @@
+{
+  "kind": "same_authorized_input_disable_thinking_compatibility_diagnostic",
+  "runtime_source": "role-create-verification-2026-09-30.json",
+  "limits": "Same authorized context/head as preceding native-schema baseline; not exact failed32 input, not a committed RP run or latency benchmark. Existing thinking-disable option requested; support must be judged from actual response metadata. No private text or uncommitted speech persisted in report. Native decoder, actual-view and canonical grounding, controller ownership all retained.",
+  "script_sha256": "02ca806237020279d78ac84f61eeeb8769fb00b3c0404b26930edf8c12dd27c9",
+  "helper_sha256": "e51780b932cfc741e8c856a8b2a42dea9e29806cb684bcb5cfbdd5e01b08479d",
+  "diagnostic_dir": "/tmp/corerp-r1-thinking-probe-h26e9422",
+  "results": [
+    {
+      "canonical_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "context_bytes": 11752,
+      "evidence_count": 12,
+      "head_sequence": 26,
+      "local_error": "",
+      "masked_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "mode": "no_thinking",
+      "observable_committed": false,
+      "private_present": true,
+      "proposal_action": "respond",
+      "provider_error_code": "",
+      "reason_code": "",
+      "seconds": 46.997530831,
+      "status": "validated"
+    }
+  ],
+  "http_records": [
+    {
+      "mode": "no_thinking",
+      "context_sha256": "f3b267c898057e862f4d5a0afb0c37dcff1145889249b63e9b2897e71c86d216",
+      "context_bytes": 11797,
+      "original_request_bytes": 22171,
+      "max_completion_tokens": 4096,
+      "enable_thinking": false,
+      "response_format": "json_schema",
+      "forwarded_request_bytes": 22171,
+      "http_status": 200,
+      "seconds": 46.971,
+      "finish_reason": "stop",
+      "content_bytes": 610,
+      "reasoning_bytes": {
+        "reasoning": 13351,
+        "reasoning_content": 13351
+      },
+      "usage": {
+        "prompt_tokens": 6122,
+        "completion_tokens": 3377,
+        "total_tokens": 9499
+      }
+    }
+  ],
+  "source_world_unchanged": true,
+  "npc_observables_committed": false,
+  "input_hash_and_head_identical": true
+}

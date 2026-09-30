@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import { once } from 'node:events'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
+import { openPlayBusiness } from './play-ui-helpers.mjs'
 
 // Explicit protocol fixture, not a live model or production keyword interpreter.
 export async function startStylePlannerFixture() {
@@ -32,7 +33,7 @@ export async function startStylePlannerFixture() {
 export async function checkCustomStyle({ page, sql, temp, credential, speak, restart, fixture, getModelCalls }) {
   const facts = () => sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_npc_decisions)||':'||(SELECT COUNT(*) FROM rp_utterances)")
   const save = async prose => {
-    await page.getByRole('button', { name: '叙事设置', exact: true }).click()
+    await openPlayBusiness(page, '叙事设置')
     const dialog = page.getByRole('dialog', { name: '叙事设置', exact: true })
     await dialog.getByLabel('自定义文风').waitFor()
     assert.match(await dialog.innerText(), /模型文风解释器/)

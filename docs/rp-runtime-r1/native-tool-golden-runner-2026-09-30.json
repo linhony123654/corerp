@@ -1,0 +1,19 @@
+{
+  "kind": "frozen_golden_current_native_tool_runner",
+  "source": "/home/ubuntu/corerp-preview-integration-20260929/scripts/verify-rp-runtime-r1-golden.mjs",
+  "source_sha256": "6f99cc0e9747487b3da5af0203332df316f1f1ccedb964113eea4af24de03d92",
+  "runner": "/dev/shm/corerp-r1-native-tool-frozen-golden-20260930.mjs",
+  "runner_sha256": "d184b4581457a5714846c605646d0b315959a9aa87d5b224111a81eeaf2dd372",
+  "only_runner_changes": [
+    "absolute repository root for temporary runner",
+    "link already-frozen binaries instead of rebuilding"
+  ],
+  "assertions_or_scenes_changed": false,
+  "frozen_files_overwritten": false,
+  "decision_format": "tool_call",
+  "model": "step-5-preview",
+  "reasoning_effort": "low",
+  "decision_max_tokens": 4096,
+  "decision_timeout_seconds": 120,
+  "concurrent_validation": "Original32 and Golden use independent isolated worlds; elapsed times are not a performance comparison."
+}

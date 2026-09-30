@@ -1,0 +1,131 @@
+{
+  "kind": "current_source_original_full32_terminal_result",
+  "captured_at_utc": "2026-09-30T11:10:24.074525+00:00",
+  "runtime_sha256": "ac0af1f8a94d64a7b5b12890af8225200af2a6c3a4bdb47983030757b762a3d0",
+  "source_checkpoint": "role-create-verification-2026-09-30.json",
+  "session": 9402,
+  "exit_code": 1,
+  "status": "FAIL",
+  "artifacts": "/tmp/corerp-rp3-npc-B3Mctr",
+  "log": "/tmp/corerp-r1-role-create-full32-current-20260930.log",
+  "normal_browser_turns_passed": 1,
+  "settled_turns": 2,
+  "provider_summary": [
+    [
+      "decision",
+      "chat_completions",
+      "success",
+      1,
+      "",
+      4
+    ],
+    [
+      "decision",
+      "chat_completions",
+      "success",
+      2,
+      "",
+      1
+    ],
+    [
+      "decision",
+      "chat_completions",
+      "timeout",
+      2,
+      "silence",
+      1
+    ],
+    [
+      "narrative",
+      "deterministic",
+      "success",
+      0,
+      "",
+      2
+    ],
+    [
+      "narrative",
+      "full_prose",
+      "success",
+      1,
+      "",
+      1
+    ],
+    [
+      "narrative",
+      "full_prose",
+      "success",
+      2,
+      "",
+      1
+    ]
+  ],
+  "model": "step-5-preview",
+  "failed_turn": 2,
+  "failed_actor": "黛玉",
+  "failure": "4096-budget completion truncated with content_len=0; one 8192-budget retry reaches unchanged 120s total deadline; explicit silence technical fallback",
+  "input_context_bytes_at_failure": 9600,
+  "request_bytes_at_failure": 19675,
+  "request_shapes": [
+    {
+      "context_bytes": 4791,
+      "request_bytes": 14169,
+      "max_completion_tokens": 4096,
+      "recent_dialogue": 1,
+      "relevant_exchanges": 0
+    },
+    {
+      "context_bytes": 5763,
+      "request_bytes": 15291,
+      "max_completion_tokens": 4096,
+      "recent_dialogue": 2,
+      "relevant_exchanges": 0
+    },
+    {
+      "context_bytes": 5720,
+      "request_bytes": 15248,
+      "max_completion_tokens": 4096,
+      "recent_dialogue": 2,
+      "relevant_exchanges": 0
+    },
+    {
+      "context_bytes": 5720,
+      "request_bytes": 15248,
+      "max_completion_tokens": 8192,
+      "recent_dialogue": 2,
+      "relevant_exchanges": 0
+    },
+    {
+      "context_bytes": 8190,
+      "request_bytes": 18025,
+      "max_completion_tokens": 4096,
+      "recent_dialogue": 4,
+      "relevant_exchanges": 0
+    },
+    {
+      "context_bytes": 9600,
+      "request_bytes": 19675,
+      "max_completion_tokens": 4096,
+      "recent_dialogue": 5,
+      "relevant_exchanges": 0
+    },
+    {
+      "context_bytes": 9600,
+      "request_bytes": 19675,
+      "max_completion_tokens": 8192,
+      "recent_dialogue": 5,
+      "relevant_exchanges": 0
+    },
+    {
+      "context_bytes": 9320,
+      "request_bytes": 19283,
+      "max_completion_tokens": 4096,
+      "recent_dialogue": 5,
+      "relevant_exchanges": 0
+    }
+  ],
+  "post_checks": "NOT REACHED: regeneration, mixed cup action, provider fault injection, restart",
+  "repetition_triggered_failure": false,
+  "provenance_and_world_checks_relaxed": false,
+  "interpretation": "Failure under small context; not proven context-budget overflow, world ledger corruption, or missing creator data alone. Need targeted generator-format/token diagnosis, not an identical full32 retry."
+}

@@ -69,6 +69,24 @@ test('transport excludes cookies, redirects, URL credentials and implicit retrie
   assert.equal(calls, 1);
 });
 
+test('typed object and nonverbal requests preserve exact payload and retirement operation', async () => {
+  const sent = [];
+  const client = new CoreRPClient('http://127.0.0.1:8080', 'test-token', async (url, options) => {
+    sent.push({ url, body: JSON.parse(options.body) });
+    assert.equal(options.method, 'POST');
+    assert.equal(options.headers.get('Authorization'), 'Bearer test-token');
+    return Response.json({ data: { status: 'retired' } });
+  });
+  for (const [operation, action] of [['object', 'offer'], ['nonverbal', 'smile']]) {
+    const request = { session_id: 'saved-session', expected_cursor: 41, idempotency_key: `${operation}-key`, action, ...(operation === 'object' ? { object_id: 'sourced-item', target_entity_id: 'visible-person' } : {}) };
+    assert.deepEqual(await client.call(operation, request), { status: 'retired' });
+    assert.deepEqual(sent.at(-1), { url: `http://127.0.0.1:8080/api/v1/rp/actions/${operation}`, body: request });
+    const retire = { operation, session_id: request.session_id, idempotency_key: request.idempotency_key };
+    await client.call('retire', retire);
+    assert.deepEqual(sent.at(-1), { url: 'http://127.0.0.1:8080/api/v1/rp/requests/retire', body: retire });
+  }
+});
+
 test('HTTP envelope and event header continuation', async () => {
   const client = new CoreRPClient('https://runtime.example.com', 'test-token', async (url, options) => {
     if (url.includes('/events/stream')) {

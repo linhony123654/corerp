@@ -4,7 +4,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { createServer as createHTTPServer } from 'node:http';
 import { once } from 'node:events';
@@ -36,15 +36,25 @@ function data(result) {
   const envelope = result.structuredContent ?? JSON.parse(result.content.find(block => block.type === 'text').text);
   return envelope.data;
 }
+const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}` : JSON.stringify(value);
+const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
+function studioBundle(kind) {
+  const content = { version: 'corerp.studio-package.v1', ...(kind === 'system' ? { system_rules: { npc_daily_action_budget: 2 } } : { narrative_style: { version: 'corerp.style.v1', pov: 'second_person', tense: 'present', verbosity: 'terse', dialogue_ratio: 100, description_density: 0, inner_monologue_policy: 'none', prose_instructions: '', forbidden_patterns: [], narrative_pack_ref: 'builtin/plain@1' } }) };
+  return { manifest: { schema_version: 'm0-draft-2026-09-22', id: `mcp.cup.${kind}`, kind, version: '1.0.0', engine_api: 'm0-draft-2026-09-22', requires: [], optional: [], capabilities: [kind === 'system' ? 'rules.npc.daily_budget' : 'narrative.style'], schema_hash: 'sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0', content_hash: `sha256:${digest(content)}`, content_files: [`${kind}.json`] }, content };
+}
 
 test('actual MCP stdio → authenticated Runtime → same authoritative world/recovery', { timeout: 150_000 }, async t => {
   const temp = await mkdtemp(join(tmpdir(), 'corerp-rp7-mcp-'));
-  const database = join(temp, 'world.db'); const executable = join(temp, 'server'); const setup = join(temp, 'setup'); const controller = join(temp, 'controller');
+  const database = join(temp, 'world.db'); const executable = join(temp, 'server'); const setup = join(temp, 'setup'); const controller = join(temp, 'controller'); const admin = join(temp, 'admin'); const m1 = join(temp, 'm1');
   const run = (command, args) => execFileSync(command, args, { cwd: join(root, 'backend'), stdio: 'pipe' });
   run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', executable, './cmd/corerp-server']);
   run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', setup, './cmd/corerp-m2']);
   run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', controller, './cmd/corerp-controller']);
-  run(setup, ['-db', database, '-action', 'rp-travel-prepare']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', admin, './cmd/corerp-admin']);
+  run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', m1, './cmd/corerp-m1']);
+  run(m1, ['-db', database, '-action', 'inspect']);
+  const prepared = JSON.parse(run(setup, ['-db', database, '-action', 'rp-travel-prepare']));
+  run(admin, ['-db', database, '-operator', 'principal_operator', '-instance', 'inst_m2_t09', '-branch', 'br_main', '-target', 'principal_creator', '-purpose', 'create_world', '-status', 'active', '-expected-head', String(prepared.event_sequence), '-key', 'mcp-cup-world-grant']);
   run('sqlite3', [database, "INSERT INTO principals(principal_id,principal_type,display_name,status) VALUES ('principal_mcp_resident_a','service','MCP Resident A','active'),('principal_mcp_resident_b','service','MCP Resident B','active');"]);
   const token = randomBytes(24).toString('hex'), creatorToken = randomBytes(24).toString('hex'), operatorToken = randomBytes(24).toString('hex');
   const residentAToken = randomBytes(24).toString('hex'), residentBToken = randomBytes(24).toString('hex');
@@ -110,6 +120,18 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   const stale = await connected.client.callTool({ name: 'corerp_command', arguments: { operation: 'move', request: { ...read, expected_cursor: speech.expected_cursor, idempotency_key: randomUUID(), from_place_id: view.place_id, to_place_id: 'place_m2_home_ada' } } }); assert.equal(stale.isError, true);
   await call('corerp_command', { operation: 'social', request: { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), action: 'greet', target_entity_id: 'entity_m2_rp_cai' } });
   view = await call('corerp_observe', read);
+  const silent = { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), action: 'smile' };
+  const nonverbal = await call('corerp_command', { operation: 'nonverbal', request: silent });
+  assert.equal(nonverbal.replayed, false);
+  assert.equal((await call('corerp_command', { operation: 'nonverbal', request: silent })).event_id, nonverbal.event_id);
+  assert.equal((await call('corerp_request_retire', { ...read, operation: 'nonverbal', idempotency_key: silent.idempotency_key })).status, 'completed');
+  const changedSilent = await connected.client.callTool({ name: 'corerp_command', arguments: { operation: 'nonverbal', request: { ...silent, action: 'nod' } } });
+  assert.equal(changedSilent.isError, true); assert.match(JSON.stringify(changedSilent), /IDEMPOTENCY_PAYLOAD_MISMATCH/u);
+  view = await call('corerp_observe', read);
+  const retiredObjectKey = randomUUID();
+  assert.equal((await call('corerp_request_retire', { ...read, operation: 'object', idempotency_key: retiredObjectKey })).status, 'retired');
+  const blockedObject = await connected.client.callTool({ name: 'corerp_command', arguments: { operation: 'object', request: { ...read, expected_cursor: view.observation_cursor, idempotency_key: retiredObjectKey, action: 'take', object_id: 'not-a-real-object' } } });
+  assert.equal(blockedObject.isError, true); assert.match(JSON.stringify(blockedObject), /REQUEST_RETIRED/u);
   await call('corerp_command', { operation: 'move', request: { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), from_place_id: view.place_id, to_place_id: 'place_m2_home_ada' } });
   view = await call('corerp_observe', read);
   const wait = { ...read, expected_cursor: view.observation_cursor, idempotency_key: randomUUID(), target_world_time: '2026-09-23T08:00:00Z', budget: 1 };
@@ -390,7 +412,41 @@ test('actual MCP stdio → authenticated Runtime → same authoritative world/re
   assert.equal((await callB('corerp_round_read', roundB)).current_world_time, due, 'released service observed later clock through settled receipt');
   assert.equal((await callB('corerp_round_advance', { ...roundB, budget: 13 })).replayed, true);
   assert.equal(Number(run('sqlite3', [database, "SELECT COUNT(*) FROM events WHERE event_type='RPExternalControllerReleased';"]).toString().trim()), 2);
+
+  const cupWorld = 'mcp-cup-world';
+  const worldResponse = await fetch(`${origin}/api/v1/studio/worlds/create`, { method: 'POST', headers: { Authorization: `Bearer ${creatorToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ authority_instance_id: instance_id, authority_branch_id: branch_id, instance_id: cupWorld, idempotency_key: 'mcp-cup-world', player_principal_id: 'principal_m2_rp_player', system_package: studioBundle('system'), narrative_package: studioBundle('narrative'), spec: { version: 'corerp.studio-world.v1', name: 'MCP 杯子世界', start_world_time: '2026-09-22T00:00:00Z', population: 2, opening_money_minor: 20, opening_stock_minor: 2, places: [{ key: 'home', name: '小屋', kind: 'home' }, { key: 'square', name: '广场', kind: 'public' }], links: [{ from: 'home', to: 'square', minutes: 5 }], people: [{ key: 'lin', name: '玩家', place: 'home', player: true }, { key: 'cai', name: '邻居', place: 'home' }] } }) });
+  const worldEnvelope = await worldResponse.json(); assert.equal(worldResponse.status, 201, JSON.stringify(worldEnvelope));
+  const createdCupWorld = worldEnvelope.data;
+  const cupScope = { instance_id: cupWorld, branch_id: 'br_main' };
+  const cupBinding = (sequence, key) => ({ ...cupScope, expected_head: sequence, idempotency_key: key });
+  const cupSession = await call('corerp_session_open', { ...cupScope, entity_id: createdCupWorld.entity_id, pov: 'second_person', idempotency_key: 'mcp-cup-session' });
+  const cupRead = { session_id: cupSession.session_id };
+  let cupView = await call('corerp_observe', cupRead);
+  const authoredCup = await creatorCall('objects/stock/define', { binding: cupBinding(createdCupWorld.event_sequence, 'mcp-cup-stock'), sku_code: 'cup', display_name: '杯子', owner_entity_id: createdCupWorld.entity_id });
+  const table = await creatorCall('objects/anchors/define', { binding: cupBinding(authoredCup.event_sequence, 'mcp-cup-table'), place_id: cupView.place_id, zone_key: 'main', anchor_code: 'table-side', display_name: '桌边' });
+  const cupSource = await creatorCall('objects/sources/define', { binding: cupBinding(table.event_sequence, 'mcp-cup-source'), anchor_id: table.fact.anchor_id, owner_entity_id: createdCupWorld.entity_id, sku_id: authoredCup.fact.sku_id, display_name: '杯子' });
+  assert.equal(cupSource.fact.stock_event_id, authoredCup.event_id);
+  cupView = await call('corerp_observe', cupRead);
+  const stageCup = { ...cupRead, expected_cursor: cupView.observation_cursor, idempotency_key: 'mcp-cup-stage', action: 'stage', source_id: cupSource.fact.source_id };
+  const cup = await call('corerp_command', { operation: 'object', request: stageCup });
+  assert.equal(cup.replayed, false); assert.ok(cup.object_id && cup.event_id);
+  const repeatedStage = await call('corerp_command', { operation: 'object', request: stageCup });
+  assert.equal(repeatedStage.replayed, true); assert.equal(repeatedStage.event_id, cup.event_id);
+  cupView = await call('corerp_observe', cupRead);
+  const placeCup = { ...cupRead, expected_cursor: cupView.observation_cursor, idempotency_key: 'mcp-cup-place', action: 'place', object_id: cup.object_id, anchor_id: table.fact.anchor_id };
+  const placedCup = await call('corerp_command', { operation: 'object', request: placeCup });
+  assert.equal((await call('corerp_command', { operation: 'object', request: placeCup })).event_id, placedCup.event_id);
+  cupView = await call('corerp_observe', cupRead);
+  const takeCup = { ...cupRead, expected_cursor: cupView.observation_cursor, idempotency_key: 'mcp-cup-take', action: 'take', object_id: cup.object_id };
+  await call('corerp_command', { operation: 'object', request: takeCup });
+  cupView = await call('corerp_observe', cupRead);
+  const stowCup = { ...cupRead, expected_cursor: cupView.observation_cursor, idempotency_key: 'mcp-cup-stow', action: 'stow', object_id: cup.object_id };
+  const returnedCup = await call('corerp_command', { operation: 'object', request: stowCup });
+  assert.equal((await call('corerp_command', { operation: 'object', request: stowCup })).event_id, returnedCup.event_id);
+  const cupLedger = run('sqlite3', [database, `SELECT (SELECT COUNT(*) FROM events WHERE instance_id='${cupWorld}' AND event_type='RPObjectInteracted')||':'||(SELECT COUNT(*) FROM stock_movements WHERE sku_id='${authoredCup.fact.sku_id}' AND reason_code LIKE 'rp_object_%')||':'||(SELECT quantity_minor FROM inventory_balances WHERE location_id='${authoredCup.fact.inventory_location_id}' AND sku_id='${authoredCup.fact.sku_id}')||':'||(SELECT quantity_minor FROM inventory_balances WHERE location_id=(SELECT escrow_location_id FROM rp_objects WHERE object_id='${cup.object_id}') AND sku_id='${authoredCup.fact.sku_id}')||':'||(SELECT physical_state FROM rp_objects WHERE object_id='${cup.object_id}')`]).toString().trim();
+  assert.equal(cupLedger, '4:2:1:0:stowed', 'MCP object path did not conserve one sourced physical unit');
+  assert.equal(run('sqlite3', [database, `SELECT COUNT(*) FROM rp_object_offers WHERE object_id='${cup.object_id}'`]).toString().trim(), '0');
   assert.equal(connected.stderr().includes(token), false); assert.equal(foreign.stderr().includes(creatorToken), false);
   assert.equal(residentA.stderr().includes(residentAToken), false); assert.equal(residentB.stderr().includes(residentBToken), false);
-  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; two service residents/Human settled shared waits plus conflicting shared speech and move windows, sourced private sleep start/end through full shared rounds, each scripted resident spoke twice, physical meeting delivered speech and leaving scene stopped hearing, explicit release fenced old proposals and preserved frozen receipts; live model provider not exercised`);
+  t.diagnostic(`real MCP legacy+2026-07-28 stdio/runtime PASS fixture ${temp}; two service residents/Human settled shared waits plus conflicting shared speech and move windows, each scripted resident spoke twice, physical meeting delivered speech and leaving scene stopped hearing, explicit release fenced old proposals and preserved frozen receipts; separate authored-world cup completed stock-backed stage/place/take/stow with exact MCP retries; live model provider not exercised`);
 });

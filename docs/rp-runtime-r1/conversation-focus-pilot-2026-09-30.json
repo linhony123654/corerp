@@ -1,0 +1,302 @@
+{
+  "captured_at_utc": "2026-09-30T07:23:38.528890+00:00",
+  "kind": "synthetic_conversation_focus_http_before_after",
+  "world_spec": {
+    "version": "corerp.studio-world.v1",
+    "name": "交流对象合成小样",
+    "start_world_time": "2026-09-22T00:00:00Z",
+    "population": 3,
+    "opening_money_minor": 30,
+    "opening_stock_minor": 2,
+    "places": [
+      {
+        "key": "hall",
+        "name": "会客室",
+        "kind": "public"
+      },
+      {
+        "key": "lane",
+        "name": "走廊",
+        "kind": "public"
+      }
+    ],
+    "links": [
+      {
+        "from": "hall",
+        "to": "lane",
+        "minutes": 5
+      }
+    ],
+    "people": [
+      {
+        "key": "lin",
+        "name": "Lin",
+        "place": "hall",
+        "player": true,
+        "persona": "来会客室聊天的熟悉访客，尚未承诺替人办事。"
+      },
+      {
+        "key": "nora",
+        "name": "Nora",
+        "place": "hall",
+        "player": false,
+        "persona": "会客室的常客，认识Lin，愿意耐心听Lin把话说清楚。说话短而温和，只知道实际听见的事情。"
+      },
+      {
+        "key": "iris",
+        "name": "Iris",
+        "place": "hall",
+        "player": false,
+        "persona": "会客室的常客，认识Lin，愿意听Lin谈眼下的困惑。说话简洁、喜欢提出具体问题，只知道实际听见的事情。"
+      }
+    ],
+    "acquaintances": [
+      [
+        "lin",
+        "nora"
+      ],
+      [
+        "lin",
+        "iris"
+      ]
+    ]
+  },
+  "inputs": [
+    "Nora，我想跟你聊聊，最近总觉得话说不清楚。",
+    "那你觉得我应该先说哪一句？"
+  ],
+  "system_package": {
+    "manifest": {
+      "schema_version": "m0-draft-2026-09-22",
+      "id": "focus.system",
+      "kind": "system",
+      "version": "1.0.0",
+      "engine_api": "m0-draft-2026-09-22",
+      "requires": [],
+      "optional": [],
+      "capabilities": [
+        "rules.npc.daily_budget"
+      ],
+      "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+      "content_hash": "sha256:3a8e95ab74d6d9928c96a924c52d9ea563acc3375eaa3fae555ade394943474c",
+      "content_files": [
+        "system.json"
+      ]
+    },
+    "content": {
+      "version": "corerp.studio-package.v1",
+      "system_rules": {
+        "npc_daily_action_budget": 2,
+        "rp_execution_mode": "orchestrated",
+        "max_active_responders": 1
+      }
+    }
+  },
+  "narrative_package": {
+    "manifest": {
+      "schema_version": "m0-draft-2026-09-22",
+      "id": "focus.narrative",
+      "kind": "narrative",
+      "version": "1.0.0",
+      "engine_api": "m0-draft-2026-09-22",
+      "requires": [],
+      "optional": [],
+      "capabilities": [
+        "narrative.style"
+      ],
+      "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+      "content_hash": "sha256:b2e244beacbe07458926558a10d5bd4063bd6a3637df0754c8151e609013311c",
+      "content_files": [
+        "narrative.json"
+      ]
+    },
+    "content": {
+      "version": "corerp.studio-package.v1",
+      "narrative_style": {
+        "version": "corerp.style.v1",
+        "pov": "second_person",
+        "tense": "present",
+        "verbosity": "terse",
+        "dialogue_ratio": 100,
+        "description_density": 0,
+        "inner_monologue_policy": "none",
+        "prose_instructions": "",
+        "forbidden_patterns": [],
+        "narrative_pack_ref": "builtin/plain@1"
+      }
+    }
+  },
+  "tuning": {
+    "model": "step-5-preview",
+    "timeout_seconds": 120,
+    "decision_max_tokens": 4096,
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "narrative": "deterministic"
+  },
+  "expected_partner": {
+    "actor_id": "studio_entity_f3739824722f9fced1123645a85ff36ffa5f35dcfed2f4281e043389e51a1b84",
+    "name": "Nora"
+  },
+  "runs": [
+    {
+      "label": "before",
+      "runtime_sha256": "2e527072a0aafea8fd9e72c545d7f847f010d8fd5937cae407298b6f87085ff1",
+      "temp_dir": "/tmp/corerp-r1-focus-before-ih91bmzu",
+      "samples": [
+        {
+          "index": 1,
+          "input": "Nora，我想跟你聊聊，最近总觉得话说不清楚。",
+          "status": "settled",
+          "duration_seconds": 32.28,
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_f3739824722f9fced1123645a85ff36ffa5f35dcfed2f4281e043389e51a1b84",
+              "rank": 0,
+              "reason": "direct_address",
+              "source_event_id": null
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_f3739824722f9fced1123645a85ff36ffa5f35dcfed2f4281e043389e51a1b84",
+              "action": "respond",
+              "text": "Nora軽声回应：「慢慢说，我听着。」",
+              "event_id": "event_rp_npc_7838b61eecbc79e525bfe64a2782f489cd32be26069271d2d8bc26021eccb765"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "input": "那你觉得我应该先说哪一句？",
+          "status": "settled",
+          "duration_seconds": 70.761,
+          "activations": [
+            {
+              "name": "Iris",
+              "actor_id": "studio_entity_e420f612f155728fabc54c2d37d7ea4927f14528cb590fe6131985780e22449a",
+              "rank": 0,
+              "reason": "stable_fallback",
+              "source_event_id": null
+            }
+          ],
+          "replies": [
+            {
+              "name": "Iris",
+              "actor_id": "studio_entity_e420f612f155728fabc54c2d37d7ea4927f14528cb590fe6131985780e22449a",
+              "action": "silence",
+              "text": "",
+              "event_id": "event_rp_npc_5d38c0c5bbdaec47e416a3f1c1bb0557aa39a886e1a410614cedd5bd1e715799"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        }
+      ],
+      "status": "PASS: reproduced old target mismatch; RP continuation failed"
+    },
+    {
+      "label": "after",
+      "runtime_sha256": "f4d5051f6b2e48779883c007df579508f2a4aa1f0fcc8021653e0b27a507d58b",
+      "temp_dir": "/tmp/corerp-r1-focus-after-7gy3_lox",
+      "samples": [
+        {
+          "index": 1,
+          "input": "Nora，我想跟你聊聊，最近总觉得话说不清楚。",
+          "status": "settled",
+          "duration_seconds": 30.249,
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_f3739824722f9fced1123645a85ff36ffa5f35dcfed2f4281e043389e51a1b84",
+              "rank": 0,
+              "reason": "direct_address",
+              "source_event_id": null
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_f3739824722f9fced1123645a85ff36ffa5f35dcfed2f4281e043389e51a1b84",
+              "action": "respond",
+              "text": "好，你慢慢说，我听着。",
+              "event_id": "event_rp_npc_4afbef03abec3420fa521bc42238e894a62320c36dd8131a3ccde516252e7b72"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "input": "那你觉得我应该先说哪一句？",
+          "status": "settled",
+          "duration_seconds": 28.283,
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_f3739824722f9fced1123645a85ff36ffa5f35dcfed2f4281e043389e51a1b84",
+              "rank": 0,
+              "reason": "conversation_continuation",
+              "source_event_id": "event_rp_npc_4afbef03abec3420fa521bc42238e894a62320c36dd8131a3ccde516252e7b72"
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_f3739824722f9fced1123645a85ff36ffa5f35dcfed2f4281e043389e51a1b84",
+              "action": "respond",
+              "text": "不用挑，从你最想说的那句开始就好。",
+              "event_id": "event_rp_npc_7e41b767f6e5db92f3a8388f824119686e4ae992fc608c8b73cf2d9998c13b01"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        }
+      ],
+      "status": "PASS: publicly grounded target continuation observed; no experience approval implied"
+    }
+  ],
+  "limits": "Two-turn synthetic authored world; not frozen Rongqing Golden, not 32-turn regression, not human RP approval. Model outputs are stochastic; routing evidence is reproducible from public source and plan.",
+  "result": "PASS: two-turn target mismatch reproduced before and repaired after; not R1 DONE",
+  "script_sha256": "d5b204a92de9d7d303e1a3ec5e85b5464d0f672b26cf7082f5e7cd8ab2efb091"
+}

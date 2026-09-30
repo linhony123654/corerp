@@ -101,9 +101,9 @@ func TestF9LifeJournalInstalledActivatedAndRegeneratedWithoutWorldMutation(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	reloaded, err := service.ReadRPNarrative(ctx, narrative)
-	if err != nil || !reflect.DeepEqual(variant.View, reloaded.View) {
-		t.Fatal("restarted presentation", reloaded, err)
+	reloaded, err := service.ObserveRPSession(ctx, read)
+	if err != nil || len(reloaded.RecentTurns) == 0 || !reflect.DeepEqual(variant.View.Lines, reloaded.RecentTurns[len(reloaded.RecentTurns)-1].NarrativeLines) || variant.View.RenderID != reloaded.RecentTurns[len(reloaded.RecentTurns)-1].RenderID {
+		t.Fatal("restarted selected presentation", reloaded.RecentTurns, err)
 	}
 	assertM2Value(t, ctx, s, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id='br_main'`, []any{r.InstanceID}, turn.SettledSequence)
 	if diffs, err := s.CompareProjections(ctx, r.InstanceID, "br_main"); err != nil || len(diffs) != 0 {

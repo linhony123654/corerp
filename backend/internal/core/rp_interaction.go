@@ -1,6 +1,9 @@
 package core
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 type RPInteractionRequest struct {
 	PrincipalID      string `json:"principal_id"`
@@ -38,10 +41,60 @@ type RPInteractionPlan struct {
 }
 
 type RPInteractionStep struct {
-	Kind          string `json:"kind"`
-	TargetPlaceID string `json:"target_place_id,omitempty"`
-	WaitHours     int    `json:"wait_hours,omitempty"`
-	SpeechText    string `json:"speech_text,omitempty"`
+	Kind            string `json:"kind"`
+	TargetPlaceID   string `json:"target_place_id,omitempty"`
+	TargetEntityID  string `json:"target_entity_id,omitempty"`
+	WaitHours       int    `json:"wait_hours,omitempty"`
+	WaitMinutes     int    `json:"wait_minutes,omitempty"`
+	SpeechText      string `json:"speech_text,omitempty"`
+	ObjectAction    string `json:"object_action,omitempty"`
+	ObjectID        string `json:"object_id,omitempty"`
+	AnchorID        string `json:"anchor_id,omitempty"`
+	OfferID         string `json:"offer_id,omitempty"`
+	NonverbalAction string `json:"nonverbal_action,omitempty"`
+	GestureCode     string `json:"gesture_code,omitempty"`
+}
+
+type RPInteractionObject struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	PhysicalState  string   `json:"physical_state,omitempty"`
+	AnchorID       string   `json:"anchor_id,omitempty"`
+	AllowedActions []string `json:"allowed_actions"`
+}
+
+type RPInteractionAnchor struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type RPInteractionOffer struct {
+	ID             string   `json:"id"`
+	ObjectID       string   `json:"object_id"`
+	AllowedActions []string `json:"allowed_actions"`
+}
+
+type RPInteractionEntity struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// An interpreter sees only the controlled player's authorized observation
+// and proposes a bounded plan. It never owns world effects or private truth.
+type RPInteractionUnderstandingInput struct {
+	Text            string                `json:"text"`
+	Mode            string                `json:"mode"`
+	PlaceName       string                `json:"place_name"`
+	WorldTime       string                `json:"world_time"`
+	ReachablePlaces []RPInteractionPlace  `json:"reachable_places"`
+	PresentEntities []RPInteractionEntity `json:"present_entities"`
+	Objects         []RPInteractionObject `json:"objects"`
+	Anchors         []RPInteractionAnchor `json:"anchors"`
+	Offers          []RPInteractionOffer  `json:"offers"`
+}
+
+type RPInteractionUnderstandingProvider interface {
+	UnderstandInteraction(context.Context, RPInteractionUnderstandingInput) (RPInteractionPlan, error)
 }
 
 type RPInteractionPlace struct {
@@ -139,10 +192,11 @@ func ParseRPInteraction(input, mode string, places []RPInteractionPlace) (RPInte
 		if strings.TrimSpace(input) == "" {
 			return clarify("请填写要说出的内容。")
 		}
+		plan.Kind = "DIALOGUE"
+		plan.Steps = append(plan.Steps, RPInteractionStep{Kind: "speech", SpeechText: input})
+		return plan, nil
 	}
-	plan.Kind = "DIALOGUE"
-	plan.Steps = append(plan.Steps, RPInteractionStep{Kind: "speech", SpeechText: input})
-	return plan, nil
+	return clarify("有限离线规则无法确认这段自由文字是对白还是行动；请选择“只说话”或连接语义理解服务。")
 }
 
 func splitRPActionSpeech(rest string) (action, speech string, hasSpeech, ok bool) {

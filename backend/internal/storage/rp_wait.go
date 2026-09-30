@@ -73,8 +73,16 @@ func (s *Store) waitRP(ctx context.Context, request core.RPWaitRequest, sharedRo
 		return RPWaitResult{}, err
 	}
 	intent, replayed, err := s.ensureRPWaitIntentForRound(ctx, request, requestHash, sharedRoundID)
-	if err != nil || replayed {
+	if err != nil {
 		return intent, err
+	}
+	if replayed {
+		if intent.Status == "completed" {
+			if err := s.settleCommittedRPWaitActivities(ctx, intent.IntentID); err != nil {
+				return RPWaitResult{}, err
+			}
+		}
+		return intent, nil
 	}
 	if sharedRoundID != "" {
 		// Rounds accepted by the earlier schema hashed the caller's budget.
@@ -99,7 +107,16 @@ func (s *Store) waitRP(ctx context.Context, request core.RPWaitRequest, sharedRo
 		intent.PendingDue = run.PendingDue
 		return intent, nil
 	}
-	return s.finishRPWait(ctx, request, requestHash, intent.IntentID, run.ProcessedItems)
+	result, err := s.finishRPWait(ctx, request, requestHash, intent.IntentID, run.ProcessedItems)
+	if err != nil {
+		return result, err
+	}
+	// The wait event and its recovery marker commit together. A failed or
+	// interrupted derived sweep remains pending and is retried by the same key.
+	if err := s.settleCommittedRPWaitActivities(ctx, intent.IntentID); err != nil {
+		return RPWaitResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Store) ensureRPWaitIntent(ctx context.Context, request core.RPWaitRequest, requestHash string) (RPWaitResult, bool, error) {
@@ -175,7 +192,7 @@ func (s *Store) ensureRPWaitIntentForRound(ctx context.Context, request core.RPW
 			return RPWaitResult{}, false, core.NewError(core.CodeNotFound, "supported RP world not found")
 		}
 		var unsupported int
-		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE instance_id=? AND branch_id=? AND status='pending' AND world_time<=? AND phase_id<>?`, session.InstanceID, session.BranchID, request.TargetWorldTime, packages.Lock.Phase).Scan(&unsupported); err != nil {
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM scheduler_items WHERE instance_id=? AND branch_id=? AND status='pending' AND world_time<=? AND phase_id NOT IN (?,?)`, session.InstanceID, session.BranchID, request.TargetWorldTime, packages.Lock.Phase, studioRoutinePhaseID).Scan(&unsupported); err != nil {
 			return RPWaitResult{}, false, err
 		}
 		if unsupported != 0 {
@@ -442,6 +459,9 @@ func (s *Store) finishRPWait(ctx context.Context, request core.RPWaitRequest, re
 		return RPWaitResult{}, err
 	}
 	if err := execAgentOne(ctx, tx.conn, "complete RP wait intent", `UPDATE rp_wait_intents SET status = 'completed', command_id = ?, completed_at_utc = ? WHERE intent_id = ? AND status = 'pending'`, commandID, now, intentID); err != nil {
+		return RPWaitResult{}, err
+	}
+	if err := execAgentOne(ctx, tx.conn, "record pending RP wait activity settlement", `INSERT INTO rp_wait_activity_settlements(intent_id,status) VALUES (?,'pending')`, intentID); err != nil {
 		return RPWaitResult{}, err
 	}
 	if s.beforeCommit != nil {

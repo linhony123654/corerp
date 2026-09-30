@@ -1,0 +1,75 @@
+{
+  "kind": "real_player_interpretation_postchecks_from_frozen_32_checkpoint",
+  "runtime_sha256": "edf6750ba0e4f417773986980c1841a70afb94cd0191c2c0377c713cf2cf9733",
+  "source_checkpoint": "interaction-contract-verification-2026-09-30.json",
+  "original_checkpoint": "source-refs-32-result-2026-09-30.json",
+  "artifact_directory": "/dev/shm/corerp-r1-interaction-contract-post-scq3r_19",
+  "status": "PASS",
+  "mock_requests": 0,
+  "checks": {
+    "mixed_object_speech_exact_replay": "PASS",
+    "meta_continue_no_speech": "PASS",
+    "restart_world_speech_object_selected_narrative": "PASS"
+  },
+  "limits": "API-only targeted continuation on a database backup; not a complete rerun of the original browser32 suite or human RP acceptance.",
+  "public_outcomes": [
+    {
+      "kind": "object",
+      "event_id": "event_rp_object_94d90e398e3aa99b43ce43ae1c77d1f98029c8537d8b1b07e2af45aa16d4d19d"
+    },
+    {
+      "kind": "speech",
+      "event_id": "event_rp_speech_71f8514eca26de7415743598fb86e45fefabb8a053f117eedb2b5213eb9ae18b"
+    }
+  ],
+  "interpretation_receipts": [
+    {
+      "source": "model",
+      "result": "failed",
+      "reason": "provider_proposal_object_fields",
+      "attempts": 1,
+      "accepted_plan": 0
+    },
+    {
+      "source": "model",
+      "result": "success",
+      "reason": "",
+      "attempts": 1,
+      "accepted_plan": 1
+    },
+    {
+      "source": "model",
+      "result": "success",
+      "reason": "",
+      "attempts": 1,
+      "accepted_plan": 1
+    }
+  ],
+  "receipt_summary": [
+    {
+      "phase": "decision",
+      "provider": "chat_completions",
+      "result": "success",
+      "fallback": "",
+      "calls": 102,
+      "attempts": 106
+    },
+    {
+      "phase": "narrative",
+      "provider": "deterministic",
+      "result": "success",
+      "fallback": "",
+      "calls": 33,
+      "attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider": "full_prose",
+      "result": "success",
+      "fallback": "",
+      "calls": 33,
+      "attempts": 33
+    }
+  ],
+  "captured_at_utc": "2026-09-30T15:37:57.763857+00:00"
+}

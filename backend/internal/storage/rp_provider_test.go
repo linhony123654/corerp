@@ -15,6 +15,7 @@ import (
 
 	"corerp.local/backend/internal/core"
 	"corerp.local/backend/internal/decision"
+	"corerp.local/backend/internal/endpointpolicy"
 )
 
 func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testing.T) {
@@ -24,8 +25,9 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, read, initial := newRPWaitTestSession(t, ctx, store)
+	session, read, initial := newRPAuthoredModelTestSession(t, ctx, store)
 	var calls atomic.Int32
+	const privateIntent = "只在私有草案中考虑下一步如何安抚"
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		raw, _ := io.ReadAll(r.Body)
@@ -37,10 +39,43 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 		if !strings.Contains(string(raw), "own_asset_minor") || !strings.Contains(string(raw), "activity_code") {
 			t.Error("missing own life context")
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]string{"content": `{"action":"respond","text":"这句话来自配置的模型接口。","destination_place_id":""}`}}}})
+		var request struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.Unmarshal(raw, &request); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var packet struct {
+			Version   string               `json:"version"`
+			Character core.RPDecisionInput `json:"character"`
+		}
+		for _, message := range request.Messages {
+			if message.Role == "user" {
+				if err := json.Unmarshal([]byte(message.Content), &packet); err != nil {
+					t.Error(err)
+				}
+			}
+		}
+		if packet.Version != "corerp.decision.v3" || packet.Character.SpeechEventID == "" {
+			t.Error("configured adapter did not receive the versioned sourced context")
+		}
+		proposal, err := json.Marshal(map[string]any{
+			"private":    core.RPDecisionPrivate{Intent: privateIntent, Emotion: "平静", RelationshipStance: "谨慎", BasisEventIDs: []string{packet.Character.SpeechEventID}},
+			"observable": map[string]any{"action": "respond", "text": "这句话来自配置的模型接口。", "introduce_self": false, "expression_code": "beckon"},
+		})
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]string{"content": string(proposal)}}}})
 	}))
 	defer model.Close()
-	provider, err := decision.NewChatProvider(decision.Config{Endpoint: model.URL, Model: "test-model"})
+	provider, err := decision.NewChatProvider(decision.Config{Endpoint: model.URL + "/v1/chat/completions", Model: "test-model", EndpointPolicy: endpointpolicy.TestLocalhostPolicy()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,6 +102,15 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 	}
 	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM rp_utterances`, nil, 2)
 	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM agent_knowledge WHERE json_extract(claim_payload,'$.claim_type')='speaker_said'`, nil, 2)
+	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM events WHERE event_type='RPNonverbalAction' AND json_extract(payload,'$.gesture_code')='beckon' AND json_extract(payload,'$.target_entity_id')=?`, []any{session.ControlledEntityID}, 1)
+	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM events WHERE payload LIKE ?`, []any{"%" + privateIntent + "%"}, 0)
+	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM outbox WHERE payload LIKE ?`, []any{"%" + privateIntent + "%"}, 0)
+	// An unfinished turn has no settled narration to contain the gesture yet.
+	// Its witnessed committed fact must remain available during recovery.
+	pending, err := service.ObserveRPSession(ctx, read)
+	if err != nil || len(pending.RecentTurns) != 1 || !strings.Contains(strings.Join(pending.RecentTurns[0].NarrativeLines, "\n"), "招手") {
+		t.Fatalf("pending turn hid its committed gesture: %+v %v", pending.RecentTurns, err)
+	}
 	store.Close()
 	store, err = Open(ctx, path)
 	if err != nil {
@@ -75,16 +119,45 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 	defer store.Close()
 	service, _ = NewRPService(store, provider, "chat_completions")
 	result, err := service.PlayResumeRPTurn(ctx, RPTurnResumeRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID, IdempotencyKey: request.IdempotencyKey})
-	if err != nil || result.Status != "settled" || len(result.NarrativeLines) != 2 || !strings.Contains(result.NarrativeLines[1], "配置的模型接口") {
+	if err != nil || result.Status != "settled" || len(result.NarrativeLines) != 3 || !strings.Contains(strings.Join(result.NarrativeLines, "\n"), "配置的模型接口") {
 		t.Fatalf("resume %+v %v", result, err)
+	}
+	public, err := json.Marshal(result)
+	if err != nil || strings.Contains(string(public), privateIntent) {
+		t.Fatal("new decision wire leaked a private sketch through recovered public output", err)
+	}
+	if len(result.ProviderCalls) != 2 || !result.ProviderCalls[0].Attempted || result.ProviderCalls[0].ProviderKind != "chat_completions" || result.ProviderCalls[0].ModelID != "test-model" || result.ProviderCalls[0].Result != "success" || result.ProviderCalls[0].AttemptCount != 1 || result.ProviderCalls[1].RenderSource != "template" || result.ProviderCalls[1].Attempted || result.ProviderCalls[1].AttemptCount != 0 {
+		t.Fatalf("recovered model success receipt: %+v", result.ProviderCalls)
+	}
+	observation, err := service.ObserveRPSession(ctx, read)
+	if err != nil || len(observation.RecentTurns) != 1 || len(observation.RecentTurns[0].ProviderCalls) != 2 || observation.RecentTurns[0].ProviderCalls[0].Result != "success" {
+		t.Fatalf("scoped history receipt %+v %v", observation.RecentTurns, err)
+	}
+	if strings.Count(strings.Join(observation.RecentTurns[0].NarrativeLines, "\n"), "招了招手") != 1 {
+		t.Fatal("settled turn lost or duplicated its witnessed gesture")
+	}
+	second, err := store.OpenRPSession(ctx, core.RPSessionOpenRequest{PrincipalID: M2RPPlayerPrincipal, InstanceID: session.InstanceID, BranchID: session.BranchID, EntityID: session.ControlledEntityID, POV: "second_person", IdempotencyKey: "wire-v3-second-client"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := store.ObserveRPSession(ctx, core.RPSessionReadRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: second.SessionID})
+	if err != nil || len(shared.RecentTurns) != 1 || shared.RecentTurns[0].CanRegenerate {
+		t.Fatalf("same observer's second session duplicated the gesture or gained regeneration authority: %+v %v", shared.RecentTurns, err)
 	}
 	replay, err := service.PlayRPTurn(ctx, request)
 	if err != nil || !replay.Replayed || calls.Load() != 1 {
 		t.Fatalf("committed effects re-called model: %+v %v calls=%d", replay, err, calls.Load())
 	}
-	differences, err := store.CompareProjections(ctx, M2DemoInstanceID, M2DemoBranchID)
+	differences, err := store.CompareProjections(ctx, session.InstanceID, session.BranchID)
 	if err != nil || len(differences) != 0 {
 		t.Fatalf("replay mismatch %v %v", differences, err)
+	}
+	if err := store.RebuildProjections(ctx, session.InstanceID, session.BranchID); err != nil {
+		t.Fatal(err)
+	}
+	rebuilt, err := service.ObserveRPSession(ctx, read)
+	if err != nil || len(rebuilt.RecentTurns) != 1 {
+		t.Fatalf("history grouping changed after projection rebuild: %+v %v", rebuilt.RecentTurns, err)
 	}
 }
 
@@ -97,7 +170,7 @@ func TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer store.Close()
-			session, _, initial := newRPWaitTestSession(t, ctx, store)
+			session, _, initial := newRPAuthoredModelTestSession(t, ctx, store)
 			release := make(chan struct{})
 			model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch mode {
@@ -118,7 +191,7 @@ func TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence(t *testing.T) {
 				}
 			}))
 			defer func() { close(release); model.Close() }()
-			provider, err := decision.NewChatProvider(decision.Config{Endpoint: model.URL, Model: "test", Timeout: 100 * time.Millisecond, Attempts: 1})
+			provider, err := decision.NewChatProvider(decision.Config{Endpoint: model.URL + "/v1/chat/completions", Model: "test", Timeout: 100 * time.Millisecond, Attempts: 1, EndpointPolicy: endpointpolicy.TestLocalhostPolicy()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -128,11 +201,22 @@ func TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence(t *testing.T) {
 			if err != nil || result.Status != "settled" || !strings.Contains(result.NarrativeLines[1], "保持沉默") {
 				t.Fatalf("failure left partial turn %+v %v", result, err)
 			}
+			if len(result.ProviderCalls) != 2 || !result.ProviderCalls[0].Attempted || result.ProviderCalls[0].ProviderKind != "chat_completions" || result.ProviderCalls[0].Result == "success" || result.ProviderCalls[0].AttemptCount != 1 || result.ProviderCalls[0].FallbackKind != "silence" || result.ProviderCalls[1].RenderSource != "template" {
+				t.Fatalf("technical failure disguised as ordinary silence: %+v", result.ProviderCalls)
+			}
+			expected := "failed"
+			if mode == "timeout" {
+				expected = "timeout"
+			}
+			if result.ProviderCalls[0].Result != expected {
+				t.Fatalf("provider failure category not distinguished: %+v", result.ProviderCalls)
+			}
+			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM rp_provider_calls WHERE model_id LIKE '%secret-upstream-details%' OR fallback_kind LIKE '%secret-upstream-details%'`, nil, 0)
 			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM rp_utterances`, nil, 1)
 			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM rp_npc_decisions WHERE action='silence'`, nil, 1)
 			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM audit_records WHERE json_extract(payload,'$.status')='provider_fallback'`, nil, 1)
 			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM audit_records WHERE payload LIKE '%secret-upstream-details%'`, nil, 0)
-			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM events WHERE event_sequence>? AND event_type NOT IN ('RPSpeechAccepted','RPNPCDecisionRecorded')`, []any{initial.ObservationCursor}, 0)
+			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_sequence>? AND event_type NOT IN ('RPSpeechAccepted','RPNPCDecisionRecorded')`, []any{session.InstanceID, session.BranchID, initial.ObservationCursor}, 0)
 		})
 	}
 }

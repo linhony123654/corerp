@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"corerp.local/backend/internal/core"
+	"corerp.local/backend/internal/endpointpolicy"
 	"corerp.local/backend/internal/storage"
 )
 
@@ -39,8 +40,10 @@ type Service interface {
 	ReadRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
 	ResumeRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
 	CloseRPSession(context.Context, core.RPSessionReadRequest) (storage.RPSession, error)
+	StartRPChapter(context.Context, storage.RPChapterStartRequest) (storage.RPChapterStartResult, error)
 	ObserveRPSession(context.Context, core.RPSessionReadRequest) (storage.RPObservation, error)
 	MoveRP(context.Context, core.RPMoveRequest) (storage.RPMoveResult, error)
+	InteractRPSceneObject(context.Context, core.RPSceneObjectActionRequest) (storage.RPSceneObjectActionResult, error)
 	StartRPJourney(context.Context, core.RPMoveRequest) (storage.RPJourneyResult, error)
 	CancelRPJourney(context.Context, core.RPJourneyCancelRequest) (storage.RPJourneyCancelRecord, error)
 	SurveyRPMap(context.Context, storage.RPMapSurveyRequest) (storage.RPMapSurveyRecord, error)
@@ -51,6 +54,11 @@ type Service interface {
 	DefineRPPerceptionLink(context.Context, storage.RPPerceptionLinkRequest) (storage.RPPerceptionLinkRecord, error)
 	PlaceRPActorInZone(context.Context, storage.RPActorZoneRequest) (storage.RPActorZoneRecord, error)
 	SocialRP(context.Context, core.RPSocialRequest) (storage.RPSocialResult, error)
+	NonverbalRP(context.Context, core.RPNonverbalRequest) (storage.RPNonverbalResult, error)
+	ObjectRP(context.Context, core.RPObjectRequest) (storage.RPObjectResult, error)
+	DefineRPObjectAnchor(context.Context, storage.RPObjectAnchorRequest) (storage.RPObjectAnchorRecord, error)
+	DefineRPObjectSource(context.Context, storage.RPObjectSourceRequest) (storage.RPObjectSourceRecord, error)
+	DefineRPObjectStock(context.Context, storage.RPObjectStockRequest) (storage.RPObjectStockRecord, error)
 	MaterializeRPBackground(context.Context, core.RPBackgroundRequest) (storage.RPBackgroundResult, error)
 	DefineCareerOrganization(context.Context, core.CareerOrganizationRequest) (storage.CareerRecord, error)
 	DefineCareerGradeScale(context.Context, core.CareerGradeScaleRequest) (storage.CareerRecord, error)
@@ -137,9 +145,13 @@ type Service interface {
 	RecordRPInformationStance(context.Context, storage.RPInformationStanceRequest) (storage.RPInformationStanceRecord, error)
 	ReadRPMessages(context.Context, storage.RPMessagesReadRequest) (storage.RPMessages, error)
 	ReadRPWork(context.Context, core.RPSessionReadRequest) (storage.RPWork, error)
+	ReadRPObservatory(context.Context, storage.RPObservatoryRequest) (storage.RPObservatoryView, error)
 	ReadRPNarrative(context.Context, storage.RPNarrativeReadRequest) (storage.RPNarrativeReadResult, error)
 	StreamRPNarrative(context.Context, storage.RPNarrativeReadRequest, func(core.RPNarrativeChunk) error) (storage.RPNarrativeReadResult, error)
+	StreamRPNarrativeWith(context.Context, storage.RPNarrativeReadRequest, func(core.RPNarrativeChunk) error, core.RPStreamingNarrativeProvider) (storage.RPNarrativeReadResult, error)
+	SelectRPNarrative(context.Context, storage.RPNarrativeSelectRequest) (storage.RPNarrativeSelectResult, error)
 	WaitRP(context.Context, core.RPWaitRequest) (storage.RPWaitResult, error)
+	WaitRPWith(context.Context, core.RPWaitRequest, core.RPDecisionProvider) (storage.RPWaitResult, error)
 	OpenRPSharedRoundLocal(context.Context, storage.RPSharedRoundOpenRequest) (storage.RPSharedRound, error)
 	ReadRPSharedRound(context.Context, storage.RPSharedRoundReadRequest) (storage.RPSharedRound, error)
 	SubmitRPSharedWait(context.Context, storage.RPSharedWaitRequest) (storage.RPSharedRound, error)
@@ -155,9 +167,13 @@ type Service interface {
 	AdvanceRPSharedRound(context.Context, storage.RPSharedRoundAdvanceRequest) (storage.RPSharedRound, error)
 	SpeakRP(context.Context, core.RPSpeechRequest) (storage.RPSpeechResult, error)
 	PlayRPTurn(context.Context, core.RPSpeechRequest) (storage.RPTurnResult, error)
+	PlayRPTurnWith(context.Context, core.RPSpeechRequest, core.RPDecisionProvider) (storage.RPTurnResult, error)
 	PlayResumeRPTurn(context.Context, storage.RPTurnResumeRequest) (storage.RPTurnResult, error)
+	PlayResumeRPTurnWith(context.Context, storage.RPTurnResumeRequest, core.RPDecisionProvider) (storage.RPTurnResult, error)
 	RunRPInteraction(context.Context, core.RPInteractionRequest) (storage.RPInteractionResult, error)
+	RunRPInteractionWith(context.Context, core.RPInteractionRequest, core.RPDecisionProvider) (storage.RPInteractionResult, error)
 	ResumeRPInteraction(context.Context, storage.RPInteractionResumeRequest) (storage.RPInteractionResult, error)
+	ResumeRPInteractionWith(context.Context, storage.RPInteractionResumeRequest, core.RPDecisionProvider) (storage.RPInteractionResult, error)
 	StopRPInteraction(context.Context, storage.RPInteractionResumeRequest) (storage.RPInteractionResult, error)
 	ReadRPInteractionMode(context.Context, core.RPSessionReadRequest) (storage.RPInteractionModeView, error)
 	SetRPInteractionMode(context.Context, storage.RPInteractionModeSetRequest) (storage.RPInteractionModeView, error)
@@ -169,6 +185,7 @@ type Server struct {
 	service           Service
 	authenticator     Authenticator
 	cursors           *CursorCodec
+	endpointPolicy    endpointpolicy.Policy
 	maxBodyBytes      int64
 	eventPollInterval time.Duration
 	heartbeatInterval time.Duration
@@ -176,6 +193,10 @@ type Server struct {
 }
 
 func New(service Service, authenticator Authenticator, cursors *CursorCodec) (*Server, error) {
+	return NewWithEndpointPolicy(service, authenticator, cursors, endpointpolicy.Policy{})
+}
+
+func NewWithEndpointPolicy(service Service, authenticator Authenticator, cursors *CursorCodec, policy endpointpolicy.Policy) (*Server, error) {
 	if service == nil {
 		return nil, core.NewError(core.CodeInvalidArgument, "HTTP API service is required")
 	}
@@ -186,7 +207,7 @@ func New(service Service, authenticator Authenticator, cursors *CursorCodec) (*S
 		return nil, core.NewError(core.CodeInvalidArgument, "HTTP API cursor codec is required")
 	}
 	return &Server{
-		service: service, authenticator: authenticator, cursors: cursors,
+		service: service, authenticator: authenticator, cursors: cursors, endpointPolicy: policy,
 		maxBodyBytes: defaultMaxBodyBytes, eventPollInterval: 250 * time.Millisecond,
 		heartbeatInterval: 15 * time.Second,
 	}, nil
@@ -230,6 +251,10 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	switch request.URL.Path {
+	case "/api/v1/proxy/test":
+		s.handleProxyTest(response, request, requestID)
+	case "/api/v1/proxy/models":
+		s.handleProxyModels(response, request, requestID)
 	case "/api/v1/commands/purchase":
 		s.handlePurchase(response, request, requestID, principalID)
 	case "/api/v1/studio/events/read":
@@ -270,6 +295,8 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPSessionResume(response, request, requestID, principalID)
 	case "/api/v1/rp/sessions/close":
 		s.handleRPSessionClose(response, request, requestID, principalID)
+	case "/api/v1/rp/sessions/chapter/start":
+		s.handleRPChapterStart(response, request, requestID, principalID)
 	case "/api/v1/rp/observe":
 		s.handleRPObserve(response, request, requestID, principalID)
 	case "/api/v1/rp/context/read":
@@ -302,6 +329,18 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPEvents(response, request, requestID, principalID, true)
 	case "/api/v1/rp/actions/move":
 		s.handleRPMove(response, request, requestID, principalID)
+	case "/api/v1/rp/actions/nonverbal":
+		s.handleRPNonverbal(response, request, requestID, principalID)
+	case "/api/v1/rp/actions/object":
+		s.handleRPObjectAction(response, request, requestID, principalID)
+	case "/api/v1/rp/observatory/read":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPObservatoryRequest) *string { return &r.PrincipalID }, s.service.ReadRPObservatory)
+	case "/api/v1/rp/objects/anchors/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPObjectAnchorRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPObjectAnchor)
+	case "/api/v1/rp/objects/sources/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPObjectSourceRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPObjectSource)
+	case "/api/v1/rp/objects/stock/define":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPObjectStockRequest) *string { return &r.Binding.PrincipalID }, s.service.DefineRPObjectStock)
 	case "/api/v1/rp/journeys/start":
 		handleBoundCommand(s, response, request, requestID, principalID, func(r *core.RPMoveRequest) *string { return &r.PrincipalID }, s.service.StartRPJourney)
 	case "/api/v1/rp/journeys/cancel":
@@ -479,6 +518,8 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.handleRPNarrativeRead(response, request, requestID, principalID)
 	case "/api/v1/rp/narrative/stream":
 		s.handleRPNarrativeStream(response, request, requestID, principalID)
+	case "/api/v1/rp/narrative/select":
+		handleBoundCommand(s, response, request, requestID, principalID, func(r *storage.RPNarrativeSelectRequest) *string { return &r.PrincipalID }, s.service.SelectRPNarrative)
 	case "/api/v1/rp/actions/wait":
 		s.handleRPWait(response, request, requestID, principalID)
 	case "/api/v1/rp/rounds/open":
@@ -957,6 +998,27 @@ func (s *Server) handleRPSessionClose(response http.ResponseWriter, request *htt
 	writeData(response, http.StatusOK, result)
 }
 
+func (s *Server) handleRPChapterStart(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
+	if !requireMethod(response, requestID, request, http.MethodPost) {
+		return
+	}
+	var input storage.RPChapterStartRequest
+	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
+		writeDecodeError(response, requestID, err)
+		return
+	}
+	if err := bindPrincipal(&input.PrincipalID, principalID); err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.StartRPChapter(request.Context(), input)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	writeData(response, http.StatusOK, result)
+}
+
 func (s *Server) handleRPObserve(response http.ResponseWriter, request *http.Request, requestID, principalID string) {
 	input, ok := s.decodeRPSessionRead(response, request, requestID, principalID)
 	if !ok {
@@ -1037,7 +1099,10 @@ func (s *Server) handleRPWait(response http.ResponseWriter, request *http.Reques
 	if !requireMethod(response, requestID, request, http.MethodPost) {
 		return
 	}
-	var input core.RPWaitRequest
+	var input struct {
+		core.RPWaitRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(response, requestID, err)
 		return
@@ -1046,7 +1111,12 @@ func (s *Server) handleRPWait(response http.ResponseWriter, request *http.Reques
 		writeError(response, requestID, err)
 		return
 	}
-	result, err := s.service.WaitRP(request.Context(), input)
+	provider, err := resolveRPDecisionOverride(input.Model, s.endpointPolicy)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.WaitRPWith(request.Context(), input.RPWaitRequest, provider)
 	if err != nil {
 		writeError(response, requestID, err)
 		return
@@ -1079,7 +1149,10 @@ func (s *Server) handleRPTurnRun(response http.ResponseWriter, request *http.Req
 	if !requireMethod(response, requestID, request, http.MethodPost) {
 		return
 	}
-	var input core.RPSpeechRequest
+	var input struct {
+		core.RPSpeechRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(response, requestID, err)
 		return
@@ -1088,7 +1161,12 @@ func (s *Server) handleRPTurnRun(response http.ResponseWriter, request *http.Req
 		writeError(response, requestID, err)
 		return
 	}
-	result, err := s.service.PlayRPTurn(request.Context(), input)
+	provider, err := resolveRPDecisionOverride(input.Model, s.endpointPolicy)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.PlayRPTurnWith(request.Context(), input.RPSpeechRequest, provider)
 	if err != nil {
 		writeError(response, requestID, err)
 		return
@@ -1100,7 +1178,10 @@ func (s *Server) handleRPTurnResume(response http.ResponseWriter, request *http.
 	if !requireMethod(response, requestID, request, http.MethodPost) {
 		return
 	}
-	var input storage.RPTurnResumeRequest
+	var input struct {
+		storage.RPTurnResumeRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(response, requestID, err)
 		return
@@ -1109,7 +1190,12 @@ func (s *Server) handleRPTurnResume(response http.ResponseWriter, request *http.
 		writeError(response, requestID, err)
 		return
 	}
-	result, err := s.service.PlayResumeRPTurn(request.Context(), input)
+	provider, err := resolveRPDecisionOverride(input.Model, s.endpointPolicy)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.PlayResumeRPTurnWith(request.Context(), input.RPTurnResumeRequest, provider)
 	if err != nil {
 		writeError(response, requestID, err)
 		return

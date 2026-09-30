@@ -70,6 +70,9 @@ func TestStudioCreateHTTPIdentityPackagesPlayAndRestart(t *testing.T) {
 	if created.Status != "ready" || created.Replayed || created.InstanceID != r.InstanceID || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("invalid creation receipt", created)
 	}
+	if created.RPReadiness.Status != "INCOMPLETE" || len(created.RPReadiness.Characters) != 1 || created.RPReadiness.Characters[0].Readiness.Persona != "MISSING" || created.RPReadiness.Characters[0].Readiness.RelationshipToInterlocutor != "UNKNOWN" {
+		t.Fatal("world readiness concealed missing RP data", created.RPReadiness)
+	}
 	assertStatus(t, performJSON(t, h, route, creatorToken, r), http.StatusOK)
 	changed := r
 	changed.Spec.Name = "different"
@@ -106,6 +109,9 @@ func TestStudioCreateHTTPIdentityPackagesPlayAndRestart(t *testing.T) {
 	retry := decodeData[storage.StudioCreateResult](t, response)
 	if !retry.Replayed || retry.ReadyEventID != created.ReadyEventID {
 		t.Fatal("restart created another world", retry)
+	}
+	if retry.RPReadiness.Status != created.RPReadiness.Status || len(retry.RPReadiness.Characters) != 1 || retry.RPReadiness.Characters[0] != created.RPReadiness.Characters[0] {
+		t.Fatal("restart changed pinned setup readiness", retry.RPReadiness, created.RPReadiness)
 	}
 	response = performJSON(t, h, "/api/v1/rp/observe", rpPlayerToken, read)
 	assertStatus(t, response, http.StatusOK)

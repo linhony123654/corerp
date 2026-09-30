@@ -1,0 +1,57 @@
+{
+  "kind": "original32_native_tool_terminal_failure",
+  "runtime_sha256": "9c7d372db2a17df19abecba77719cb53aac5b652f021e719096fdfd5fc4b8d4b",
+  "exit_code": 1,
+  "session": 32110,
+  "browser_turns_passed": 7,
+  "settled_turns": 8,
+  "failure_turn": 8,
+  "failure_kind": "proposal_invalid_private_decision",
+  "calls": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "failed",
+      "count": 1,
+      "max_attempts": 2
+    },
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "count": 23,
+      "max_attempts": 3
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "count": 8,
+      "max_attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "count": 8,
+      "max_attempts": 2
+    }
+  ],
+  "failure_receipt": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "model_id": "step-5-preview",
+      "result": "failed",
+      "attempt_count": 2,
+      "fallback_kind": "silence",
+      "started_at_utc": "2026-09-30T12:29:50.316650323Z",
+      "finished_at_utc": "2026-09-30T12:30:07.288614519Z"
+    }
+  ],
+  "log": "/tmp/corerp-r1-native-tool-original32-20260930.log",
+  "artifacts": "/dev/shm/corerp-rp3-npc-8EDkXc",
+  "post_checks": "NOT REACHED: regeneration/mixed interaction/fault/restart complete suite",
+  "limits": "Transport improves short samples but original32 remains FAILED. Rejected private content was not persisted; its exact offending field/control character cannot be inferred from current sanitized log. Independent Golden launched only after the failing NPC request finished; concurrency did not cause this receipt.",
+  "R1": "NOT DONE"
+}

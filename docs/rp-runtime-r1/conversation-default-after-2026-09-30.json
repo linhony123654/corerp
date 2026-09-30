@@ -1,0 +1,1573 @@
+{
+  "kind": "generated_product_conversation_policy_eight_real_turns",
+  "runtime_sha256": "0f2664e83218e22d9e11588ca5f90bf093cbc3f0bd7dc22d9179f1a2d702cf6e",
+  "source_files": {
+    "src/lib/studioCreate.ts": "32000a549fe4a1a5718bedbd05b6b57ab4508af6a072c5f701983cb54643ef43",
+    "src/components/StudioCreate.vue": "2c8ab425d56bb9b2b30ed0401a6742bf5aba7a3d34a4245590a4de4e903576fc",
+    "scripts/rp-runtime-role-create-checks.mjs": "3713f356389d2f5a7431137bf1c8fcf46bd194cc90aa6c03f02afd16933a8682",
+    "backend/internal/storage/rp_conversation_focus.go": "549cda70f76191a6013b202bcc0987d18a148c2272050610e474005f9ea43322",
+    "backend/internal/storage/rp_conversation_focus_test.go": "c3b363d3cb331cb8b6ad48902287fc447e4d071ca9cb6e429d264633fb6e6416"
+  },
+  "captured_at_utc": "2026-09-30T16:06:27.128959+00:00",
+  "inputs": [
+    "Nora，今天有点想你。",
+    "我今天总有些失落，又说不清为什么。",
+    "我们先不找原因，能陪我说一会儿话吗？",
+    "你刚才答应我的是什么？",
+    "那咱们换个话题。我记得一本诗集，却想不起书名。先别替我编标题，你会怎样陪我找？",
+    "Iris，你刚才听见我们在聊什么了吗？",
+    "对，只记得读的时候很安静，标题真想不起来。",
+    "Nora，我们刚才的约定还算数吗？"
+  ],
+  "world_spec": {
+    "version": "corerp.studio-world.v1",
+    "name": "主要交流对象诊断·明确测试作者世界",
+    "start_world_time": "2026-09-22T00:00:00Z",
+    "population": 3,
+    "opening_money_minor": 30,
+    "opening_stock_minor": 2,
+    "places": [
+      {
+        "key": "hall",
+        "name": "会客室",
+        "kind": "public"
+      },
+      {
+        "key": "lane",
+        "name": "走廊",
+        "kind": "public"
+      }
+    ],
+    "links": [
+      {
+        "from": "hall",
+        "to": "lane",
+        "minutes": 5
+      }
+    ],
+    "people": [
+      {
+        "key": "lin",
+        "name": "Lin",
+        "place": "hall",
+        "player": true,
+        "persona": "Lin是Nora认识多年的朋友。来到会客室聊天，不曾承诺替她做事。"
+      },
+      {
+        "key": "nora",
+        "name": "Nora",
+        "place": "hall",
+        "player": false,
+        "persona": "Nora与Lin是认识多年的朋友，性格温和，偶有轻巧的玩笑。说中文，通常两三句，不讲大道理，不把关心变成盘问。她愿意陪朋友聊天，但不会代替朋友认定心事的原因。眼下没有要立刻离开的事务。她只知道自己实际听见和看见的内容。",
+        "public_presentation": "言辞温和、亲切，偶有轻巧的玩笑。"
+      },
+      {
+        "key": "iris",
+        "name": "Iris",
+        "place": "hall",
+        "player": false,
+        "persona": "Iris与Lin是相识的朋友，语气简洁清楚，喜欢一起琢磨书里的词句，但不会装作知道朋友没说出的书名或往事。眼下在同一间会客室，知道自己实际听见的交流。",
+        "public_presentation": "言辞简洁清楚，偶尔提出具体的小问题。"
+      }
+    ],
+    "acquaintances": [
+      [
+        "lin",
+        "nora"
+      ],
+      [
+        "lin",
+        "iris"
+      ]
+    ],
+    "relationships": [
+      {
+        "from": "nora",
+        "to": "lin",
+        "role": "多年的朋友",
+        "address_to": [
+          "Lin"
+        ],
+        "self_reference": "我"
+      },
+      {
+        "from": "lin",
+        "to": "nora",
+        "role": "多年的朋友",
+        "address_to": [
+          "Nora"
+        ],
+        "self_reference": "我"
+      },
+      {
+        "from": "iris",
+        "to": "lin",
+        "role": "相识的朋友",
+        "address_to": [
+          "Lin"
+        ],
+        "self_reference": "我"
+      },
+      {
+        "from": "lin",
+        "to": "iris",
+        "role": "相识的朋友",
+        "address_to": [
+          "Iris"
+        ],
+        "self_reference": "我"
+      }
+    ]
+  },
+  "world_spec_sha256": "3c1887e240a43ab0ef27f897a1fc70b7f4bdf1c88b3c5fd5ae9937a2286370a3",
+  "generated_packages": {
+    "system": {
+      "manifest": {
+        "schema_version": "m0-draft-2026-09-22",
+        "id": "studio.system",
+        "kind": "system",
+        "version": "1.1.0",
+        "engine_api": "m0-draft-2026-09-22",
+        "requires": [],
+        "optional": [],
+        "capabilities": [
+          "rules.npc.daily_budget"
+        ],
+        "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+        "content_hash": "sha256:3a8e95ab74d6d9928c96a924c52d9ea563acc3375eaa3fae555ade394943474c",
+        "content_files": [
+          "system.json"
+        ]
+      },
+      "content": {
+        "version": "corerp.studio-package.v1",
+        "system_rules": {
+          "npc_daily_action_budget": 2,
+          "rp_execution_mode": "orchestrated",
+          "max_active_responders": 1
+        }
+      }
+    },
+    "narrative": {
+      "manifest": {
+        "schema_version": "m0-draft-2026-09-22",
+        "id": "studio.narrative",
+        "kind": "narrative",
+        "version": "1.0.0",
+        "engine_api": "m0-draft-2026-09-22",
+        "requires": [],
+        "optional": [],
+        "capabilities": [
+          "narrative.style"
+        ],
+        "schema_hash": "sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0",
+        "content_hash": "sha256:459a40e4b126740d391df32af7b8946027187fc6be3d15b1b9416dc673c81201",
+        "content_files": [
+          "narrative.json"
+        ]
+      },
+      "content": {
+        "version": "corerp.studio-package.v1",
+        "narrative_style": {
+          "version": "corerp.style.v1",
+          "pov": "second_person",
+          "tense": "present",
+          "verbosity": "normal",
+          "dialogue_ratio": 100,
+          "description_density": 0,
+          "inner_monologue_policy": "none",
+          "prose_instructions": "",
+          "forbidden_patterns": [],
+          "narrative_pack_ref": "builtin/plain@1"
+        }
+      }
+    }
+  },
+  "model_tuning": {
+    "model": "step-5-preview",
+    "timeout_seconds": 120,
+    "decision_max_tokens": 4096,
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "decision_format": "tool_call",
+    "narrative": "deterministic"
+  },
+  "limits": "Explicit test-author three-person world and eight real NPC turns, using the actual Studio-generated default packages. Not Rongqing canon, full32, expressive narration, long-term goal lifecycle or human RP acceptance.",
+  "run": {
+    "label": "product_default_main_interlocutor",
+    "runtime_sha256": "0f2664e83218e22d9e11588ca5f90bf093cbc3f0bd7dc22d9179f1a2d702cf6e",
+    "temp_dir": "/dev/shm/corerp-r1-selection-product_default_main_interlocutor-5ei62dq0",
+    "samples": [
+      {
+        "index": 1,
+        "input": "Nora，今天有点想你。",
+        "status": "settled",
+        "duration_seconds": 5.448,
+        "public_narrative_lines": [
+          "你说：「Nora，今天有点想你。」",
+          "Nora 回应：「Lin，我在这儿呢。哪天顺路过来坐坐？给你泡杯热的。」",
+          "Nora 笑了笑。"
+        ],
+        "activations": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "rank": 0,
+            "reason": "direct_address",
+            "source_event_id": null
+          }
+        ],
+        "replies": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "action": "respond",
+            "text": "Lin，我在这儿呢。哪天顺路过来坐坐？给你泡杯热的。",
+            "event_id": "event_rp_npc_f2ab5e7798380e36c6ff7cdd37ca22d323131e9079b4b68b2147c62dda22bef2"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "input": "我今天总有些失落，又说不清为什么。",
+        "status": "settled",
+        "duration_seconds": 26.262,
+        "public_narrative_lines": [
+          "你说：「我今天总有些失落，又说不清为什么。」",
+          "Nora 回应：「Lin，说不清就先别逼自己想。我就在这儿陪着你，你想说我就听，不想说我们安静待会儿也挺好。」",
+          "Nora 点了点头。"
+        ],
+        "activations": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "rank": 0,
+            "reason": "conversation_continuation",
+            "source_event_id": "event_rp_npc_f2ab5e7798380e36c6ff7cdd37ca22d323131e9079b4b68b2147c62dda22bef2"
+          }
+        ],
+        "replies": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "action": "respond",
+            "text": "Lin，说不清就先别逼自己想。我就在这儿陪着你，你想说我就听，不想说我们安静待会儿也挺好。",
+            "event_id": "event_rp_npc_2dbd93821f02b7bc56087998369648d354e81b2fd221c590eb711bbcd016afc8"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "input": "我们先不找原因，能陪我说一会儿话吗？",
+        "status": "settled",
+        "duration_seconds": 7.125,
+        "public_narrative_lines": [
+          "你说：「我们先不找原因，能陪我说一会儿话吗？」",
+          "Nora 回应：「能啊，我今天没别的事。先不找原因，你想说什么就说什么，不想说我就安静陪你坐着。」",
+          "Nora 笑了笑。"
+        ],
+        "activations": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "rank": 0,
+            "reason": "conversation_continuation",
+            "source_event_id": "event_rp_npc_2dbd93821f02b7bc56087998369648d354e81b2fd221c590eb711bbcd016afc8"
+          }
+        ],
+        "replies": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "action": "respond",
+            "text": "能啊，我今天没别的事。先不找原因，你想说什么就说什么，不想说我就安静陪你坐着。",
+            "event_id": "event_rp_npc_3e5f107fcbe0fb7e0efdb51a14f2d2dc6cc6f4cf017d95adb4014115a9e441f6"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "input": "你刚才答应我的是什么？",
+        "status": "settled",
+        "duration_seconds": 18.629,
+        "public_narrative_lines": [
+          "你说：「你刚才答应我的是什么？」",
+          "Nora 回应：「我答应陪你聊啊。你想说什么我就听，不想说我们就安安静静坐着，我哪儿也不去。」",
+          "Nora 笑了笑。"
+        ],
+        "activations": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "rank": 0,
+            "reason": "conversation_continuation",
+            "source_event_id": "event_rp_npc_3e5f107fcbe0fb7e0efdb51a14f2d2dc6cc6f4cf017d95adb4014115a9e441f6"
+          }
+        ],
+        "replies": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "action": "respond",
+            "text": "我答应陪你聊啊。你想说什么我就听，不想说我们就安安静静坐着，我哪儿也不去。",
+            "event_id": "event_rp_npc_7236f84c1d4127a66ed767b4812f02a18fb92493da3825e160348f04469f24b3"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "input": "那咱们换个话题。我记得一本诗集，却想不起书名。先别替我编标题，你会怎样陪我找？",
+        "status": "settled",
+        "duration_seconds": 14.227,
+        "public_narrative_lines": [
+          "你说：「那咱们换个话题。我记得一本诗集，却想不起书名。先别替我编标题，你会怎样陪我找？」",
+          "Nora 回应：「Lin，我不替你编标题。你只要想起一点线索，比如里面的句子、封面样子，或者你在哪儿读过，慢慢说给我听，我就坐这儿陪你一起找。」",
+          "Nora 笑了笑。"
+        ],
+        "activations": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "rank": 0,
+            "reason": "conversation_continuation",
+            "source_event_id": "event_rp_npc_7236f84c1d4127a66ed767b4812f02a18fb92493da3825e160348f04469f24b3"
+          }
+        ],
+        "replies": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "action": "respond",
+            "text": "Lin，我不替你编标题。你只要想起一点线索，比如里面的句子、封面样子，或者你在哪儿读过，慢慢说给我听，我就坐这儿陪你一起找。",
+            "event_id": "event_rp_npc_e8c9f2728809a5421bad60fc1d5ac31e03f6f167c0bb325877de102eb51b0358"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "input": "Iris，你刚才听见我们在聊什么了吗？",
+        "status": "settled",
+        "duration_seconds": 19.427,
+        "public_narrative_lines": [
+          "你说：「Iris，你刚才听见我们在聊什么了吗？」",
+          "Iris 回应：「听见了一些。Lin，你说今天有点失落，又说不清为什么；接着你提起一本记得却想不起书名的诗集，还请对方别替你编标题。要是想起里面的句子或封面样子，我可以陪你想。」",
+          "Iris 点了点头。"
+        ],
+        "activations": [
+          {
+            "name": "Iris",
+            "actor_id": "studio_entity_8274cc8d9cec0ca1509d58446f0f818c447fa755205acac9f52fb6a07b8d18ef",
+            "rank": 0,
+            "reason": "direct_address",
+            "source_event_id": null
+          }
+        ],
+        "replies": [
+          {
+            "name": "Iris",
+            "actor_id": "studio_entity_8274cc8d9cec0ca1509d58446f0f818c447fa755205acac9f52fb6a07b8d18ef",
+            "action": "respond",
+            "text": "听见了一些。Lin，你说今天有点失落，又说不清为什么；接着你提起一本记得却想不起书名的诗集，还请对方别替你编标题。要是想起里面的句子或封面样子，我可以陪你想。",
+            "event_id": "event_rp_npc_cb3ffe7d341e65642678c99c5db0bc36779f785202b96efc6415aea77b656db3"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "input": "对，只记得读的时候很安静，标题真想不起来。",
+        "status": "settled",
+        "duration_seconds": 25.973,
+        "public_narrative_lines": [
+          "你说：「对，只记得读的时候很安静，标题真想不起来。」",
+          "Iris 回应：「Lin，标题想不起来就先别逼自己。你还记得那种安静是在哪儿读到的吗？家里、车上，还是窗边？想起一句，我陪你顺着句子往回找。」",
+          "Iris 点了点头。"
+        ],
+        "activations": [
+          {
+            "name": "Iris",
+            "actor_id": "studio_entity_8274cc8d9cec0ca1509d58446f0f818c447fa755205acac9f52fb6a07b8d18ef",
+            "rank": 0,
+            "reason": "conversation_continuation",
+            "source_event_id": "event_rp_npc_cb3ffe7d341e65642678c99c5db0bc36779f785202b96efc6415aea77b656db3"
+          }
+        ],
+        "replies": [
+          {
+            "name": "Iris",
+            "actor_id": "studio_entity_8274cc8d9cec0ca1509d58446f0f818c447fa755205acac9f52fb6a07b8d18ef",
+            "action": "respond",
+            "text": "Lin，标题想不起来就先别逼自己。你还记得那种安静是在哪儿读到的吗？家里、车上，还是窗边？想起一句，我陪你顺着句子往回找。",
+            "event_id": "event_rp_npc_ae49e695bb96b29c13b6d9039444fd25507a739a4c2363b135f147e82fa10b7a"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      },
+      {
+        "index": 8,
+        "input": "Nora，我们刚才的约定还算数吗？",
+        "status": "settled",
+        "duration_seconds": 4.61,
+        "public_narrative_lines": [
+          "你说：「Nora，我们刚才的约定还算数吗？」",
+          "Nora 回应：「算数啊。我说了今天没别的事，就在这儿陪着你。你想说诗的事，我就听；想静静待着，我也哪儿不去。」",
+          "Nora 笑了笑。"
+        ],
+        "activations": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "rank": 0,
+            "reason": "direct_address",
+            "source_event_id": null
+          }
+        ],
+        "replies": [
+          {
+            "name": "Nora",
+            "actor_id": "studio_entity_7fcf7354e878a5235089e8adb46bca21828ed648651f668496e063dd238ca2c1",
+            "action": "respond",
+            "text": "算数啊。我说了今天没别的事，就在这儿陪着你。你想说诗的事，我就听；想静静待着，我也哪儿不去。",
+            "event_id": "event_rp_npc_f88018af79cc122e3c5c9d0f9225e63edb77d7b392757231f9977174271328b1"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "attempted": true,
+            "attempt_count": 1,
+            "result": "success",
+            "fallback_kind": null
+          }
+        ]
+      }
+    ],
+    "status": "PASS: four real-model turns settled; role quality requires text review",
+    "setup_readiness": {
+      "status": "READY",
+      "characters": [
+        {
+          "key": "nora",
+          "name": "Nora",
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "public_presentation": "READY"
+        },
+        {
+          "key": "iris",
+          "name": "Iris",
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "public_presentation": "READY"
+        }
+      ],
+      "incomplete_relationships": []
+    },
+    "live_request_shapes": [
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 15170,
+        "context_bytes": 7933,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 1,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "tool_calls",
+        "usage": {
+          "prompt_tokens": 4496,
+          "completion_tokens": 173,
+          "total_tokens": 4669
+        },
+        "tool_call_count": 1,
+        "declared_proposal_function_only": true,
+        "ordinary_content_bytes": 0,
+        "content_bytes": 375,
+        "grounding_shape": {
+          "declared_refs": 4,
+          "proposal_schema_present": true,
+          "basis_count": 2,
+          "short_refs": 2,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 155,
+          "reasoning_content": 155
+        },
+        "http_status": 200,
+        "seconds": 5.396
+      },
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 18513,
+        "context_bytes": 11056,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 3,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "tool_calls",
+        "usage": {
+          "prompt_tokens": 5891,
+          "completion_tokens": 1323,
+          "total_tokens": 7214
+        },
+        "tool_call_count": 1,
+        "declared_proposal_function_only": true,
+        "ordinary_content_bytes": 0,
+        "content_bytes": 418,
+        "grounding_shape": {
+          "declared_refs": 7,
+          "proposal_schema_present": true,
+          "basis_count": 3,
+          "short_refs": 3,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 5039,
+          "reasoning_content": 5039
+        },
+        "http_status": 200,
+        "seconds": 26.208
+      },
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 21822,
+        "context_bytes": 14150,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 5,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "tool_calls",
+        "usage": {
+          "prompt_tokens": 7225,
+          "completion_tokens": 330,
+          "total_tokens": 7555
+        },
+        "tool_call_count": 1,
+        "declared_proposal_function_only": true,
+        "ordinary_content_bytes": 0,
+        "content_bytes": 420,
+        "grounding_shape": {
+          "declared_refs": 10,
+          "proposal_schema_present": true,
+          "basis_count": 4,
+          "short_refs": 4,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 729,
+          "reasoning_content": 729
+        },
+        "http_status": 200,
+        "seconds": 7.067
+      },
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 25192,
+        "context_bytes": 17301,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 7,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "tool_calls",
+        "usage": {
+          "prompt_tokens": 8645,
+          "completion_tokens": 1008,
+          "total_tokens": 9653
+        },
+        "tool_call_count": 1,
+        "declared_proposal_function_only": true,
+        "ordinary_content_bytes": 0,
+        "content_bytes": 433,
+        "grounding_shape": {
+          "declared_refs": 13,
+          "proposal_schema_present": true,
+          "basis_count": 6,
+          "short_refs": 6,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 3561,
+          "reasoning_content": 3561
+        },
+        "http_status": 200,
+        "seconds": 18.569
+      },
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 28066,
+        "context_bytes": 19990,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 9,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "tool_calls",
+        "usage": {
+          "prompt_tokens": 9860,
+          "completion_tokens": 567,
+          "total_tokens": 10427
+        },
+        "tool_call_count": 1,
+        "declared_proposal_function_only": true,
+        "ordinary_content_bytes": 0,
+        "content_bytes": 512,
+        "grounding_shape": {
+          "declared_refs": 16,
+          "proposal_schema_present": true,
+          "basis_count": 4,
+          "short_refs": 4,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 1707,
+          "reasoning_content": 1707
+        },
+        "http_status": 200,
+        "seconds": 14.161
+      },
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 27475,
+        "context_bytes": 19354,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 11,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "stop",
+        "usage": {
+          "prompt_tokens": 9459,
+          "completion_tokens": 1016,
+          "total_tokens": 10475
+        },
+        "tool_call_count": 0,
+        "declared_proposal_function_only": false,
+        "ordinary_content_bytes": 588,
+        "content_bytes": 588,
+        "grounding_shape": {
+          "declared_refs": 19,
+          "proposal_schema_present": true,
+          "basis_count": 4,
+          "short_refs": 4,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 3497,
+          "reasoning_content": 3497
+        },
+        "http_status": 200,
+        "seconds": 19.36
+      },
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 30847,
+        "context_bytes": 22521,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 13,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "tool_calls",
+        "usage": {
+          "prompt_tokens": 10798,
+          "completion_tokens": 1176,
+          "total_tokens": 11974
+        },
+        "tool_call_count": 1,
+        "declared_proposal_function_only": true,
+        "ordinary_content_bytes": 0,
+        "content_bytes": 526,
+        "grounding_shape": {
+          "declared_refs": 22,
+          "proposal_schema_present": true,
+          "basis_count": 4,
+          "short_refs": 4,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 4427,
+          "reasoning_content": 4427
+        },
+        "http_status": 200,
+        "seconds": 25.901
+      },
+      {
+        "label": "product_default_main_interlocutor",
+        "phase": "real_role_turn",
+        "request_bytes": 35745,
+        "context_bytes": 27136,
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "has_persona": true,
+        "relationship_count": 1,
+        "recent_dialogue_count": 15,
+        "model": "step-5-preview",
+        "response_format": null,
+        "declared_proposal_tool": true,
+        "finish_reason": "stop",
+        "usage": {
+          "prompt_tokens": 12949,
+          "completion_tokens": 130,
+          "total_tokens": 13079
+        },
+        "tool_call_count": 0,
+        "declared_proposal_function_only": false,
+        "ordinary_content_bytes": 433,
+        "content_bytes": 433,
+        "grounding_shape": {
+          "declared_refs": 25,
+          "proposal_schema_present": true,
+          "basis_count": 3,
+          "short_refs": 3,
+          "approved_raw_refs": 0,
+          "unknown_refs": 0,
+          "repeated_refs": 0
+        },
+        "reply_shape": {
+          "valid_json": true,
+          "root_object": true,
+          "private_present": true,
+          "observable_present": true,
+          "recognized_root_fields": {
+            "action": false,
+            "text": false,
+            "intent": false,
+            "emotion": false,
+            "reasoning": false,
+            "decision": false,
+            "public": false,
+            "proposal": false,
+            "private_decision": false,
+            "npc": false,
+            "speech": false
+          },
+          "root_field_count": 2
+        },
+        "response_model_matches_request": true,
+        "reasoning_bytes": {
+          "reasoning": 73,
+          "reasoning_content": 73
+        },
+        "http_status": 200,
+        "seconds": 4.531
+      }
+    ],
+    "mock_request_count": 0
+  },
+  "checks": {
+    "eight_settled_turns": true,
+    "one_deciding_actor_each_turn": true,
+    "continuation_source_when_not_addressed": true,
+    "explicit_actor_switch": true,
+    "inactive_listener_accounting_and_hearing": true,
+    "generated_policy_pinned": true
+  },
+  "real_requests": 8,
+  "safe_request_shapes": [
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 15170,
+      "context_bytes": 7933,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 1,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "tool_calls",
+      "usage": {
+        "prompt_tokens": 4496,
+        "completion_tokens": 173,
+        "total_tokens": 4669
+      },
+      "tool_call_count": 1,
+      "declared_proposal_function_only": true,
+      "ordinary_content_bytes": 0,
+      "content_bytes": 375,
+      "grounding_shape": {
+        "declared_refs": 4,
+        "proposal_schema_present": true,
+        "basis_count": 2,
+        "short_refs": 2,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 155,
+        "reasoning_content": 155
+      },
+      "http_status": 200,
+      "seconds": 5.396
+    },
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 18513,
+      "context_bytes": 11056,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 3,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "tool_calls",
+      "usage": {
+        "prompt_tokens": 5891,
+        "completion_tokens": 1323,
+        "total_tokens": 7214
+      },
+      "tool_call_count": 1,
+      "declared_proposal_function_only": true,
+      "ordinary_content_bytes": 0,
+      "content_bytes": 418,
+      "grounding_shape": {
+        "declared_refs": 7,
+        "proposal_schema_present": true,
+        "basis_count": 3,
+        "short_refs": 3,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 5039,
+        "reasoning_content": 5039
+      },
+      "http_status": 200,
+      "seconds": 26.208
+    },
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 21822,
+      "context_bytes": 14150,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 5,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "tool_calls",
+      "usage": {
+        "prompt_tokens": 7225,
+        "completion_tokens": 330,
+        "total_tokens": 7555
+      },
+      "tool_call_count": 1,
+      "declared_proposal_function_only": true,
+      "ordinary_content_bytes": 0,
+      "content_bytes": 420,
+      "grounding_shape": {
+        "declared_refs": 10,
+        "proposal_schema_present": true,
+        "basis_count": 4,
+        "short_refs": 4,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 729,
+        "reasoning_content": 729
+      },
+      "http_status": 200,
+      "seconds": 7.067
+    },
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 25192,
+      "context_bytes": 17301,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 7,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "tool_calls",
+      "usage": {
+        "prompt_tokens": 8645,
+        "completion_tokens": 1008,
+        "total_tokens": 9653
+      },
+      "tool_call_count": 1,
+      "declared_proposal_function_only": true,
+      "ordinary_content_bytes": 0,
+      "content_bytes": 433,
+      "grounding_shape": {
+        "declared_refs": 13,
+        "proposal_schema_present": true,
+        "basis_count": 6,
+        "short_refs": 6,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 3561,
+        "reasoning_content": 3561
+      },
+      "http_status": 200,
+      "seconds": 18.569
+    },
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 28066,
+      "context_bytes": 19990,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 9,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "tool_calls",
+      "usage": {
+        "prompt_tokens": 9860,
+        "completion_tokens": 567,
+        "total_tokens": 10427
+      },
+      "tool_call_count": 1,
+      "declared_proposal_function_only": true,
+      "ordinary_content_bytes": 0,
+      "content_bytes": 512,
+      "grounding_shape": {
+        "declared_refs": 16,
+        "proposal_schema_present": true,
+        "basis_count": 4,
+        "short_refs": 4,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 1707,
+        "reasoning_content": 1707
+      },
+      "http_status": 200,
+      "seconds": 14.161
+    },
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 27475,
+      "context_bytes": 19354,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 11,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 9459,
+        "completion_tokens": 1016,
+        "total_tokens": 10475
+      },
+      "tool_call_count": 0,
+      "declared_proposal_function_only": false,
+      "ordinary_content_bytes": 588,
+      "content_bytes": 588,
+      "grounding_shape": {
+        "declared_refs": 19,
+        "proposal_schema_present": true,
+        "basis_count": 4,
+        "short_refs": 4,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 3497,
+        "reasoning_content": 3497
+      },
+      "http_status": 200,
+      "seconds": 19.36
+    },
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 30847,
+      "context_bytes": 22521,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 13,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "tool_calls",
+      "usage": {
+        "prompt_tokens": 10798,
+        "completion_tokens": 1176,
+        "total_tokens": 11974
+      },
+      "tool_call_count": 1,
+      "declared_proposal_function_only": true,
+      "ordinary_content_bytes": 0,
+      "content_bytes": 526,
+      "grounding_shape": {
+        "declared_refs": 22,
+        "proposal_schema_present": true,
+        "basis_count": 4,
+        "short_refs": 4,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 4427,
+        "reasoning_content": 4427
+      },
+      "http_status": 200,
+      "seconds": 25.901
+    },
+    {
+      "label": "product_default_main_interlocutor",
+      "phase": "real_role_turn",
+      "request_bytes": 35745,
+      "context_bytes": 27136,
+      "readiness": {
+        "persona": "READY",
+        "relationship_to_interlocutor": "READY",
+        "address_to_interlocutor": "READY"
+      },
+      "has_persona": true,
+      "relationship_count": 1,
+      "recent_dialogue_count": 15,
+      "model": "step-5-preview",
+      "response_format": null,
+      "declared_proposal_tool": true,
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 12949,
+        "completion_tokens": 130,
+        "total_tokens": 13079
+      },
+      "tool_call_count": 0,
+      "declared_proposal_function_only": false,
+      "ordinary_content_bytes": 433,
+      "content_bytes": 433,
+      "grounding_shape": {
+        "declared_refs": 25,
+        "proposal_schema_present": true,
+        "basis_count": 3,
+        "short_refs": 3,
+        "approved_raw_refs": 0,
+        "unknown_refs": 0,
+        "repeated_refs": 0
+      },
+      "reply_shape": {
+        "valid_json": true,
+        "root_object": true,
+        "private_present": true,
+        "observable_present": true,
+        "recognized_root_fields": {
+          "action": false,
+          "text": false,
+          "intent": false,
+          "emotion": false,
+          "reasoning": false,
+          "decision": false,
+          "public": false,
+          "proposal": false,
+          "private_decision": false,
+          "npc": false,
+          "speech": false
+        },
+        "root_field_count": 2
+      },
+      "response_model_matches_request": true,
+      "reasoning_bytes": {
+        "reasoning": 73,
+        "reasoning_content": 73
+      },
+      "http_status": 200,
+      "seconds": 4.531
+    }
+  ],
+  "status": "PASS: conversation selection and exact source accounting; human quality pending"
+}

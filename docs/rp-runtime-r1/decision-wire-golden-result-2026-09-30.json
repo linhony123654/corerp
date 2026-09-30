@@ -1,0 +1,54 @@
+{
+  "kind": "decision_wire_v3_final_source_frozen_golden_capture",
+  "runtime_sha256": "sha256:2e527072a0aafea8fd9e72c545d7f847f010d8fd5937cae407298b6f87085ff1",
+  "artifact_directory": "/tmp/corerp-rp-runtime-r1-after-HsNBon",
+  "script_exit_code": 0,
+  "model": "step-5-preview",
+  "model_config": {
+    "decision_timeout": "120s",
+    "decision_max_tokens": "4096",
+    "reasoning_effort": "low",
+    "decision_attempts": "2",
+    "narrative_timeout": "90s",
+    "narrative_attempts": "2"
+  },
+  "configuration_note": "Decision4096 initial tokens/low/120s/2 transport attempts; existing length repair can raise to8192 inside120s. disable_thinking=false. Narrator4096/90s/2 attempts, no explicit reasoning_effort. No fixed seed; comparable Step runs are sampled evidence, not causal proof. Frozen Gemini paired before/after remain immutable and are older-source evidence.",
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "count": 17,
+      "total_attempts": 17
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "count": 15,
+      "total_attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "count": 1,
+      "total_attempts": 1
+    }
+  ],
+  "nonverbal_events": 0,
+  "committed_object_interaction_events": 0,
+  "frozen_hashes": {
+    "real-rongqing-world-spec.json": "e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+    "real-rongqing-packages.json": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+    "before-samples.json": "9e4ddf8a948be6d80f7fa46365fe4320c3d7577437e6dd4f839eee06d1c52c2a",
+    "after-samples.json": "924f55ba7b77ed2358d514b6c5161a3232b280174e9d8f926685af80fd3a9709"
+  },
+  "rp_experience_exit": "NOT PASSED; no clear improvement, no creator canon or actual human approval",
+  "review": "decision-wire-golden-review-2026-09-30.md",
+  "capture": "decision-wire-golden-2026-09-30.json",
+  "log_path": "/tmp/corerp-r1-decision-wire-golden-20260930.log",
+  "log_sha256": "c51f2268f53fc08e2208f8f7e5649fa0e1a26b6e9b6ffa9057259dcf3dcd923e",
+  "capture_sha256": "9309be2b6da880f082dac53663b098dd3133f04e08118c7b552b92ad683462e4",
+  "completed_at_utc": "2026-09-30T06:41:31.842157+00:00"
+}

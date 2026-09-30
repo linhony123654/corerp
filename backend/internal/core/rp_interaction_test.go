@@ -8,8 +8,7 @@ func TestParseRPInteractionSafeModesAndOrder(t *testing.T) {
 		input, mode, kind string
 		steps             []RPInteractionStep
 	}{
-		{"你好，最近怎么样？", "AUTO", "DIALOGUE", []RPInteractionStep{{Kind: "speech", SpeechText: "你好，最近怎么样？"}}},
-		{"去年你去哪了？", "AUTO", "DIALOGUE", []RPInteractionStep{{Kind: "speech", SpeechText: "去年你去哪了？"}}},
+		{"你好，最近怎么样？", "DIALOGUE", "DIALOGUE", []RPInteractionStep{{Kind: "speech", SpeechText: "你好，最近怎么样？"}}},
 		{"去咖啡馆", "AUTO", "ACTION", []RPInteractionStep{{Kind: "move", TargetPlaceID: "cafe"}}},
 		{"去咖啡馆，随后说「你好」", "SCENE", "MIXED", []RPInteractionStep{{Kind: "move", TargetPlaceID: "cafe"}, {Kind: "speech", SpeechText: "你好"}}},
 		{"等一小时，然后说「我回来了」", "AUTO", "MIXED", []RPInteractionStep{{Kind: "wait", WaitHours: 1}, {Kind: "speech", SpeechText: "我回来了"}}},
@@ -31,7 +30,7 @@ func TestParseRPInteractionSafeModesAndOrder(t *testing.T) {
 
 func TestParseRPInteractionClarifiesInsteadOfActing(t *testing.T) {
 	places := []RPInteractionPlace{{ID: "first", Name: "店"}, {ID: "second", Name: "店"}}
-	for _, input := range []string{"继续", "去店", "去陌生地点", "去店，说「你好", "等待十小时"} {
+	for _, input := range []string{"继续", "去店", "去陌生地点", "去店，说「你好", "等待十小时", "去年你去哪了？", "我递给她杯子", "我看了她一眼，没有说话"} {
 		plan, err := ParseRPInteraction(input, "AUTO", places)
 		if err != nil || plan.Kind != "CLARIFICATION" || len(plan.Steps) != 0 || plan.Clarification == "" {
 			t.Fatalf("ambiguous %q produced action: %+v %v", input, plan, err)

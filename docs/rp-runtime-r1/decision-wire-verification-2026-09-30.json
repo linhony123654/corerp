@@ -1,0 +1,154 @@
+{
+  "kind": "decision_wire_v3_source_checkpoint",
+  "captured_at_utc": "2026-09-30T06:20:30.714756+00:00",
+  "branch": "rp-preview-integration-20260929",
+  "head": "7fc3b3ba7be229b11341130d6cdd4275e231274f",
+  "sources_sha256": {
+    "backend/internal/decision/chat.go": "e66a3840eb6115261eba433ba8fa6e74296daa2c9db709cb3cf7ec3ded8dbf61",
+    "backend/internal/decision/decision_wire.go": "97e4df31af3912b3d0a8a2bb2e5059a460eb2f54b22cd1aa210078f294d14289",
+    "backend/internal/decision/chat_test.go": "70933a653b951da5e6a1a4f041ce559f39f92e943a33251d567e5d06f1417709",
+    "backend/internal/decision/decision_wire_test.go": "2095daffb77b1925fc7acaef18ee58e9b4abf75d3f9c19101ee7bb3a6193c253",
+    "backend/internal/decision/grounding_schema_test.go": "17172a2032e18ccae39d6b2733c5caae47f7120e7edc0012c1dcf9714704d05f",
+    "backend/internal/decision/reasoning_options_test.go": "be653bca6eb8e7c5cff94fe998a7e2bb2ba378af4284fe9d9745a0083546be5a",
+    "backend/internal/storage/rp_provider_test.go": "2184845778b8a20e12c02c3a3b72145224806f0d24a3bcfbae8fd4a9224c1563",
+    "backend/internal/storage/rp_session.go": "b212c880ac1a5cde30b26bb2e867d800c23a2f8a0ad022380849bb1169a0303a"
+  },
+  "decision_tests": "PASS",
+  "storage_focused_tests": "PASS",
+  "related_vet": "PASS",
+  "diff_check": "PASS",
+  "live_protocol_probe": "PASS; two synthetic cases, one v3 HTTP response each, no world writes",
+  "probe_record": "decision-wire-probe-2026-09-30.json",
+  "logs": {
+    "decision": {
+      "path": "/tmp/corerp-r1-decision-wire-tests-final-20260930.log",
+      "sha256": "3e6f961e7f3efd42d23cfc29abfb1a03b91016def7fb1fd253b81e86652a753b"
+    },
+    "storage_focused": {
+      "path": "/tmp/corerp-r1-decision-wire-storage-final-20260930.log",
+      "sha256": "b5925a4a6709bbabab4f5862ee8566f0d52d03cf387cff1fffaf442ee996e98e"
+    },
+    "wire_red": {
+      "path": "/tmp/corerp-r1-decision-wire-red-20260930.log",
+      "sha256": "2c97692a81fa00c7316bf1c7cdacbcb468b8a4e58b645e7b6f4ca7726fa05c50"
+    },
+    "storage_pre_fix_failure": {
+      "path": "/tmp/corerp-r1-decision-wire-storage-20260930.log",
+      "sha256": "faebc353e183b455ca9708ea0903a436d8daafe5a209503c0916976e8f1cb54e"
+    }
+  },
+  "full_backend_suite": {
+    "status": "PASS",
+    "exit_code": 0,
+    "command": "go test ./... -count=1 -timeout=20m",
+    "packages": [
+      {
+        "package": "corerp.local/backend/cmd/corerp-admin",
+        "duration": "0.881s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/cmd/corerp-controller",
+        "duration": "0.798s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/cmd/corerp-m2",
+        "duration": "11.806s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/cmd/corerp-server",
+        "duration": "1.307s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/cmd/manual-gen",
+        "duration": "0.026s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/core",
+        "duration": "0.141s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/decision",
+        "duration": "0.562s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/endpointpolicy",
+        "duration": "0.025s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/narrative",
+        "duration": "1.492s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/outbound",
+        "duration": "0.002s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/storage",
+        "duration": "889.953s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/transport/httpapi",
+        "duration": "69.189s",
+        "result": "PASS"
+      }
+    ],
+    "no_test_files": [
+      "corerp.local/backend/cmd/corerp-m1"
+    ],
+    "log_path": "/tmp/corerp-r1-decision-wire-backend-final-20260930.log",
+    "log_sha256": "ed3a51f4d134bf71527d2b5a18f21c83a5815071c0b80b79c520105c04687de4"
+  },
+  "live32": {
+    "status": "FAIL",
+    "script_exit_code": 1,
+    "result": "decision-wire-32-result-2026-09-30.json",
+    "completed_browser_turns": 1,
+    "settled_turns": 2,
+    "successful_decisions": 5,
+    "failed_decisions": 1,
+    "failure": "timeout after truncation/2 attempts,120s total budget",
+    "followup_checks": "NOT REACHED"
+  },
+  "final_source_golden": {
+    "status": "CAPTURED, NOT RP acceptance",
+    "result": "decision-wire-golden-result-2026-09-30.json",
+    "capture": "decision-wire-golden-2026-09-30.json",
+    "script_exit_code": 0,
+    "successful_decisions": 17,
+    "failed_decisions": 0,
+    "nonverbal_events": 0,
+    "g8_real_prose": "success,1 attempt",
+    "rp_experience_exit": "NOT PASSED"
+  },
+  "rp_experience_exit": "NOT PASSED: no clear improvement, missing canon/human approval",
+  "runtime_sha256": "sha256:2e527072a0aafea8fd9e72c545d7f847f010d8fd5937cae407298b6f87085ff1",
+  "full_backend_initial_environment_failure": {
+    "status": "FAILED; not code acceptance",
+    "exit_code": 1,
+    "no_space_lines": 283,
+    "log_path": "/tmp/corerp-r1-decision-wire-backend-20260930.log",
+    "log_sha256": "befaab552dbbaccefc8faf7ed157370eb033ef67d1f86aab7eccdff31f760a13",
+    "recovery": "go clean -cache; rebuilt disposable compilation cache, free disk 2.1G immediately after cleanup"
+  },
+  "running_jobs": [],
+  "completed_at_utc": "2026-09-30T06:41:31.842674+00:00",
+  "final_worktree": {
+    "captured_at_utc": "2026-09-30T06:45:29.124806+00:00",
+    "tracked_modified": 102,
+    "untracked_entries": 184,
+    "clean": false,
+    "commit_push_deploy": false
+  },
+  "world_integrity_exit": "NOT PASSED: actual full32 failed"
+}

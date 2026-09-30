@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"corerp.local/backend/internal/core"
 )
@@ -38,12 +39,18 @@ func (s *Store) Ready(ctx context.Context) error {
 	if err := s.db.PingContext(ctx); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "ping readiness database", err)
 	}
+	versions := make([]any, 0, len(schemaMigrations)+1)
+	versions = append(versions, BaseSchemaVersion)
+	for _, migration := range schemaMigrations {
+		versions = append(versions, migration.version)
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(versions)), ",")
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_meta WHERE schema_version = ?`, SchemaVersion).Scan(&count); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_meta WHERE schema_version IN (`+placeholders+`)`, versions...).Scan(&count); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "read readiness schema", err)
 	}
-	if count != 1 {
-		return core.NewError(core.CodeStorageFailure, "current schema version is not applied")
+	if count != len(versions) {
+		return core.NewError(core.CodeStorageFailure, "required schema versions are not all applied")
 	}
 	return nil
 }

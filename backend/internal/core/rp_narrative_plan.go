@@ -29,6 +29,13 @@ func (plan RPNarrativeStylePlan) Apply(base RPStyleProfile) (RPStyleProfile, err
 type PlannedRPNarrativeProvider struct{ Planner RPNarrativeStylePlanner }
 
 func (PlannedRPNarrativeProvider) NarrativeMode() string { return "style_planner" }
+func (p PlannedRPNarrativeProvider) ProviderMetadata() RPProviderMetadata {
+	metadata := RPProviderMetadata{Kind: "style_planner"}
+	if planner, ok := p.Planner.(interface{ ProviderMetadata() RPProviderMetadata }); ok {
+		metadata.Model = planner.ProviderMetadata().Model
+	}
+	return metadata
+}
 
 func (p PlannedRPNarrativeProvider) Render(ctx context.Context, in RPNarrativeInput) (RPNarrativeView, error) {
 	return p.RenderStream(ctx, in, nil)

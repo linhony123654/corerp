@@ -1,0 +1,487 @@
+{
+  "kind": "unified_context_current_step32_terminal_result",
+  "captured_at_utc": "2026-09-30T08:50:46.848008+00:00",
+  "model": "step-5-preview",
+  "script_exit_code": 1,
+  "completed_browser_turns": 8,
+  "settled_turns": 9,
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "result": "success",
+      "attempt_count": 1,
+      "count": 23
+    },
+    {
+      "phase": "decision",
+      "result": "success",
+      "attempt_count": 2,
+      "count": 3
+    },
+    {
+      "phase": "decision",
+      "result": "timeout",
+      "attempt_count": 2,
+      "count": 1
+    },
+    {
+      "phase": "narrative",
+      "result": "success",
+      "attempt_count": 0,
+      "count": 9
+    },
+    {
+      "phase": "narrative",
+      "result": "success",
+      "attempt_count": 1,
+      "count": 9
+    }
+  ],
+  "failures": [
+    {
+      "phase": "decision",
+      "model_id": "step-5-preview",
+      "result": "timeout",
+      "attempt_count": 2,
+      "fallback_kind": "silence",
+      "started_at_utc": "2026-09-30T08:45:58.589813525Z",
+      "finished_at_utc": "2026-09-30T08:47:58.592449256Z"
+    }
+  ],
+  "followup_checks": "NOT REACHED: regeneration/mixed/continue/fault/restart",
+  "world_integrity_32_exit": "NOT PASSED",
+  "runtime_sha256": "f6c9677840beaeb1100a215084cf1b37c8bbcebd8f52263504ba77d56910a67b",
+  "model_configuration": {
+    "reasoning_effort": "low",
+    "decision_max_tokens": 4096,
+    "interaction_max_tokens": 4096,
+    "decision_timeout_seconds": 120,
+    "narrative_timeout_seconds": 90,
+    "disable_thinking": false
+  },
+  "artifact_directory": "/tmp/corerp-rp3-npc-4yqlNG",
+  "log_path": "/tmp/corerp-r1-context-selection-32-20260930.log",
+  "log_sha256": "584c867bf38072935ab3f4ce696d6022b229724308409d4906bc202faa560531",
+  "failure_diagnostic": {
+    "kind": "truncation_then_timeout",
+    "context_bytes": 22703,
+    "request_bytes": 34842,
+    "first_max_completion_tokens": 4096,
+    "repair_max_completion_tokens": 8192,
+    "budget_expanded": false
+  },
+  "fixture_note": "Original unchanged synthetic four-person browser regression; not frozen 11-role Rongqing Golden. Public approved speech/prose only; no model override/request_json or private decisions copied. Runtime is same current f6c96778. Reduced context did not ensure this model meets every bounded call. No same-source blind repeat.",
+  "public_samples": [
+    {
+      "turn_run_id": "rpturn_dca299d78d7569675bb23db27f16f8e1da22e76037254856c9bed50efc605f63",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_d02899fdbee044bd1aa7142fdfddbce41fb761fffb3afddac064c99730d77a4d",
+      "player_event_id": "event_rp_speech_d02899fdbee044bd1aa7142fdfddbce41fb761fffb3afddac064c99730d77a4d",
+      "settled_sequence": 21,
+      "input": "有人吗？",
+      "committed_public_lines": [
+        "你：「有人吗？」",
+        "袭人：「有人，我在。这堂里的布帘还没理完——你是来找人，还是有别的事？」",
+        "宝钗：「有，我在。茶盏才点了一半，坐席也还没归置完；你有什么事先说，我这儿听得见。」"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_34271621ac9432f30dd109bc204dfa135d4a6be75b869bc302d8c276504523dd",
+          "text": "有人，我在。这堂里的布帘还没理完——你是来找人，还是有别的事？"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_f004fc3696e529d0b3f95b641e08cda6e5492a20302934dec6fd5d8bf6261dc4",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "respond",
+          "event_id": "event_rp_npc_2b4f257ad65114cbfe5eb40ed2f72fb58d38d70be8994d45df09edb19b3d1242",
+          "text": "有，我在。茶盏才点了一半，坐席也还没归置完；你有什么事先说，我这儿听得见。"
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_310bc46e28245b68ce8d716a84827841",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你：「有人吗？」",
+            "袭人：「有人，我在。这堂里的布帘还没理完——你是来找人，还是有别的事？」",
+            "宝钗：「有，我在。茶盏才点了一半，坐席也还没归置完；你有什么事先说，我这儿听得见。」"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_7cd2910dfc833b2213b025f6dd13652a6911d04f347b788e298d73e31ed0daf3",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_9ae9a93935cbb8028e20aa43b252ddd25487fc3f895660be7d97ab8b9de136c3",
+      "player_event_id": "event_rp_speech_9ae9a93935cbb8028e20aa43b252ddd25487fc3f895660be7d97ab8b9de136c3",
+      "settled_sequence": 25,
+      "input": "你是谁呀？",
+      "committed_public_lines": [
+        "你 「你是谁呀？」",
+        "袭人 「我是袭人。你方才一进来问“有人吗”，应声的就有我；我这会儿在理这堂里的布帘。你有事直说，我听得见。」",
+        "宝钗 「我是宝钗。你方才问有人没有，应声的就有我；有什么话，你直说就是。」"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_5e6b02e50e1d86e3200cff3e36ea071bf923ae8ad18d3c76b712eef6aa34a4f4",
+          "text": "我是袭人。你方才一进来问“有人吗”，应声的就有我；我这会儿在理这堂里的布帘。你有事直说，我听得见。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_1ba1ba4b565936698a014c209a5c0fee78ce29bc9b88cfe3f8d54b0a9d983523",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "respond",
+          "event_id": "event_rp_npc_f5ab5c0837248abd54ced5f4fdf842612e7d9d6b7ae0785b4f72062f272544da",
+          "text": "我是宝钗。你方才问有人没有，应声的就有我；有什么话，你直说就是。"
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_ce128db1d30029bc017fcf8bba34c0de",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你 「你是谁呀？」",
+            "袭人 「我是袭人。你方才一进来问“有人吗”，应声的就有我；我这会儿在理这堂里的布帘。你有事直说，我听得见。」",
+            "宝钗 「我是宝钗。你方才问有人没有，应声的就有我；有什么话，你直说就是。」"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_95149277c14e6f42ee7fd84c2836b70aebe7cef4cdb95ad9bb4b3a67a5a527f5",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_def246213b6352b6a9ed34c64b13711d0d04bb5fcf26e50087069cdfc590e144",
+      "player_event_id": "event_rp_speech_def246213b6352b6a9ed34c64b13711d0d04bb5fcf26e50087069cdfc590e144",
+      "settled_sequence": 29,
+      "input": "想你了。",
+      "committed_public_lines": [
+        "你 「想你了。」",
+        "袭人 「……这话我可担不起。我们方才才通名，连一盏茶还没喝完。你是走累了，还是心里搁着事？若有事，坐下慢慢说；若只是随口一提，我可当不起这个'想'字。帘子我理完这面就来。」",
+        "黛玉 保持沉默",
+        "宝钗 保持沉默"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_90b90f76e84a846e9a1aa146392bd1ec17e5840cf5be678f0dd9f36bf09a7356",
+          "text": "……这话我可担不起。我们方才才通名，连一盏茶还没喝完。你是走累了，还是心里搁着事？若有事，坐下慢慢说；若只是随口一提，我可当不起这个'想'字。帘子我理完这面就来。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_ae1996c6b014526f734b2851d8b537b0b39103e8322fa2405d2dcf60bb47e28f",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "silence",
+          "event_id": "event_rp_npc_6dd6c809e576cbd29963d720823f601eb134bf16f533fa6068fbf4499e547a83",
+          "text": ""
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_6417c70c19380f3d0a178f26a86f025d",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你 「想你了。」",
+            "袭人 「……这话我可担不起。我们方才才通名，连一盏茶还没喝完。你是走累了，还是心里搁着事？若有事，坐下慢慢说；若只是随口一提，我可当不起这个'想'字。帘子我理完这面就来。」",
+            "黛玉 保持沉默",
+            "宝钗 保持沉默"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_0d8e3186c3403838f0777d1430faec7917f3dd4775bc5b691807210f5a287396",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_ff34f1ce5db8f971ba0b9dfadce5cdf020f610b442cd18b6d6a06c0526aa1c5b",
+      "player_event_id": "event_rp_speech_ff34f1ce5db8f971ba0b9dfadce5cdf020f610b442cd18b6d6a06c0526aa1c5b",
+      "settled_sequence": 33,
+      "input": "今儿这边怎么静悄悄的？",
+      "committed_public_lines": [
+        "你：「今儿这边怎么静悄悄的？」",
+        "袭人：「各人手里都有事，声音便轻了。宝姐姐在点茶，我也还有些零碎要理；这儿没大事，自然静。你有话，这会儿说，听得清。」",
+        "黛玉和宝钗保持沉默。"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_ce87c0b30d54c7971200543e4c2df721244a77cc335b2eccbd2a9bb1c81c272c",
+          "text": "各人手里都有事，声音便轻了。宝姐姐在点茶，我也还有些零碎要理；这儿没大事，自然静。你有话，这会儿说，听得清。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_352771add072b6b49ca469f7685b2d0c8ca77a4e44bdc96dd8c5dd5cc9f1b4ab",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "silence",
+          "event_id": "event_rp_npc_2be4665517c6e958976ec288bcac37230a497d44238e0d385ee3e35e48932ca3",
+          "text": ""
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_e927946f71c526cf968c51aee042ef2a",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你：「今儿这边怎么静悄悄的？」",
+            "袭人：「各人手里都有事，声音便轻了。宝姐姐在点茶，我也还有些零碎要理；这儿没大事，自然静。你有话，这会儿说，听得清。」",
+            "黛玉和宝钗保持沉默。"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_e1a92ed9c75d288b56a59f1ec9ef994e164fb9caa39227cfb5ea993fce93bdef",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_34afc6ec78b1f95a87783689be39dca2e34af9e077f543b12fdcb43744837cf2",
+      "player_event_id": "event_rp_speech_34afc6ec78b1f95a87783689be39dca2e34af9e077f543b12fdcb43744837cf2",
+      "settled_sequence": 37,
+      "input": "我刚刚是不是打断你们了？",
+      "committed_public_lines": [
+        "你：「我刚刚是不是打断你们了？」",
+        "袭人：「没打断。各人手里都有事，本也算不上正经说话。你要问什么，接着说便是。」",
+        "黛玉与宝钗保持沉默。"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_c976e0b5e948cdb9227da1d30284308b54b63a84c5abe9f3f16d85759fcd689f",
+          "text": "没打断。各人手里都有事，本也算不上正经说话。你要问什么，接着说便是。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_499c797d5a768204216e240ecf9203f6b349c5735963f9fc52f272a9dc62f0a9",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "silence",
+          "event_id": "event_rp_npc_3afaa4b9540622564341a80f593bee10b913f8d73e2aede758cd0783383ae5f0",
+          "text": ""
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_6508ccf7805ce4d55f8448829202a9b9",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你：「我刚刚是不是打断你们了？」",
+            "袭人：「没打断。各人手里都有事，本也算不上正经说话。你要问什么，接着说便是。」",
+            "黛玉与宝钗保持沉默。"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_7c892b42614acefa0726d1ce70f8f4fe1961af184b679dcd122d88ceb76430d2",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_097ad77598275a482d430219929221e7fc9fae43754a8500b8ce908342a9f82d",
+      "player_event_id": "event_rp_speech_097ad77598275a482d430219929221e7fc9fae43754a8500b8ce908342a9f82d",
+      "settled_sequence": 41,
+      "input": "你手里的活忙完了吗？",
+      "committed_public_lines": [
+        "你 「你手里的活忙完了吗？」",
+        "袭人 「还没有。这堂里的帘子还有些零碎没归置完，且得一会儿。你要有事，不必候我；若只是问一声，那我照实说给你听。」",
+        "黛玉沉默。",
+        "宝钗 「还没有。茶盏点了一半，坐席也还没归置完；你要有事，不必候我。」"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_c5608d95acdf0fb1c537055995f4975e2e8cd57f5ef76a648c1b85fca0dcbfa4",
+          "text": "还没有。这堂里的帘子还有些零碎没归置完，且得一会儿。你要有事，不必候我；若只是问一声，那我照实说给你听。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_1b98d18d818590162a18fd2ce129d56632cfb7a45434c8470f692dda1096ec4e",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "respond",
+          "event_id": "event_rp_npc_b2c3a95d77c249e3a9329c32e89a866ca2e8dc77076e4e5cda6d8bbcb9965f50",
+          "text": "还没有。茶盏点了一半，坐席也还没归置完；你要有事，不必候我。"
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_5348cfa5089ae3e6bee86a2600375b61",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你 「你手里的活忙完了吗？」",
+            "袭人 「还没有。这堂里的帘子还有些零碎没归置完，且得一会儿。你要有事，不必候我；若只是问一声，那我照实说给你听。」",
+            "黛玉沉默。",
+            "宝钗 「还没有。茶盏点了一半，坐席也还没归置完；你要有事，不必候我。」"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_5cbed81b2cdfbfa2943f0755ba6d2e7538480691cc407179d1dd7134cbbd2981",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_8eabbef67f00edf72b49b0c30560f51d97b265125e080550bb0f68406f0fe01d",
+      "player_event_id": "event_rp_speech_8eabbef67f00edf72b49b0c30560f51d97b265125e080550bb0f68406f0fe01d",
+      "settled_sequence": 45,
+      "input": "若你不愿说，我就不追问。",
+      "committed_public_lines": [
+        "你: 「若你不愿说，我就不追问。」",
+        "袭人: 「我本无不可对人言的事。你既有此意，我便明说——帘子还没理完，我一时不得空。」",
+        "（黛玉保持沉默）",
+        "（宝钗保持沉默）"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_c524114137c3f12890a684ca1ae1f618af0ee3643dd750d5b1ae9f6926862c1a",
+          "text": "我本无不可对人言的事。你既有此意，我便明说——帘子还没理完，我一时不得空。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_7ba2c74027414eaa8e51124871371a001f516aad8ebb5e6413f03fd58b5b36b1",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "silence",
+          "event_id": "event_rp_npc_791d4439811ae2e4691bc024636a42efd6e1a6c8fbcefb8fa9c04bc1ad2107c5",
+          "text": ""
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_ca72c8e50bb27c8f83478aac167bd83c",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你: 「若你不愿说，我就不追问。」",
+            "袭人: 「我本无不可对人言的事。你既有此意，我便明说——帘子还没理完，我一时不得空。」",
+            "（黛玉保持沉默）",
+            "（宝钗保持沉默）"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_68f3499715e56f6b477846658941326a07c6e1c2889494aaf8a3a305c8f9bd00",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_814db71f476bbed63eac0b15f9e8cc91af70a098beba64bb4d3c33f46b064cee",
+      "player_event_id": "event_rp_speech_814db71f476bbed63eac0b15f9e8cc91af70a098beba64bb4d3c33f46b064cee",
+      "settled_sequence": 49,
+      "input": "我记得你说过今天还有事，是什么事？",
+      "committed_public_lines": [
+        "你 「我记得你说过今天还有事，是什么事？」",
+        "袭人 「这话我不敢认。我只同你说过这堂里的帘子还没归置完，别的今天有什么事，我并没有应承过。你若是从别处听来的，我这儿没有凭据，也不敢替你认下。」",
+        "黛玉 「我何曾对你说过今天还有事？大约是你把别人手里的活计，记到我名下了。我这里只有一张诗笺上的字句要核对，算不得什么，也累不到谁。」",
+        "宝钗 「我只说过茶盏点了一半、坐席也还没归置完，都是眼前这堂里的差事；今天是否还有旁的安排，我并不曾应承。你若是在别处听来的，我这儿没有凭据，也不敢替自己认下。」"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_2b8afbd0ea431562a19090fc6a58ac287b31389beafbf5f750fae98cc9a72859",
+          "text": "这话我不敢认。我只同你说过这堂里的帘子还没归置完，别的今天有什么事，我并没有应承过。你若是从别处听来的，我这儿没有凭据，也不敢替你认下。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "respond",
+          "event_id": "event_rp_npc_a49090ffd1d38fb8647b16f525ebf5e2eca099aa3d74bb6aee6ae528bc58d317",
+          "text": "我何曾对你说过今天还有事？大约是你把别人手里的活计，记到我名下了。我这里只有一张诗笺上的字句要核对，算不得什么，也累不到谁。"
+        },
+        {
+          "speaker": "宝钗",
+          "action": "respond",
+          "event_id": "event_rp_npc_c76696430d1d5000732af6eb3abe91b03bf3cdd80a0e56fb03d4fc99a312f590",
+          "text": "我只说过茶盏点了一半、坐席也还没归置完，都是眼前这堂里的差事；今天是否还有旁的安排，我并不曾应承。你若是在别处听来的，我这儿没有凭据，也不敢替自己认下。"
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_0a62be554a23c5f1cfe90e01126ccb18",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你 「我记得你说过今天还有事，是什么事？」",
+            "袭人 「这话我不敢认。我只同你说过这堂里的帘子还没归置完，别的今天有什么事，我并没有应承过。你若是从别处听来的，我这儿没有凭据，也不敢替你认下。」",
+            "黛玉 「我何曾对你说过今天还有事？大约是你把别人手里的活计，记到我名下了。我这里只有一张诗笺上的字句要核对，算不得什么，也累不到谁。」",
+            "宝钗 「我只说过茶盏点了一半、坐席也还没归置完，都是眼前这堂里的差事；今天是否还有旁的安排，我并不曾应承。你若是在别处听来的，我这儿没有凭据，也不敢替自己认下。」"
+          ]
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_8453e81c837067d96eae32a7f40769311eae2c2b45026949a3cbc7ec7b783566",
+      "status": "settled",
+      "player_turn_id": "turn_rp_speech_54497d62c47511563a4f1aa3ab1722c138b1f05c794cafd31ecc327ab65d9905",
+      "player_event_id": "event_rp_speech_54497d62c47511563a4f1aa3ab1722c138b1f05c794cafd31ecc327ab65d9905",
+      "settled_sequence": 53,
+      "input": "你刚刚为什么躲着我？",
+      "committed_public_lines": [
+        "你：「你刚刚为什么躲着我？」",
+        "袭人：「我没有躲你。你才进来问有人没有，应声的就有我；这会儿我也只是理我的帘子，算不得躲。你要有话，直说便是。」"
+      ],
+      "npc_replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "event_id": "event_rp_npc_cea1dcdb6226d72e1ea76ff51647e12324be5ca2f8ecf3255683f2ffe74ab626",
+          "text": "我没有躲你。你才进来问有人没有，应声的就有我；这会儿我也只是理我的帘子，算不得躲。你要有话，直说便是。"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "silence",
+          "event_id": "event_rp_npc_9ad76b6c5c05886c3aa2420ddb4f96df324fedcc2aaed2f6fe69fc330b2d3efd",
+          "text": ""
+        },
+        {
+          "speaker": "宝钗",
+          "action": "silence",
+          "event_id": "event_rp_npc_838a1077ee9a0336c053e88c83024f74e6676bb03c7637857d227261328b68d1",
+          "text": ""
+        }
+      ],
+      "prose_variants": [
+        {
+          "render_id": "rpr_c25cf5b6ba15b7624b8d59d43cbe5169",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "lines": [
+            "你：「你刚刚为什么躲着我？」",
+            "袭人：「我没有躲你。你才进来问有人没有，应声的就有我；这会儿我也只是理我的帘子，算不得躲。你要有话，直说便是。」"
+          ]
+        }
+      ]
+    }
+  ]
+}

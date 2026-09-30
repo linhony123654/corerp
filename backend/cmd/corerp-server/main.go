@@ -17,14 +17,16 @@ import (
 
 	"corerp.local/backend/internal/core"
 	"corerp.local/backend/internal/decision"
+	"corerp.local/backend/internal/endpointpolicy"
 	"corerp.local/backend/internal/narrative"
 	"corerp.local/backend/internal/storage"
 	"corerp.local/backend/internal/transport/httpapi"
 )
 
 const (
-	tokenEnvironment  = "CORERP_AUTH_TOKENS_JSON"
-	cursorEnvironment = "CORERP_CURSOR_SECRET"
+	tokenEnvironment              = "CORERP_AUTH_TOKENS_JSON"
+	cursorEnvironment             = "CORERP_CURSOR_SECRET"
+	backgroundIntervalEnvironment = "CORERP_BACKGROUND_INTERVAL"
 )
 
 func main() {
@@ -74,6 +76,13 @@ func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSO
 	if logger == nil {
 		return core.NewError(core.CodeInvalidArgument, "logger is required")
 	}
+	providerPolicy, err := endpointpolicy.FromEnvironment(os.Getenv("CORERP_PROVIDER_ALLOWLIST"), os.Getenv("CORERP_PROVIDER_LOCAL_ALLOWLIST"))
+	if err != nil {
+		return core.WrapError(core.CodeInvalidArgument, "provider endpoint allowlist is invalid", err)
+	}
+	for _, endpoint := range []string{os.Getenv("CORERP_LLM_ENDPOINT"), os.Getenv("CORERP_NARRATIVE_ENDPOINT")} {
+		providerPolicy = providerPolicy.WithOperatorEndpoint(endpoint)
+	}
 	originPolicy, err := httpapi.BrowserOriginPolicy(browserOrigins)
 	if err != nil {
 		return err
@@ -98,11 +107,21 @@ func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSO
 	if err := store.BootstrapDemo(ctx); err != nil {
 		return err
 	}
+	backgroundInterval, err := parseBackgroundInterval(os.Getenv(backgroundIntervalEnvironment))
+	if err != nil {
+		return err
+	}
+	if backgroundInterval > 0 {
+		host, _ := os.Hostname()
+		workerID := fmt.Sprintf("corerp-server:%s:%d", host, os.Getpid())
+		go runBackgroundProgression(ctx, store, workerID, backgroundInterval, logger)
+		logger.Info("RP background progression enabled", "interval", backgroundInterval.String())
+	}
 	service, err := storage.NewRPServiceWithNarrative(store, provider, mode, narrator)
 	if err != nil {
 		return err
 	}
-	api, err := httpapi.New(service, authenticator, cursors)
+	api, err := httpapi.NewWithEndpointPolicy(service, authenticator, cursors, providerPolicy)
 	if err != nil {
 		return err
 	}
@@ -140,6 +159,45 @@ func runWithProviders(ctx context.Context, databasePath, listenAddress, tokenJSO
 		}
 		logger.Info("CoreRP HTTP API stopped")
 		return nil
+	}
+}
+
+func parseBackgroundInterval(raw string) (time.Duration, error) {
+	if strings.TrimSpace(raw) == "" {
+		return 0, nil
+	}
+	interval, err := time.ParseDuration(raw)
+	if err != nil || interval < 30*time.Second || interval > time.Hour {
+		return 0, core.NewError(core.CodeInvalidArgument, backgroundIntervalEnvironment+" must be empty or a duration between 30s and 1h")
+	}
+	return interval, nil
+}
+
+func runBackgroundProgression(ctx context.Context, store *storage.Store, workerID string, interval time.Duration, logger *slog.Logger) {
+	run := func() {
+		results, err := store.RunEligibleRPBackgroundProgression(ctx, workerID, 10*time.Minute, 100)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.Error("RP background progression scan failed", "error", err)
+			}
+			return
+		}
+		counts := map[string]int{}
+		for _, result := range results {
+			counts[result.Status]++
+		}
+		logger.Info("RP background progression scan completed", "worlds", len(results), "completed", counts["completed"], "controlled", counts["controlled"], "busy", counts["busy"], "disabled", counts["disabled"], "budget_exhausted", counts["budget_exhausted"])
+	}
+	run()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
 	}
 }
 

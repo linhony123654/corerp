@@ -23,7 +23,7 @@ func TestNarrativeConfigurationIndependentAndFailClosed(t *testing.T) {
 			t.Fatal("invalid narrative configuration accepted")
 		}
 	}
-	if p, mode, err := FromEnvironment(get(map[string]string{"CORERP_NARRATIVE_PROVIDER": "style_planner", "CORERP_NARRATIVE_ENDPOINT": "http://127.0.0.1:1/v1/chat/completions", "CORERP_NARRATIVE_MODEL": "fixture"})); err != nil || p == nil || mode != "style_planner" {
+	if p, mode, err := FromEnvironment(get(map[string]string{"CORERP_NARRATIVE_PROVIDER": "style_planner", "CORERP_NARRATIVE_ENDPOINT": "http://127.0.0.1:1/v1/chat/completions", "CORERP_NARRATIVE_MODEL": "fixture", "CORERP_PROVIDER_LOCAL_ALLOWLIST": "http://127.0.0.1:1"})); err != nil || p == nil || mode != "style_planner" {
 		t.Fatalf("explicit independent config rejected: %s %v", mode, err)
 	}
 }

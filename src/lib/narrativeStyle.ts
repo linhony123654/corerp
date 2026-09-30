@@ -2,6 +2,7 @@ export type StyleScope = { session_id: string; instance_id: string; branch_id: s
 export type StyleProfile = {
 	context_budget_bytes?: number
   narrative_density?: '' | 'concise' | 'standard' | 'long'
+  full_prose?: boolean
   pov: string; tense: string; verbosity: string; dialogue_ratio: number; description_density: number
   inner_monologue_policy: string; prose_instructions: string; forbidden_patterns: string[]; narrative_pack_ref: string
 }

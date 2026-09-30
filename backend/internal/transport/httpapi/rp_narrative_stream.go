@@ -14,12 +14,20 @@ func (s *Server) handleRPNarrativeStream(w http.ResponseWriter, r *http.Request,
 	if !requireMethod(w, requestID, r, http.MethodPost) {
 		return
 	}
-	var input storage.RPNarrativeReadRequest
+	var input struct {
+		storage.RPNarrativeReadRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(w, r, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(w, requestID, err)
 		return
 	}
 	if err := bindPrincipal(&input.PrincipalID, principal); err != nil {
+		writeError(w, requestID, err)
+		return
+	}
+	narrative, err := resolveRPNarrativeOverride(input.Model, s.endpointPolicy)
+	if err != nil {
 		writeError(w, requestID, err)
 		return
 	}
@@ -43,12 +51,12 @@ func (s *Server) handleRPNarrativeStream(w http.ResponseWriter, r *http.Request,
 		}
 		return controller.Flush()
 	}
-	result, err := s.service.StreamRPNarrative(r.Context(), input, func(chunk core.RPNarrativeChunk) error {
+	result, err := s.service.StreamRPNarrativeWith(r.Context(), input.RPNarrativeReadRequest, func(chunk core.RPNarrativeChunk) error {
 		return writeFrame(struct {
 			Type  string                `json:"type"`
 			Chunk core.RPNarrativeChunk `json:"chunk"`
 		}{"line", chunk})
-	})
+	}, narrative)
 	if err != nil {
 		if !started {
 			writeError(w, requestID, err)
@@ -60,8 +68,11 @@ func (s *Server) handleRPNarrativeStream(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	_ = writeFrame(struct {
-		Type     string   `json:"type"`
-		Count    int      `json:"count"`
-		Warnings []string `json:"warnings"`
-	}{"done", len(result.View.Lines), result.View.Warnings})
+		Type           string   `json:"type"`
+		Count          int      `json:"count"`
+		EventIDs       []string `json:"event_ids"`
+		Warnings       []string `json:"warnings"`
+		FallbackReason string   `json:"fallback_reason,omitempty"`
+		RenderID       string   `json:"render_id,omitempty"`
+	}{"done", len(result.View.Lines), result.View.EventIDs, result.View.Warnings, result.View.FallbackReason, result.View.RenderID})
 }

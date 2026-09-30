@@ -1,0 +1,57 @@
+{
+  "kind": "same_authorized_input_lean_contract_diagnostic",
+  "runtime_source": "role-create-verification-2026-09-30.json",
+  "limits": "Same authorized context/head as preceding native-schema baseline; not exact failed32 input, not a committed RP run or latency benchmark. Only the system execution contract is shortened; native schema and full authorized input are unchanged. No private text or uncommitted speech persisted in report. Native decoder, actual-view and canonical grounding, controller ownership all retained.",
+  "script_sha256": "c0507d2ef2decc64be120bc5471b882197a61a177b28f4fca6228bde5d8133d3",
+  "helper_sha256": "74f2a91a75b9af64254b6a58ef7c007074b0df86904b5561cf21b3af54c96e83",
+  "diagnostic_dir": "/tmp/corerp-r1-lean-probe-che69z6l",
+  "results": [
+    {
+      "canonical_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "context_bytes": 11752,
+      "evidence_count": 12,
+      "head_sequence": 26,
+      "local_error": "",
+      "masked_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "mode": "lean_contract",
+      "observable_committed": false,
+      "private_present": true,
+      "proposal_action": "respond",
+      "provider_error_code": "",
+      "reason_code": "",
+      "seconds": 27.090648301,
+      "status": "validated"
+    }
+  ],
+  "http_records": [
+    {
+      "mode": "lean_contract",
+      "context_sha256": "f3b267c898057e862f4d5a0afb0c37dcff1145889249b63e9b2897e71c86d216",
+      "context_bytes": 11797,
+      "original_request_bytes": 22147,
+      "max_completion_tokens": 4096,
+      "original_instruction_bytes": 6258,
+      "instruction_bytes": 2475,
+      "instruction_sha256": "ca0735091baa5a00cc16c17960578e5da7df4d877d081a21e5e9002d91080d14",
+      "enable_thinking": null,
+      "response_format": "json_schema",
+      "forwarded_request_bytes": 18351,
+      "http_status": 200,
+      "seconds": 27.061,
+      "finish_reason": "stop",
+      "content_bytes": 563,
+      "reasoning_bytes": {
+        "reasoning": 6963,
+        "reasoning_content": 6963
+      },
+      "usage": {
+        "prompt_tokens": 5392,
+        "completion_tokens": 1809,
+        "total_tokens": 7201
+      }
+    }
+  ],
+  "source_world_unchanged": true,
+  "npc_observables_committed": false,
+  "input_hash_and_head_identical": true
+}

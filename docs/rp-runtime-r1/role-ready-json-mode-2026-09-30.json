@@ -1,0 +1,190 @@
+{
+  "kind": "current_runtime_four_real_role_turns",
+  "captured_at_utc": "2026-09-30T11:43:54.660135+00:00",
+  "runtime_sha256": "e2cdff39bdf8529a259b51947a74f4c526eeceb60407b2c8f9085402a5ab4f93",
+  "inputs": [
+    "Nora，今天有点想你。",
+    "我今天总有些失落，又说不清为什么。",
+    "我们先不找原因，能陪我说一会儿话吗？",
+    "你刚才答应我的是什么？"
+  ],
+  "tuning": {
+    "model": "step-5-preview",
+    "timeout_seconds": 120,
+    "decision_max_tokens": 4096,
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "decision_format": "json_object",
+    "narrative": "deterministic"
+  },
+  "harness_sha256": "8bca98d35db41e2a7f8ac8441b243b0d5d622d98469ed4a7280d65886fabe996",
+  "runs": [
+    {
+      "label": "ready_json_mode_runtime",
+      "runtime_sha256": "e2cdff39bdf8529a259b51947a74f4c526eeceb60407b2c8f9085402a5ab4f93",
+      "temp_dir": "/tmp/corerp-r1-selection-ready_json_mode_runtime-4o3aau2d",
+      "samples": [
+        {
+          "index": 1,
+          "input": "Nora，今天有点想你。",
+          "status": "settled",
+          "duration_seconds": 18.697,
+          "public_narrative_lines": [
+            "你说：\n「Nora，今天有点想你。」",
+            "Nora 保持沉默。"
+          ],
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "rank": 0,
+              "reason": "direct_address",
+              "source_event_id": null
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "action": "silence",
+              "text": "",
+              "event_id": "event_rp_npc_4b465c4c448639dd9e4d7b6d1bedcb0ed79cada68b050e6b57435665419f611f"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "failed",
+              "fallback_kind": "silence"
+            }
+          ]
+        }
+      ],
+      "status": "FAIL: provider/settlement",
+      "setup_readiness": {
+        "status": "READY",
+        "characters": [
+          {
+            "key": "nora",
+            "name": "Nora",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          }
+        ],
+        "incomplete_relationships": []
+      },
+      "live_request_shapes": [
+        {
+          "label": "ready_json_mode_runtime",
+          "phase": "real_role_turn",
+          "request_bytes": 10394,
+          "context_bytes": 4560,
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "has_persona": true,
+          "relationship_count": 1,
+          "recent_dialogue_count": 1,
+          "model": "step-5-preview",
+          "response_format": "json_object",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 3004,
+            "completion_tokens": 1242,
+            "total_tokens": 4246
+          },
+          "content_bytes": 12,
+          "reasoning_bytes": {
+            "reasoning": 5067,
+            "reasoning_content": 5067
+          },
+          "http_status": 200,
+          "seconds": 18.58
+        }
+      ],
+      "mock_request_count": 0,
+      "world_spec": {
+        "version": "corerp.studio-world.v1",
+        "name": "角色就绪诊断·虚构测试世界",
+        "start_world_time": "2026-09-22T00:00:00Z",
+        "population": 2,
+        "opening_money_minor": 30,
+        "opening_stock_minor": 2,
+        "places": [
+          {
+            "key": "hall",
+            "name": "会客室",
+            "kind": "public"
+          },
+          {
+            "key": "lane",
+            "name": "走廊",
+            "kind": "public"
+          }
+        ],
+        "links": [
+          {
+            "from": "hall",
+            "to": "lane",
+            "minutes": 5
+          }
+        ],
+        "people": [
+          {
+            "key": "lin",
+            "name": "Lin",
+            "place": "hall",
+            "player": true,
+            "persona": "Lin是Nora认识多年的朋友。来到会客室聊天，不曾承诺替她做事。"
+          },
+          {
+            "key": "nora",
+            "name": "Nora",
+            "place": "hall",
+            "player": false,
+            "persona": "Nora与Lin是认识多年的朋友，性格温和，偶有轻巧的玩笑。说中文，通常两三句，不讲大道理，不把关心变成盘问。她愿意陪朋友聊天，但不会代替朋友认定心事的原因。眼下没有要立刻离开的事务。她只知道自己实际听见和看见的内容。",
+            "public_presentation": "言辞温和、亲切，偶有轻巧的玩笑。"
+          }
+        ],
+        "acquaintances": [
+          [
+            "lin",
+            "nora"
+          ]
+        ],
+        "relationships": [
+          {
+            "from": "nora",
+            "to": "lin",
+            "role": "多年的朋友",
+            "address_to": [
+              "Lin"
+            ],
+            "self_reference": "我"
+          },
+          {
+            "from": "lin",
+            "to": "nora",
+            "role": "多年的朋友",
+            "address_to": [
+              "Nora"
+            ],
+            "self_reference": "我"
+          }
+        ]
+      },
+      "world_spec_sha256": "34a79c05fb62155d3a54f94a4efc941524073b8e5b091053f1b8db04a34aceee"
+    }
+  ],
+  "limits": "All model requests are real Step; zero mocked replies. Fictional test-author declarations only, not approved Rongqing canon or production data. Current explicit JSON Mode execution contract runtime, same authored fixture/model/stimuli as previous f6 ready group. No mocked seed turns. Single stochastic run, not a causal speed comparison, full32, expressive narrator or human RP acceptance."
+}

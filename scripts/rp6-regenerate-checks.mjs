@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { checkStreamParser } from './rp6-stream-parser-checks.mjs'
+import { scrollPlayToEnd } from './play-ui-helpers.mjs'
 
 export async function checkRegenerate({ page, sql, temp, credential, getModelCalls }) {
   await checkStreamParser(page)
@@ -14,7 +15,7 @@ export async function checkRegenerate({ page, sql, temp, credential, getModelCal
   assert.ok(await waits.count() > 0)
   assert.equal(await waits.locator('.narrative-tools').count(), 0, 'event-only history has no unsupported render button')
   const turn = controls.last()
-  const original = await turn.locator(':scope > p').allTextContents()
+  const original = await turn.locator(':scope > .prose > p').allTextContents()
   const setting = await page.evaluate(async ({ session, credential }) => {
     const call = async (path, body) => {
       const response = await fetch(`/api/v1/rp/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -35,18 +36,19 @@ export async function checkRegenerate({ page, sql, temp, credential, getModelCal
   }, { times: 1 })
   await turn.getByRole('button', { name: '按当前设置重新生成' }).click()
   await turn.getByRole('alert').waitFor()
-  assert.deepEqual(await turn.locator(':scope > p').allTextContents(), original)
+  assert.deepEqual(await turn.locator(':scope > .prose > p').allTextContents(), original)
   const retried = page.waitForRequest(r => r.url().endsWith('/rp/narrative/stream'))
   await turn.getByRole('button', { name: '重试叙述读取' }).click()
   assert.deepEqual((await retried).postDataJSON(), failedRequest, 'retry pins same turn and presentation patch')
+  await page.waitForFunction(() => [...document.querySelectorAll('.turn.narrator .prose')].at(-1)?.textContent?.includes('Lin说'), null, { timeout: 30000 })
   await turn.getByText('展示已更新，世界事件和原始记录未改变。', { exact: true }).waitFor()
-  assert.match((await turn.locator(':scope > p').allTextContents()).join('\n'), /Lin说/)
+  assert.match((await turn.locator(':scope > .prose > p').allTextContents()).join('\n'), /Lin说/)
   assert.equal(facts(), before, 'render cannot mutate decision/world/original narrative')
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  await scrollPlayToEnd(page)
   assert.equal(await turn.getByRole('button', { name: '恢复原叙述' }).evaluate(el => el.getBoundingClientRect().bottom <= document.querySelector('.composer').getBoundingClientRect().top), true, 'regenerate controls reachable above composer')
   await page.screenshot({ path: join(temp, 'regenerate-mobile.png') })
   await turn.getByRole('button', { name: '恢复原叙述' }).click()
-  assert.deepEqual(await turn.locator(':scope > p').allTextContents(), original)
+  assert.deepEqual(await turn.locator(':scope > .prose > p').allTextContents(), original)
   // Explicit timing fixture over a REAL server response, only to make the
   // transient preview observable. Production never inserts artificial delays.
   await page.evaluate(() => {
@@ -67,19 +69,20 @@ export async function checkRegenerate({ page, sql, temp, credential, getModelCal
   })
   await turn.getByRole('button', { name: '按当前设置重新生成' }).click()
   await turn.getByRole('region', { name: '叙述流临时预览' }).waitFor()
-  assert.deepEqual(await turn.locator(':scope > p').allTextContents(), original, 'partial preview must not replace complete original')
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  assert.deepEqual(await turn.locator(':scope > .prose > p').allTextContents(), original, 'partial preview must not replace complete original')
+  await scrollPlayToEnd(page)
   await page.screenshot({ path: join(temp, 'stream-preview-mobile.png') })
   await page.evaluate(() => { window.__rp6ReleaseStream(); delete window.__rp6ReleaseStream })
-  await turn.getByText('展示已更新，世界事件和原始记录未改变。', { exact: true }).waitFor()
+  await page.waitForFunction(() => [...document.querySelectorAll('.turn.narrator .prose')].at(-1)?.textContent?.includes('Lin说'), null, { timeout: 30000 })
+  const selectedBeforeReload = await turn.locator(':scope > .prose > p').allTextContents()
   await page.reload()
   await page.getByLabel('玩家访问凭证').fill(credential)
   await page.getByRole('button', { name: '继续这段生活' }).click()
   await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
-  assert.deepEqual(await controls.last().locator(':scope > p').allTextContents(), original, 'reload restores original persistent narrative')
+  assert.deepEqual(await controls.last().locator(':scope > .prose > p').allTextContents(), selectedBeforeReload, 'reload lost selected persistent render')
   assert.equal(facts(), before)
   assert.equal(getModelCalls(), initialModelCalls, 'regeneration never calls the decision model')
   assert.ok(!JSON.stringify(await page.context().storageState()).includes(credential))
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
-  console.log(JSON.stringify({ regenerateScenario: 'PASS', checks: ['server-declared eligibility', 'read failure preserves current text', 'retry pins same presentation request', 'actual third-person variant', 'restore original and reload', 'world/decision/transcript invariance', 'no credential persistence'] }))
+  await scrollPlayToEnd(page)
+  console.log(JSON.stringify({ regenerateScenario: 'PASS', checks: ['server-declared eligibility', 'read failure preserves current text', 'retry pins same presentation request', 'actual third-person variant', 'restore original', 'selected render survives reload', 'world/decision/transcript invariance', 'no credential persistence'] }))
 }

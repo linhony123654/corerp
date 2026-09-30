@@ -15,6 +15,7 @@ type StudioSpatialFact struct {
 	PlayerPrincipalID string `json:"player_principal_id"`
 	PlaceCount        int    `json:"place_count"`
 	ParticipantCount  int    `json:"participant_count"`
+	ObjectCount       int    `json:"object_count"`
 }
 
 // PrepareStudioSpatial saves the declared topology and initial physical actors.
@@ -30,7 +31,7 @@ func (s *Store) PrepareStudioSpatial(ctx context.Context, r StudioGenesisRequest
 		privateFactDomain{"studio_spatial", "StudioSpatialPrepared", `{"authorization":"sourced-world-create"}`},
 		func(conn *sql.Conn) error { return authorizeSavedStudioGenesis(ctx, conn, r) },
 		func(conn *sql.Conn, c privateFactContext) (StudioSpatialFact, func() error, error) {
-			fact := StudioSpatialFact{Version: "corerp.studio-spatial.v1", GenesisEventID: id("event", "genesis"), PlaceCount: len(r.Spec.Places), ParticipantCount: len(r.Spec.People)}
+			fact := StudioSpatialFact{Version: "corerp.studio-spatial.v1", GenesisEventID: id("event", "genesis"), PlaceCount: len(r.Spec.Places), ParticipantCount: len(r.Spec.People), ObjectCount: len(r.Spec.Objects)}
 			var ready int
 			if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM world_instances w JOIN world_clocks c ON c.instance_id=w.instance_id AND c.branch_id='br_main' WHERE w.instance_id=? AND w.lifecycle_state='paused' AND c.status='paused' AND c.current_world_time=?`, r.InstanceID, r.Spec.StartWorldTime).Scan(&ready); err != nil {
 				return fact, nil, err
@@ -78,13 +79,31 @@ func (s *Store) PrepareStudioSpatial(ctx context.Context, r StudioGenesisRequest
 					if err := exec(`INSERT INTO principals(principal_id,principal_type,display_name,status) VALUES (?,?,?,'active')`, principal, kind, person.Name); err != nil {
 						return err
 					}
-					if err := exec(`INSERT INTO agent_profiles(agent_id,instance_id,branch_id,principal_id,agent_level,goal_code,action_budget_per_day,status,definition_event_id) VALUES (?,?,'br_main',?,'L2',?,8,'active',?)`, entity, r.InstanceID, principal, goal, c.EventID); err != nil {
+					if err := exec(`INSERT INTO agent_profiles(agent_id,instance_id,branch_id,principal_id,agent_level,goal_code,action_budget_per_day,persona_text,status,definition_event_id) VALUES (?,?,'br_main',?,'L2',?,8,?,'active',?)`, entity, r.InstanceID, principal, goal, person.Persona, c.EventID); err != nil {
 						return err
 					}
 					if err := exec(`INSERT INTO agent_movements(movement_id,event_id,agent_id,from_place_id,to_place_id,schedule_id,activity_code,world_time,movement_kind) VALUES (?,?,?,NULL,?,NULL,'present',?,'initialize')`, id("movement", person.Key), c.EventID, entity, place, c.WorldTime); err != nil {
 						return err
 					}
 					if err := exec(`INSERT INTO agent_positions(agent_id,place_id,activity_code,effective_world_time,projection_version,last_event_sequence) VALUES (?,?,'present',?,0,?)`, entity, place, c.WorldTime, c.Sequence); err != nil {
+						return err
+					}
+					for i, entry := range person.Routine {
+						item, schedule := id("item", fmt.Sprintf("%s-r%02d", person.Key, i)), id("schedule", fmt.Sprintf("%s-r%02d", person.Key, i))
+						payload, err := core.CanonicalJSON(agentSchedulePayload{Kind: "agent_move", Day: 0, AgentID: entity, ScheduleID: schedule, ToPlaceID: id("place", entry.Place), ActivityCode: entry.ActivityCode})
+						if err != nil {
+							return err
+						}
+						if err := exec(`INSERT INTO scheduler_items(scheduler_item_id,instance_id,branch_id,world_time,phase_id,declared_priority,status,payload) VALUES (?,?,?,?,?,?,'pending',?)`, item, r.InstanceID, "br_main", entry.WorldTime, studioRoutinePhaseID, i, string(payload)); err != nil {
+							return err
+						}
+						if err := exec(`INSERT INTO agent_schedule_entries(schedule_id,agent_id,world_time,place_id,activity_code,declared_priority,scheduler_item_id,status,definition_event_id) VALUES (?,?,?,?,?,?,?,'active',?)`, schedule, entity, entry.WorldTime, id("place", entry.Place), entry.ActivityCode, i, item, c.EventID); err != nil {
+							return err
+						}
+					}
+				}
+				for _, object := range r.Spec.Objects {
+					if err := exec(`INSERT INTO rp_scene_objects(object_id,instance_id,branch_id,object_key,display_name,object_kind,place_id,state_code,definition_event_id,state_event_id,projection_version,last_event_sequence) VALUES (?,?,'br_main',?,?,?,?,?,?,?,0,?)`, id("object", object.Key), r.InstanceID, object.Key, object.Name, object.Kind, id("place", object.Place), object.InitialState, c.EventID, c.EventID, c.Sequence); err != nil {
 						return err
 					}
 				}

@@ -17,7 +17,11 @@ func TestProviderConfigurationIsExplicitAndFailClosed(t *testing.T) {
 		{"partial", map[string]string{"CORERP_LLM_API_KEY": "do-not-log"}, false, ""},
 		{"unknown", map[string]string{"CORERP_DECISION_PROVIDER": "anything"}, false, ""},
 		{"missing endpoint", map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions"}, false, ""},
-		{"local", map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions", "CORERP_LLM_ENDPOINT": "http://127.0.0.1:9090/v1/chat/completions", "CORERP_LLM_MODEL": "local-model"}, true, "chat_completions"},
+		{"local", map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions", "CORERP_LLM_ENDPOINT": "http://127.0.0.1:9090/v1/chat/completions", "CORERP_LLM_MODEL": "local-model", "CORERP_PROVIDER_LOCAL_ALLOWLIST": "http://127.0.0.1:9090"}, true, "chat_completions"},
+		{"bounded reasoning", map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions", "CORERP_LLM_ENDPOINT": "http://127.0.0.1:9090/v1/chat/completions", "CORERP_LLM_MODEL": "local-model", "CORERP_PROVIDER_LOCAL_ALLOWLIST": "http://127.0.0.1:9090", "CORERP_LLM_TIMEOUT": "90s", "CORERP_LLM_REASONING_EFFORT": "low", "CORERP_LLM_PROPOSAL_REPAIRS": "1", "CORERP_LLM_INTERACTION_MAX_TOKENS": "3072", "CORERP_LLM_DECISION_MAX_TOKENS": "4096"}, true, "chat_completions"},
+		{"deterministic rejects model setting", map[string]string{"CORERP_LLM_REASONING_EFFORT": "low"}, false, ""},
+		{"disable thinking", map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions", "CORERP_LLM_ENDPOINT": "http://127.0.0.1:9090/v1/chat/completions", "CORERP_LLM_MODEL": "local-model", "CORERP_PROVIDER_LOCAL_ALLOWLIST": "http://127.0.0.1:9090", "CORERP_LLM_DISABLE_THINKING": "true"}, true, "chat_completions"},
+		{"deterministic rejects thinking setting", map[string]string{"CORERP_LLM_DISABLE_THINKING": "true"}, false, ""},
 		{"remote cleartext", map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions", "CORERP_LLM_ENDPOINT": "http://example.com/v1/chat/completions", "CORERP_LLM_MODEL": "remote", "CORERP_LLM_API_KEY": "test"}, false, ""},
 		{"remote no key", map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions", "CORERP_LLM_ENDPOINT": "https://example.com/v1/chat/completions", "CORERP_LLM_MODEL": "remote"}, false, ""},
 	} {
@@ -34,7 +38,7 @@ func TestProviderConfigurationIsExplicitAndFailClosed(t *testing.T) {
 		}
 	}
 	for _, budget := range []Config{
-		{Timeout: -time.Second}, {Timeout: 2 * time.Minute}, {Attempts: -1}, {Attempts: 4},
+		{Timeout: -time.Second}, {Timeout: 3 * time.Minute}, {Attempts: -1}, {Attempts: 4}, {ReasoningEffort: "max"}, {ProposalRepairs: -1}, {ProposalRepairs: 2}, {InteractionMaxTokens: 511}, {InteractionMaxTokens: 4097}, {DecisionMaxTokens: 511}, {DecisionMaxTokens: 8193},
 	} {
 		budget.Endpoint = "http://127.0.0.1/model"
 		budget.Model = "model"
@@ -42,7 +46,7 @@ func TestProviderConfigurationIsExplicitAndFailClosed(t *testing.T) {
 			t.Fatal("invalid budget accepted")
 		}
 	}
-	for _, setting := range []struct{ key, value string }{{"CORERP_LLM_ATTEMPTS", "0"}, {"CORERP_LLM_ATTEMPTS", "ten"}, {"CORERP_LLM_TIMEOUT", "0s"}, {"CORERP_LLM_TIMEOUT", "forever"}} {
+	for _, setting := range []struct{ key, value string }{{"CORERP_LLM_ATTEMPTS", "0"}, {"CORERP_LLM_ATTEMPTS", "ten"}, {"CORERP_LLM_TIMEOUT", "0s"}, {"CORERP_LLM_TIMEOUT", "forever"}, {"CORERP_LLM_REASONING_EFFORT", "extreme"}, {"CORERP_LLM_DISABLE_THINKING", "yes"}, {"CORERP_LLM_PROPOSAL_REPAIRS", "2"}, {"CORERP_LLM_PROPOSAL_REPAIRS", "bad"}, {"CORERP_LLM_INTERACTION_MAX_TOKENS", "511"}, {"CORERP_LLM_INTERACTION_MAX_TOKENS", "bad"}, {"CORERP_LLM_DECISION_MAX_TOKENS", "511"}, {"CORERP_LLM_DECISION_MAX_TOKENS", "bad"}} {
 		env := map[string]string{"CORERP_DECISION_PROVIDER": "chat_completions", "CORERP_LLM_ENDPOINT": "http://127.0.0.1/model", "CORERP_LLM_MODEL": "test", setting.key: setting.value}
 		if _, _, err := FromEnvironment(func(k string) string { return env[k] }); err == nil {
 			t.Fatal("invalid environment budget accepted")

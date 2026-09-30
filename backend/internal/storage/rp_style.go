@@ -335,8 +335,9 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 	if err := authorizeRPControl(ctx, tx.conn, r.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return empty, err
 	}
-	var playerTurnID, playerEventID string
-	if err := tx.conn.QueryRowContext(ctx, `SELECT player_turn_id,player_event_id FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, r.TurnRunID, r.SessionID).Scan(&playerTurnID, &playerEventID); err != nil {
+	var playerTurnID, playerEventID, savedNarrative, savedMode, savedFallback string
+	var savedAt sql.NullString
+	if err := tx.conn.QueryRowContext(ctx, `SELECT player_turn_id,player_event_id,narrative_json,narrative_presentation_mode,narrative_presented_at_utc,COALESCE(narrative_fallback,'') FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, r.TurnRunID, r.SessionID).Scan(&playerTurnID, &playerEventID, &savedNarrative, &savedMode, &savedAt, &savedFallback); err != nil {
 		return empty, classifyMissing(err, "settled own turn narrative")
 	}
 	tx.Rollback(ctx)
@@ -358,6 +359,192 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 	if err := input.ValidateReadBudget(); err != nil {
 		return empty, err
 	}
-	view, err := provider.RenderStream(ctx, input, emit)
-	return RPNarrativeReadResult{Style: style, View: view}, err
+	if r.StyleOverride == nil && savedAt.Valid && savedMode != "base" {
+		view, err := savedRPOfficialNarrative(ctx, savedNarrative, savedFallback, input, emit)
+		if err != nil {
+			return empty, err
+		}
+		return RPNarrativeReadResult{Style: style, View: view}, nil
+	}
+	providerMode := "custom"
+	if mode, ok := provider.(interface{ NarrativeMode() string }); ok {
+		switch mode.NarrativeMode() {
+		case "full_prose", "deterministic", "style_planner":
+			providerMode = mode.NarrativeMode()
+		}
+	}
+	metadata := rpProviderMetadata(provider, providerMode)
+	callID, err := s.beginRPProviderCall(ctx, rpProviderCallScope{SessionID: r.SessionID, TurnRunID: r.TurnRunID, SubjectID: playerEventID, Phase: "narrative"}, metadata)
+	if err != nil {
+		return empty, err
+	}
+	var trace core.RPProviderTrace
+	var emissionFailed bool
+	wrappedEmit := emit
+	if emit != nil {
+		wrappedEmit = func(chunk core.RPNarrativeChunk) error {
+			if err := emit(chunk); err != nil {
+				emissionFailed = true
+				return err
+			}
+			return nil
+		}
+	}
+	view, err := provider.RenderStream(core.WithRPProviderTrace(ctx, &trace), input, wrappedEmit)
+	if err != nil {
+		fallback := ""
+		if emissionFailed {
+			fallback = "stream_interrupted"
+		}
+		if recordErr := s.finishRPProviderCall(ctx, callID, rpProviderErrorResult(ctx, err), fallback, "", trace.AttemptCount()); recordErr != nil {
+			return empty, recordErr
+		}
+		return empty, err
+	}
+	if style.Profile.FullProse && providerMode != "full_prose" {
+		// The world declares long-form narrative but no prose-capable
+		// provider answered this read. The lines stay the deterministic
+		// rendering; the reason is recorded, never silently dropped.
+		if view.FallbackReason == "" {
+			view.FallbackReason = "world_declares_full_prose_without_prose_provider"
+		}
+		view.Warnings = append(view.Warnings, "世界声明了 full_prose，但当前叙事 provider 不是长文模式，已按标准叙述呈现。")
+	}
+	// A provider's fallback string is not trusted presentation metadata.
+	// Never persist a raw remote error, URL or response in the receipt.
+	fallback := sanitizeRPNarrativeFallback(view.FallbackReason)
+	view.FallbackReason = fallback
+	if fallback != "" {
+		if recordErr := s.recordRPNarrativeFallback(ctx, r.TurnRunID, fallback, providerMode, input); recordErr != nil {
+			return empty, recordErr
+		}
+	} else {
+		if err := s.saveSelectedRPNarrative(ctx, r, input, &view, metadata); err != nil {
+			_ = s.finishRPProviderCall(ctx, callID, "failed", "render_persist", "", trace.AttemptCount())
+			return empty, err
+		}
+	}
+	source := "template"
+	if providerMode == "full_prose" && fallback == "" {
+		source = "live_prose"
+	}
+	result := "success"
+	if strings.HasPrefix(fallback, "prose_") {
+		result = "failed"
+		if fallback == "prose_timeout" {
+			result = "timeout"
+		}
+	}
+	if err := s.finishRPProviderCall(ctx, callID, result, fallback, source, trace.AttemptCount()); err != nil {
+		return empty, err
+	}
+	if r.StyleOverride == nil {
+		if err := s.saveRPOfficialNarrative(ctx, r.TurnRunID, providerMode, view); err != nil {
+			return empty, err
+		}
+	}
+	return RPNarrativeReadResult{Style: style, View: view}, nil
+}
+
+func savedRPOfficialNarrative(ctx context.Context, encoded, fallback string, input core.RPNarrativeInput, emit func(core.RPNarrativeChunk) error) (core.RPNarrativeView, error) {
+	var lines []string
+	if err := json.Unmarshal([]byte(encoded), &lines); err != nil || len(lines) == 0 || len(input.Facts) == 0 {
+		return core.RPNarrativeView{}, core.NewError(core.CodeProjectionDiverged, "saved RP narrative is invalid")
+	}
+	view := core.RPNarrativeView{Lines: lines, EventIDs: make([]string, 0, len(input.Facts)), Warnings: []string{}}
+	for _, fact := range input.Facts {
+		view.EventIDs = append(view.EventIDs, fact.EventID)
+	}
+	if fallback != "" {
+		var record struct {
+			Reason string `json:"reason"`
+		}
+		if json.Unmarshal([]byte(fallback), &record) == nil {
+			view.FallbackReason = record.Reason
+		}
+		view.Warnings = append(view.Warnings, "小说式呈现暂不可用或正文未通过事实校验，已回退为标准叙述。")
+	}
+	for i, line := range lines {
+		if err := ctx.Err(); err != nil {
+			return core.RPNarrativeView{}, err
+		}
+		if emit == nil {
+			continue
+		}
+		source := i
+		if source >= len(input.Facts) {
+			source = len(input.Facts) - 1
+		}
+		if err := emit(core.RPNarrativeChunk{Index: i, EventID: input.Facts[source].EventID, Line: line}); err != nil {
+			return core.RPNarrativeView{}, err
+		}
+	}
+	return view, nil
+}
+
+func (s *Store) saveRPOfficialNarrative(ctx context.Context, turnRunID, providerMode string, view core.RPNarrativeView) error {
+	mode := providerMode
+	switch mode {
+	case "deterministic", "style_planner", "full_prose":
+	default:
+		mode = "custom"
+	}
+	encoded, err := core.CanonicalJSON(view.Lines)
+	if err != nil {
+		return err
+	}
+	fallbackAssignment := "narrative_fallback"
+	if view.FallbackReason == "" {
+		fallbackAssignment = "NULL"
+	}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	query := `UPDATE rp_turn_runs SET narrative_json=?,narrative_presentation_mode=?,narrative_presented_at_utc=?,updated_at_utc=?,narrative_fallback=` + fallbackAssignment + ` WHERE turn_run_id=? AND status='settled' AND narrative_presented_at_utc IS NULL`
+	if _, err := s.db.ExecContext(ctx, query, string(encoded), mode, now, now, turnRunID); err != nil {
+		return core.WrapError(core.CodeStorageFailure, "save official RP narrative", err)
+	}
+	return nil
+}
+
+func sanitizeRPNarrativeFallback(reason string) string {
+	if reason == "" || reason == "world_declares_full_prose_without_prose_provider" {
+		return reason
+	}
+	if strings.HasPrefix(reason, "prose_") {
+		switch {
+		case strings.Contains(reason, "timeout"), strings.Contains(reason, "cancellation"):
+			return "prose_timeout"
+		case strings.Contains(reason, "speech"), strings.Contains(reason, "dialogue"), strings.Contains(reason, "forbidden"), strings.Contains(reason, "prose empty"), strings.Contains(reason, "agency"), strings.Contains(reason, "expression in prose"), strings.Contains(reason, "money claim"), strings.Contains(reason, "time change"), strings.Contains(reason, "object in prose"), strings.Contains(reason, "person in prose"), strings.Contains(reason, "name in prose"), strings.Contains(reason, "NPC action"), strings.Contains(reason, "relationship"), strings.Contains(reason, "quotation"):
+			return "prose_validation_failure"
+		default:
+			return "prose_unavailable"
+		}
+	}
+	return "narrative_provider_fallback"
+}
+
+// recordRPNarrativeFallback persists why the displayed narrative fell back to
+// the deterministic renderer. Presentation metadata only: it never influences
+// facts, settlement or later reads.
+func (s *Store) recordRPNarrativeFallback(ctx context.Context, turnRunID, reason, providerMode string, input core.RPNarrativeInput) error {
+	factEvents := make([]string, 0, len(input.Facts))
+	for i, fact := range input.Facts {
+		if i >= 8 {
+			break
+		}
+		factEvents = append(factEvents, fact.EventID)
+	}
+	payload, err := core.CanonicalJSON(struct {
+		Reason       string   `json:"reason"`
+		ProviderMode string   `json:"provider_mode"`
+		FactCount    int      `json:"fact_count"`
+		FactEvents   []string `json:"fact_events"`
+		RecordedAt   string   `json:"recorded_at_utc"`
+	}{reason, providerMode, len(input.Facts), factEvents, s.now().UTC().Format(time.RFC3339Nano)})
+	if err != nil {
+		return err
+	}
+	if err := execAgentOne(ctx, s.db, "record narrative fallback", `UPDATE rp_turn_runs SET narrative_fallback=? WHERE turn_run_id=?`, string(payload), turnRunID); err != nil {
+		return err
+	}
+	return nil
 }

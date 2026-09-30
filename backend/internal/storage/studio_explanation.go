@@ -132,7 +132,7 @@ func (s *Store) ReadStudioExplanation(ctx context.Context, r StudioExplanationRe
 			d.Status = "unrecognized"
 		}
 		switch d.ReasonCode {
-		case "action_not_legal", "invalid_speech_fields", "movement_contains_speech", "destination_not_reachable", "noop_contains_effects", "unknown_action", "provider_failure":
+		case "action_not_legal", "invalid_speech_fields", "movement_contains_speech", "destination_not_reachable", "noop_contains_effects", "act_contains_effects", "activity_not_legal", "unknown_action", "provider_failure":
 		default:
 			d.ReasonCode = "not_recorded"
 		}
@@ -170,10 +170,11 @@ func (s *Store) ReadStudioExplanation(ctx context.Context, r StudioExplanationRe
 	committed.SourceKind = "npc_response"
 	if err == sql.ErrNoRows {
 		err = tx.QueryRowContext(ctx, `SELECT c.command_id,p.event_id,p.event_sequence,e.actor_id,
- json_extract(e.payload,'$.action'),json_extract(e.payload,'$.status'),COALESCE(json_extract(e.payload,'$.reason_code'),'')
+ json_extract(main.payload,'$.action'),json_extract(main.payload,'$.status'),COALESCE(json_extract(main.payload,'$.reason_code'),'')
  FROM events e JOIN event_batches b ON b.batch_id=e.batch_id
  JOIN commands c ON c.command_id=b.command_id
- JOIN events p ON p.event_id=json_extract(e.payload,'$.trigger_event_id')
+ JOIN events main ON main.batch_id=e.batch_id AND main.batch_index=0 AND main.actor_id=e.actor_id
+ JOIN events p ON p.event_id=json_extract(main.payload,'$.trigger_event_id')
  WHERE e.event_id=? AND e.instance_id=? AND e.branch_id=? AND c.command_type='RPNPCInitiative'
  AND c.status='committed' AND c.instance_id=e.instance_id AND c.branch_id=e.branch_id
  AND p.instance_id=e.instance_id AND p.branch_id=e.branch_id AND p.event_sequence<e.event_sequence
@@ -189,7 +190,7 @@ func (s *Store) ReadStudioExplanation(ctx context.Context, r StudioExplanationRe
 			committed.Status = "unrecognized"
 		}
 		switch committed.ReasonCode {
-		case "action_not_legal", "invalid_speech_fields", "movement_contains_speech", "destination_not_reachable", "noop_contains_effects", "unknown_action", "provider_failure", "contact_opportunity_suppressed":
+		case "action_not_legal", "invalid_speech_fields", "movement_contains_speech", "destination_not_reachable", "noop_contains_effects", "act_contains_effects", "activity_not_legal", "unknown_action", "provider_failure", "contact_opportunity_suppressed":
 		default:
 			committed.ReasonCode = "not_recorded"
 		}
@@ -204,6 +205,8 @@ func (s *Store) ReadStudioExplanation(ctx context.Context, r StudioExplanationRe
 			committed.Outcome = "committed_silence"
 		case "wait":
 			committed.Outcome = "committed_wait"
+		case "act":
+			committed.Outcome = "committed_activity"
 		default:
 			return StudioExplanation{}, core.NewError(core.CodeProjectionDiverged, "unknown committed NPC action")
 		}

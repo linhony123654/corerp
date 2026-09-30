@@ -18,8 +18,11 @@ func NewRPService(store *Store, provider core.RPDecisionProvider, mode string) (
 	return NewRPServiceWithNarrative(store, provider, mode, core.DeterministicRPNarrativeProvider{})
 }
 
-// The operator supplies immutable, independent decision and presentation
-// providers. Requests/styles cannot select a remote endpoint or credentials.
+// The operator supplies the default decision and presentation providers.
+// The transport layer may additionally resolve a player-supplied
+// core.RPModelOverride into an in-memory per-request provider (the With
+// methods); overrides are validated at construction, never persisted, and an
+// invalid override is an explicit error rather than a silent fallback.
 // Canonical settlement always keeps its original deterministic record.
 func NewRPServiceWithNarrative(store *Store, provider core.RPDecisionProvider, mode string, narrative core.RPStreamingNarrativeProvider) (*RPService, error) {
 	if store == nil || provider == nil || (mode != "deterministic" && mode != "chat_completions") {
@@ -34,24 +37,49 @@ func (s *RPService) ReadRPNarrative(ctx context.Context, r RPNarrativeReadReques
 	return s.StreamRPNarrative(ctx, r, nil)
 }
 func (s *RPService) StreamRPNarrative(ctx context.Context, r RPNarrativeReadRequest, emit func(core.RPNarrativeChunk) error) (RPNarrativeReadResult, error) {
-	return s.Store.streamRPNarrativeWithProvider(ctx, r, emit, s.narrative)
+	return s.StreamRPNarrativeWith(ctx, r, emit, nil)
+}
+
+// The With variants accept a per-request override provider resolved by the
+// transport layer from RPModelOverride. A nil provider keeps the immutable
+// operator-selected default; overrides are never persisted.
+func (s *RPService) StreamRPNarrativeWith(ctx context.Context, r RPNarrativeReadRequest, emit func(core.RPNarrativeChunk) error, narrative core.RPStreamingNarrativeProvider) (RPNarrativeReadResult, error) {
+	if narrative == nil {
+		narrative = s.narrative
+	}
+	return s.Store.streamRPNarrativeWithProvider(ctx, r, emit, narrative)
 }
 func (s *RPService) PlayRPTurn(ctx context.Context, request core.RPSpeechRequest) (RPTurnResult, error) {
-	return s.Store.RunRPTurn(ctx, request, s.provider)
+	return s.PlayRPTurnWith(ctx, request, nil)
+}
+func (s *RPService) PlayRPTurnWith(ctx context.Context, request core.RPSpeechRequest, provider core.RPDecisionProvider) (RPTurnResult, error) {
+	if provider == nil {
+		provider = s.provider
+	}
+	return s.Store.RunRPTurn(ctx, request, provider)
 }
 func (s *RPService) PlayResumeRPTurn(ctx context.Context, request RPTurnResumeRequest) (RPTurnResult, error) {
-	return s.Store.ResumeRPTurn(ctx, request, s.provider)
+	return s.PlayResumeRPTurnWith(ctx, request, nil)
+}
+func (s *RPService) PlayResumeRPTurnWith(ctx context.Context, request RPTurnResumeRequest, provider core.RPDecisionProvider) (RPTurnResult, error) {
+	if provider == nil {
+		provider = s.provider
+	}
+	return s.Store.ResumeRPTurn(ctx, request, provider)
 }
 
 // A wait is the product's explicit time advance, not an invented player speech.
 // Its committed roster owns retry identity. Individual effects remain atomic;
 // after a lost response, committed actors are replayed without model calls.
 func (s *RPService) WaitRP(ctx context.Context, request core.RPWaitRequest) (RPWaitResult, error) {
+	return s.WaitRPWith(ctx, request, nil)
+}
+func (s *RPService) WaitRPWith(ctx context.Context, request core.RPWaitRequest, provider core.RPDecisionProvider) (RPWaitResult, error) {
 	result, err := s.Store.WaitRP(ctx, request)
 	if err != nil || result.Status != "completed" {
 		return result, err
 	}
-	return s.finishRPWaitPresentation(ctx, request, result)
+	return s.finishRPWaitPresentation(ctx, request, result, provider)
 }
 
 // Shared-round authority is settled by Store first. The product service then
@@ -79,11 +107,14 @@ func (s *RPService) AdvanceRPSharedRound(ctx context.Context, request RPSharedRo
 	if err != nil {
 		return result, err
 	}
-	_, err = s.finishRPWaitPresentation(ctx, wait, completed)
+	_, err = s.finishRPWaitPresentation(ctx, wait, completed, nil)
 	return result, err
 }
 
-func (s *RPService) finishRPWaitPresentation(ctx context.Context, request core.RPWaitRequest, result RPWaitResult) (RPWaitResult, error) {
+func (s *RPService) finishRPWaitPresentation(ctx context.Context, request core.RPWaitRequest, result RPWaitResult, provider core.RPDecisionProvider) (RPWaitResult, error) {
+	if provider == nil {
+		provider = s.provider
+	}
 	for _, npc := range result.WarmNPCIDs {
 		_, err := s.Store.runRPWarmDecision(ctx, core.RPInitiativeRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID, NPCEntityID: npc, TriggerEventID: result.EventID})
 		if err != nil && !core.HasCode(err, core.CodeBranchConflict) && !core.HasCode(err, core.CodeNotFound) && !core.HasCode(err, core.CodeCommandInProgress) {
@@ -91,7 +122,7 @@ func (s *RPService) finishRPWaitPresentation(ctx context.Context, request core.R
 		}
 	}
 	for _, npc := range result.InitiativeNPCIDs {
-		effect, err := s.Store.RunRPInitiative(ctx, core.RPInitiativeRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID, NPCEntityID: npc, TriggerEventID: result.EventID}, s.provider)
+		effect, err := s.Store.RunRPInitiative(ctx, core.RPInitiativeRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID, NPCEntityID: npc, TriggerEventID: result.EventID}, provider)
 		if err != nil {
 			// A later user action may legitimately supersede an unfinished old
 			// opportunity. Never replay an old initiative into a different scene.

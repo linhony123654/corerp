@@ -50,7 +50,10 @@ func (s *Server) handleRPNarrativeRead(w http.ResponseWriter, r *http.Request, r
 	if !requireMethod(w, requestID, r, http.MethodPost) {
 		return
 	}
-	var input storage.RPNarrativeReadRequest
+	var input struct {
+		storage.RPNarrativeReadRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(w, r, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(w, requestID, err)
 		return
@@ -59,7 +62,12 @@ func (s *Server) handleRPNarrativeRead(w http.ResponseWriter, r *http.Request, r
 		writeError(w, requestID, err)
 		return
 	}
-	result, err := s.service.ReadRPNarrative(r.Context(), input)
+	narrative, err := resolveRPNarrativeOverride(input.Model, s.endpointPolicy)
+	if err != nil {
+		writeError(w, requestID, err)
+		return
+	}
+	result, err := s.service.StreamRPNarrativeWith(r.Context(), input.RPNarrativeReadRequest, nil, narrative)
 	if err != nil {
 		writeError(w, requestID, err)
 		return

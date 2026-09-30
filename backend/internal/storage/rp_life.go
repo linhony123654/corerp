@@ -39,15 +39,20 @@ func buildRPLifeContext(ctx context.Context, conn *sql.Conn, input core.RPDecisi
 		return nil, err
 	}
 	// Projection last_event_sequence can change during rebuild without a new
-	// economic fact. Trace causal sources through immutable posted entries.
-	rows, err := conn.QueryContext(ctx, `WITH own_latest AS (
- SELECT MAX(e.event_sequence) AS sequence FROM materialized_entities n
- JOIN postings p ON p.account_id IN (n.asset_account_id,n.receivable_account_id,n.liability_account_id)
- JOIN journal_entries j ON j.entry_id=p.entry_id AND j.status='posted'
- JOIN events e ON e.event_id=j.event_id AND e.instance_id=? AND e.branch_id=?
- WHERE n.entity_id=? GROUP BY p.account_id)
- SELECT DISTINCT e.event_id FROM own_latest l JOIN events e ON e.event_sequence=l.sequence
- WHERE e.instance_id=? AND e.branch_id=? ORDER BY e.event_sequence,e.event_id`, input.InstanceID, input.BranchID, input.NPCEntityID, input.InstanceID, input.BranchID)
+	// economic fact. Read the latest indexed posted source for each owned
+	// account; the journal/postings/events remain the authority for this index.
+	rows, err := conn.QueryContext(ctx, `WITH accounts AS MATERIALIZED (
+ SELECT asset_account_id AS account_id FROM materialized_entities WHERE entity_id=?
+ UNION SELECT receivable_account_id FROM materialized_entities WHERE entity_id=?
+ UNION SELECT liability_account_id FROM materialized_entities WHERE entity_id=?),
+ latest AS MATERIALIZED (
+ SELECT (SELECT s.event_id FROM rp_account_economic_sources s
+         WHERE s.account_id=a.account_id AND s.instance_id=? AND s.branch_id=?
+         ORDER BY s.event_sequence DESC,s.event_id LIMIT 1) AS event_id
+ FROM accounts a)
+ SELECT DISTINCT e.event_id FROM latest l JOIN events e ON e.event_id=l.event_id
+ WHERE e.instance_id=? AND e.branch_id=?
+ ORDER BY e.event_sequence,e.event_id`, input.NPCEntityID, input.NPCEntityID, input.NPCEntityID, input.InstanceID, input.BranchID, input.InstanceID, input.BranchID)
 	if err != nil {
 		return nil, err
 	}

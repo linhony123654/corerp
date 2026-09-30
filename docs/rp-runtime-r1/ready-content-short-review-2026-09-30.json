@@ -1,0 +1,98 @@
+{
+  "kind": "assistant_readable_short_dialogue_audit_not_user_acceptance",
+  "runtime_sha256": "f85f7a508a2373755189243bdfa2a11460a956e595f1077265d2e8f963affd95",
+  "source_artifact": "role-ready-ready-content-2026-09-30.json",
+  "world_spec_sha256": "34a79c05fb62155d3a54f94a4efc941524073b8e5b091053f1b8db04a34aceee",
+  "facts": {
+    "real_requests": 4,
+    "successes": 4,
+    "native_function_replies": 2,
+    "complete_content_replies": 2,
+    "mock_requests": 0,
+    "repair_requests": 0,
+    "fallbacks": 0,
+    "observable_audit": [
+      {
+        "event_id": "event_rp_npc_expression_7176aeb743e1ecb84047af73a20f9fc1e7f414667b9de8f7375caa1f8a1d365f",
+        "event_sequence": 12,
+        "event_type": "RPNonverbalAction",
+        "witness_observations": 1,
+        "player_witness_observations": 1
+      },
+      {
+        "event_id": "event_rp_npc_expression_529a99eeb91fad22eaa055878e2f8361dd74fee18a3353ceb173fcf55e8206c1",
+        "event_sequence": 15,
+        "event_type": "RPNonverbalAction",
+        "witness_observations": 1,
+        "player_witness_observations": 1
+      },
+      {
+        "event_id": "event_rp_npc_expression_62ecc7b83a38609552590ce7426a5bb8947d104b3a5fad34cdbc1645933d5c9d",
+        "event_sequence": 18,
+        "event_type": "RPNonverbalAction",
+        "witness_observations": 1,
+        "player_witness_observations": 1
+      },
+      {
+        "event_id": "event_rp_npc_expression_e7383c0c2e619d6cd500520430bda79f24216891a53978ce9fec31dde86f4176",
+        "event_sequence": 21,
+        "event_type": "RPNonverbalAction",
+        "witness_observations": 1,
+        "player_witness_observations": 1
+      }
+    ],
+    "observation_channel": "co_location (the nonverbal visual witness implementation uses this channel)"
+  },
+  "public_samples": [
+    {
+      "turn": 1,
+      "input": "Nora，今天有点想你。",
+      "lines": [
+        "你说：\n「Nora，今天有点想你。」",
+        "Nora 回应：\n「Lin，突然这么讲，我都有点不好意思了。过来坐，我陪你聊一会儿。」",
+        "Nora 笑了笑。"
+      ],
+      "seconds": 7.051
+    },
+    {
+      "turn": 2,
+      "input": "我今天总有些失落，又说不清为什么。",
+      "lines": [
+        "你说：\n「我今天总有些失落，又说不清为什么。」",
+        "Nora 回应：\n「Lin，说不清就先不说。我在这儿坐一会儿，你想讲的时候再讲。」",
+        "Nora 点了点头。"
+      ],
+      "seconds": 4.923
+    },
+    {
+      "turn": 3,
+      "input": "我们先不找原因，能陪我说一会儿话吗？",
+      "lines": [
+        "你说：\n「我们先不找原因，能陪我说一会儿话吗？」",
+        "Nora 回应：\n「好，不找原因。我就坐在这儿陪你，你想说什么都行，不想说也没关系。」",
+        "Nora 点了点头。"
+      ],
+      "seconds": 5.064
+    },
+    {
+      "turn": 4,
+      "input": "你刚才答应我的是什么？",
+      "lines": [
+        "你说：\n「你刚才答应我的是什么？」",
+        "Nora 回应：\n「Lin，我答应过陪你聊一会儿呀。不找原因，你想说我就听着，不想说也没关系。」",
+        "Nora 点了点头。"
+      ],
+      "seconds": 6.624
+    }
+  ],
+  "assistant_reading": {
+    "identity_relationship_address": "Nora recognises Lin and uses the authored familiar address; no new introduction in these four turns.",
+    "knowledge_continuity": "Does not invent the cause of Lin sadness, agrees not to pursue it; fourth reply recalls the explicit promise.",
+    "initiative_and_repetition": "Short replies appropriate to the declared persona, but turns2–4 repeat sitting/companionship/no questions. No evidence of an independent new goal or rich initiative.",
+    "narrator": "Deterministic renderer only; repeated reply framing and nod gestures. This sample does not validate expressive narration.",
+    "observable_boundary": "All four rendered gestures have committed RPNonverbalAction sources and one co_location witness record for the player. Speech about sitting remains attributed speech and does not prove posture/location change.",
+    "private_visibility": "No private intent/reasoning appears in the public samples inspected; focused HTTP tests separately assert those values never enter public responses. This is a bounded inspection, not proof over arbitrary prose."
+  },
+  "acceptance": "TECHNICAL SHORT SLICE PASS; HUMAN RP QUALITY PENDING; NO LONG-RP / RONGQING EXPERIENCE PASS",
+  "limits": "Fictional explicit test-author declarations, same stimuli/model/tuning as earlier samples. One stochastic run; no causal speed benchmark. No actual user review or approved Rongqing canon."
+}

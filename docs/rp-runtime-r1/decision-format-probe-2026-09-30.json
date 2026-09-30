@@ -1,0 +1,87 @@
+{
+  "kind": "same_authorized_input_response_format_diagnostic",
+  "runtime_source": "role-create-verification-2026-09-30.json",
+  "limits": "Cloned world plus new question; not exact failed input, not a committed RP run, not a latency benchmark. No private text or uncommitted speech persisted in report. Native decoder, actual-view and canonical grounding, controller ownership all retained.",
+  "script_sha256": "745cb668efb4b64b9b2183ed1b939de6c42221abd79a8d1528d7fa4b81a8427c",
+  "helper_sha256": "7c1e1857396c05f87aa35a9102424a5892a484870cd9d00d41b08a6b17f1c5bd",
+  "diagnostic_dir": "/tmp/corerp-r1-format-probe-2i73gssr",
+  "results": [
+    {
+      "canonical_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "context_bytes": 11752,
+      "evidence_count": 12,
+      "head_sequence": 26,
+      "local_error": "",
+      "masked_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "mode": "json_schema",
+      "observable_committed": false,
+      "proposal_action": "silence",
+      "provider_error_code": "",
+      "reason_code": "",
+      "seconds": 47.389382792,
+      "status": "validated"
+    },
+    {
+      "canonical_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "context_bytes": 11752,
+      "evidence_count": 12,
+      "head_sequence": 26,
+      "local_error": "",
+      "masked_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "mode": "json_object",
+      "observable_committed": false,
+      "proposal_action": "silence",
+      "provider_error_code": "other",
+      "reason_code": "provider_failure",
+      "seconds": 44.426029342,
+      "status": "provider_fallback"
+    }
+  ],
+  "http_records": [
+    {
+      "mode": "json_schema",
+      "context_sha256": "f3b267c898057e862f4d5a0afb0c37dcff1145889249b63e9b2897e71c86d216",
+      "context_bytes": 11797,
+      "original_request_bytes": 22147,
+      "max_completion_tokens": 4096,
+      "forwarded_request_bytes": 22147,
+      "http_status": 200,
+      "seconds": 47.366,
+      "finish_reason": "stop",
+      "content_bytes": 827,
+      "reasoning_bytes": {
+        "reasoning": 13451,
+        "reasoning_content": 13451
+      },
+      "usage": {
+        "prompt_tokens": 6122,
+        "completion_tokens": 3906,
+        "total_tokens": 10028
+      }
+    },
+    {
+      "mode": "json_object",
+      "context_sha256": "f3b267c898057e862f4d5a0afb0c37dcff1145889249b63e9b2897e71c86d216",
+      "context_bytes": 11797,
+      "original_request_bytes": 22147,
+      "max_completion_tokens": 4096,
+      "forwarded_request_bytes": 19053,
+      "http_status": 200,
+      "seconds": 44.406,
+      "finish_reason": "stop",
+      "content_bytes": 482,
+      "reasoning_bytes": {
+        "reasoning": 13334,
+        "reasoning_content": 13334
+      },
+      "usage": {
+        "prompt_tokens": 6122,
+        "completion_tokens": 3278,
+        "total_tokens": 9400
+      }
+    }
+  ],
+  "source_world_unchanged": true,
+  "npc_observables_committed": false,
+  "input_hash_and_head_identical": true
+}

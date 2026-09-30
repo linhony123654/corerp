@@ -1,0 +1,580 @@
+{
+  "kind": "current_runtime_four_real_role_turns",
+  "captured_at_utc": "2026-09-30T12:14:21.289915+00:00",
+  "runtime_sha256": "9c7d372db2a17df19abecba77719cb53aac5b652f021e719096fdfd5fc4b8d4b",
+  "inputs": [
+    "Nora，今天有点想你。",
+    "我今天总有些失落，又说不清为什么。",
+    "我们先不找原因，能陪我说一会儿话吗？",
+    "你刚才答应我的是什么？"
+  ],
+  "tuning": {
+    "model": "step-5-preview",
+    "timeout_seconds": 120,
+    "decision_max_tokens": 4096,
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "decision_format": "tool_call",
+    "narrative": "deterministic"
+  },
+  "harness_sha256": "8bca98d35db41e2a7f8ac8441b243b0d5d622d98469ed4a7280d65886fabe996",
+  "runs": [
+    {
+      "label": "ready_native_tool_runtime",
+      "runtime_sha256": "9c7d372db2a17df19abecba77719cb53aac5b652f021e719096fdfd5fc4b8d4b",
+      "temp_dir": "/dev/shm/corerp-r1-selection-ready_native_tool_runtime-iv0izzeg",
+      "samples": [
+        {
+          "index": 1,
+          "input": "Nora，今天有点想你。",
+          "status": "settled",
+          "duration_seconds": 18.039,
+          "public_narrative_lines": [
+            "你说：\n「Nora，今天有点想你。」",
+            "Nora 回应：\n「Lin，那你今天来对了。我这儿没什么急事，陪你坐一会儿，想说什么都行。」",
+            "Nora 笑了笑。"
+          ],
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "rank": 0,
+              "reason": "direct_address",
+              "source_event_id": null
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "action": "respond",
+              "text": "Lin，那你今天来对了。我这儿没什么急事，陪你坐一会儿，想说什么都行。",
+              "event_id": "event_rp_npc_88f01a4f36cf456e5f3bbde37526a6a8e0313c3d470b106a4d38bdd930123f4b"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 2,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "input": "我今天总有些失落，又说不清为什么。",
+          "status": "settled",
+          "duration_seconds": 17.15,
+          "public_narrative_lines": [
+            "你说：\n「我今天总有些失落，又说不清为什么。」",
+            "Nora 回应：\n「Lin，说不清就先不用急着想清楚。失落也可以只是累了，我在这儿陪你坐一会儿。你想说的我听，不想说我们就安静待着。」",
+            "Nora 点了点头。"
+          ],
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "rank": 0,
+              "reason": "conversation_continuation",
+              "source_event_id": "event_rp_npc_88f01a4f36cf456e5f3bbde37526a6a8e0313c3d470b106a4d38bdd930123f4b"
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "action": "respond",
+              "text": "Lin，说不清就先不用急着想清楚。失落也可以只是累了，我在这儿陪你坐一会儿。你想说的我听，不想说我们就安静待着。",
+              "event_id": "event_rp_npc_b678107140765b7eebaf7f938f495edeab5719c74ff993f749265fa1aac7dce5"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "input": "我们先不找原因，能陪我说一会儿话吗？",
+          "status": "settled",
+          "duration_seconds": 7.525,
+          "public_narrative_lines": [
+            "你说：\n「我们先不找原因，能陪我说一会儿话吗？」",
+            "Nora 回应：\n「当然可以，Lin。不找原因，我就坐这儿陪你。你什么时候想停，我们就停。」",
+            "Nora 点了点头。"
+          ],
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "rank": 0,
+              "reason": "conversation_continuation",
+              "source_event_id": "event_rp_npc_b678107140765b7eebaf7f938f495edeab5719c74ff993f749265fa1aac7dce5"
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "action": "respond",
+              "text": "当然可以，Lin。不找原因，我就坐这儿陪你。你什么时候想停，我们就停。",
+              "event_id": "event_rp_npc_09a6b8b7354faf87249d03891c16b50c0cb796a1741ba65d79e2b53656ac53f9"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "input": "你刚才答应我的是什么？",
+          "status": "settled",
+          "duration_seconds": 6.798,
+          "public_narrative_lines": [
+            "你说：\n「你刚才答应我的是什么？」",
+            "Nora 回应：\n「我说，不找原因，就坐这儿陪你，你想停我们就停。诺言还热着呢，Lin。现在反悔可来不及了。」",
+            "Nora 笑了笑。"
+          ],
+          "activations": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "rank": 0,
+              "reason": "conversation_continuation",
+              "source_event_id": "event_rp_npc_09a6b8b7354faf87249d03891c16b50c0cb796a1741ba65d79e2b53656ac53f9"
+            }
+          ],
+          "replies": [
+            {
+              "name": "Nora",
+              "actor_id": "studio_entity_23d9cf55e97974354662065367c99dfc3f2e6a9671e5f17d890e45eeec178696",
+              "action": "respond",
+              "text": "我说，不找原因，就坐这儿陪你，你想停我们就停。诺言还热着呢，Lin。现在反悔可来不及了。",
+              "event_id": "event_rp_npc_687df006dcf044bc2682348c57a86f93ea6bdd44860101613fbd3c5a80414ac5"
+            }
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "attempted": true,
+              "attempt_count": 1,
+              "result": "success",
+              "fallback_kind": null
+            }
+          ]
+        }
+      ],
+      "status": "PASS: four real-model turns settled; role quality requires text review",
+      "setup_readiness": {
+        "status": "READY",
+        "characters": [
+          {
+            "key": "nora",
+            "name": "Nora",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          }
+        ],
+        "incomplete_relationships": []
+      },
+      "live_request_shapes": [
+        {
+          "label": "ready_native_tool_runtime",
+          "phase": "real_role_turn",
+          "request_bytes": 10915,
+          "context_bytes": 4560,
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "has_persona": true,
+          "relationship_count": 1,
+          "recent_dialogue_count": 1,
+          "model": "step-5-preview",
+          "response_format": null,
+          "declared_proposal_tool": true,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 3433,
+            "completion_tokens": 387,
+            "total_tokens": 3820
+          },
+          "tool_call_count": 0,
+          "declared_proposal_function_only": false,
+          "ordinary_content_bytes": 667,
+          "content_bytes": 0,
+          "reply_shape": {
+            "valid_json": false,
+            "fenced": false,
+            "starts_object": false,
+            "ends_object": false
+          },
+          "response_model_matches_request": true,
+          "reasoning_bytes": {
+            "reasoning": 600,
+            "reasoning_content": 600
+          },
+          "http_status": 200,
+          "seconds": 7.964
+        },
+        {
+          "label": "ready_native_tool_runtime",
+          "phase": "real_role_turn",
+          "request_bytes": 11226,
+          "context_bytes": 4560,
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "has_persona": true,
+          "relationship_count": 1,
+          "recent_dialogue_count": 1,
+          "model": "step-5-preview",
+          "response_format": null,
+          "declared_proposal_tool": true,
+          "finish_reason": "tool_calls",
+          "usage": {
+            "prompt_tokens": 3488,
+            "completion_tokens": 474,
+            "total_tokens": 3962
+          },
+          "tool_call_count": 1,
+          "declared_proposal_function_only": true,
+          "ordinary_content_bytes": 0,
+          "content_bytes": 471,
+          "reply_shape": {
+            "valid_json": true,
+            "root_object": true,
+            "private_present": true,
+            "observable_present": true,
+            "recognized_root_fields": {
+              "action": false,
+              "text": false,
+              "intent": false,
+              "emotion": false,
+              "reasoning": false,
+              "decision": false,
+              "public": false,
+              "proposal": false,
+              "private_decision": false,
+              "npc": false,
+              "speech": false
+            },
+            "root_field_count": 2
+          },
+          "response_model_matches_request": true,
+          "reasoning_bytes": {
+            "reasoning": 1371,
+            "reasoning_content": 1371
+          },
+          "http_status": 200,
+          "seconds": 9.997
+        },
+        {
+          "label": "ready_native_tool_runtime",
+          "phase": "real_role_turn",
+          "request_bytes": 14015,
+          "context_bytes": 7242,
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "has_persona": true,
+          "relationship_count": 1,
+          "recent_dialogue_count": 3,
+          "model": "step-5-preview",
+          "response_format": null,
+          "declared_proposal_tool": true,
+          "finish_reason": "tool_calls",
+          "usage": {
+            "prompt_tokens": 4718,
+            "completion_tokens": 915,
+            "total_tokens": 5633
+          },
+          "tool_call_count": 1,
+          "declared_proposal_function_only": true,
+          "ordinary_content_bytes": 0,
+          "content_bytes": 645,
+          "reply_shape": {
+            "valid_json": true,
+            "root_object": true,
+            "private_present": true,
+            "observable_present": true,
+            "recognized_root_fields": {
+              "action": false,
+              "text": false,
+              "intent": false,
+              "emotion": false,
+              "reasoning": false,
+              "decision": false,
+              "public": false,
+              "proposal": false,
+              "private_decision": false,
+              "npc": false,
+              "speech": false
+            },
+            "root_field_count": 2
+          },
+          "response_model_matches_request": true,
+          "reasoning_bytes": {
+            "reasoning": 3227,
+            "reasoning_content": 3227
+          },
+          "http_status": 200,
+          "seconds": 17.099
+        },
+        {
+          "label": "ready_native_tool_runtime",
+          "phase": "real_role_turn",
+          "request_bytes": 17133,
+          "context_bytes": 9948,
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "has_persona": true,
+          "relationship_count": 1,
+          "recent_dialogue_count": 5,
+          "model": "step-5-preview",
+          "response_format": null,
+          "declared_proposal_tool": true,
+          "finish_reason": "tool_calls",
+          "usage": {
+            "prompt_tokens": 5902,
+            "completion_tokens": 299,
+            "total_tokens": 6201
+          },
+          "tool_call_count": 1,
+          "declared_proposal_function_only": true,
+          "ordinary_content_bytes": 0,
+          "content_bytes": 571,
+          "reply_shape": {
+            "valid_json": true,
+            "root_object": true,
+            "private_present": true,
+            "observable_present": true,
+            "recognized_root_fields": {
+              "action": false,
+              "text": false,
+              "intent": false,
+              "emotion": false,
+              "reasoning": false,
+              "decision": false,
+              "public": false,
+              "proposal": false,
+              "private_decision": false,
+              "npc": false,
+              "speech": false
+            },
+            "root_field_count": 2
+          },
+          "response_model_matches_request": true,
+          "reasoning_bytes": {
+            "reasoning": 421,
+            "reasoning_content": 421
+          },
+          "http_status": 200,
+          "seconds": 7.471
+        },
+        {
+          "label": "ready_native_tool_runtime",
+          "phase": "real_role_turn",
+          "request_bytes": 20156,
+          "context_bytes": 12559,
+          "readiness": {
+            "persona": "READY",
+            "relationship_to_interlocutor": "READY",
+            "address_to_interlocutor": "READY"
+          },
+          "has_persona": true,
+          "relationship_count": 1,
+          "recent_dialogue_count": 7,
+          "model": "step-5-preview",
+          "response_format": null,
+          "declared_proposal_tool": true,
+          "finish_reason": "tool_calls",
+          "usage": {
+            "prompt_tokens": 7162,
+            "completion_tokens": 375,
+            "total_tokens": 7537
+          },
+          "tool_call_count": 1,
+          "declared_proposal_function_only": true,
+          "ordinary_content_bytes": 0,
+          "content_bytes": 627,
+          "reply_shape": {
+            "valid_json": true,
+            "root_object": true,
+            "private_present": true,
+            "observable_present": true,
+            "recognized_root_fields": {
+              "action": false,
+              "text": false,
+              "intent": false,
+              "emotion": false,
+              "reasoning": false,
+              "decision": false,
+              "public": false,
+              "proposal": false,
+              "private_decision": false,
+              "npc": false,
+              "speech": false
+            },
+            "root_field_count": 2
+          },
+          "response_model_matches_request": true,
+          "reasoning_bytes": {
+            "reasoning": 609,
+            "reasoning_content": 609
+          },
+          "http_status": 200,
+          "seconds": 6.739
+        }
+      ],
+      "mock_request_count": 0,
+      "world_spec": {
+        "version": "corerp.studio-world.v1",
+        "name": "角色就绪诊断·虚构测试世界",
+        "start_world_time": "2026-09-22T00:00:00Z",
+        "population": 2,
+        "opening_money_minor": 30,
+        "opening_stock_minor": 2,
+        "places": [
+          {
+            "key": "hall",
+            "name": "会客室",
+            "kind": "public"
+          },
+          {
+            "key": "lane",
+            "name": "走廊",
+            "kind": "public"
+          }
+        ],
+        "links": [
+          {
+            "from": "hall",
+            "to": "lane",
+            "minutes": 5
+          }
+        ],
+        "people": [
+          {
+            "key": "lin",
+            "name": "Lin",
+            "place": "hall",
+            "player": true,
+            "persona": "Lin是Nora认识多年的朋友。来到会客室聊天，不曾承诺替她做事。"
+          },
+          {
+            "key": "nora",
+            "name": "Nora",
+            "place": "hall",
+            "player": false,
+            "persona": "Nora与Lin是认识多年的朋友，性格温和，偶有轻巧的玩笑。说中文，通常两三句，不讲大道理，不把关心变成盘问。她愿意陪朋友聊天，但不会代替朋友认定心事的原因。眼下没有要立刻离开的事务。她只知道自己实际听见和看见的内容。",
+            "public_presentation": "言辞温和、亲切，偶有轻巧的玩笑。"
+          }
+        ],
+        "acquaintances": [
+          [
+            "lin",
+            "nora"
+          ]
+        ],
+        "relationships": [
+          {
+            "from": "nora",
+            "to": "lin",
+            "role": "多年的朋友",
+            "address_to": [
+              "Lin"
+            ],
+            "self_reference": "我"
+          },
+          {
+            "from": "lin",
+            "to": "nora",
+            "role": "多年的朋友",
+            "address_to": [
+              "Nora"
+            ],
+            "self_reference": "我"
+          }
+        ]
+      },
+      "world_spec_sha256": "34a79c05fb62155d3a54f94a4efc941524073b8e5b091053f1b8db04a34aceee"
+    }
+  ],
+  "limits": "All model requests are real Step; zero mocked replies. Fictional test-author declarations only, not approved Rongqing canon or production data. Current explicit JSON Mode execution contract runtime, same authored fixture/model/stimuli as previous f6 ready group. No mocked seed turns. Single stochastic run, not a causal speed comparison, full32, expressive narrator or human RP acceptance.",
+  "public_expression_trace_check": {
+    "status": "PASS: four published expressions have committed events and visual observations",
+    "events": [
+      {
+        "event_id": "event_rp_npc_expression_88f01a4f36cf456e5f3bbde37526a6a8e0313c3d470b106a4d38bdd930123f4b",
+        "event_sequence": 12,
+        "action": "smile",
+        "gesture_code": "",
+        "witness_observation_count": 1
+      },
+      {
+        "event_id": "event_rp_npc_expression_b678107140765b7eebaf7f938f495edeab5719c74ff993f749265fa1aac7dce5",
+        "event_sequence": 15,
+        "action": "nod",
+        "gesture_code": "",
+        "witness_observation_count": 1
+      },
+      {
+        "event_id": "event_rp_npc_expression_09a6b8b7354faf87249d03891c16b50c0cb796a1741ba65d79e2b53656ac53f9",
+        "event_sequence": 18,
+        "action": "nod",
+        "gesture_code": "",
+        "witness_observation_count": 1
+      },
+      {
+        "event_id": "event_rp_npc_expression_687df006dcf044bc2682348c57a86f93ea6bdd44860101613fbd3c5a80414ac5",
+        "event_sequence": 21,
+        "action": "smile",
+        "gesture_code": "",
+        "witness_observation_count": 1
+      }
+    ],
+    "speech_limit": "Dialogue about sitting is not proof of a committed sit action."
+  },
+  "prior_comparable_run": {
+    "artifact": "role-ready-current-2026-09-30.json",
+    "same_authored_spec": true,
+    "same_stimuli": true,
+    "model": "step-5-preview",
+    "limits": "Separate stochastic four-turn runs; not a long conversation or causal performance/quality benchmark."
+  },
+  "human_rp_acceptance": "PENDING; existing user question unanswered; no artificial score assigned"
+}

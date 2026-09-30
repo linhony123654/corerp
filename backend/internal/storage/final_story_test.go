@@ -129,7 +129,7 @@ func runFinalWorldStory(t *testing.T, month bool) {
 	for _, relation := range friendly.Life.Relationships {
 		// The unwelcome gift adds tension, not trust; only the welcome gift
 		// contributes trust. Both consequences retain their actual sources.
-		trusted = trusted || relation.SubjectEntityID == M2RPPlayerID && relation.Trust == 1 && relation.Tension == 2 && len(relation.SourceEventIDs) >= 2
+		trusted = trusted || relation.SubjectEntityID == friendly.InterlocutorEntityID && relation.Trust == 1 && relation.Tension == 2 && len(relation.SourceEventIDs) >= 2
 	}
 	if !trusted {
 		t.Fatalf("two gifts did not create sourced trust: %+v", friendly.Life.Relationships)
@@ -184,6 +184,7 @@ func runFinalWorldStory(t *testing.T, month bool) {
 		t.Fatalf("actual work: %+v %v", attendance, err)
 	}
 	assertM2Value(t, ctx, s, `SELECT amount_paid_minor FROM wage_obligations WHERE contract_id=? AND period_start_day=2`, []any{job.Fact.Employment.ContractID}, 12)
+	beforeRestart := readCareerTestContext(t, s, nora)
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +203,7 @@ func runFinalWorldStory(t *testing.T, month bool) {
 		t.Fatalf("fine replay: %+v %v", retry, err)
 	}
 	recovered := readCareerTestContext(t, s, nora)
-	if recovered.Life.Background.MaterializationEventID != initial.Life.Background.MaterializationEventID || !reflect.DeepEqual(recovered.Life.CultureExperiences, friendly.Life.CultureExperiences) {
+	if recovered.Life.Background.MaterializationEventID != initial.Life.Background.MaterializationEventID || !reflect.DeepEqual(recovered.Life.CultureExperiences, beforeRestart.Life.CultureExperiences) {
 		t.Fatal("restart changed identity or historical experience")
 	}
 	if _, err := s.ReadCareerRecruitmentRecord(ctx, M2RPPlayerPrincipal, M2DemoInstanceID, M2DemoBranchID, "evaluation", "eval_"+nora); !core.HasCode(err, core.CodeUnauthorized) {

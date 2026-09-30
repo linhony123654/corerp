@@ -1,0 +1,123 @@
+{
+  "kind": "decision_wire_v3_full32_terminal_result",
+  "captured_at_utc": "2026-09-30T06:29:18.088979+00:00",
+  "model": "step-5-preview",
+  "script_exit_code": 1,
+  "completed_browser_turns": 1,
+  "settled_turns": 2,
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "count": 5,
+      "total_attempts": 6
+    },
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "timeout",
+      "count": 1,
+      "total_attempts": 2
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "count": 2,
+      "total_attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "count": 2,
+      "total_attempts": 2
+    }
+  ],
+  "failures": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "model_id": "step-5-preview",
+      "result": "timeout",
+      "attempt_count": 2,
+      "fallback_kind": "silence",
+      "started_at_utc": "2026-09-30T06:23:23.541238101Z",
+      "finished_at_utc": "2026-09-30T06:25:23.584910108Z"
+    }
+  ],
+  "followup_checks": "NOT REACHED: regeneration, mixed interaction, injected provider failure, restart recovery followups",
+  "world_integrity_32_exit": "FAIL: browser turn2 audited silence after120s NPC decision timeout; no gate relaxed",
+  "runtime_sha256": "sha256:2e527072a0aafea8fd9e72c545d7f847f010d8fd5937cae407298b6f87085ff1",
+  "model_configuration": {
+    "decision_timeout_seconds": 120,
+    "decision_initial_max_tokens": 4096,
+    "existing_length_repair_cap": 8192,
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "interaction_max_tokens": 4096,
+    "narrator_explicit_reasoning_effort": null
+  },
+  "artifact_directory": "/tmp/corerp-rp3-npc-iVNXtN",
+  "log_path": "/tmp/corerp-r1-decision-wire-32-20260930.log",
+  "log_sha256": "0bfb383c668687c682646126c8c43a5ba7864c9034122dc067c723392116f329",
+  "fixture_note": "Existing isolated authored three-NPC Rongqing technical fixture, not the frozen actual11-role Golden. Public speaker labels are authored creator names. No private thoughts captured. Step sampling is not causal paired evaluation.",
+  "public_samples": [
+    {
+      "turn_run_id": "rpturn_7b3be1129247669a527aa3f7076497943b108189f999bbd9bdfcc9ae37cb206c",
+      "status": "settled",
+      "settled_sequence": 21,
+      "committed_template": [
+        "宝玉 「有人吗？」",
+        "袭人 「我在，帘子才理了一半。您有什么事？」",
+        "黛玉 「有人。诗笺还捏在我手里，帘子却已被别人应去了。」"
+      ],
+      "selected_public_lines": null,
+      "replies": [
+        {
+          "speaker": "袭人",
+          "action": "respond",
+          "text": "我在，帘子才理了一半。您有什么事？"
+        },
+        {
+          "speaker": "黛玉",
+          "action": "respond",
+          "text": "有人。诗笺还捏在我手里，帘子却已被别人应去了。"
+        },
+        {
+          "speaker": "宝钗",
+          "action": "silence",
+          "text": null
+        }
+      ]
+    },
+    {
+      "turn_run_id": "rpturn_d0b1637ab729e9d9fdbd5277c608edb92768374428f2af598ab72c6194731815",
+      "status": "settled",
+      "settled_sequence": 25,
+      "committed_template": [
+        "你 「你是谁呀？」",
+        "黛玉 「我姓林，闺名黛玉。诗笺还捏在我手里，人是站在这屋里头的。」"
+      ],
+      "selected_public_lines": null,
+      "replies": [
+        {
+          "speaker": "袭人",
+          "action": "silence",
+          "text": null
+        },
+        {
+          "speaker": "黛玉",
+          "action": "respond",
+          "text": "我姓林，闺名黛玉。诗笺还捏在我手里，人是站在这屋里头的。"
+        },
+        {
+          "speaker": "宝钗",
+          "action": "silence",
+          "text": null
+        }
+      ]
+    }
+  ]
+}

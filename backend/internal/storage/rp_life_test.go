@@ -48,9 +48,18 @@ func TestRPLifeUsesOwnFactsAndRemembersRepeatedContactAcrossReopen(t *testing.T)
 		t.Fatalf("life does not match own authoritative facts %+v", input.Life)
 	}
 	first = input.Life.Disposition
-	if len(input.Life.SalientMemories) == 0 || input.Life.SalientMemories[0].Kind != "speaker_said" || input.Life.SalientMemories[0].Text != "我有一百万" {
-		t.Fatalf("attributed memory missing %+v", input.Life.SalientMemories)
+	checkMemory := func(packet core.RPDecisionInput) {
+		t.Helper()
+		if packet.Life == nil || len(packet.Life.SalientMemories) == 0 {
+			t.Fatal("attributed memory missing")
+		}
+		memory := packet.Life.SalientMemories[0]
+		words, complete := core.ResolveRPDecisionSpeech(packet, memory.SourceEventID, memory.SubjectEntityID)
+		if memory.Kind != "speaker_said" || memory.SourceEventID != speech.EventID || memory.SubjectEntityID != M2RPPlayerID || memory.WorldTime != speech.WorldTime || !complete || words != "我有一百万" {
+			t.Fatalf("attributed memory words/source/time changed: %+v", memory)
+		}
 	}
+	checkMemory(input)
 	raw, _ := json.Marshal(input.Life)
 	for _, forbidden := range []string{M2AgentAdaID, M2AgentBoID, "account_id", "principal_id"} {
 		if strings.Contains(string(raw), forbidden) {
@@ -78,6 +87,7 @@ func TestRPLifeUsesOwnFactsAndRemembersRepeatedContactAcrossReopen(t *testing.T)
 	if !reflect.DeepEqual(first, restored.Life.Disposition) || !reflect.DeepEqual(input.Life, restored.Life) {
 		t.Fatal("life context changed on reopen")
 	}
+	checkMemory(restored)
 	if err := store.RebuildProjections(ctx, M2DemoInstanceID, M2DemoBranchID); err != nil {
 		t.Fatal(err)
 	}
@@ -88,4 +98,5 @@ func TestRPLifeUsesOwnFactsAndRemembersRepeatedContactAcrossReopen(t *testing.T)
 	if !reflect.DeepEqual(restored.Life, replayed.Life) {
 		t.Fatal("life context changed after projection rebuild")
 	}
+	checkMemory(replayed)
 }

@@ -128,6 +128,15 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 	if request.ExpectedCursor != head || session.ObservationCursor != head {
 		return RPSpeechResult{}, core.NewError(core.CodeBranchConflict, "RP speech requires a current observation cursor")
 	}
+	if request.IntroduceSelf {
+		var speakerName string
+		if err := tx.conn.QueryRowContext(ctx, `SELECT display_name FROM materialized_entities WHERE entity_id=?`, session.ControlledEntityID).Scan(&speakerName); err != nil {
+			return RPSpeechResult{}, classifyMissing(err, "RP speaker identity")
+		}
+		if !core.ExplicitSelfIntroduction(request.Text, speakerName) {
+			return RPSpeechResult{}, core.NewError(core.CodeInvalidArgument, "self-introduction must say the speaker's name")
+		}
+	}
 	var roundID, roundStatus, selectedSession, settlementKind, selectedKind string
 	err = tx.conn.QueryRowContext(ctx, `SELECT round_id,status,selected_session_id,settlement_kind,selected_action_kind FROM rp_shared_rounds WHERE instance_id=? AND branch_id=? AND status IN ('open','advancing')`, session.InstanceID, session.BranchID).Scan(&roundID, &roundStatus, &selectedSession, &settlementKind, &selectedKind)
 	if err == nil {
@@ -221,6 +230,9 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 				return RPSpeechResult{}, core.WrapError(core.CodeStorageFailure, "record heard self-introduction", err)
 			}
 		}
+	}
+	if err := insertRPOwnAction(ctx, tx.conn, session.ControlledEntityID, eventID, "speech", "", request.Text, placeID, worldTime, "", session.InstanceID, session.BranchID, sequence); err != nil {
+		return RPSpeechResult{}, err
 	}
 	if err := execAgentOne(ctx, tx.conn, "advance RP speech clock lineage", `UPDATE world_clocks SET projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time = ?`, sequence, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return RPSpeechResult{}, err

@@ -131,6 +131,10 @@ func TestRPIdentityNeedsKnownSourceOrHeardIntroduction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.SpeakRP(ctx, core.RPSpeechRequest{PrincipalID: adaRead.PrincipalID, SessionID: adaRead.SessionID, ExpectedCursor: adaView.ObservationCursor, IdempotencyKey: "ada-false-intro", Text: "你来了。", IntroduceSelf: true}); !core.HasCode(err, core.CodeInvalidArgument) {
+		t.Fatal("identity flag without spoken identity was accepted", err)
+	}
+	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_identity_familiarity WHERE observer_agent_id=? AND subject_agent_id=?`, []any{M2RPPlayerID, M2AgentAdaID}, 0)
 	intro, err := s.SpeakRP(ctx, core.RPSpeechRequest{PrincipalID: adaRead.PrincipalID, SessionID: adaRead.SessionID, ExpectedCursor: adaView.ObservationCursor, IdempotencyKey: "ada-introduces-self", Text: "我叫 Ada。", IntroduceSelf: true})
 	if err != nil || len(intro.ListenerIDs) != 1 || intro.ListenerIDs[0] != M2RPPlayerID {
 		t.Fatal("introduction was not heard", intro, err)
@@ -203,9 +207,20 @@ func TestRPNarrativeDoesNotNameUnintroducedRespondent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn, err := s.PlayRPTurn(ctx, core.RPSpeechRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, ExpectedCursor: view.ObservationCursor, IdempotencyKey: "narrative-anonymous-speech", Text: "你好，你是谁？"})
+	turn, err := s.RunRPTurn(ctx, core.RPSpeechRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, ExpectedCursor: view.ObservationCursor, IdempotencyKey: "narrative-anonymous-speech", Text: "你好，你是谁？"}, rpDecisionProviderFunc(func(context.Context, core.RPDecisionInput) (core.RPDecisionProposal, error) {
+		return core.RPDecisionProposal{Action: "respond", Text: "你来了。", IntroduceSelf: true}, nil
+	}))
 	if err != nil || len(turn.NPCEventIDs) == 0 {
 		t.Fatal("unintroduced respondent did not participate", turn, err)
+	}
+	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_identity_familiarity WHERE observer_agent_id=? AND subject_agent_id=?`, []any{M2RPPlayerID, M2AgentAdaID}, 0)
+	var acceptedRaw string
+	if err := s.db.QueryRowContext(ctx, `SELECT payload FROM events WHERE event_id=?`, turn.NPCEventIDs[0]).Scan(&acceptedRaw); err != nil {
+		t.Fatal(err)
+	}
+	var accepted rpSpeechEvent
+	if err := json.Unmarshal([]byte(acceptedRaw), &accepted); err != nil || accepted.IntroduceSelf {
+		t.Fatal("false NPC introduction entered accepted event", err)
 	}
 	input, err := s.readRPNarrativeInput(ctx, read.SessionID, turn.PlayerTurnID, turn.PlayerEventID)
 	if err != nil || len(input.Facts) < 2 {

@@ -1,0 +1,39 @@
+{
+  "kind": "synthetic_live_decision_wire_v3_probe",
+  "records": [
+    {
+      "action": "silence",
+      "attempts": 1,
+      "case": "synthetic_silence",
+      "context": "synthetic, no world writes",
+      "elapsed_seconds": 18.289790238,
+      "expression": "",
+      "finish_reasons": [
+        "stop"
+      ],
+      "legacy_responses": 0,
+      "model": "step-5-preview",
+      "private_present": true,
+      "success": true,
+      "text_chars": 0,
+      "v3_responses": 1
+    },
+    {
+      "action": "respond",
+      "attempts": 1,
+      "case": "synthetic_speech",
+      "context": "synthetic, no world writes",
+      "elapsed_seconds": 17.989687458,
+      "expression": "",
+      "finish_reasons": [
+        "stop"
+      ],
+      "legacy_responses": 0,
+      "model": "step-5-preview",
+      "private_present": true,
+      "success": true,
+      "text_chars": 7,
+      "v3_responses": 1
+    }
+  ]
+}

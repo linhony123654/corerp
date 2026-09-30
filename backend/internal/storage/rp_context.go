@@ -22,6 +22,7 @@ type RPContextReadRequest struct {
 type RPContextFact struct {
 	Kind             string `json:"kind"`
 	SubjectEntityID  string `json:"subject_entity_id"`
+	TargetEntityID   string `json:"target_entity_id,omitempty"`
 	PlaceID          string `json:"place_id"`
 	LearnedWorldTime string `json:"learned_world_time"`
 	SourceEventID    string `json:"source_event_id"`
@@ -107,7 +108,7 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 	 FROM agent_knowledge k JOIN events e ON e.event_id=k.source_event_id
 	 WHERE k.observer_agent_id=? AND e.instance_id=? AND e.branch_id=?
 	 AND e.world_time<=? AND k.learned_world_time<=? AND (?='' OR k.subject_agent_id=?)
-	 AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received')
+	 AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received','nonverbal_action','object_interaction')
 	 ORDER BY e.event_sequence DESC,k.claim_key LIMIT ?`, session.ControlledEntityID, session.InstanceID, session.BranchID, result.WorldTime, result.WorldTime, subjectID, subjectID, r.Limit+1)
 	if err != nil {
 		return result, err
@@ -124,6 +125,7 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 			Text        string `json:"text"`
 			Description string `json:"description"`
 			Action      string `json:"action"`
+			Target      string `json:"target_entity_id"`
 			Channel     string `json:"channel"`
 			Reliability string `json:"claimed_reliability"`
 			MessageID   string `json:"message_id"`
@@ -138,13 +140,13 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 		switch claim.Kind {
 		case "speaker_said":
 			fact.Text = claim.Text
-		case "interpersonal_action":
+		case "interpersonal_action", "nonverbal_action", "object_interaction":
 			fact.Text, fact.Action = claim.Description, claim.Action
+			fact.TargetEntityID = claim.Target
 		case "message_received":
 			fact.Text, fact.Channel, fact.Reliability = claim.Text, claim.Channel, claim.Reliability
-			fact.MessageID = claim.MessageID
-			fact.MayRelay, fact.Forwarded = claim.MayRelay, claim.Forwarded
-			fact.PlaceID = "" // Remote receipt is not evidence of sender co-location.
+			fact.MessageID, fact.MayRelay, fact.Forwarded = claim.MessageID, claim.MayRelay, claim.Forwarded
+			fact.PlaceID = "" // A remote receipt does not prove sender co-location.
 		}
 		result.Facts = append(result.Facts, fact)
 	}
@@ -180,6 +182,12 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 		fact.SubjectEntityID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, originalID)
 		if err != nil {
 			return result, err
+		}
+		if fact.TargetEntityID != "" {
+			fact.TargetEntityID, err = rpPublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, fact.TargetEntityID)
+			if err != nil {
+				return result, err
+			}
 		}
 		if fact.SubjectEntityID != originalID {
 			fact.SourceEventID, err = rpAnonymousEvidenceID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, fact.SourceEventID)

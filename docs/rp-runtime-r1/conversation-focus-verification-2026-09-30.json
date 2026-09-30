@@ -1,0 +1,187 @@
+{
+  "kind": "public_conversation_focus_source_checkpoint",
+  "captured_at_utc": "2026-09-30T07:37:03.328422+00:00",
+  "branch": "rp-preview-integration-20260929",
+  "head": "7fc3b3ba7be229b11341130d6cdd4275e231274f",
+  "source_sha256": {
+    "backend/internal/storage/rp_conversation_focus.go": "a5dd2af7f8ab4e1ddadbe19946e086c625bdbcce4a689066899c58f1f7fc5f32",
+    "backend/internal/storage/rp_conversation_focus_test.go": "eafc8fd78f67a3b9e183fecf75d4d2b4e3513ab0a436e6a57bd1eba81c1abda3",
+    "backend/internal/storage/rp_turn_activation.go": "11f8ed6362d1c0b002ec41c014aac012f741014bae04d0cb9ad61025c0804d81",
+    "backend/internal/storage/rp_turn.go": "2a075f49062b2c3505f90ee9da9cc9b7ba811ead73a5743de5cfde849cd00e93",
+    "backend/internal/storage/rp_turn_test.go": "eff8367e3cb2c9a01ed274682e49c955826140d0b672209484e58f838716adf2",
+    "backend/internal/storage/store.go": "3955b69853135a5f80cceebbbceaea64f7789bd0023397c662576543605a855b",
+    "backend/internal/storage/migrations/076_rp_conversation_focus.sql": "f7dcbd97aeea7d98a4f14b78528cc4ac7b39e41294dd8705a42cc3bd4d8047c0",
+    "src/components/PlayObservatory.vue": "62da0df9926edc839d795c7c69263d1bf617bd38f18045f1e50b7dff83a8144e"
+  },
+  "runtime_sha256": "f4d5051f6b2e48779883c007df579508f2a4aa1f0fcc8021653e0b27a507d58b",
+  "frozen_sha256": {
+    "real-rongqing-world-spec.json": "e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+    "real-rongqing-packages.json": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+    "before-samples.json": "9e4ddf8a948be6d80f7fa46365fe4320c3d7577437e6dd4f839eee06d1c52c2a",
+    "after-samples.json": "924f55ba7b77ed2358d514b6c5161a3232b280174e9d8f926685af80fd3a9709"
+  },
+  "checks": {
+    "focused": {
+      "status": "PASS",
+      "exit_code": 0,
+      "command": "go test ./internal/storage -run '^Test(RPConversationFocus.*|RPTurnActivation.*|RPTurnExecutionModes.*|RPExternalControllerHandoff.*|RPChapterStart.*|RPTurn.*Upgrade.*)$' -count=1",
+      "duration_seconds": 37.169
+    },
+    "vet": {
+      "status": "PASS",
+      "exit_code": 0,
+      "command": "go vet ./internal/core ./internal/decision ./internal/narrative ./internal/storage ./internal/transport/httpapi"
+    },
+    "ui_build": {
+      "status": "PASS",
+      "exit_code": 0,
+      "command": "npm run build"
+    },
+    "full_backend": {
+      "status": "PASS",
+      "exit_code": 0,
+      "session_id": 36735,
+      "command": "go test ./... -count=1 -timeout=20m",
+      "packages": [
+        {
+          "package": "corerp.local/backend/cmd/corerp-admin",
+          "duration": "1.167s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/cmd/corerp-controller",
+          "duration": "0.978s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/cmd/corerp-m2",
+          "duration": "16.700s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/cmd/corerp-server",
+          "duration": "1.142s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/cmd/manual-gen",
+          "duration": "0.026s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/internal/core",
+          "duration": "0.145s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/internal/decision",
+          "duration": "0.536s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/internal/endpointpolicy",
+          "duration": "0.025s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/internal/narrative",
+          "duration": "1.480s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/internal/outbound",
+          "duration": "0.015s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/internal/storage",
+          "duration": "914.532s",
+          "result": "PASS"
+        },
+        {
+          "package": "corerp.local/backend/internal/transport/httpapi",
+          "duration": "71.400s",
+          "result": "PASS"
+        }
+      ],
+      "no_test_package": "corerp.local/backend/cmd/corerp-m1"
+    },
+    "step_two_turn_comparison": {
+      "status": "PASS",
+      "exit_code": 0,
+      "session_id": 61116,
+      "decision_calls": 4,
+      "first_attempt_success": 4,
+      "record": "conversation-focus-pilot-2026-09-30.json",
+      "record_sha256": "50ada5d88421ae7a93a0b470cc74579ce3c49f20c434488588060823a142d270",
+      "review": "conversation-focus-pilot-review-2026-09-30.md",
+      "coverage": "Reproduced old Nora→Iris/silence; new Nora→Nora/respond with exact prior public speech source. Synthetic two turns only; does not verify long RP or latency improvement."
+    },
+    "live_32": {
+      "status": "NOT VERIFIED",
+      "reason": "Not rerun on this source: previous runtime2e527072 failed at turn2 after truncation/120s timeout; focus does not address latency. A two-turn public-focus diagnostic is running instead. Previous failure preserved, no R1 world-integrity pass."
+    },
+    "frozen_golden": {
+      "status": "NOT VERIFIED",
+      "reason": "Not rerun on this source. Latest archived17/17 capture on2e527072 was not experience approval; absent authored canon and human review remain."
+    },
+    "diff_check": {
+      "status": "PASS",
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  },
+  "logs": {
+    "red": {
+      "path": "/tmp/corerp-r1-conversation-focus-red-final-20260930.log",
+      "sha256": "b71af4f99bfce45b913952c466de2b085f666813ac794520ac5dc8fe6d3afb90"
+    },
+    "expanded": {
+      "path": "/tmp/corerp-r1-conversation-focus-expanded-20260930.log",
+      "sha256": "8e507a2b4f6e49230d49b9e96c0052604bd848672e0c9a61617d2e05bc32e437"
+    },
+    "pre_fix_boundaries": {
+      "path": "/tmp/corerp-r1-conversation-focus-boundaries-20260930.log",
+      "sha256": "e99ef0b104f811862a08169b906886110fb61cb147041834c59ebe28c39c4556"
+    },
+    "control_fixture_failures": {
+      "path": "/tmp/corerp-r1-conversation-focus-final-boundaries-20260930.log",
+      "sha256": "d668ffb3268f57834108b02ace48b06180e6afb3da39d860896b581d412afa8a"
+    },
+    "focused": {
+      "path": "/tmp/corerp-r1-conversation-focus-focused-20260930.log",
+      "sha256": "e1f74c1c228a81bb533156a0344f1d8fcfc97893ab9c7de478ebd3236351b54e"
+    },
+    "vet": {
+      "path": "/tmp/corerp-r1-conversation-focus-vet-20260930.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ui_build": {
+      "path": "/tmp/corerp-r1-conversation-focus-ui-build-20260930.log",
+      "sha256": "38dde68fb0683eaac18ec0f2babcf239a58be0f1ef044e457d4bec21ed0fc1d7"
+    },
+    "step_pilot": {
+      "path": "/tmp/corerp-r1-conversation-focus-pilot-final-20260930.log",
+      "sha256": "644acbdabecf9507d4c7d2336ee7ccfce6cf51f8d91960dc75afb7cecd79658b"
+    },
+    "full_backend": {
+      "path": "/tmp/corerp-r1-conversation-focus-backend-20260930.log",
+      "sha256": "249f1e3a545f3f8a509554b58fc0363096fb83cb9601f95fc4c1a07c02416e66"
+    }
+  },
+  "released": false,
+  "committed": false,
+  "r1": "NOT DONE",
+  "repository_state": {
+    "branch": "rp-preview-integration-20260929",
+    "head": "7fc3b3ba7be229b11341130d6cdd4275e231274f",
+    "tracked_modified": 102,
+    "untracked_entries": 187,
+    "clean": false,
+    "note": "Includes extensive pre-existing unrelated work; no history-changing command or deployment performed."
+  },
+  "processes": "All tasks for this increment have exited; no background test or live-provider job remains.",
+  "world_integrity_exit": "NOT PASSED: local full regression PASS, current-source real32 NOT VERIFIED; previous source real32 failed after turn2 truncation/timeout.",
+  "rp_experience_exit": "NOT PASSED: synthetic two-turn target selection improved; current frozen Golden not rerun, persona/relationship/address canon and human rubric remain unresolved.",
+  "source_archive": "/tmp/corerp-r1-conversation-focus-source-20260930"
+}

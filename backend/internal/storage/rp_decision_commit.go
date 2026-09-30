@@ -30,7 +30,9 @@ type rpNPCActionEvent struct {
 }
 
 // CommitRPDecision revalidates a proposal against a fresh world snapshot and
-// commits exactly one NPC effect for this player turn/NPC pair. Provider output
+// commits one NPC decision for this player turn/NPC pair. Speech and any
+// observable expression are separate sourced events in the same atomic batch.
+// Provider output
 // itself never writes an Event; this method owns the authority boundary.
 func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionRequest, decision RPDecisionResult) (RPNPCDecisionCommitResult, error) {
 	if err := request.Validate(); err != nil {
@@ -133,19 +135,50 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 	attemptID, batchID, eventID := "attempt_rp_npc_"+suffix, "batch_rp_npc_"+suffix, "event_rp_npc_"+suffix
 	action := decision.Proposal.Action
 	eventType := "RPNPCDecisionRecorded"
-	var payload any = rpNPCActionEvent{SessionID: session.SessionID, ParentTurnID: request.TurnID, NPCEntityID: request.NPCEntityID, Action: action}
+	var payload any = rpNPCActionEvent{SessionID: session.SessionID, ParentTurnID: request.TurnID, NPCEntityID: request.NPCEntityID, Action: action, FromPlaceID: input.PlaceID}
 	var listeners []string
 	childTurnID, utteranceID := "turn_rp_npc_"+suffix, "utterance_rp_npc_"+suffix
+	activityID := "activity_rp_npc_" + suffix
+	activityDuration := 0
+	expression, err := prepareRPNPCExpression(ctx, tx.conn, session.SessionID, input, decision.Proposal.ExpressionCode)
+	if err != nil {
+		return RPNPCDecisionCommitResult{}, err
+	}
+	expressionID := "event_rp_npc_expression_" + suffix
+	lastSequence, eventCount := sequence, 1
+	if expression != nil {
+		lastSequence, eventCount = sequence+1, 2
+		var lastEpoch string
+		if err := tx.conn.QueryRowContext(ctx, `SELECT epoch_id FROM rule_epochs WHERE instance_id = ? AND branch_id = ? AND start_sequence <= ? AND (end_sequence IS NULL OR ? < end_sequence)`, session.InstanceID, session.BranchID, lastSequence, lastSequence).Scan(&lastEpoch); err != nil {
+			return RPNPCDecisionCommitResult{}, classifyMissing(err, "NPC expression Rule Epoch")
+		}
+		if lastEpoch != epochID {
+			return RPNPCDecisionCommitResult{}, core.NewError(core.CodeBranchConflict, "NPC expression crosses a rule epoch boundary")
+		}
+	}
+	acceptedIntroduction := decision.Proposal.IntroduceSelf && core.ExplicitSelfIntroduction(decision.Proposal.Text, input.NPCName)
 	if action == "respond" || action == "refuse" {
 		eventType = "RPSpeechAccepted"
 		listeners, err = rpPerceivedEntityIDs(ctx, tx.conn, session.InstanceID, session.BranchID, input.PlaceID, request.NPCEntityID, "audio", "voice")
 		if err != nil {
 			return RPNPCDecisionCommitResult{}, err
 		}
-		payload = rpSpeechEvent{SessionID: session.SessionID, TurnID: childTurnID, ParentTurnID: request.TurnID, UtteranceID: utteranceID, SpeakerEntityID: request.NPCEntityID, PlaceID: input.PlaceID, Text: decision.Proposal.Text, SpeechAct: "statement", ListenerIDs: listeners}
+		payload = rpSpeechEvent{SessionID: session.SessionID, TurnID: childTurnID, ParentTurnID: request.TurnID, UtteranceID: utteranceID, SpeakerEntityID: request.NPCEntityID, PlaceID: input.PlaceID, Text: decision.Proposal.Text, SpeechAct: "statement", ListenerIDs: listeners, IntroduceSelf: acceptedIntroduction}
 	} else if action == "leave" {
 		eventType = "RPNPCMoved"
 		payload = rpNPCActionEvent{SessionID: session.SessionID, ParentTurnID: request.TurnID, NPCEntityID: request.NPCEntityID, Action: action, FromPlaceID: input.PlaceID, ToPlaceID: decision.Proposal.DestinationPlaceID}
+	} else if action == "act" {
+		rules, err := readRPActivityRules(ctx, tx.conn, session.InstanceID, session.BranchID)
+		if err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+		duration, legal := rules[decision.Proposal.ActivityCode]
+		if !legal {
+			return RPNPCDecisionCommitResult{}, core.NewError(core.CodeInvalidArgument, "activity is not legal at decision commit")
+		}
+		eventType = "AgentActivityStarted"
+		activityDuration = duration
+		payload = rpActivityStartedEvent{ActivityID: activityID, ActorID: request.NPCEntityID, ToPlaceID: input.PlaceID, ActivityCode: decision.Proposal.ActivityCode, StartedWorldTime: worldTime, DurationMinutes: duration}
 	}
 	payloadJSON, err := core.CanonicalJSON(payload)
 	if err != nil {
@@ -171,6 +204,18 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 	if err != nil {
 		return RPNPCDecisionCommitResult{}, err
 	}
+	if expression != nil {
+		batchHash, err = core.HashJSON(struct {
+			CommandID  string                `json:"command_id"`
+			Sequence   int64                 `json:"sequence"`
+			EventType  string                `json:"event_type"`
+			Payload    any                   `json:"payload"`
+			Expression *core.RPNonverbalFact `json:"expression"`
+		}{commandID, sequence, eventType, payload, expression})
+		if err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
 	statements := []struct {
 		name, query string
@@ -178,7 +223,7 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 	}{
 		{"NPC effect command", `INSERT INTO commands(command_id, instance_id, branch_id, command_type, idempotency_key, request_hash, expected_head, principal_id, command_policy, status, created_at_utc) VALUES (?, ?, ?, 'RPNPCDecision', ?, ?, ?, ?, '{"authorization":"rp-npc-scoped-decision"}', 'pending', ?)`, []any{commandID, session.InstanceID, session.BranchID, decisionID, requestHash, head, request.PrincipalID, now}},
 		{"NPC effect attempt", `INSERT INTO command_attempts(command_id, attempt_no, attempt_id, status, lease_owner, lease_until_utc, proposal_hash, created_at_utc) VALUES (?, 1, ?, 'ready', 'corerp-rp1', ?, ?, ?)`, []any{commandID, attemptID, s.now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano), proposalHash, now}},
-		{"NPC effect batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, []any{batchID, commandID, session.InstanceID, session.BranchID, epochID, head, sequence, sequence, worldTime, batchHash, now}},
+		{"NPC effect batch", `INSERT INTO event_batches(batch_id, command_id, attempt_no, instance_id, branch_id, epoch_id, expected_head, first_sequence, last_sequence, event_count, world_time, batch_hash, committed_at_utc) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, []any{batchID, commandID, session.InstanceID, session.BranchID, epochID, head, sequence, lastSequence, eventCount, worldTime, batchHash, now}},
 		{"NPC effect event", `INSERT INTO events(event_id, batch_id, instance_id, branch_id, event_sequence, batch_index, event_type, actor_id, world_time, payload) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`, []any{eventID, batchID, session.InstanceID, session.BranchID, sequence, eventType, request.NPCEntityID, worldTime, string(payloadJSON)}},
 		{"NPC committed decision", `INSERT INTO rp_npc_decisions(decision_id, session_id, parent_turn_id, npc_entity_id, event_id, action, input_hash, proposal_hash, proposal_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, []any{decisionID, session.SessionID, request.TurnID, request.NPCEntityID, eventID, action, inputHash, proposalHash, string(proposalJSON)}},
 	}
@@ -194,15 +239,50 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 		if err := insertRPSpeechHearings(ctx, tx.conn, eventID, sequence, request.NPCEntityID, input.PlaceID, worldTime, utteranceID, decision.Proposal.Text, "statement", listeners); err != nil {
 			return RPNPCDecisionCommitResult{}, err
 		}
+		if acceptedIntroduction {
+			for _, listener := range listeners {
+				if _, err := tx.conn.ExecContext(ctx, `INSERT OR IGNORE INTO rp_identity_familiarity(observer_agent_id,subject_agent_id,instance_id,branch_id,source_event_id,learned_world_time,origin_kind) VALUES (?,?,?,?,?,?,'introduction')`, listener, request.NPCEntityID, session.InstanceID, session.BranchID, eventID, worldTime); err != nil {
+					return RPNPCDecisionCommitResult{}, core.WrapError(core.CodeStorageFailure, "record heard NPC self-introduction", err)
+				}
+			}
+		}
 	} else if action == "leave" {
 		if err := commitRPNPCMovement(ctx, tx.conn, session.InstanceID, session.BranchID, eventID, sequence, request.NPCEntityID, input.PlaceID, decision.Proposal.DestinationPlaceID, worldTime, currentDay, suffix); err != nil {
 			return RPNPCDecisionCommitResult{}, err
 		}
+	} else if action == "act" {
+		if err := execAgentOne(ctx, tx.conn, "NPC activity state", `INSERT INTO rp_activities(activity_id, actor_id, place_id, activity_code, started_world_time, duration_minutes, status, start_event_id, instance_id, branch_id, last_event_sequence) VALUES (?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?)`, activityID, request.NPCEntityID, input.PlaceID, decision.Proposal.ActivityCode, worldTime, activityDuration, eventID, session.InstanceID, session.BranchID, sequence); err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+		if err := execAgentOne(ctx, tx.conn, "NPC activity position", `UPDATE agent_positions SET activity_code = ?, effective_world_time = ?, projection_version = projection_version + 1, last_event_sequence = ? WHERE agent_id = ? AND place_id = ?`, decision.Proposal.ActivityCode, worldTime, sequence, request.NPCEntityID, input.PlaceID); err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
 	}
-	if err := execAgentOne(ctx, tx.conn, "advance NPC effect clock lineage", `UPDATE world_clocks SET projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time = ?`, sequence, session.InstanceID, session.BranchID, worldTime); err != nil {
+	switch action {
+	case "respond", "refuse":
+		if err := insertRPOwnAction(ctx, tx.conn, request.NPCEntityID, eventID, "speech", "", decision.Proposal.Text, input.PlaceID, worldTime, "", session.InstanceID, session.BranchID, sequence); err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+	case "leave":
+		if err := insertRPOwnAction(ctx, tx.conn, request.NPCEntityID, eventID, "leave", "", "", decision.Proposal.DestinationPlaceID, worldTime, "", session.InstanceID, session.BranchID, sequence); err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+	case "act":
+		if err := insertRPOwnAction(ctx, tx.conn, request.NPCEntityID, eventID, "activity", decision.Proposal.ActivityCode, "", input.PlaceID, worldTime, "in_progress", session.InstanceID, session.BranchID, sequence); err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+	default:
+		if err := insertRPOwnAction(ctx, tx.conn, request.NPCEntityID, eventID, action, "", "", input.PlaceID, worldTime, "", session.InstanceID, session.BranchID, sequence); err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+	}
+	if err := commitRPNPCExpression(ctx, tx.conn, input, expression, expressionID, eventID, batchID, lastSequence); err != nil {
 		return RPNPCDecisionCommitResult{}, err
 	}
-	if err := execAgentOne(ctx, tx.conn, "advance NPC effect branch", `UPDATE branches SET head_sequence = ? WHERE instance_id = ? AND branch_id = ? AND head_sequence = ?`, sequence, session.InstanceID, session.BranchID, head); err != nil {
+	if err := execAgentOne(ctx, tx.conn, "advance NPC effect clock lineage", `UPDATE world_clocks SET projection_version = projection_version + 1, last_event_sequence = ? WHERE instance_id = ? AND branch_id = ? AND current_world_time = ?`, lastSequence, session.InstanceID, session.BranchID, worldTime); err != nil {
+		return RPNPCDecisionCommitResult{}, err
+	}
+	if err := execAgentOne(ctx, tx.conn, "advance NPC effect branch", `UPDATE branches SET head_sequence = ? WHERE instance_id = ? AND branch_id = ? AND head_sequence = ?`, lastSequence, session.InstanceID, session.BranchID, head); err != nil {
 		return RPNPCDecisionCommitResult{}, err
 	}
 	if err := execAgentOne(ctx, tx.conn, "advance NPC effect turn stage", `UPDATE rp_sessions SET turn_state = 'npc_effects_committed' WHERE session_id = ? AND turn_cursor = ? AND status = 'active'`, session.SessionID, request.TurnID); err != nil {

@@ -152,5 +152,5 @@ func readRPInitiativeInput(ctx context.Context, conn *sql.Conn, r core.RPInitiat
 		seenStores[receipt.Store.StorefrontSourceEventID] = true
 		input.StoreOpportunities = append(input.StoreOpportunities, core.RPStoreOpportunityContext{Store: receipt.Store, Selected: receipt.Draw.Selected})
 	}
-	return input, nil
+	return core.SelectRPDecisionContext(input, core.DefaultRPDecisionContextBudgetBytes)
 }

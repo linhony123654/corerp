@@ -40,6 +40,15 @@ func TestRPControllerReleaseWaitsForSharedRoundAndPreservesReceipt(t *testing.T)
 		t.Fatal(err)
 	}
 	serviceRead := core.RPSessionReadRequest{PrincipalID: "principal_round_release_service", SessionID: service.SessionID}
+	serviceView, err := s.ObserveRPSession(ctx, serviceRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSpeech := core.RPSpeechRequest{PrincipalID: serviceRead.PrincipalID, SessionID: serviceRead.SessionID, Text: "我此前已说过。", ExpectedCursor: serviceView.ObservationCursor, IdempotencyKey: "service-before-release"}
+	oldTurn, err := s.PlayRPTurn(ctx, oldSpeech)
+	if err != nil || oldTurn.Status != "settled" {
+		t.Fatal("service speech setup", oldTurn, err)
+	}
 	for _, read := range []core.RPSessionReadRequest{humanRead, serviceRead} {
 		if _, err := s.ObserveRPSession(ctx, read); err != nil {
 			t.Fatal(err)
@@ -79,6 +88,13 @@ func TestRPControllerReleaseWaitsForSharedRoundAndPreservesReceipt(t *testing.T)
 	release.Binding = binding("release-after-round")
 	if _, err := s.ReleaseRPExternalControllerLocal(ctx, release); err != nil {
 		t.Fatal(err)
+	}
+	if replay, err := s.PlayRPTurn(ctx, oldSpeech); err != nil || !replay.Replayed || replay.PlayerEventID != oldTurn.PlayerEventID {
+		t.Fatal("settled service speech lost its receipt after release", replay, err)
+	}
+	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id=? AND speech_text=?`, []any{M2AgentBoID, oldSpeech.Text}, 1)
+	if _, err := s.PlayRPTurn(ctx, core.RPSpeechRequest{PrincipalID: oldSpeech.PrincipalID, SessionID: oldSpeech.SessionID, Text: "释放后不应再说话。", ExpectedCursor: oldSpeech.ExpectedCursor, IdempotencyKey: "service-after-release"}); !core.HasCode(err, core.CodeBranchConflict) {
+		t.Fatal("released service submitted new speech", err)
 	}
 	if again, err := s.ReadRPSharedRound(ctx, advance.RPSharedRoundReadRequest); err != nil || again.Status != "settled" || again.EventSequence != settled.EventSequence {
 		t.Fatal("settled round receipt", again, err)

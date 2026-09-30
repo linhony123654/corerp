@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { once } from 'node:events'
 import assert from 'node:assert/strict'
+import { openPlayBusiness } from './play-ui-helpers.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const temp = await mkdtemp(join(tmpdir(), 'corerp-f2-play-'))
@@ -61,7 +62,7 @@ try {
   const head = Number(sql("SELECT head_sequence FROM branches WHERE instance_id='inst_m2_t09' AND branch_id='br_main'"))
   const segment = await creatorCall('locations/materialize', { binding: { ...scope, expected_head: head, idempotency_key: 'browser-road' }, parent_location_id: 'place_m2_cafe', slot_key: 'browser-road', candidate: { display_name: '路上的小径', generator_version: 'local-v1' } })
   await creatorCall('edges/define', { binding: { ...scope, expected_head: segment.event_sequence, idempotency_key: 'browser-edge' }, from_place_id: 'place_m2_cafe', to_place_id: 'place_m2_home_ada', segment_place_id: segment.fact.location_id, duration_minutes: 15 })
-  await page.getByRole('button', { name: '地图', exact: true }).click()
+  await openPlayBusiness(page, '地图')
   const map = page.getByRole('dialog', { name: '附近地图' })
   await map.getByText('约 15 分钟 · 途中有真实路段').waitFor()
   await page.route('**/api/v1/rp/journeys/start', async route => {

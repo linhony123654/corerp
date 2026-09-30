@@ -1,0 +1,84 @@
+{
+  "runtime_sha256": "d329e35ce793c306058235b1aa1600d0f80fd24e92d42049a213daab247d30bb",
+  "status": "FAIL: postcheck player mixed object/speech proposal rejected",
+  "session": 32876,
+  "exit_code": 1,
+  "source_checkpoint": "source-refs-verification-2026-09-30.json",
+  "completed_browser_turns": 32,
+  "settled_main_turns": 32,
+  "main_NPC_decisions": 96,
+  "main_NPC_attempts": 100,
+  "main_decision_fallbacks": 0,
+  "completed_Play_prose": 32,
+  "extra_prose_render": 1,
+  "receipt_summary": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 96,
+      "attempts": 100
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 32,
+      "attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 33,
+      "attempts": 33
+    }
+  ],
+  "interaction_receipts": [
+    {
+      "source": "model",
+      "provider_kind": "chat_completions",
+      "result": "failed",
+      "reason": "provider_proposal_object_fields",
+      "attempt_count": 1,
+      "accepted_plan": 0,
+      "started_unix": 1790781447,
+      "finished_at_utc": "2026-09-30T15:17:58.565533913Z"
+    }
+  ],
+  "accepted_interactions": 0,
+  "failure": {
+    "scenario": "push authored cup toward Daiyu and say the explicit quoted player words",
+    "public_code": "STORAGE_FAILURE",
+    "actual_receipt_reason": "provider_proposal_object_fields",
+    "attempts": 1,
+    "accepted_plan": false,
+    "committed_mixed_effects": false
+  },
+  "postchecks": {
+    "profile_validation": "PASS",
+    "Play_regeneration_selection_world_head": "PASS before failed mixed interaction",
+    "mixed_object_and_speech": "FAIL",
+    "meta_continue": "NOT REACHED",
+    "deliberate_provider_failure": "NOT REACHED",
+    "final_restart": "NOT REACHED"
+  },
+  "safe_diagnostics": {
+    "schema_errors": 3,
+    "grounding_errors": 0,
+    "private_errors": 0
+  },
+  "quick_check": "ok",
+  "runner": {
+    "project_sha256": "f49001d8a553ab5495e83cf66b496fd853f3c796d3f98cff5d34b83c3461e774",
+    "adapted_sha256": "17145a2374c90222dae7131c86e709ff946664325b2895701c33d02f3f5ac413",
+    "changes": "Only import/root absolute paths and prebuilt hash-bound executable symlinks; scenarios and assertions unchanged."
+  },
+  "artifact_directory": "/dev/shm/corerp-rp3-npc-j8lfmR",
+  "public_samples": "source-refs-32-public-2026-09-30.json",
+  "limits": "32 main turns passed, but original complete runner exit1 is retained. Storage failure here labels a rejected model interpretation, not proven SQLite corruption. No private proposal or model reasoning was captured. This is not complete 32 regression PASS or RP experience acceptance.",
+  "captured_at_utc": "2026-09-30T15:25:27.398592+00:00"
+}

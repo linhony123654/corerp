@@ -1,0 +1,9 @@
+{
+  "kind": "isolated_observable_type_diagnostic",
+  "source_runtime_sha256": "sha256:31041504fb84c49571cb62fde5cab31fdbfddf12c2e44b9839f9b49f2a266900",
+  "exit_code": 1,
+  "probe_code": "package narrative\nimport(\"testing\";\"corerp.local/backend/internal/core\")\nfunc TestDiagnosticObservableTypeCannotLicenseDifferentFact(t *testing.T){\n base:=core.RPNarrativeInput{ControlledEntityID:\"player\",Style:core.RPStyleProfile{POV:\"second_person\"},Facts:[]core.RPNarrativeFact{{EventID:\"p\",ActorID:\"player\",ActorName:\"你\",Action:\"speak\",WorldTime:\"2026-09-30T00:00:00Z\"}}}\n cases:=[]struct{name,action,draft string}{\n {\"wait_is_not_time_advance\",\"wait\",\"转眼过了三天。\"},\n {\"arrival_is_not_departure\",\"arrive\",\"Cai 离开咖啡馆。\"},\n {\"departure_is_not_arrival\",\"depart\",\"Cai 来到咖啡馆。\"},\n {\"departure_is_not_posture\",\"depart\",\"Cai 坐下。\"},\n }\n for _,c:=range cases{t.Run(c.name,func(t *testing.T){in:=base;in.Facts=append(append([]core.RPNarrativeFact{},base.Facts...),core.RPNarrativeFact{EventID:\"npc\",ActorID:\"cai\",ActorName:\"Cai\",Action:c.action,PlaceName:\"咖啡馆\",WorldTime:\"2026-09-30T00:00:00Z\"});if err:=validateProseSceneClaims(c.draft,in);err==nil{t.Fatal(\"different observable invented by Narrator\")}})}\n}\n",
+  "log_path": "/tmp/corerp-r1-observable-type-probe-20260930.log",
+  "cases": 4,
+  "scope": "Production narrative package copied into automatically cleaned owned temporary directory; no model/world/runtime mutation."
+}

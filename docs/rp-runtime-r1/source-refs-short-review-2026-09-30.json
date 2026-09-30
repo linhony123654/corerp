@@ -1,0 +1,78 @@
+{
+  "kind": "assistant_short_sample_reading_not_human_acceptance",
+  "runtime_sha256": "d329e35ce793c306058235b1aa1600d0f80fd24e92d42049a213daab247d30bb",
+  "artifact": "role-ready-source-refs-2026-09-30.json",
+  "world_spec_sha256": "34a79c05fb62155d3a54f94a4efc941524073b8e5b091053f1b8db04a34aceee",
+  "public_samples": [
+    {
+      "turn": 1,
+      "input": "Nora，今天有点想你。",
+      "lines": [
+        "你说：\n「Nora，今天有点想你。」",
+        "Nora 回应：\n「Lin，今天嘴抹了蜜吧？说得我怪不好意思的。我也想你——来，咱们说说话。」",
+        "Nora 笑了笑。"
+      ],
+      "seconds": 23.98
+    },
+    {
+      "turn": 2,
+      "input": "我今天总有些失落，又说不清为什么。",
+      "lines": [
+        "你说：\n「我今天总有些失落，又说不清为什么。」",
+        "Nora 回应：\n「Lin，失落就说失落，不必非得立刻想明白。我在这儿，你想说话我听着，不想说咱们就静静坐一会儿。」",
+        "Nora 点了点头。"
+      ],
+      "seconds": 12.878
+    },
+    {
+      "turn": 3,
+      "input": "我们先不找原因，能陪我说一会儿话吗？",
+      "lines": [
+        "你说：\n「我们先不找原因，能陪我说一会儿话吗？」",
+        "Nora 回应：\n「当然能，我今晚也没别的事，就坐这儿等你说话。不急着找缘由，你讲到哪算哪；要是不想说，我也不会嫌闷。」",
+        "Nora 笑了笑。"
+      ],
+      "seconds": 8.337
+    },
+    {
+      "turn": 4,
+      "input": "你刚才答应我的是什么？",
+      "lines": [
+        "你说：\n「你刚才答应我的是什么？」",
+        "Nora 回应：\n「Lin，我答应的是陪你说说话，不急着找原因。你讲到哪算哪，不想说我也不会嫌闷——这话现在也作数。」",
+        "Nora 点了点头。"
+      ],
+      "seconds": 4.454
+    }
+  ],
+  "public_gesture_audit": [
+    {
+      "event_id": "event_rp_npc_expression_7a1bc04ba452e0d0a00838af0864ba45769a8c76dc0f3e4d5842442e472f61c9",
+      "event_sequence": 12,
+      "player_witnesses": 1
+    },
+    {
+      "event_id": "event_rp_npc_expression_ec343f5ffc3fea843846c651ee679701d2d54bd0825bd5ad27a61c58b31ac757",
+      "event_sequence": 15,
+      "player_witnesses": 1
+    },
+    {
+      "event_id": "event_rp_npc_expression_235d103d4e09981b763ec6581b65f209cdabebcba16f932741b7184c1d646a9e",
+      "event_sequence": 18,
+      "player_witnesses": 1
+    },
+    {
+      "event_id": "event_rp_npc_expression_a7ea0ee06ad625a1d00e877e0ce2612e22e247d9cc8466935f90c2156c8f944a",
+      "event_sequence": 21,
+      "player_witnesses": 1
+    }
+  ],
+  "assistant_observations": [
+    "Nora recognises Lin and uses the declared familiar address; no introduction. First response uses a light joke, compatible with the authored persona.",
+    "Does not invent the cause of sadness, respects not questioning it, and recalls the explicit companionship promise in turn4.",
+    "Sitting and tonight availability are only attributed NPC speech. No pose/schedule change is committed; the broader tonight claim is an experience/knowledge concern, not verified canon.",
+    "Deterministic narration remains repetitive; these four turns do not validate expressive narrator or longer memory/initiative.",
+    "Observed gestures have committed Event sources and player witness records. No private intent or hidden reasoning appears in inspected public lines."
+  ],
+  "acceptance": "SHORT TECHNICAL PASS; HUMAN QUALITY PENDING; NO SPEED OR LONG-RP/RONGQING GOLDEN CLAIM"
+}

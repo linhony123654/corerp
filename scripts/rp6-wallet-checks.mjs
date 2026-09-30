@@ -1,20 +1,21 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { openPlayBusiness, scrollPlayToEnd } from './play-ui-helpers.mjs'
 
 // Real service/SQLite acceptance. Only fault injection and format boundary cases
 // use fixtures; no mocked balance can establish the owner-backed read assertion.
 export async function checkWallet({ page, sql, temp, stage }) {
   const before = sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')")
   const bookmark = await page.evaluate(() => localStorage.getItem('corerp.play.v1'))
-  const opener = page.getByRole('button', { name: '钱包', exact: true })
+  const opener = page.getByRole('button', { name: '行动与功能', exact: true })
   const dialog = page.getByRole('dialog', { name: '钱包', exact: true })
   const response = page.waitForResponse(r => r.url().endsWith('/rp/wallet/read'))
-  await opener.click()
+  await openPlayBusiness(page, '钱包')
   const { data } = await (await response).json()
   assert.equal(data.balance_minor, sql("SELECT balance_minor FROM account_balances WHERE account_id=(SELECT asset_account_id FROM materialized_entities WHERE entity_id='entity_m2_rp_lin')"))
   assert.equal(typeof data.balance_minor, 'string')
   await page.getByTestId('wallet-amount').waitFor()
-  assert.equal(await dialog.getByRole('heading', { name: '钱包' }).evaluate(el => getComputedStyle(el).color), 'rgb(52, 61, 53)', 'wallet title must retain paper/ink contrast')
+  assert.equal(await dialog.getByRole('heading', { name: '钱包' }).evaluate(el => getComputedStyle(el).color), await dialog.evaluate(el => getComputedStyle(el).color), 'wallet title uses the active theme ink')
   assert.equal(await dialog.getByText('Lin 的随身账户', { exact: true }).count(), 1)
   assert.equal(await dialog.evaluate(el => el.contains(document.activeElement)), true)
   await page.keyboard.press('Shift+Tab')
@@ -30,7 +31,7 @@ export async function checkWallet({ page, sql, temp, stage }) {
 
   // Error is local to this read; it cannot create a pending world action.
   await page.route('**/api/v1/rp/wallet/read', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: '测试读取暂不可用' } }) }), { times: 1 })
-  await opener.click()
+  await openPlayBusiness(page, '钱包')
   await dialog.getByRole('alert').waitFor()
   assert.equal(await page.getByTestId('wallet-amount').count(), 0, 'no invented/stale balance on failed read')
   assert.equal(await page.evaluate(() => localStorage.getItem('corerp.play.v1')), bookmark)
@@ -42,13 +43,13 @@ export async function checkWallet({ page, sql, temp, stage }) {
   let release
   const held = new Promise(resolve => { release = resolve })
   await page.route('**/api/v1/rp/wallet/read', async route => { await held; await route.continue() }, { times: 1 })
-  await opener.click()
+  await openPlayBusiness(page, '钱包')
   await dialog.getByRole('status').waitFor()
   assert.equal(await dialog.getByRole('button', { name: '刷新余额' }).isDisabled(), true)
   await page.keyboard.press('Escape') // Closing never waits for the network.
   await dialog.waitFor({ state: 'hidden' })
   release()
-  await opener.click()
+  await openPlayBusiness(page, '钱包')
   await page.getByTestId('wallet-amount').waitFor()
   await page.keyboard.press('Escape')
   await dialog.waitFor({ state: 'hidden' })
@@ -66,6 +67,6 @@ export async function checkWallet({ page, sql, temp, stage }) {
   assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')"), before)
   assert.equal(await page.evaluate(() => localStorage.getItem('corerp.play.v1')), bookmark)
   // Return the reading viewport to its normal end, as the main journey expects.
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  await scrollPlayToEnd(page)
   console.log(JSON.stringify({ walletScenario: 'PASS', stage, balanceMinor: data.balance_minor, checks: ['real SQLite balance', 'modal focus and Escape', 'error/read retry', 'loading close/reopen', 'exact formatting boundaries', 'desktop/mobile artifacts', 'no world or bookmark mutation'] }))
 }

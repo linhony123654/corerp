@@ -1,0 +1,621 @@
+{
+  "label": "before",
+  "model": "gemini-3.8-flash-high",
+  "world_spec_sha256": "sha256:e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+  "world_packages_sha256": "sha256:a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+  "world": "rp-runtime-r1-golden-world",
+  "world_head": 52,
+  "samples": [
+    {
+      "scene": "G6",
+      "place": "yihongyuan",
+      "text": "你们好呀",
+      "turn_run_id": "rpturn_62b7a5d6d390ad997cb62dcf1f13ff7e5514caf5471e062b408e52b5246b8164",
+      "world_head": 20,
+      "decisions": [
+        {
+          "event_sequence": 19,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "你是哪位？到我们院里来找谁？",
+          "event_id": "event_rp_npc_71e1ab116e3ca2e4e9f15502a82e59c6b79850d946025871bc3794ddaa14dd9e"
+        },
+        {
+          "event_sequence": 20,
+          "speaker": "袭人",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_7435b3d5673658ee543e8a544c66008a24e72391b1e9ce91f1ef19ae297771e9"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「你们好呀」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 回应：「你是哪位？到我们院里来找谁？」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G6",
+      "place": "yihongyuan",
+      "text": "你们叫什么名字呀",
+      "turn_run_id": "rpturn_cd2c087cafa2b01723ee5faead423b2f8109b07a6763bb672f4c23de5223f441",
+      "world_head": 23,
+      "decisions": [
+        {
+          "event_sequence": 22,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "我叫晴雯。你倒怪有意思，我问你是谁你还没说，倒先打听起我们来了。你到底是哪个院里的？",
+          "event_id": "event_rp_npc_3b6b9ba2df642d26df984b5cca585c0df5cc908ac5e4c48d0d819e111c5fc9eb"
+        },
+        {
+          "event_sequence": 23,
+          "speaker": "袭人",
+          "action": "respond",
+          "text": "我叫袭人。瞧你面生得很，不知打哪处来，到我们院里找谁？",
+          "event_id": "event_rp_npc_89eba8434b4a35268d42513cd78fa60ec35172d1029f47d2671cd76f24dcf1e6"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「你们叫什么名字呀」",
+        "（2026-09-22T00:00:00Z）在怡红院，晴雯 回应：「我叫晴雯。你倒怪有意思，我问你是谁你还没说，倒先打听起我们来了。你到底是哪个院里的？」",
+        "（2026-09-22T00:00:00Z）在怡红院，袭人 回应：「我叫袭人。瞧你面生得很，不知打哪处来，到我们院里找谁？」"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "来看看凤姐呗",
+      "turn_run_id": "rpturn_8056b06a89fc9b8d88938fb3839bf3c0e0d807e008117d8d6bf056211394eaa3",
+      "world_head": 27,
+      "decisions": [
+        {
+          "event_sequence": 27,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "瞧你这话说的，倒像逛景儿似的。你是打哪儿来的？找我究竟有什么正经事？",
+          "event_id": "event_rp_npc_959bc6d1d09ee0edbb73bcea02522defe8117e0d26f24b64e6734e63c0eb8c26"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「来看看凤姐呗」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「瞧你这话说的，倒像逛景儿似的。你是打哪儿来的？找我究竟有什么正经事？」"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "那就谢谢凤姐了",
+      "turn_run_id": "rpturn_a5adaca3a0da7ada9414994b927fb0e512168ab9c997d42f156467e0ef7679b5",
+      "world_head": 29,
+      "decisions": [
+        {
+          "event_sequence": 29,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "你倒先谢上了，我何曾许过你什么？打哪儿来、找我有何事，一句没交代明白，倒跟我打起马虎眼来了。",
+          "event_id": "event_rp_npc_5d8637e5a1496a5d234568aaa9fdbc593459f98dbe74d13745b4cb9fdca1e434"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「那就谢谢凤姐了」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「你倒先谢上了，我何曾许过你什么？打哪儿来、找我有何事，一句没交代明白，倒跟我打起马虎眼来了。」"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "你刚才已经把茶递给我了吗？",
+      "turn_run_id": "rpturn_52944d8f27fe8b4104002a0a9125ebb7a6f8be35603c4a937a47a9669ccf9427",
+      "world_head": 31,
+      "decisions": [
+        {
+          "event_sequence": 31,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "哪来的茶？我可半点茶水都没递过给你。你这颠三倒四的，究竟是来做什么的？",
+          "event_id": "event_rp_npc_345b5e5daf510b8bd9e97a2dc86e747dc402f7d4b6ae86acc92708deceffbb81"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「你刚才已经把茶递给我了吗？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「哪来的茶？我可半点茶水都没递过给你。你这颠三倒四的，究竟是来做什么的？」"
+      ]
+    },
+    {
+      "scene": "G4",
+      "place": "fengjieyuan",
+      "text": "我这几日总惦记着姐姐，前儿你说的那桩事，可有下文了？",
+      "turn_run_id": "rpturn_326ab70cd7163d16297fe637c52f7ada790d4593c8cf1d784215f1480e4fef78",
+      "world_head": 33,
+      "decisions": [
+        {
+          "event_sequence": 33,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "我可不记得前儿同你提过什么事。你口口声声姐姐长姐姐短的，说的到底是哪一桩？究竟又是打哪儿来的？",
+          "event_id": "event_rp_npc_e2344278e447d5d60f493cd82f6436bb0cc3f209e77780005408262926579cb6"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「我这几日总惦记着姐姐，前儿你说的那桩事，可有下文了？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「我可不记得前儿同你提过什么事。你口口声声姐姐长姐姐短的，说的到底是哪一桩？究竟又是打哪儿来的？」"
+      ]
+    },
+    {
+      "scene": "G5",
+      "place": "fengjieyuan",
+      "text": "凤姐姐天天都好忙",
+      "turn_run_id": "rpturn_abdaa6fa91f59aa6c999d8cb6e0863fd2d1ef93d849ae4f4af3ee022e197ab20",
+      "world_head": 35,
+      "decisions": [
+        {
+          "event_sequence": 35,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "既然知道我忙，怎么还在这儿净扯些闲话？你究竟是受谁打发来的、找我有何正经事，痛痛快快说明白了，别在这儿兜圈子。",
+          "event_id": "event_rp_npc_af1a4075e6945e41283e7f7108fd099c3e6a55001c3ab0543cf25df9b61fa5e4"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「凤姐姐天天都好忙」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「既然知道我忙，怎么还在这儿净扯些闲话？你究竟是受谁打发来的、找我有何正经事，痛痛快快说明白了，别在这儿兜圈子。」"
+      ]
+    },
+    {
+      "scene": "G5",
+      "place": "fengjieyuan",
+      "text": "那凤姐你先处理",
+      "turn_run_id": "rpturn_ba9a17e752bfbab0e42f2e5930d485ee6a9360b4377bbe72fdb1fb1316f21faa",
+      "world_head": 37,
+      "decisions": [
+        {
+          "event_sequence": 37,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "你倒会顺坡下驴。既然说不出个原委来，也别在我这儿戳着耽搁工夫，该回哪儿去就回哪儿去罢。",
+          "event_id": "event_rp_npc_907b09ac3747b3415d519a93ee896baea012f4f7b100581c7ffa8d6f39c01763"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「那凤姐你先处理」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「你倒会顺坡下驴。既然说不出个原委来，也别在我这儿戳着耽搁工夫，该回哪儿去就回哪儿去罢。」"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "有谁呀",
+      "turn_run_id": "rpturn_af5c1ac593bfc784bb0a6aa02849578fcec5e66d56d0b6ba2eabb951b1fa55c1",
+      "world_head": 40,
+      "decisions": [
+        {
+          "event_sequence": 40,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "这屋里眼下就我一个人在这儿坐着呢。瞧你面生得很，是找谁来的？",
+          "event_id": "event_rp_npc_a0e4874e7f6a6b07de2f56bfcc606b53262a047f2bef7a34410a92a9f1e4ba81"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有谁呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 回应：「这屋里眼下就我一个人在这儿坐着呢。瞧你面生得很，是找谁来的？」"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "你是谁",
+      "turn_run_id": "rpturn_7d4ad28579442a7d6b2e2eb5f03fef331640657572bc5107ca8d50e7e3781e2e",
+      "world_head": 42,
+      "decisions": [
+        {
+          "event_sequence": 42,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "我是这荣国府里的老太太贾母。你瞧着面生得很，打哪儿过来的？",
+          "event_id": "event_rp_npc_43097f5b7093599319fcc05aaca9c790415589c3bc839d322be26fa40f5dc861"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「你是谁」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「我是这荣国府里的老太太贾母。你瞧着面生得很，打哪儿过来的？」"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "有人吗",
+      "turn_run_id": "rpturn_9dc57f6612ddc26fa062c674d3f06905b54b0e0a9545976bc31b34b6c0e767b8",
+      "world_head": 44,
+      "decisions": [
+        {
+          "event_sequence": 44,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "我不是正坐在这儿同你说话呢么？你究竟是有何事，进这屋里来找谁？",
+          "event_id": "event_rp_npc_5de082ebfdcccce737e0a133b9aef8b85d51314500e8207156042637a1eeeaf7"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有人吗」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「我不是正坐在这儿同你说话呢么？你究竟是有何事，进这屋里来找谁？」"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "你是谁呀",
+      "turn_run_id": "rpturn_12267512421ae9593eeac48ba425ea4e973325d891f75a8bc58e27e219ceca8d",
+      "world_head": 46,
+      "decisions": [
+        {
+          "event_sequence": 46,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "方才已同你说了，我是这荣国府里的贾母。你连着问了几遭，可是方才没听清？你进到这屋里，究竟是有什么事要办？",
+          "event_id": "event_rp_npc_cd16b21a82b5dbe75511e50e75316e8a891433d1a00dd9705e5deda0149f7bfc"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「你是谁呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「方才已同你说了，我是这荣国府里的贾母。你连着问了几遭，可是方才没听清？你进到这屋里，究竟是有什么事要办？」"
+      ]
+    },
+    {
+      "scene": "G3",
+      "place": "rongqingtang",
+      "text": "想你了",
+      "turn_run_id": "rpturn_34980b1846ac44fc517b37996f0b18e7551c6fa9c690fc42adced88cb96cd8ba",
+      "world_head": 48,
+      "decisions": [
+        {
+          "event_sequence": 48,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "想我了？我左瞧右瞧，倒实在记不得在何处见过你。你是哪家的孩子，咱们从前认得么？",
+          "event_id": "event_rp_npc_0f636382b00af3223229bbcd3722682302a8bfb279cd066218abc3a1e6dff44d"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「想你了」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「想我了？我左瞧右瞧，倒实在记不得在何处见过你。你是哪家的孩子，咱们从前认得么？」"
+      ]
+    },
+    {
+      "scene": "G1",
+      "place": "rongqingtang",
+      "text": "有人吗",
+      "turn_run_id": "rpturn_ae302b09c2e75bb91d86075a88b9cc59e064504732a53acfdcdadade4932c9be",
+      "world_head": 50,
+      "decisions": [
+        {
+          "event_sequence": 50,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "我就坐在这里，方才也应了你几遭。你若真有什么事，不妨痛痛快快直说；总这般喊着，到底是寻谁呢？",
+          "event_id": "event_rp_npc_648953ba7167a2bb0314ff4cd3f444f8ce18916a40d73d14dbf956d3b6588900"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有人吗」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「我就坐在这里，方才也应了你几遭。你若真有什么事，不妨痛痛快快直说；总这般喊着，到底是寻谁呢？」"
+      ]
+    },
+    {
+      "scene": "G1",
+      "place": "rongqingtang",
+      "text": "找老祖宗呀",
+      "turn_run_id": "rpturn_00088589d07ab607bf158695ccafddb78732505ac3d2d49c195510f00bd1e89c",
+      "world_head": 52,
+      "decisions": [
+        {
+          "event_sequence": 52,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "找老祖宗？这府里上下唤我老祖宗的也就是我了。只是我瞧着你眼生得很，究竟是哪家的孩子，找我有什么事？",
+          "event_id": "event_rp_npc_0682ba7386c83f0d7d9802c9b3b0cb8d216a185e7ecdba9dfe1df9dd9fdd1783"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "gemini-3.8-flash-high",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「找老祖宗呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「找老祖宗？这府里上下唤我老祖宗的也就是我了。只是我瞧着你眼生得很，究竟是哪家的孩子，找我有什么事？」"
+      ]
+    },
+    {
+      "scene": "G8",
+      "source_turn": "rpturn_00088589d07ab607bf158695ccafddb78732505ac3d2d49c195510f00bd1e89c",
+      "narrative": [
+        "你在荣庆堂里开口道：「找老祖宗呀」",
+        "贾母听见你的话，随即回应道：「找老祖宗？这府里上下唤我老祖宗的也就是我了。只是我瞧着你眼生得很，究竟是哪家的孩子，找我有什么事？」"
+      ],
+      "fallback_reason": ""
+    }
+  ]
+}

@@ -456,6 +456,7 @@ func TestRPExternalControllerHeardSpeechSkipsInternalDecisionAndSettles(t *testi
 		t.Fatal("speech did not settle", turn, err)
 	}
 	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_turn_listener_skips WHERE turn_run_id=? AND npc_entity_id=?`, []any{turn.TurnRunID, M2AgentAdaID}, 1)
+	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_turn_listener_activations WHERE turn_run_id=? AND npc_entity_id=? AND disposition='externally_controlled' AND reason_code='external_controller'`, []any{turn.TurnRunID, M2AgentAdaID}, 1)
 	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_npc_decisions WHERE parent_turn_id=? AND npc_entity_id=?`, []any{turn.PlayerTurnID, M2AgentAdaID}, 0)
 	if again, err := s.PlayRPTurn(ctx, core.RPSpeechRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: human.SessionID, Text: "你好，艾达。", ExpectedCursor: view.ObservationCursor, IdempotencyKey: "speak-to-ada"}); err != nil || !again.Replayed || again.TurnRunID != turn.TurnRunID {
 		t.Fatal("turn replay", again, err)
@@ -564,6 +565,7 @@ func TestRPExternalControllerHandoffDuringAcceptedSpeechFencesProvider(t *testin
 		t.Fatal("accepted speech failed during controller handoff", turn, providerCalls, err)
 	}
 	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_turn_listener_skips WHERE turn_run_id=? AND npc_entity_id=?`, []any{turn.TurnRunID, M2RPNPCID}, 1)
+	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_turn_listener_activations WHERE turn_run_id=? AND npc_entity_id=? AND disposition='externally_controlled' AND reason_code='external_controller'`, []any{turn.TurnRunID, M2RPNPCID}, 1)
 	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_npc_decisions WHERE parent_turn_id=? AND npc_entity_id=?`, []any{turn.PlayerTurnID, M2RPNPCID}, 0)
 	if again, err := s.RunRPTurn(ctx, request, nil); err != nil || !again.Replayed || again.TurnRunID != turn.TurnRunID {
 		t.Fatal("accepted speech replay after handoff", again, err)
@@ -635,6 +637,7 @@ func TestRPExternalControllerHandoffResumesAcceptedTurnAfterRestart(t *testing.T
 		t.Fatal("accepted turn did not recover after restart and handoff", turn, err)
 	}
 	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_turn_listener_skips WHERE turn_run_id=? AND npc_entity_id=?`, []any{turn.TurnRunID, M2RPNPCID}, 1)
+	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_turn_listener_activations WHERE turn_run_id=? AND npc_entity_id=? AND disposition='externally_controlled' AND reason_code='external_controller'`, []any{turn.TurnRunID, M2RPNPCID}, 1)
 	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_npc_decisions WHERE parent_turn_id=? AND npc_entity_id=?`, []any{turn.PlayerTurnID, M2RPNPCID}, 0)
 	assertM2Value(t, ctx, s, `SELECT COUNT(*) FROM rp_utterances WHERE session_id=? AND speaker_entity_id=? AND turn_id=?`, []any{human.SessionID, M2RPPlayerID, turn.PlayerTurnID}, 1)
 	if diff, err := s.CompareProjections(ctx, M2DemoInstanceID, M2DemoBranchID); err != nil || len(diff) != 0 {

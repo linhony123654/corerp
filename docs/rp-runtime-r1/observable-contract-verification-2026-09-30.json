@@ -1,0 +1,83 @@
+{
+  "kind": "observable_contract_source_checkpoint",
+  "captured_at_utc": "2026-09-30T05:33:16.196076+00:00",
+  "runtime_sha256": "sha256:f9c6769f81ec5198295c74af008bc728d05983a06090ca5291ed4518549118cb",
+  "sources_sha256": {
+    "backend/internal/core/rp_style.go": "938cc1bdffce8421861222732dd54bfa5e1c504e5ed6d1b23086f66a221f9a83",
+    "backend/internal/core/rp_narrative_target_test.go": "9de518fad041b1186f641b4a7588de063e2aa3b630b6010f5fc7c9d9fda21224",
+    "backend/internal/narrative/prose.go": "9f78df882732684fddeefffc6aac2dffd385637b3b65384969895d8496a49426",
+    "backend/internal/narrative/agency.go": "2eea729c3699878a8e2d1bdfe9dcce1fee6daae73cc70ae66c9775216d63b838",
+    "backend/internal/narrative/fact_guard.go": "6763f70d25438692e6501fee8b304e80f3c9092f9e75f534473bff0f02350202",
+    "backend/internal/narrative/prose_test.go": "03d8997f9f8adfc787ab309336e0fbe28bbab7e7ab52887885406a08d5c0bc83",
+    "backend/internal/narrative/observable_boundary_test.go": "035309b477aa0d7b8be2d0bd88539d73111af0154f7da8deb64c2a638183a5ca",
+    "backend/internal/storage/rp_turn_view.go": "14cdb5298583713de2734ad84c72b0f7b23adf153887524dddb8b67e314d497a",
+    "backend/internal/storage/rp_runtime_expression_test.go": "64c7703bf1c07e42c40c9288cf6580081b27236f36885690902e9fca222762fb",
+    "backend/internal/storage/rp_initiative_expression_test.go": "5df893de38c826e9df8bcda7ed9c54d534c4e90684f12cca3d964ef1281301f5"
+  },
+  "core_narrative_tests": "PASS",
+  "storage_focused_tests": "PASS",
+  "related_vet": "PASS",
+  "runtime_build": "PASS",
+  "full_internal_suite": {
+    "status": "PASS",
+    "exit_code": 0,
+    "command": "go test ./internal/... -count=1 -timeout=20m",
+    "packages": [
+      {
+        "package": "corerp.local/backend/internal/core",
+        "duration": "0.291s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/decision",
+        "duration": "0.457s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/endpointpolicy",
+        "duration": "0.026s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/narrative",
+        "duration": "1.478s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/outbound",
+        "duration": "0.005s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/storage",
+        "duration": "877.383s",
+        "result": "PASS"
+      },
+      {
+        "package": "corerp.local/backend/internal/transport/httpapi",
+        "duration": "69.733s",
+        "result": "PASS"
+      }
+    ],
+    "log_path": "/tmp/corerp-r1-observable-contract-internal-20260930.log",
+    "log_sha256": "97cada47283700f432d677faa6d30c21a9b655613c413dde8fc531174834fe9f"
+  },
+  "live32": {
+    "status": "NOT PASSED",
+    "record": "private-observable-32-result-2026-09-30.json",
+    "binary_note": "Previous private-continuity binary 31041504, before this target/type fix; not final-source proof."
+  },
+  "final_source_golden": {
+    "status": "CAPTURED, not RP acceptance",
+    "result": "observable-contract-golden-result-2026-09-30.json",
+    "source": "observable-contract-golden-2026-09-30.json",
+    "script_exit_code": 0,
+    "decision_success": 17,
+    "decision_failure": 0,
+    "nonverbal_events": 0,
+    "rp_experience_exit": "NOT PASSED"
+  },
+  "rp_experience_exit": "NOT PASSED; no creator canon or actual human approval",
+  "completed_at_utc": "2026-09-30T05:49:43.774751+00:00",
+  "running_jobs": []
+}

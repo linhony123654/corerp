@@ -1,0 +1,66 @@
+{
+  "kind": "final_source_frozen_golden_capture",
+  "runtime_sha256": "sha256:f9c6769f81ec5198295c74af008bc728d05983a06090ca5291ed4518549118cb",
+  "artifact_directory": "/tmp/corerp-rp-runtime-r1-after-XTAf2X",
+  "script_exit_code": 0,
+  "model": "step-5-preview",
+  "model_config": {
+    "decision_timeout": "120s",
+    "decision_max_tokens": "4096",
+    "reasoning_effort": "low",
+    "decision_attempts": "2",
+    "narrative_timeout": "90s",
+    "narrative_attempts": "2"
+  },
+  "configuration_note": "Decision initial4096 tokens/low/120s/2 transport attempts; existing length repair may raise limit to8192 inside same120s. DisableThinking=false. Narrator4096 tokens/90s/2 attempts without explicit reasoning_effort. No model seed fixed.",
+  "provider_counts": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "count": 17
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "count": 15
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "count": 1
+    }
+  ],
+  "decision_attempts": [
+    {
+      "attempt_count": 1,
+      "count": 16
+    },
+    {
+      "attempt_count": 2,
+      "count": 1
+    }
+  ],
+  "failures": [],
+  "g8_receipts": [
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "model_id": "step-5-preview",
+      "result": "success",
+      "attempt_count": 1,
+      "fallback_kind": ""
+    }
+  ],
+  "nonverbal_events": 0,
+  "world_head": 52,
+  "rp_experience_exit": "NOT PASSED",
+  "interpretation": "All17 decisions and realG8 prose succeeded. Canon remains incomplete; JiaMu dialogue remains stranger interrogation/rejection, one line contains shade,0 observable expressions, sparseG8. Model call success is not clear/replicable RP experience improvement or human acceptance.",
+  "log_sha256": "408a4544ff6a4eaebb670285f4b8a6a5398b6a1a8c6ff760000880f79baf7fd3",
+  "frozen_source_sha256": {
+    "world_spec": "sha256:e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+    "world_packages": "sha256:a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d"
+  }
+}

@@ -17,6 +17,8 @@ import { checkWork } from './rp6-work-checks.mjs'
 import { checkMap, checkMapWorks } from './rp6-map-checks.mjs'
 import { checkMessages } from './rp6-messages-checks.mjs'
 import { checkCustomStyle, startStylePlannerFixture } from './rp6-custom-style-checks.mjs'
+import { clickPlayWait, movePlayTo, openPlayTools, openPlayBusiness, setPlayInputMode } from './play-ui-helpers.mjs'
+import { checkPlayVisual } from './play-ui-visual-checks.mjs'
 
 // Real world/service/browser. --fake-model adds only a local model HTTP fixture;
 // it verifies the adapter, not live model quality. Never inherit live model credentials.
@@ -25,10 +27,12 @@ const lifeScenario = process.argv.includes('--life')
 const emergentScenario = process.argv.includes('--emergent')
 const styleScenario = process.argv.includes('--style')
 const initiativeScenario = process.argv.includes('--initiative')
+const visualScenario = process.argv.includes('--ui-baseline')
 const walletScenario = process.argv.includes('--wallet')
 const styleUIScenario = process.argv.includes('--style-ui')
 const regenerateScenario = process.argv.includes('--regenerate')
 const turnStreamScenario = process.argv.includes('--turn-stream')
+const slowNarrativeScenario = process.argv.includes('--slow-narrative')
 const contextBudgetScenario = process.argv.includes('--context-budget')
 const contactsScenario = process.argv.includes('--contacts')
 const workScenario = process.argv.includes('--work')
@@ -46,8 +50,8 @@ Object.assign(env, { CORERP_DECISION_PROVIDER: 'deterministic', CORERP_LLM_ENDPO
 Object.assign(env, { CORERP_NARRATIVE_PROVIDER: 'deterministic', CORERP_NARRATIVE_ENDPOINT: '', CORERP_NARRATIVE_MODEL: '', CORERP_NARRATIVE_API_KEY: '', CORERP_NARRATIVE_TIMEOUT: '', CORERP_NARRATIVE_ATTEMPTS: '' })
 const sql = query => execFileSync('sqlite3', [database, query], { encoding: 'utf8' }).trim()
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'pipe' })
-run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'server'), './cmd/corerp-server'], join(root, 'backend'))
-run('/usr/local/go/bin/go', ['build', '-o', join(temp, 'setup'), './cmd/corerp-m2'], join(root, 'backend'))
+run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, 'server'), './cmd/corerp-server'], join(root, 'backend'))
+run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, 'setup'), './cmd/corerp-m2'], join(root, 'backend'))
 run(join(temp, 'setup'), ['-db', database, '-action', 'rp-travel-prepare'])
 let server, vite, browser, modelServer, stylePlannerFixture
 let modelCalls = 0
@@ -71,9 +75,32 @@ try {
         for await (const chunk of request) raw += chunk
         const body = JSON.parse(raw)
         assert.equal(body.response_format.json_schema.strict, true)
-        const input = JSON.parse(body.messages[1].content).character
+        const context = JSON.parse(body.messages[1].content)
         modelCalls++
-        let action = 'respond', text = '来自测试模型的问候。'
+        if (context.version === 'corerp.interaction.v2') {
+          const step = (kind, fields = {}) => ({ kind, target_place_id: '', target_entity_id: '', wait_hours: 0, wait_minutes: 0, speech_text: '', object_action: '', object_id: '', anchor_id: '', offer_id: '', nonverbal_action: '', gesture_code: '', ...fields })
+          let proposal = { kind: 'CLARIFICATION', steps: [], clarification: 'ambiguous_intent' }
+          if (context.text === '去Ada Home，随后说「重启后还记得这段行动吗？」')
+            proposal = { kind: 'MIXED', steps: [step('move', { target_place_id: 'place_m2_home_ada' }), step('speech', { speech_text: '重启后还记得这段行动吗？' })], clarification: '' }
+          else if (context.text === '去M2 Cafe')
+            proposal = { kind: 'ACTION', steps: [step('move', { target_place_id: 'place_m2_cafe' })], clarification: '' }
+          else if (['想你了。', '你是谁呀？', '等我一下，我有件事想告诉你。'].includes(context.text))
+            proposal = { kind: 'DIALOGUE', steps: [step('speech', { speech_text: context.text })], clarification: '' }
+          else if (['继续剧情', '接着看看后面的发展'].includes(context.text))
+            proposal = { kind: 'CONTINUE', steps: [step('wait', { wait_minutes: 15 })], clarification: '' }
+          else if (context.text === '我笑了笑，没有说话。')
+            proposal = { kind: 'ACTION', steps: [step('nonverbal', { nonverbal_action: 'smile' })], clarification: '' }
+          else if (context.text === '*看了她一眼，没有说话。*' && context.present_entities?.length)
+            proposal = { kind: 'ACTION', steps: [step('nonverbal', { nonverbal_action: 'look_at', target_entity_id: context.present_entities[0].id })], clarification: '' }
+          else if (context.text.includes('杯子')) proposal.clarification = 'unsupported_item'
+          else if (context.text.includes('看了她一眼')) proposal.clarification = 'ambiguous_target'
+          else if (context.text.includes('创建一个地点')) proposal.clarification = 'unsupported_command'
+          response.setHeader('Content-Type', 'application/json')
+          response.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(proposal) } }] }))
+          return
+        }
+        const input = context.character
+        let action = 'respond', text = `关于“${input.player_speech_text.slice(0, 32)}”，来自测试模型的问候。`
         if (input.trigger?.kind === 'elapsed_time') {
           assert.equal(input.player_speech_text, '')
           assert.equal(input.speech_event_id, '')
@@ -83,11 +110,11 @@ try {
         else if (input.player_speech_text.includes('借') || input.own_asset_minor < 100) { action = 'refuse'; text = '测试模型：抱歉，我现在无法答应。' }
         else if (input.next_schedule?.activity_code === 'work') { action = 'refuse'; text = '测试模型：我得先去工作，晚些再聊。' }
         response.setHeader('Content-Type', 'application/json')
-        response.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ action, text, destination_place_id: '' }) } }] }))
+        response.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ action, text, destination_place_id: '', activity_code: '', introduce_self: false }) } }] }))
       } catch { response.writeHead(400); response.end() }
     })
     modelServer.listen(0, '127.0.0.1'); await once(modelServer, 'listening')
-    Object.assign(env, { CORERP_DECISION_PROVIDER: 'chat_completions', CORERP_LLM_ENDPOINT: `http://127.0.0.1:${modelServer.address().port}/v1/chat/completions`, CORERP_LLM_MODEL: 'test-http-model' })
+    Object.assign(env, { CORERP_DECISION_PROVIDER: 'chat_completions', CORERP_LLM_ENDPOINT: `http://127.0.0.1:${modelServer.address().port}/v1/chat/completions`, CORERP_LLM_MODEL: 'test-http-model', CORERP_PROVIDER_LOCAL_ALLOWLIST: `http://127.0.0.1:${modelServer.address().port}` })
   }
   server = startServer()
   vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '4178', '--strictPort'], { cwd: root, stdio: 'ignore' })
@@ -110,12 +137,19 @@ try {
   if (mapScenario) await checkMap({ page, sql, temp, stage: 'entry' })
   if (messagesScenario) await checkMessages({ page, sql, temp, stage: 'entry' })
   const speak = async text => {
+    // This R1 regression exercises explicit Speech, not the new default AUTO interpreter.
+    await setPlayInputMode(page, 'speech')
     const response = page.waitForResponse(r => r.url().endsWith('/rp/turns/run'))
     await page.getByLabel('你想说的话').fill(text)
     await page.getByRole('button', { name: '说出' }).click()
     const result = await (await response).json()
     assert.ok(result.data, JSON.stringify(result))
-    await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
+    try {
+      await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending, null, { timeout: slowNarrativeScenario ? 90_000 : 30_000 })
+    } catch (error) {
+      console.error(JSON.stringify({ pageErrors: errors, alert: await page.locator('[role="alert"]').allInnerTexts(), status: await page.locator('[role="status"]').allInnerTexts(), narrativeIntercepts: slowNarrativeIntercepts }))
+      throw error
+    }
     return result.data
   }
   if (initiativeScenario) {
@@ -137,12 +171,15 @@ try {
       const response = await route.fetch(); assert.equal(response.status(), 200); await route.abort('failed')
     }, { times: 1 })
     const seeking = page.getByRole('checkbox', { name: '等待时，愿意和熟人聊聊' })
+    const tools = await openPlayTools(page)
     assert.equal(await seeking.isChecked(), false)
     await seeking.focus(); await page.keyboard.press('Space')
     assert.equal(await seeking.isChecked(), true)
-    await page.getByRole('button', { name: '等四小时' }).click()
+    await tools.getByRole('button', { name: /^等四小时/ }).click()
     await page.getByRole('button', { name: '继续未完成的行动', exact: true }).waitFor()
+    await openPlayTools(page)
     assert.equal(await seeking.isDisabled(), true)
+    await page.getByRole('button', { name: '关闭详情' }).click()
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).pending.body.opportunity_intent), 'social')
     assert.equal(sql("SELECT json_extract(payload,'$.opportunity_intent') FROM events WHERE event_type='RPWaitCompleted' ORDER BY event_sequence DESC LIMIT 1"), 'social')
     assert.equal(sql("SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin'"), '0', 'initiative precedes all player speech')
@@ -159,37 +196,54 @@ try {
     await page.getByLabel('玩家访问凭证').fill(credential)
     await page.getByRole('button', { name: '继续这段生活' }).click()
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
+    await openPlayTools(page)
     assert.equal(await page.getByRole('checkbox', { name: '等待时，愿意和熟人聊聊' }).isChecked(), false)
+    await page.getByRole('button', { name: '关闭详情' }).click()
     assert.match(await page.locator('.reading').innerText(), /Nora说.*手头的开销/)
     assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM observation_records)||':'||(SELECT COUNT(*) FROM rp_utterances)"), before)
     assert.equal(modelCalls, beforeCalls, 'wait recovery does not repeat committed initiative model calls')
     console.log(JSON.stringify({ initiativeScenario: 'PASS', beforePlayerSpeech: true, lostWaitResponseRestart: true, factsUnchanged: before, modelCallsUnchanged: beforeCalls }))
   }
-  await speak('能借我一点钱吗？')
+  let slowNarrativeIntercepts = 0
+  if (slowNarrativeScenario) {
+    await page.route('**/api/v1/rp/narrative/stream', async route => {
+      const response = await route.fetch()
+      assert.equal(response.status(), 200)
+      await new Promise(resolve => setTimeout(resolve, 50_000))
+      await route.fulfill({ response })
+      slowNarrativeIntercepts++
+    }, { times: 1 })
+  }
+  const firstTurn = await speak('能借我一点钱吗？')
+  if (slowNarrativeScenario) assert.equal(slowNarrativeIntercepts, 1, 'Play did not finish a narrative response delayed beyond the old 45s browser budget')
+  if (fakeModel) {
+    assert.ok(firstTurn.provider_calls?.some(call => call.phase === 'decision' && call.provider_kind === 'chat_completions' && call.model_id === 'test-http-model' && call.result === 'success' && call.attempted && call.attempt_count === 1), 'real backend receipt counts the local fixture HTTP attempt')
+    assert.ok(firstTurn.provider_calls?.some(call => call.phase === 'narrative' && call.provider_kind === 'deterministic' && call.render_source === 'template' && !call.attempted && call.attempt_count === 0), 'canonical narration is not attributed to the model')
+  }
   assert.match(await page.locator('.reading').innerText(), /Cai 拒绝了/)
+  if (visualScenario) await checkPlayVisual({ page, browser, temp })
   const hearingCount = Number(sql("SELECT COUNT(*) FROM observation_records WHERE json_extract(claim_payload, '$.claim_type') = 'speaker_said'"))
   assert.ok(hearingCount >= 2, 'speech hearing persisted')
-  await page.getByRole('button', { name: '去别处' }).click()
-  await page.getByRole('button', { name: 'Ada Home' }).click()
+  await movePlayTo(page, 'Ada Home')
   await page.getByRole('heading', { name: 'Ada Home' }).waitFor()
   assert.doesNotMatch(await page.locator('.presence').innerText(), /Cai/)
   await speak('你好，一起聊聊吧。')
   assert.match(await page.locator('.turn').last().innerText(), /先去工作/)
   assert.doesNotMatch(await page.locator('.turn').last().innerText(), /Cai/)
   const ordinaryWait = page.waitForRequest(r => r.url().endsWith('/rp/actions/wait'))
-  assert.equal(await page.getByRole('checkbox', { name: '等待时，愿意和熟人聊聊' }).isChecked(), false)
-  await page.getByRole('button', { name: '等四小时' }).click()
+  const ordinaryTools = await openPlayTools(page)
+  assert.equal(await ordinaryTools.getByRole('checkbox', { name: '等待时，愿意和熟人聊聊' }).isChecked(), false)
+  await ordinaryTools.getByRole('button', { name: /^等四小时/ }).click()
   assert.equal((await ordinaryWait).postDataJSON().opportunity_intent, undefined)
   await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
   assert.match(await page.locator('.turn').last().innerText(), /等待至/)
   // Cross the actual work/lunch schedule, not only an empty clock interval.
   for (let i = 0; sql("SELECT current_world_time FROM world_clocks WHERE instance_id = 'inst_m2_t09' AND branch_id = 'br_main'") < '2026-09-23T12:00:00Z'; i++) {
     assert.ok(i < 12, 'wait progression bounded')
-    await page.getByRole('button', { name: '等四小时' }).click()
+    await clickPlayWait(page, 4)
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
   }
-  await page.getByRole('button', { name: '去别处' }).click()
-  await page.getByRole('button', { name: 'M2 Cafe' }).click()
+  await movePlayTo(page, 'M2 Cafe')
   await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
   const lunchPresence = await page.locator('.presence').innerText()
   assert.equal((lunchPresence.match(/陌生人/g) || []).length, 2, 'sight alone must not reveal Ada or Bo')
@@ -335,11 +389,11 @@ try {
   if (mapScenario) await checkMapWorks({ page, sql, temp, credential, creatorCredential, restart: async () => { await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/readyz') } })
   if (customStyleScenario) await checkCustomStyle({ page, sql, temp, credential, speak, fixture: stylePlannerFixture, getModelCalls: () => modelCalls, restart: async () => { await stop(server); server = startServer(); await ready('http://127.0.0.1:8080/readyz') } })
   if (interactionScenario) {
-    await page.getByLabel('输入方式').selectOption('AUTO')
+    await setPlayInputMode(page, 'AUTO')
     const beforeClarification = sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM agent_knowledge)||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')")
     await page.getByLabel('你想说或做的事').fill('继续')
-    await page.getByRole('button', { name: '继续 →' }).click()
-    await page.getByText(/请说明要继续说话/).waitFor()
+    await page.getByRole('button', { name: '说出' }).click()
+    await page.getByText(/请明确要说话/).waitFor()
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
     assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM agent_knowledge)||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')"), beforeClarification, 'clarification made no world effects')
     await page.route('**/api/v1/rp/interactions/run', async route => {
@@ -349,7 +403,7 @@ try {
       await route.abort('failed')
     }, { times: 1 })
     await page.getByLabel('你想说或做的事').fill('去Ada Home，随后说「重启后还记得这段行动吗？」')
-    await page.getByRole('button', { name: '继续 →' }).click()
+    await page.getByRole('button', { name: '说出' }).click()
     await page.getByRole('button', { name: '继续未完成的行动', exact: true }).waitFor()
     const committed = sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_utterances)||':'||(SELECT COUNT(*) FROM rp_interactions WHERE json_extract(plan_json,'$.kind')='MIXED')")
     const pendingInteraction = await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
@@ -362,12 +416,12 @@ try {
     assert.match(await page.locator('.reading').innerText(), /重启后还记得这段行动吗/)
     assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_utterances)||':'||(SELECT COUNT(*) FROM rp_interactions WHERE json_extract(plan_json,'$.kind')='MIXED')"), committed, 'recovery did not duplicate mixed effects')
     assert.equal(sql("SELECT COUNT(*) FROM rp_interactions WHERE json_extract(plan_json,'$.kind')='MIXED' AND status='settled' AND next_step=2"), '1')
-    await page.getByRole('button', { name: '叙事设置' }).click()
+    await openPlayBusiness(page, '叙事设置')
     await page.getByLabel('叙述篇幅').selectOption('long')
     await page.getByRole('button', { name: '保存叙事设置' }).click()
     await page.getByText('已保存。用于之后的新段落').waitFor()
     await page.getByRole('button', { name: '关闭叙事设置' }).click()
-    await page.getByLabel('输入方式').selectOption('DIALOGUE')
+    await setPlayInputMode(page, 'DIALOGUE')
     const longSpeech = '我把今天亲眼见到的事慢慢讲清楚。'.repeat(65)
     assert.ok([...longSpeech].length > 1000 && [...longSpeech].length < 2000)
     await page.route('**/api/v1/rp/narrative/stream', async route => {
@@ -390,12 +444,12 @@ try {
     assert.ok([...await page.locator('.turn').last().innerText()].length >= 1000, '1000+ characters shown in the real browser')
     assert.equal(sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_utterances)||':'||(SELECT COUNT(*) FROM agent_knowledge)"), longCommitted, 'long stream recovery has no world effects')
     assert.equal(sql(`SELECT json_extract(profile_json,'$.narrative_density') FROM rp_turn_styles WHERE turn_run_id='${longPending.narrative_turn_id}'`), 'long')
-    await page.getByLabel('输入方式').selectOption('AUTO')
+    await setPlayInputMode(page, 'AUTO')
     let committedMoveResponse
     const moveAccepted = new Promise(resolve => { committedMoveResponse = resolve })
     await page.route('**/api/v1/rp/interactions/run', async route => { const response = await route.fetch(); assert.equal(response.status(), 200); committedMoveResponse(); await route.abort('failed') }, { times: 1 })
     await page.getByLabel('你想说或做的事').fill('去M2 Cafe')
-    await page.getByRole('button', { name: '继续 →' }).click()
+    await page.getByRole('button', { name: '说出' }).click()
     await moveAccepted
     await page.getByRole('button', { name: '尝试结束原计划' }).waitFor()
     const movedCount = sql("SELECT COUNT(*) FROM events WHERE event_type='RPPlayerMoved'")
@@ -403,7 +457,58 @@ try {
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
     await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor()
     assert.equal(sql("SELECT COUNT(*) FROM events WHERE event_type='RPPlayerMoved'"), movedCount, 'stop attempt did not erase or repeat settled action')
-    console.log(JSON.stringify({ interactionScenario: 'PASS', clarificationNoEffects: true, recoveredMixedNoDuplicates: committed, longStreamRestartNoEffects: longCommitted, settledStopRecovered: true }))
+    if (fakeModel) {
+      const submitAuto = async text => {
+        const response = page.waitForResponse(r => r.url().endsWith('/rp/interactions/run'))
+        await page.getByLabel('你想说或做的事').fill(text)
+        await page.getByRole('button', { name: '说出' }).click()
+        const envelope = await (await response).json()
+        assert.ok(envelope.data, JSON.stringify(envelope))
+        await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
+        assert.equal(envelope.data.interpretation_source, 'model')
+        assert.equal(envelope.data.interpretation_attempts, 1)
+        return envelope.data
+      }
+      for (const text of ['想你了。', '你是谁呀？', '等我一下，我有件事想告诉你。']) {
+        const playerMoves = sql("SELECT COUNT(*) FROM events WHERE event_type='RPPlayerMoved'")
+        const outcome = await submitAuto(text)
+        assert.equal(outcome.plan_kind, 'DIALOGUE')
+        assert.equal(sql(`SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin' AND speech_text='${text}'`), '1')
+        assert.equal(sql("SELECT COUNT(*) FROM events WHERE event_type='RPPlayerMoved'"), playerMoves, 'speech invented player movement')
+      }
+      const beforeContinue = sql("SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main'")
+      const beforeSpeech = sql("SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin'")
+      const continued = await submitAuto('接着看看后面的发展')
+      assert.equal(continued.plan_kind, 'CONTINUE')
+      assert.equal(continued.outcomes[0].kind, 'wait')
+      assert.equal(sql("SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main'"), new Date(Date.parse(beforeContinue) + 15 * 60000).toISOString().replace('.000Z', 'Z'))
+      assert.equal(sql("SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin'"), beforeSpeech, 'continue invented player speech')
+      const unchangedFacts = () => sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM rp_utterances)||':'||(SELECT COUNT(*) FROM stock_movements)")
+      for (const text of ['我把杯子轻轻推到她面前，说：“喝一点吧。”', '请帮我创建一个地点']) {
+        const beforeUnsupported = unchangedFacts()
+        const result = await submitAuto(text)
+        assert.equal(result.status, 'clarification')
+        assert.equal(unchangedFacts(), beforeUnsupported, 'unsourced item or creator command invented effects')
+      }
+      const silentBefore = sql("SELECT (SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin')||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')")
+      const silentCount = Number(sql("SELECT COUNT(*) FROM events WHERE event_type='RPNonverbalAction'"))
+      const smile = await submitAuto('我笑了笑，没有说话。')
+      assert.equal(smile.status, 'settled')
+      assert.equal(smile.outcomes[0].kind, 'nonverbal')
+      assert.equal(Number(sql("SELECT COUNT(*) FROM events WHERE event_type='RPNonverbalAction'")), silentCount + 1)
+      assert.equal(sql("SELECT (SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin')||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')"), silentBefore, 'neutral expression invented speech or elapsed time')
+      const beforeLook = unchangedFacts()
+      const look = await submitAuto('*看了她一眼，没有说话。*')
+      if (look.status === 'settled') {
+        assert.equal(look.outcomes[0].kind, 'nonverbal')
+        assert.equal(Number(sql("SELECT COUNT(*) FROM events WHERE event_type='RPNonverbalAction'")), silentCount + 2)
+        assert.equal(sql("SELECT (SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='entity_m2_rp_lin')||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')"), silentBefore)
+      } else {
+        assert.equal(look.status, 'clarification', 'unseen target cannot be inferred')
+        assert.equal(unchangedFacts(), beforeLook, 'unseen target became a silent fact')
+      }
+    }
+    console.log(JSON.stringify({ interactionScenario: 'PASS_LOCAL_FIXTURE_ONLY', clarificationNoEffects: true, recoveredMixedNoDuplicates: committed, longStreamRestartNoEffects: longCommitted, settledStopRecovered: true, unsourcedCup: 'CLARIFICATION', neutralExpression: 'COMMITTED', liveProvider: false }))
   }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile overflow')
   await page.screenshot({ path: join(temp, 'play-mobile.png'), fullPage: true })
@@ -413,7 +518,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.screenshot({ path: join(temp, 'play-desktop.png'), fullPage: true })
   assert.equal(errors.length, 0, errors.join('\n'))
-  console.log(JSON.stringify({ status: 'PASS', provider: fakeModel ? 'local HTTP fixture (not live LLM)' : 'deterministic', lifeScenario, modelCalls, artifacts: temp, session, recoveryCountsUnchanged: counts, hearingCount, checks: ['real session', 'same-place refusal and hearing', 'legal move and offsite exclusion', 'schedule affects NPC reply', 'scheduler wait', 'lost-response plus process/browser restart', 'same-key no duplicate facts or model calls', 'server-backed history', 'continue after restart', 'mobile no overflow', 'no credential persistence', 'no browser errors', ...(lifeScenario ? ['experienced conflict changes actual NPC movement', 'relationship knowledge and action persist after second restart'] : [])] }, null, 2))
+  console.log(JSON.stringify({ status: 'PASS', provider: fakeModel ? 'local HTTP fixture (not live LLM)' : 'deterministic', lifeScenario, modelCalls, artifacts: temp, session, recoveryCountsUnchanged: counts, hearingCount, checks: ['real session', 'same-place refusal and hearing', 'legal move and offsite exclusion', 'schedule affects NPC reply', 'scheduler wait', 'lost-response plus process/browser restart', 'same-key no duplicate facts or model calls', 'server-backed history', 'continue after restart', 'mobile no overflow', 'no credential persistence', 'no browser errors', ...(slowNarrativeScenario ? ['50s narrative response clears pending without repeating world effects'] : []), ...(lifeScenario ? ['experienced conflict changes actual NPC movement', 'relationship knowledge and action persist after second restart'] : [])] }, null, 2))
 } finally {
   await browser?.close()
   await stop(server); await stop(vite)

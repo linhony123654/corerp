@@ -27,6 +27,7 @@ const (
 	m2AgentSetupCommandID = "cmd_m2_agent_life_setup"
 	m2AgentSetupEventID   = "event_m2_agent_life_setup"
 	m2AgentPhaseID        = "m2_agent_location"
+	studioRoutinePhaseID  = "phase_studio_routine"
 )
 
 type AgentSetupResult struct {
@@ -431,7 +432,7 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 	if err := requireStudioWriteRules(ctx, tx.conn, instanceID, branchID); err != nil {
 		return false, err
 	}
-	if item.PhaseID != m2AgentPhaseID && item.PhaseID != rpInformationPhase && item.PhaseID != organizationReviewPhase && (instanceID != M2DemoInstanceID || branchID != M2DemoBranchID) {
+	if item.PhaseID != m2AgentPhaseID && item.PhaseID != studioRoutinePhaseID && item.PhaseID != rpInformationPhase && item.PhaseID != organizationReviewPhase && (instanceID != M2DemoInstanceID || branchID != M2DemoBranchID) {
 		return false, core.NewError(core.CodeInvalidArgument, "scheduler phase is not yet enabled for this world")
 	}
 	var currentWorldTime string
@@ -497,7 +498,7 @@ func (s *Store) executeNextAgentScheduleForScope(ctx context.Context, instanceID
 		}
 		return true, nil
 	}
-	if item.PhaseID != m2AgentPhaseID {
+	if item.PhaseID != m2AgentPhaseID && item.PhaseID != studioRoutinePhaseID {
 		return false, core.NewError(core.CodeStorageFailure, "unsupported M2 scheduler phase "+item.PhaseID)
 	}
 	var scheduled agentSchedulePayload

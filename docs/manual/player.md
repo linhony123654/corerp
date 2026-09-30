@@ -102,6 +102,19 @@ When an installed **Narrative Pack** (such as `life-journal`) is activated:
 - Set `narrative_density: "long"` in your session style preferences.
 - Responses will render extensive descriptions of atmosphere, sensory details, and character reactions without altering underlying world events.
 
+Full-prose output treats exact world timestamps as ordering evidence, not as a mandatory sentence prefix. Normal/detailed long-form responses are written as a continuous multi-paragraph scene; accepted dialogue remains verbatim, while repeated timestamps, invented dialogue, and undersized drafts are rejected and retried before the deterministic fallback is used.
+
+### Starting a New Chapter
+
+Play's story menu includes **开始新篇**. It gives the current session a new transcript and prose-context boundary:
+
+- earlier conversation disappears from the current story record and is not supplied to later prose generation;
+- canonical Events, world time, character relationships, knowledge, and already completed actions are not deleted or rolled back;
+- another session is unaffected;
+- an unsettled turn, pending wait, or paused interaction must be recovered or stopped first.
+
+The API equivalent is `POST /api/v1/rp/sessions/chapter/start` with `session_id`, the latest `expected_cursor`, and an `idempotency_key`. Lost responses may retry the exact request; a replay returns the original boundary rather than moving it forward.
+
 ---
 
 ## 5. Spatial Navigation: Move & Wait
@@ -190,6 +203,9 @@ Every modifying command accepts an `idempotency_key`. If your network drops or a
 If you want to view a past scene described in a different tone, literary POV, or density:
 - You can request presentation regeneration.
 - The underlying world facts, balances, and event IDs remain **strictly unchanged**. Only the cosmetic rendering is re-evaluated.
+- The first completed presentation generated without a style override is the turn's official player-facing text. It is persisted and reused by observation, refresh, resume, restart, and export without another model call.
+- A manual style regeneration remains temporary. It may be displayed and exported from the current page, but it does not replace the official presentation or alter any NPC decision.
+- If full prose fails fact validation, the deterministic fallback and its sanitized reason become the persisted official presentation rather than silently reverting only after reload.
 
 ---
 

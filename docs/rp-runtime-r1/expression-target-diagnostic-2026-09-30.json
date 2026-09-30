@@ -1,0 +1,16 @@
+{
+  "kind": "isolated_current_source_expression_target_diagnostic",
+  "source_runtime_sha256": "sha256:31041504fb84c49571cb62fde5cab31fdbfddf12c2e44b9839f9b49f2a266900",
+  "code_sources_sha256": {
+    "chat.go": "96170bdaa70c294c77f9726ad59389a927d4b446d1ed0de32805ba5bd5385676",
+    "agency.go": "0496ee285eccda129479678daee3ecd3afb70a49ec022502d1a29fca1978aa9c",
+    "fact_guard.go": "1431e77118d43f35f80a6ef15f8e0938055dfe0f2e2cae196381c613f4eefd0f",
+    "config.go": "4f2fb9412a71eba82e86cfae4ad97ac92cb5dbca16d7b12452ab0f37720adad9",
+    "prose.go": "a6756dc7ef4815a03e791318bc788b06fbe22f500c214076dd560fe329bdc625"
+  },
+  "exit_code": 1,
+  "finding": "Current public fact schema carries a nod but no target. The current prose guard accepts explicit targets player and another NPC. All three negative probes fail; undirected sourced nod remains accepted.",
+  "probe_code": "package narrative\nimport (\n \"testing\"\n \"corerp.local/backend/internal/core\"\n)\nfunc TestDiagnosticExpressionTargetRequiresObservableEvidence(t *testing.T) {\n in:=core.RPNarrativeInput{ControlledEntityID:\"player\",Style:core.RPStyleProfile{POV:\"second_person\"},Facts:[]core.RPNarrativeFact{\n  {EventID:\"player-speech\",ActorID:\"player\",ActorName:\"你\",Action:\"speak\"},\n  {EventID:\"npc-nod\",ActorID:\"baochai\",ActorName:\"宝钗\",Action:\"expression\",ExpressionCode:\"nod\"},\n  {EventID:\"other-npc\",ActorID:\"xiren\",ActorName:\"袭人\",Action:\"silence\"},\n }}\n if err:=validateProseSceneClaims(\"宝钗点头。\",in);err!=nil {t.Fatal(\"sourced undirected nod should remain valid\",err)}\n for _,draft:=range []string{\"宝钗对你点头。\",\"宝钗向你点了点头。\",\"宝钗向袭人点头。\"} {\n  t.Run(draft,func(t *testing.T){if err:=validateProseSceneClaims(draft,in);err==nil{t.Fatal(\"Narrator invented a gesture target without target evidence\")}})\n }\n}\n",
+  "log_path": "/tmp/corerp-r1-expression-target-probe-20260930.log",
+  "scope": "Isolated production-package copy under an owned TemporaryDirectory, cleaned automatically; no current runtime source, real model, world or existing user file changed."
+}

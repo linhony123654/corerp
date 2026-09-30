@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"corerp.local/backend/internal/core"
+	"corerp.local/backend/internal/endpointpolicy"
 	"corerp.local/backend/internal/storage"
 )
 
@@ -194,7 +195,9 @@ func TestRPWaitHTTPUsesPlayerAuthorizationAndCommittedClock(t *testing.T) {
 	}
 	response = performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read)
 	assertStatus(t, response, http.StatusOK)
-	if got := decodeData[storage.RPObservation](t, response); got.WorldTime != wait.TargetWorldTime || got.ObservationCursor != first.EventSequence {
+	// The service layer also drains the wait's warm/initiative presentation,
+	// whose audited silence choices may commit further Events after the clock.
+	if got := decodeData[storage.RPObservation](t, response); got.WorldTime != wait.TargetWorldTime || got.ObservationCursor < first.EventSequence {
 		t.Fatalf("HTTP observation missed completed wait: %+v", got)
 	}
 }
@@ -830,7 +833,12 @@ func openHTTPTestServer(t *testing.T, ctx context.Context, path string) (*storag
 		store.Close()
 		t.Fatal(err)
 	}
-	server, err := New(store, authenticator, cursors)
+	service, err := storage.NewRPService(store, core.DeterministicRPDecisionProvider{}, "deterministic")
+	if err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	server, err := NewWithEndpointPolicy(service, authenticator, cursors, endpointpolicy.TestLocalhostPolicy())
 	if err != nil {
 		store.Close()
 		t.Fatal(err)

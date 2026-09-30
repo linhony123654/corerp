@@ -3,13 +3,17 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"corerp.local/backend/internal/core"
 )
+
+type rpDiagnosticTestError struct{}
+
+func (rpDiagnosticTestError) Error() string                 { return "private-provider-error-token" }
+func (rpDiagnosticTestError) RPDecisionFailureCode() string { return "proposal_ungrounded_decision" }
 
 func TestRPDecisionRecordedReasonNoWorldEffectAndRecovery(t *testing.T) {
 	ctx := context.Background()
@@ -38,7 +42,7 @@ func TestRPDecisionRecordedReasonNoWorldEffectAndRecovery(t *testing.T) {
 	} {
 		result, err := s.DecideRP(ctx, r, rpDecisionProviderFunc(func(context.Context, core.RPDecisionInput) (core.RPDecisionProposal, error) {
 			if tc.failure {
-				return tc.proposal, errors.New("private-provider-error-token")
+				return tc.proposal, rpDiagnosticTestError{}
 			}
 			return tc.proposal, nil
 		}))
@@ -46,7 +50,7 @@ func TestRPDecisionRecordedReasonNoWorldEffectAndRecovery(t *testing.T) {
 			if !core.HasCode(err, core.CodeInvalidArgument) {
 				t.Fatal("expected actual rejection", err)
 			}
-		} else if err != nil || result.Status != tc.status || result.ReasonCode != tc.reason {
+		} else if err != nil || result.Status != tc.status || result.ReasonCode != tc.reason || tc.failure && result.ProviderErrorCode != "proposal_ungrounded_decision" {
 			t.Fatal("wrong decision diagnostic", err)
 		}
 		var raw string
@@ -54,10 +58,11 @@ func TestRPDecisionRecordedReasonNoWorldEffectAndRecovery(t *testing.T) {
 			t.Fatal(err)
 		}
 		var record struct {
-			Status string `json:"status"`
-			Reason string `json:"reason_code"`
+			Status            string `json:"status"`
+			Reason            string `json:"reason_code"`
+			ProviderErrorCode string `json:"provider_error_code"`
 		}
-		if err := json.Unmarshal([]byte(raw), &record); err != nil || record.Status != tc.status || record.Reason != tc.reason || strings.Contains(raw, "private-provider-error-token") {
+		if err := json.Unmarshal([]byte(raw), &record); err != nil || record.Status != tc.status || record.Reason != tc.reason || tc.failure && record.ProviderErrorCode != "proposal_ungrounded_decision" || strings.Contains(raw, "private-provider-error-token") {
 			t.Fatalf("unsafe/wrong audit: %s %v", raw, err)
 		}
 	}

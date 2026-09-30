@@ -19,6 +19,7 @@ type RPTurnResult struct {
 	PlayerEventID     string              `json:"player_event_id"`
 	NPCEventIDs       []string            `json:"npc_event_ids"`
 	NarrativeLines    []string            `json:"narrative_lines"`
+	ProviderCalls     []RPProviderCall    `json:"provider_calls"`
 	SettledSequence   int64               `json:"settled_sequence"`
 	Status            string              `json:"status"`
 	Replayed          bool                `json:"replayed"`
@@ -90,6 +91,10 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 	if request.SpeechAct == "" {
 		request.SpeechAct = "statement"
 	}
+	fresh, err := s.settleBeforeRPTurnIntent(ctx, request, provider)
+	if err != nil {
+		return RPTurnResult{}, err
+	}
 	run, wasExisting, err := s.ensureRPTurnRun(ctx, request)
 	if err != nil {
 		return RPTurnResult{}, err
@@ -102,6 +107,15 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 	}
 	if err := s.afterTurnStage("turn_open"); err != nil {
 		return RPTurnResult{}, err
+	}
+	if !fresh {
+		session, err := loadRPSession(ctx, s.db, request.PrincipalID, request.SessionID)
+		if err != nil {
+			return RPTurnResult{}, err
+		}
+		if err := s.settleRPActivities(ctx, session.InstanceID, session.BranchID); err != nil {
+			return RPTurnResult{}, err
+		}
 	}
 	speechRequest := request
 	speechRequest.NarrativeStyle = nil
@@ -122,7 +136,15 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 	if err := s.advanceRPTurnRunStatus(ctx, run.ID, "player_committed", "npc_deciding"); err != nil {
 		return RPTurnResult{}, err
 	}
-	for _, npcID := range speech.ListenerIDs {
+	activations, err := s.ensureRPTurnActivationPlan(ctx, run.ID, run.SessionID, request.Text, speech.ListenerIDs)
+	if err != nil {
+		return RPTurnResult{}, err
+	}
+	for _, activation := range activations {
+		if activation.Disposition != "activated" {
+			continue
+		}
+		npcID := activation.NPCEntityID
 		committed, err := s.hasRPNPCDecision(ctx, run.SessionID, speech.TurnID, npcID)
 		if err != nil {
 			return RPTurnResult{}, err
@@ -159,6 +181,9 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 			return RPTurnResult{}, err
 		}
 	}
+	if err := s.recordUnusedRPTurnDecision(ctx, run.ID, run.SessionID, speech.TurnID, provider); err != nil {
+		return RPTurnResult{}, err
+	}
 	if err := s.markRPTurnNPCsCommitted(ctx, run.ID, run.SessionID, speech.TurnID); err != nil {
 		return RPTurnResult{}, err
 	}
@@ -174,8 +199,18 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 		if err != nil {
 			return RPTurnResult{}, err
 		}
+		callID, err := s.beginRPProviderCall(ctx, rpProviderCallScope{SessionID: run.SessionID, TurnRunID: run.ID, SubjectID: speech.EventID, Phase: "narrative"}, core.RPProviderMetadata{Kind: "deterministic"})
+		if err != nil {
+			return RPTurnResult{}, err
+		}
 		view, err := s.renderRPTurnStyled(ctx, run.SessionID, speech.TurnID, speech.EventID, style.Profile)
 		if err != nil {
+			if recordErr := s.finishRPProviderCall(ctx, callID, rpProviderErrorResult(ctx, err), "", "", 0); recordErr != nil {
+				return RPTurnResult{}, recordErr
+			}
+			return RPTurnResult{}, err
+		}
+		if err := s.finishRPProviderCall(ctx, callID, "success", "", "template", 0); err != nil {
 			return RPTurnResult{}, err
 		}
 		observation, err := s.ObserveRPSession(ctx, core.RPSessionReadRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID})
@@ -225,15 +260,27 @@ func (s *Store) ensureRPTurnRun(ctx context.Context, request core.RPSpeechReques
 		return rpTurnRun{}, false, err
 	}
 	var run rpTurnRun
-	var existingHash string
+	var existingHash, existingJSON string
 	var playerTurnID, playerEventID sql.NullString
-	err = tx.conn.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence, request_hash FROM rp_turn_runs WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &existingHash)
+	err = tx.conn.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence, request_hash, request_json FROM rp_turn_runs WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &existingHash, &existingJSON)
 	if err == nil {
-		if existingHash != requestHash {
-			return rpTurnRun{}, false, core.NewError(core.CodeIdempotencyMismatch, "RP turn key was used with another input")
-		}
 		run.PlayerTurnID = playerTurnID.String
 		run.PlayerEventID = playerEventID.String
+		if existingHash != requestHash {
+			if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
+				return rpTurnRun{}, false, err
+			}
+			if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+				return rpTurnRun{}, false, err
+			}
+			if err := s.rebaseUncommittedRPTurn(ctx, tx.conn, session, run, existingHash, existingJSON, requestHash, requestJSON, request); err != nil {
+				return rpTurnRun{}, false, err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return rpTurnRun{}, false, core.WrapError(core.CodeStorageFailure, "commit explicit RP turn rebase", err)
+			}
+			return run, true, nil
+		}
 		if run.Status == "settled" {
 			return run, true, nil
 		}
@@ -363,6 +410,17 @@ func (s *Store) skipControlledRPListener(ctx context.Context, runID, sessionID, 
 	if _, err := tx.conn.ExecContext(ctx, `INSERT OR IGNORE INTO rp_turn_listener_skips(turn_run_id,npc_entity_id,owner_source_event_id) VALUES (?,?,?)`, runID, npcID, source); err != nil {
 		return false, err
 	}
+	focusAvailable, err := rpConversationFocusAvailable(ctx, tx.conn)
+	if err != nil {
+		return false, err
+	}
+	focusReset := ``
+	if focusAvailable {
+		focusReset = `,conversation_source_event_id=NULL`
+	}
+	if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_turn_listener_activations SET disposition='externally_controlled',reason_code='external_controller',activation_rank=NULL,owner_source_event_id=?`+focusReset+` WHERE turn_run_id=? AND npc_entity_id=? AND disposition='activated'`, source, runID, npcID); err != nil {
+		return false, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, err
 	}
@@ -397,7 +455,20 @@ func (s *Store) markRPTurnNPCsCommitted(ctx context.Context, runID, sessionID, p
 	if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_turn_listener_skips WHERE turn_run_id=?`, runID).Scan(&skippedCount); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "count externally controlled listeners", err)
 	}
-	if committedCount+skippedCount != len(listeners) {
+	var plannedCount, inactiveCount int
+	activationAvailable, err := rpTurnActivationTableAvailable(ctx, tx.conn)
+	if err != nil {
+		return err
+	}
+	if activationAvailable {
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(disposition='not_activated'),0) FROM rp_turn_listener_activations WHERE turn_run_id=?`, runID).Scan(&plannedCount, &inactiveCount); err != nil {
+			return core.WrapError(core.CodeStorageFailure, "count RP turn activation outcomes", err)
+		}
+		if plannedCount != len(listeners) {
+			return core.NewError(core.CodeProjectionDiverged, "RP turn activation accounting differs from hearing")
+		}
+	}
+	if committedCount+skippedCount+inactiveCount != len(listeners) {
 		return core.NewError(core.CodeCommandInProgress, "RP turn still has undecided listeners")
 	}
 	if err := execAgentOne(ctx, tx.conn, "complete RP turn NPC stage", `UPDATE rp_turn_runs SET status = 'npc_effects_committed', updated_at_utc = ? WHERE turn_run_id = ? AND status = 'npc_deciding'`, s.now().UTC().Format(time.RFC3339Nano), runID); err != nil {
@@ -498,6 +569,13 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 	}
 	if err := rows.Err(); err != nil {
 		return RPTurnResult{}, core.WrapError(core.CodeStorageFailure, "iterate RP turn NPC events", err)
+	}
+	if err := rows.Close(); err != nil {
+		return RPTurnResult{}, core.WrapError(core.CodeStorageFailure, "close RP turn NPC events", err)
+	}
+	result.ProviderCalls, err = readRPTurnProviderCalls(ctx, s.db, run.SessionID, run.ID)
+	if err != nil {
+		return RPTurnResult{}, err
 	}
 	return result, nil
 }

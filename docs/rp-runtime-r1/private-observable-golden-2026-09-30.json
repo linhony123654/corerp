@@ -1,0 +1,631 @@
+{
+  "label": "after",
+  "model": "step-5-preview",
+  "model_config": {
+    "decision_timeout": "120s",
+    "decision_max_tokens": "4096",
+    "reasoning_effort": "low",
+    "decision_attempts": "2",
+    "narrative_timeout": "90s",
+    "narrative_attempts": "2"
+  },
+  "runtime_sha256": "sha256:31041504fb84c49571cb62fde5cab31fdbfddf12c2e44b9839f9b49f2a266900",
+  "world_spec_sha256": "sha256:e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+  "world_packages_sha256": "sha256:a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+  "world": "rp-runtime-r1-golden-world",
+  "world_head": 52,
+  "samples": [
+    {
+      "scene": "G6",
+      "place": "yihongyuan",
+      "text": "你们好呀",
+      "turn_run_id": "rpturn_86fb3d2a6c606ad0aa154835c0357ebefe0ef04d1f6eb65384d590dc8356382a",
+      "world_head": 20,
+      "decisions": [
+        {
+          "event_sequence": 19,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "……你们好。",
+          "event_id": "event_rp_npc_fabc22bb586ffd5ba9987387a31e68cbcd07df3b611a61421f7b37d2aad6b244"
+        },
+        {
+          "event_sequence": 20,
+          "speaker": "袭人",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_da25f8ffd553ed7e6b4193e1664e0f3e50e1ca88adc33f5c4c1d287b99d3e287"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 2,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「你们好呀」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 回应：「……你们好。」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G6",
+      "place": "yihongyuan",
+      "text": "你们叫什么名字呀",
+      "turn_run_id": "rpturn_c00e765db01bbb33ec6b7f2370e6c419d918cf33a901d618f1c81b90a4f9b215",
+      "world_head": 23,
+      "decisions": [
+        {
+          "event_sequence": 22,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "……晴雯。",
+          "event_id": "event_rp_npc_160fa28b6c7a9e38909ab56823ba0685c1f915d3e08060b33e217c4d6461117a"
+        },
+        {
+          "event_sequence": 23,
+          "speaker": "袭人",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_2833ce2e558d1237c1805cbd139311618418a03d0233a60e12b66a0e00cdad3c"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「你们叫什么名字呀」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 回应：「……晴雯。」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "来看看凤姐呗",
+      "turn_run_id": "rpturn_ada54456a1b399f261fec12e700bc6ad12d9b1712ad59d09089188769fbd2732",
+      "world_head": 27,
+      "decisions": [
+        {
+          "event_sequence": 27,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "我正忙着，你有什么事便说。",
+          "event_id": "event_rp_npc_0fa0a979113ac059f403aa4edf6877e53c3319e0c9c8e265c7d0ed283a28113d"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「来看看凤姐呗」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「我正忙着，你有什么事便说。」"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "那就谢谢凤姐了",
+      "turn_run_id": "rpturn_799f5f57cdf922cc3eace4e5047d7a020a774152ebe74c6d90a9b6dd2db8c925",
+      "world_head": 29,
+      "decisions": [
+        {
+          "event_sequence": 29,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "不必多礼。我这儿确有事要料理，你若无要紧事，便请回吧。",
+          "event_id": "event_rp_npc_ffd862668e1c35bcf87529200e13b33fd0350b36e5f1aaa67655a1233a511aea"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「那就谢谢凤姐了」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「不必多礼。我这儿确有事要料理，你若无要紧事，便请回吧。」"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "你刚才已经把茶递给我了吗？",
+      "turn_run_id": "rpturn_8acc4f7c91d752c67e4aa259a111a19a80a99a6b444cc302f9fc66904c53d1d7",
+      "world_head": 31,
+      "decisions": [
+        {
+          "event_sequence": 31,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "我不曾递过茶与你，想是你记错了。我这儿还忙着，不送。",
+          "event_id": "event_rp_npc_44400a6986e36b2cf0245fcf1ae60fa2b0f318adc3a43e5b016482a22b729c26"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「你刚才已经把茶递给我了吗？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 回应：「我不曾递过茶与你，想是你记错了。我这儿还忙着，不送。」"
+      ]
+    },
+    {
+      "scene": "G4",
+      "place": "fengjieyuan",
+      "text": "我这几日总惦记着姐姐，前儿你说的那桩事，可有下文了？",
+      "turn_run_id": "rpturn_25c9ebc74c5ed995724645db49f88fc1f450cfdf72cd1bdbc4fbbb694de3ecf7",
+      "world_head": 33,
+      "decisions": [
+        {
+          "event_sequence": 33,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_eb3ebf233a32687d15985c694b5accf5202c512cacf87257976db013598f86e2"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "timeout",
+          "attempt_count": 2,
+          "fallback_kind": "silence"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「我这几日总惦记着姐姐，前儿你说的那桩事，可有下文了？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G5",
+      "place": "fengjieyuan",
+      "text": "凤姐姐天天都好忙",
+      "turn_run_id": "rpturn_dbcbb8144ff4ef720f66f228d0fd3bbdc3c3b07ac59960a24f54e8131793923f",
+      "world_head": 35,
+      "decisions": [
+        {
+          "event_sequence": 35,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_96cc993bb2ccb6b70ca158332d4e2de26986419f7dd23ff112884adb6c896c3a"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "timeout",
+          "attempt_count": 3,
+          "fallback_kind": "silence"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「凤姐姐天天都好忙」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G5",
+      "place": "fengjieyuan",
+      "text": "那凤姐你先处理",
+      "turn_run_id": "rpturn_c8c9cf81d4dbf585d3a0a86099e97a6d99ebd92bda36e3e00b43a65c7042b11f",
+      "world_head": 37,
+      "decisions": [
+        {
+          "event_sequence": 37,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_a6431e786bf900a8c404e8d0a8e7e5581ec73e458cfa3a052f10c82576755e86"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「那凤姐你先处理」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "有谁呀",
+      "turn_run_id": "rpturn_fb4d246e6dcddbef1cd9d860a00706d90d47529ce544c418f40858c84173f185",
+      "world_head": 40,
+      "decisions": [
+        {
+          "event_sequence": 40,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "是我。你是何人？",
+          "event_id": "event_rp_npc_0be147478aab58fbe24b0d7c0dbeef28f1eb2582096f3da52c4c4bc9dd2d8cc0"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有谁呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 回应：「是我。你是何人？」"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "你是谁",
+      "turn_run_id": "rpturn_2739bd5f778ce695dbf5d86de10ed641da2a2e2624fd79cace55ec764b56dcf5",
+      "world_head": 42,
+      "decisions": [
+        {
+          "event_sequence": 42,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "贾母。方才已答过你'是我'，你还再问。这回该你答了——你是谁？",
+          "event_id": "event_rp_npc_d687be94cde4aa9c2fd4062e25c432f2f16b05849a5d7796c68dc66e58cd0f0e"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「你是谁」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 回应：「贾母。方才已答过你'是我'，你还再问。这回该你答了——你是谁？」"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "有人吗",
+      "turn_run_id": "rpturn_4584979c8e845caaa9339d89c8ede1e9013ebed284f613aa00441f265cfcc9ab",
+      "world_head": 44,
+      "decisions": [
+        {
+          "event_sequence": 44,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "老身在此。你要寻人，人已在眼前；要问老身是谁，你也听见了。如今该你通报名姓。\"} }",
+          "event_id": "event_rp_npc_0536fc447f7afd69155ced36a3e342f77a5861ce8bdd2305b7429edce6e99987"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有人吗」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 回应：「老身在此。你要寻人，人已在眼前；要问老身是谁，你也听见了。如今该你通报名姓。\"} }」"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "你是谁呀",
+      "turn_run_id": "rpturn_f482f60f32a751723b4baacc86c702863dc90959aaa9cf7bf9749464a34aabc3",
+      "world_head": 46,
+      "decisions": [
+        {
+          "event_sequence": 46,
+          "speaker": "贾母",
+          "action": "refuse",
+          "text": "老身已答过三遍，不再答了。你先通名姓，再谈其他。",
+          "event_id": "event_rp_npc_2bede7d9b5a4abb9fa24fe1bcc47b1d1405232ebb6707124a2aa50a10c6be679"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「你是谁呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 拒绝了：「老身已答过三遍，不再答了。你先通名姓，再谈其他。」"
+      ]
+    },
+    {
+      "scene": "G3",
+      "place": "rongqingtang",
+      "text": "想你了",
+      "turn_run_id": "rpturn_7fe355aaaf863b96fabf86481d4c106a044e082a235b46ab739334338ff356c4",
+      "world_head": 48,
+      "decisions": [
+        {
+          "event_sequence": 48,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "这话老身当不起。夜深至此，连姓名都不肯吐露，倒说想我——老身与你不识，这'想'字从何而来？还是先通名姓，再叙旧不迟。r",
+          "event_id": "event_rp_npc_f88173d8f8c8da977068c27d3becd95704fb834bbb18955d9f6d89d28a8f7b9b"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「想你了」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 回应：「这话老身当不起。夜深至此，连姓名都不肯吐露，倒说想我——老身与你不识，这'想'字从何而来？还是先通名姓，再叙旧不迟。r」"
+      ]
+    },
+    {
+      "scene": "G1",
+      "place": "rongqingtang",
+      "text": "有人吗",
+      "turn_run_id": "rpturn_1d8078a68e0d3554f8b2fb482a5498fc8ffae9ac30618fcae4b4acacf410eb39",
+      "world_head": 50,
+      "decisions": [
+        {
+          "event_sequence": 50,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "老身在此。你这句‘有人吗’，自己心里当真没有数？要老身再说一遍是谁，那是不必了。我只问你：姓甚名谁？说出来，老身才好与你说话；说不出，这‘有人吗’问上千遍也还是一样。",
+          "event_id": "event_rp_npc_d35f02e1051c516e1cdc867104450b8b95e241f26afccbcf966d42fbe740d688"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有人吗」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 回应：「老身在此。你这句‘有人吗’，自己心里当真没有数？要老身再说一遍是谁，那是不必了。我只问你：姓甚名谁？说出来，老身才好与你说话；说不出，这‘有人吗’问上千遍也还是一样。」"
+      ]
+    },
+    {
+      "scene": "G1",
+      "place": "rongqingtang",
+      "text": "找老祖宗呀",
+      "turn_run_id": "rpturn_54edcf57dbd61501a3b64a5b908172195433ea394adf9c6d139cf261cdcbf07f",
+      "world_head": 52,
+      "decisions": [
+        {
+          "event_sequence": 52,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "你既说找老祖宗，那眼前便是。老身一直在此，不曾离开。可你要寻人，为何反倒将自己的名姓藏得这样严实？先说出来，老身才知该以何礼待你。",
+          "event_id": "event_rp_npc_126caa2fea18fefdea65718cb6c1fa6997c9af13f3cdef0669eda98d8e793ef5"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 2,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「找老祖宗呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 回应：「你既说找老祖宗，那眼前便是。老身一直在此，不曾离开。可你要寻人，为何反倒将自己的名姓藏得这样严实？先说出来，老身才知该以何礼待你。」"
+      ]
+    },
+    {
+      "scene": "G8",
+      "source_turn": "rpturn_54edcf57dbd61501a3b64a5b908172195433ea394adf9c6d139cf261cdcbf07f",
+      "narrative": [
+        "你「找老祖宗呀」",
+        "陌生人「你既说找老祖宗，那眼前便是。老身一直在此，不曾离开。可你要寻人，为何反倒将自己的名姓藏得这样严实？先说出来，老身才知该以何礼待你。」"
+      ],
+      "fallback_reason": ""
+    }
+  ],
+  "capture_scope": "Private-continuity source31041504, before subsequent expression-target/movement/wait guard fixes; diagnostic, not final-source Golden."
+}

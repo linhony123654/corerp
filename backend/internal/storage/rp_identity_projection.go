@@ -51,7 +51,7 @@ func rpIdentityExpected(ctx context.Context, q replayQuerier, instance, branch s
 		return nil, err
 	}
 	rows.Close()
-	rows, err = q.QueryContext(ctx, `SELECT event_id,event_type,world_time,payload FROM events WHERE instance_id=? AND branch_id=? AND event_sequence<=? AND (event_type='RPParticipantsInitialized' OR (event_type='RPSpeechAccepted' AND event_sequence>?)) ORDER BY event_sequence`, instance, branch, through, cutover)
+	rows, err = q.QueryContext(ctx, `SELECT e.event_id,e.event_type,e.world_time,e.payload,COALESCE(m.display_name,'') FROM events e LEFT JOIN materialized_entities m ON m.entity_id=e.actor_id WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence<=? AND (e.event_type='RPParticipantsInitialized' OR e.event_type='RPIdentitiesDeclared' OR (e.event_type='RPSpeechAccepted' AND e.event_sequence>?)) ORDER BY e.event_sequence`, instance, branch, through, cutover)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +66,8 @@ func rpIdentityExpected(ctx context.Context, q replayQuerier, instance, branch s
 		return nil
 	}
 	for rows.Next() {
-		var id, kind, worldTime, raw string
-		if err := rows.Scan(&id, &kind, &worldTime, &raw); err != nil {
+		var id, kind, worldTime, raw, speakerName string
+		if err := rows.Scan(&id, &kind, &worldTime, &raw, &speakerName); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -95,12 +95,32 @@ func rpIdentityExpected(ctx context.Context, q replayQuerier, instance, branch s
 			}
 			continue
 		}
+		if kind == "RPIdentitiesDeclared" {
+			var fact struct {
+				Pairs [][2]string `json:"pairs"`
+			}
+			if err := json.Unmarshal([]byte(raw), &fact); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			for _, pair := range fact.Pairs {
+				if err := add(pair[0], pair[1], id, worldTime, "declared"); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				if err := add(pair[1], pair[0], id, worldTime, "declared"); err != nil {
+					rows.Close()
+					return nil, err
+				}
+			}
+			continue
+		}
 		var fact rpSpeechEvent
 		if err := json.Unmarshal([]byte(raw), &fact); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		if !fact.IntroduceSelf {
+		if !fact.IntroduceSelf || !core.ExplicitSelfIntroduction(fact.Text, speakerName) {
 			continue
 		}
 		for _, listener := range fact.ListenerIDs {

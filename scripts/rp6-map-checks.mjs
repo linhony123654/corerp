@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { clickPlayWait, openPlayBusiness, scrollPlayToEnd } from './play-ui-helpers.mjs'
 
 export async function checkMap({ page, sql, temp, stage, blocked = false }) {
   const facts = () => sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')||':'||(SELECT place_id FROM agent_positions WHERE agent_id='entity_m2_rp_lin')")
   const before = facts()
   const bookmark = await page.evaluate(() => localStorage.getItem('corerp.play.v1'))
   const response = page.waitForResponse(r => r.url().endsWith('/rp/observe'))
-  const opener = page.getByRole('button', { name: '地图', exact: true })
+  const opener = page.getByRole('button', { name: '行动与功能', exact: true })
   const dialog = page.getByRole('dialog', { name: '附近地图', exact: true })
-  await opener.click()
+  await openPlayBusiness(page, '地图')
   const { data } = await (await response).json()
   await dialog.getByRole('heading', { name: data.place_name, exact: true }).waitFor()
   const adjacent = sql(`SELECT to_place_id FROM rp_place_links WHERE instance_id='inst_m2_t09' AND branch_id='br_main' AND from_place_id='${data.place_id.replaceAll("'", "''")}' ORDER BY to_place_id`).split('\n').filter(Boolean)
@@ -45,7 +46,7 @@ export async function checkMap({ page, sql, temp, stage, blocked = false }) {
   assert.equal(await opener.evaluate(el => document.activeElement === el), true)
   assert.equal(facts(), before)
   assert.equal(await page.evaluate(() => localStorage.getItem('corerp.play.v1')), bookmark)
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  await scrollPlayToEnd(page)
   console.log(JSON.stringify({ map: 'PASS', stage, routes: adjacent.length, checks: ['actual adjacency and movement availability', 'no internals in diagram', 'keyboard/Escape', 'failed refresh disables old departures', 'no world/time/position/bookmark change'] }))
 }
 
@@ -57,14 +58,14 @@ export async function checkMapWorks({ page, sql, temp, creatorCredential, creden
   const response = await fetch('http://127.0.0.1:8080/api/v1/opportunities/transit/define', { method: 'POST', headers: { Authorization: `Bearer ${creatorCredential}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ binding: { ...scope, expected_head: Number(sql("SELECT head_sequence FROM branches WHERE instance_id='inst_m2_t09' AND branch_id='br_main'")), idempotency_key: 'map-local-works' }, from_place_id: 'place_m2_cafe', to_place_id: 'place_m2_work_ada', starts_at: at(1), ends_at: at(2) }) })
   assert.equal(response.status, 200, await response.text())
   await page.getByRole('button', { name: '环顾四周' }).click()
-  await page.getByRole('button', { name: '等一小时', exact: true }).click()
+  await clickPlayWait(page, 1)
   await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
   await checkMap({ page, sql, temp, stage: 'blocked', blocked: true })
-  await page.getByRole('button', { name: '等一小时', exact: true }).click()
+  await clickPlayWait(page, 1)
   await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending)
   // Lose the committed move response. Recovery must retain the exact map cursor
   // and idempotency key and cannot move a second time after process restart.
-  await page.getByRole('button', { name: '地图', exact: true }).click()
+  await openPlayBusiness(page, '地图')
   const dialog = page.getByRole('dialog', { name: '附近地图', exact: true })
   await dialog.getByRole('button', { name: `前往 ${destinationName}`, exact: true }).waitFor()
   let sent

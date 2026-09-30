@@ -72,7 +72,30 @@ const (
 	RPSharedOrganizationPublishSchemaVersion = "corerp-f7-shared-organization-notice-publish-054-2026-09-26"
 	OrganizationAgencySchemaVersion          = "corerp-f8-organization-agency-055-2026-09-26"
 	OrganizationReviewScheduleSchemaVersion  = "corerp-f8-organization-review-schedule-056-2026-09-26"
-	SchemaVersion                            = OrganizationReviewScheduleSchemaVersion
+	StudioLifeSeedingSchemaVersion           = "corerp-studio-life-seeding-057-2026-09-27"
+	RPActivityContinuitySchemaVersion        = "corerp-rp-activity-continuity-058-2026-09-27"
+	RPNarrativeFallbackSchemaVersion         = "corerp-rp-narrative-fallback-059-2026-09-27"
+	RPTurnActivationSchemaVersion            = "corerp-rp-turn-activation-060-2026-09-27"
+	RPSceneObjectSchemaVersion               = "corerp-rp-scene-objects-061-2026-09-27"
+	RPBackgroundProgressionSchemaVersion     = "corerp-rp-background-progression-062-2026-09-27"
+	RPSessionChapterSchemaVersion            = "corerp-rp-session-chapters-063-2026-09-27"
+	RPOfficialNarrativeSchemaVersion         = "corerp-rp-official-narrative-064-2026-09-27"
+	RPProviderReceiptsSchemaVersion          = "corerp-rp-provider-receipts-065-2026-09-27"
+	RPWaitDerivedSettleSchemaVersion         = "corerp-rp-wait-derived-settle-066-2026-09-27"
+	RPTurnExplicitRebaseSchemaVersion        = "corerp-rp-turn-explicit-rebases-067-2026-09-27"
+	RPInteractionInterpretationVersion       = "corerp-rp-interaction-interpretations-068-2026-09-27"
+	RPWaitSettleLineageSchemaVersion         = "corerp-rp-wait-settle-lineage-069-2026-09-27"
+	RPObjectSchemaVersion                    = "corerp-rp-object-interactions-070-2026-09-27"
+	RPTypedActionChildSchemaVersion          = "corerp-rp-typed-action-children-071-2026-09-27"
+	RPObjectStowSchemaVersion                = "corerp-rp-object-stow-072-2026-09-28"
+	RPNarrativeRendersSchemaVersion          = "corerp-rp-narrative-renders-073-2026-09-28"
+	RPLifePostingsIndexSchemaVersion         = "corerp-rp-life-postings-index-074-2026-09-28"
+	RPAccountEconomicSourcesVersion          = "corerp-rp-account-economic-sources-075-2026-09-28"
+	RPConversationFocusSchemaVersion         = "corerp-rp-conversation-focus-076-2026-09-30"
+	SchemaVersion                            = RPConversationFocusSchemaVersion
+	legacyStudioLifeSeedingSchemaVersion     = "corerp-studio-life-seeding-042-2026-09-26"
+	legacyRPActivityContinuitySchemaVersion  = "corerp-rp-activity-continuity-043-2026-09-26"
+	legacyRPNarrativeFallbackSchemaVersion   = "corerp-rp-narrative-fallback-044-2026-09-26"
 )
 
 const (
@@ -166,6 +189,87 @@ func Open(ctx context.Context, path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+var schemaMigrations = []struct {
+	version  string
+	filename string
+}{
+	{RecoverySchemaVersion, "002_recovery.sql"},
+	{StrictSchemaVersion, "003_strict_world.sql"},
+	{AccountingSchemaVersion, "004_obligation_accounting.sql"},
+	{AuthorizationSchemaVersion, "005_authorization_issuance.sql"},
+	{CohortSchemaVersion, "006_cohort_materialization.sql"},
+	{AgentSchemaVersion, "007_agent_life.sql"},
+	{EconomySchemaVersion, "008_m2_economy.sql"},
+	{StoreSchemaVersion, "009_m2_store.sql"},
+	{SupplySchemaVersion, "010_m2_consumption_supply.sql"},
+	{ArrearsSchemaVersion, "011_m2_arrears.sql"},
+	{InsolvencySchemaVersion, "012_m2_insolvency.sql"},
+	{ClaimsSchemaVersion, "013_m2_bankruptcy_claims.sql"},
+	{AllocationSchemaVersion, "014_m2_claim_allocations.sql"},
+	{EstateSchemaVersion, "015_m2_estate_distribution.sql"},
+	{WageParticipationSchemaVersion, "016_m2_wage_participation.sql"},
+	{WageAllocationSchemaVersion, "017_m2_wage_allocation_policy.sql"},
+	{WageClaimOwnershipSchemaVersion, "018_m2_wage_claim_ownership.sql"},
+	{BankruptcySlotSchemaVersion, "019_m2_bankruptcy_slot_claims.sql"},
+	{RPSessionSchemaVersion, "020_rp_sessions.sql"},
+	{RPRouteSchemaVersion, "021_rp_routes.sql"},
+	{RPWaitSchemaVersion, "022_rp_wait_intents.sql"},
+	{RPSpeechSchemaVersion, "023_rp_utterances.sql"},
+	{RPNPCDecisionSchemaVersion, "024_rp_npc_decisions.sql"},
+	{RPTurnSchemaVersion, "025_rp_turn_runs.sql"},
+	{RPStyleSchemaVersion, "026_rp_styles.sql"},
+	{RPRequestSchemaVersion, "027_rp_request_retirement.sql"},
+	{StudioPackageSchemaVersion, "028_studio_package_content.sql"},
+	{StudioActivationSchemaVersion, "029_studio_package_activation.sql"},
+	{StudioReadySchemaVersion, "030_studio_world_ready.sql"},
+	{RPInteractionSchemaVersion, "031_rp_interactions.sql"},
+	{RPSpatialLocationSchemaVersion, "032_spatial_locations.sql"},
+	{RPSpatialJourneySchemaVersion, "033_spatial_journeys.sql"},
+	{RPSpatialPerceptionSchemaVersion, "034_spatial_perception.sql"},
+	{RPSpatialIdentitySchemaVersion, "035_spatial_identity.sql"},
+	{RPControllerEnrollmentSchemaVersion, "036_controller_enrollment.sql"},
+	{RPControllerAuthoritySchemaVersion, "037_controller_authority.sql"},
+	{RPSharedRoundsSchemaVersion, "038_shared_rounds.sql"},
+	{RPControllerLifecycleSchemaVersion, "039_controller_lifecycle.sql"},
+	{RPSharedActionSchemaVersion, "040_shared_action_rounds.sql"},
+	{RPSharedMoveSchemaVersion, "041_shared_move_rounds.sql"},
+	{RPHouseholdSchemaVersion, "042_households.sql"},
+	{RPHouseholdRentSchemaVersion, "043_household_rent_agreements.sql"},
+	{RPHouseholdContributionSchemaVersion, "044_household_rent_contributions.sql"},
+	{RPHouseholdDependentSchemaVersion, "045_household_dependents.sql"},
+	{RPSharedHealthSchemaVersion, "046_shared_health_rounds.sql"},
+	{RPInformationSchemaVersion, "047_information_channels.sql"},
+	{RPSharedInformationSchemaVersion, "048_shared_information_rounds.sql"},
+	{RPSharedStanceSchemaVersion, "049_shared_information_stance.sql"},
+	{RPSharedRelaySchemaVersion, "050_shared_information_relay.sql"},
+	{RPSharedPublicAccessSchemaVersion, "051_shared_public_notice_access.sql"},
+	{RPSharedOrganizationAccessSchemaVersion, "052_shared_organization_notice_access.sql"},
+	{RPSharedPublicPublishSchemaVersion, "053_shared_public_notice_publish.sql"},
+	{RPSharedOrganizationPublishSchemaVersion, "054_shared_organization_notice_publish.sql"},
+	{OrganizationAgencySchemaVersion, "055_organization_agency.sql"},
+	{OrganizationReviewScheduleSchemaVersion, "056_organization_review_schedule.sql"},
+	{StudioLifeSeedingSchemaVersion, "057_studio_life_seeding.sql"},
+	{RPActivityContinuitySchemaVersion, "058_rp_activity_continuity.sql"},
+	{RPNarrativeFallbackSchemaVersion, "059_rp_narrative_fallback.sql"},
+	{RPTurnActivationSchemaVersion, "060_rp_turn_activation.sql"},
+	{RPSceneObjectSchemaVersion, "061_rp_scene_objects.sql"},
+	{RPBackgroundProgressionSchemaVersion, "062_rp_background_progression.sql"},
+	{RPSessionChapterSchemaVersion, "063_rp_session_chapters.sql"},
+	{RPOfficialNarrativeSchemaVersion, "064_rp_official_narrative.sql"},
+	{RPProviderReceiptsSchemaVersion, "065_rp_provider_receipts.sql"},
+	{RPWaitDerivedSettleSchemaVersion, "066_rp_wait_derived_settle.sql"},
+	{RPTurnExplicitRebaseSchemaVersion, "067_rp_turn_explicit_rebases.sql"},
+	{RPInteractionInterpretationVersion, "068_rp_interaction_interpretations.sql"},
+	{RPWaitSettleLineageSchemaVersion, "069_rp_wait_settle_lineage.sql"},
+	{RPObjectSchemaVersion, "070_rp_object_interactions.sql"},
+	{RPTypedActionChildSchemaVersion, "071_rp_typed_action_children.sql"},
+	{RPObjectStowSchemaVersion, "072_rp_object_stow.sql"},
+	{RPNarrativeRendersSchemaVersion, "073_rp_narrative_renders.sql"},
+	{RPLifePostingsIndexSchemaVersion, "074_rp_life_postings_index.sql"},
+	{RPAccountEconomicSourcesVersion, "075_rp_account_economic_sources.sql"},
+	{RPConversationFocusSchemaVersion, "076_rp_conversation_focus.sql"},
+}
+
 func (s *Store) migrate(ctx context.Context) error {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'`).Scan(&count)
@@ -184,67 +288,10 @@ func (s *Store) migrate(ctx context.Context) error {
 	if !hasBase {
 		return core.NewError(core.CodeStorageFailure, fmt.Sprintf("database is missing required base schema %q", BaseSchemaVersion))
 	}
-	migrations := []struct {
-		version  string
-		filename string
-	}{
-		{RecoverySchemaVersion, "002_recovery.sql"},
-		{StrictSchemaVersion, "003_strict_world.sql"},
-		{AccountingSchemaVersion, "004_obligation_accounting.sql"},
-		{AuthorizationSchemaVersion, "005_authorization_issuance.sql"},
-		{CohortSchemaVersion, "006_cohort_materialization.sql"},
-		{AgentSchemaVersion, "007_agent_life.sql"},
-		{EconomySchemaVersion, "008_m2_economy.sql"},
-		{StoreSchemaVersion, "009_m2_store.sql"},
-		{SupplySchemaVersion, "010_m2_consumption_supply.sql"},
-		{ArrearsSchemaVersion, "011_m2_arrears.sql"},
-		{InsolvencySchemaVersion, "012_m2_insolvency.sql"},
-		{ClaimsSchemaVersion, "013_m2_bankruptcy_claims.sql"},
-		{AllocationSchemaVersion, "014_m2_claim_allocations.sql"},
-		{EstateSchemaVersion, "015_m2_estate_distribution.sql"},
-		{WageParticipationSchemaVersion, "016_m2_wage_participation.sql"},
-		{WageAllocationSchemaVersion, "017_m2_wage_allocation_policy.sql"},
-		{WageClaimOwnershipSchemaVersion, "018_m2_wage_claim_ownership.sql"},
-		{BankruptcySlotSchemaVersion, "019_m2_bankruptcy_slot_claims.sql"},
-		{RPSessionSchemaVersion, "020_rp_sessions.sql"},
-		{RPRouteSchemaVersion, "021_rp_routes.sql"},
-		{RPWaitSchemaVersion, "022_rp_wait_intents.sql"},
-		{RPSpeechSchemaVersion, "023_rp_utterances.sql"},
-		{RPNPCDecisionSchemaVersion, "024_rp_npc_decisions.sql"},
-		{RPTurnSchemaVersion, "025_rp_turn_runs.sql"},
-		{RPStyleSchemaVersion, "026_rp_styles.sql"},
-		{RPRequestSchemaVersion, "027_rp_request_retirement.sql"},
-		{StudioPackageSchemaVersion, "028_studio_package_content.sql"},
-		{StudioActivationSchemaVersion, "029_studio_package_activation.sql"},
-		{StudioReadySchemaVersion, "030_studio_world_ready.sql"},
-		{RPInteractionSchemaVersion, "031_rp_interactions.sql"},
-		{RPSpatialLocationSchemaVersion, "032_spatial_locations.sql"},
-		{RPSpatialJourneySchemaVersion, "033_spatial_journeys.sql"},
-		{RPSpatialPerceptionSchemaVersion, "034_spatial_perception.sql"},
-		{RPSpatialIdentitySchemaVersion, "035_spatial_identity.sql"},
-		{RPControllerEnrollmentSchemaVersion, "036_controller_enrollment.sql"},
-		{RPControllerAuthoritySchemaVersion, "037_controller_authority.sql"},
-		{RPSharedRoundsSchemaVersion, "038_shared_rounds.sql"},
-		{RPControllerLifecycleSchemaVersion, "039_controller_lifecycle.sql"},
-		{RPSharedActionSchemaVersion, "040_shared_action_rounds.sql"},
-		{RPSharedMoveSchemaVersion, "041_shared_move_rounds.sql"},
-		{RPHouseholdSchemaVersion, "042_households.sql"},
-		{RPHouseholdRentSchemaVersion, "043_household_rent_agreements.sql"},
-		{RPHouseholdContributionSchemaVersion, "044_household_rent_contributions.sql"},
-		{RPHouseholdDependentSchemaVersion, "045_household_dependents.sql"},
-		{RPSharedHealthSchemaVersion, "046_shared_health_rounds.sql"},
-		{RPInformationSchemaVersion, "047_information_channels.sql"},
-		{RPSharedInformationSchemaVersion, "048_shared_information_rounds.sql"},
-		{RPSharedStanceSchemaVersion, "049_shared_information_stance.sql"},
-		{RPSharedRelaySchemaVersion, "050_shared_information_relay.sql"},
-		{RPSharedPublicAccessSchemaVersion, "051_shared_public_notice_access.sql"},
-		{RPSharedOrganizationAccessSchemaVersion, "052_shared_organization_notice_access.sql"},
-		{RPSharedPublicPublishSchemaVersion, "053_shared_public_notice_publish.sql"},
-		{RPSharedOrganizationPublishSchemaVersion, "054_shared_organization_notice_publish.sql"},
-		{OrganizationAgencySchemaVersion, "055_organization_agency.sql"},
-		{OrganizationReviewScheduleSchemaVersion, "056_organization_review_schedule.sql"},
+	if err := s.normalizeLegacyEStageMigrations(ctx); err != nil {
+		return err
 	}
-	for _, migration := range migrations {
+	for _, migration := range schemaMigrations {
 		hasVersion, err := s.hasSchemaVersion(ctx, migration.version)
 		if err != nil {
 			return err
@@ -258,6 +305,71 @@ func (s *Store) migrate(ctx context.Context) error {
 	var foreignKeys int
 	if err := s.db.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&foreignKeys); err != nil || foreignKeys != 1 {
 		return core.WrapError(core.CodeStorageFailure, "foreign key enforcement is not active", err)
+	}
+	return nil
+}
+
+// normalizeLegacyEStageMigrations bridges databases created by the earlier E
+// integration worktree, where these three migrations occupied 042-044 before
+// F4-F8 claimed those sequence numbers in the merged migration line. The
+// legacy schemas are structurally equivalent to 057 and 059. Migration 058
+// additionally introduced a historical own-action backfill, so that delta is
+// applied idempotently before recording the canonical version.
+func (s *Store) normalizeLegacyEStageMigrations(ctx context.Context) error {
+	type alias struct {
+		legacy   string
+		current  string
+		backfill string
+	}
+	aliases := []alias{
+		{legacy: legacyStudioLifeSeedingSchemaVersion, current: StudioLifeSeedingSchemaVersion},
+		{
+			legacy:  legacyRPActivityContinuitySchemaVersion,
+			current: RPActivityContinuitySchemaVersion,
+			backfill: `
+INSERT OR IGNORE INTO rp_own_actions(agent_id,event_id,action,activity_code,text,place_id,world_time,status,instance_id,branch_id,last_event_sequence)
+SELECT e.actor_id,e.event_id,'speech',NULL,json_extract(e.payload,'$.text'),json_extract(e.payload,'$.place_id'),e.world_time,NULL,e.instance_id,e.branch_id,e.event_sequence
+FROM events e WHERE e.event_type='RPSpeechAccepted';
+INSERT OR IGNORE INTO rp_own_actions(agent_id,event_id,action,activity_code,text,place_id,world_time,status,instance_id,branch_id,last_event_sequence)
+SELECT e.actor_id,e.event_id,'leave',NULL,NULL,json_extract(e.payload,'$.to_place_id'),e.world_time,NULL,e.instance_id,e.branch_id,e.event_sequence
+FROM events e WHERE e.event_type='RPNPCMoved';
+INSERT OR IGNORE INTO rp_own_actions(agent_id,event_id,action,activity_code,text,place_id,world_time,status,instance_id,branch_id,last_event_sequence)
+SELECT e.actor_id,e.event_id,json_extract(e.payload,'$.action'),NULL,NULL,COALESCE(json_extract(e.payload,'$.from_place_id'),json_extract(e.payload,'$.place_id')),e.world_time,NULL,e.instance_id,e.branch_id,e.event_sequence
+FROM events e WHERE e.event_type='RPNPCDecisionRecorded' AND json_extract(e.payload,'$.action') IN ('silence','wait');`,
+		},
+		{legacy: legacyRPNarrativeFallbackSchemaVersion, current: RPNarrativeFallbackSchemaVersion},
+	}
+
+	tx, err := beginImmediate(ctx, s.db)
+	if err != nil {
+		return core.WrapError(core.CodeStorageFailure, "begin legacy E migration normalization", err)
+	}
+	for _, item := range aliases {
+		var legacyCount, currentCount int
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_meta WHERE schema_version=?`, item.legacy).Scan(&legacyCount); err != nil {
+			tx.Rollback(ctx)
+			return core.WrapError(core.CodeStorageFailure, "read legacy E migration version", err)
+		}
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_meta WHERE schema_version=?`, item.current).Scan(&currentCount); err != nil {
+			tx.Rollback(ctx)
+			return core.WrapError(core.CodeStorageFailure, "read canonical E migration version", err)
+		}
+		if legacyCount == 0 || currentCount != 0 {
+			continue
+		}
+		if item.backfill != "" {
+			if _, err := tx.conn.ExecContext(ctx, item.backfill); err != nil {
+				tx.Rollback(ctx)
+				return core.WrapError(core.CodeStorageFailure, "backfill legacy E activity projection", err)
+			}
+		}
+		if _, err := tx.conn.ExecContext(ctx, `INSERT INTO schema_meta(schema_version,applied_at_utc) VALUES (?,?)`, item.current, "2026-09-27T00:00:00Z"); err != nil {
+			tx.Rollback(ctx)
+			return core.WrapError(core.CodeStorageFailure, "record canonical E migration alias", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return core.WrapError(core.CodeStorageFailure, "commit legacy E migration normalization", err)
 	}
 	return nil
 }
@@ -282,6 +394,24 @@ func (s *Store) applyMigration(ctx context.Context, filename string) error {
 	if _, err := tx.conn.ExecContext(ctx, string(schema)); err != nil {
 		tx.Rollback(ctx)
 		return core.WrapError(core.CodeStorageFailure, "apply migration "+filename, err)
+	}
+	if filename == "072_rp_object_stow.sql" {
+		rows, err := tx.conn.QueryContext(ctx, `PRAGMA foreign_key_check`)
+		if err != nil {
+			tx.Rollback(ctx)
+			return core.WrapError(core.CodeStorageFailure, "check migrated object references", err)
+		}
+		broken := rows.Next()
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			tx.Rollback(ctx)
+			return core.WrapError(core.CodeStorageFailure, "check migrated object references", err)
+		}
+		if broken {
+			tx.Rollback(ctx)
+			return core.NewError(core.CodeStorageFailure, "object migration has invalid foreign keys")
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "commit migration "+filename, err)

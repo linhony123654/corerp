@@ -1,0 +1,58 @@
+{
+  "kind": "same_authorized_input_json_contract_diagnostic",
+  "runtime_source": "lean-contract-verification-2026-09-30.json",
+  "limits": "Same authorized context/head as preceding native-schema baseline; not exact failed32 input, not a committed RP run or latency benchmark. Current lean instruction plus exact generated JSON schema supplied as text in JSON Mode; full authorized input and native parser/grounding gates unchanged. Prior JSON-object-only probe lacked this schema. No private text or uncommitted speech persisted in report. Native decoder, actual-view and canonical grounding, controller ownership all retained.",
+  "script_sha256": "72f2fff3c2e8ce4b31db8995071689319affb20485cdd471fbeff5246565d03c",
+  "helper_sha256": "2c5fdba3312e852bef2c35e0a8768b869b3dfe0131cafc78aecd1915449e4485",
+  "diagnostic_dir": "/tmp/corerp-r1-json-contract-probe-4w9c_47e",
+  "results": [
+    {
+      "canonical_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "context_bytes": 11752,
+      "evidence_count": 12,
+      "head_sequence": 26,
+      "local_error": "",
+      "masked_input_hash": "sha256:9bb1e1c8f0f363ceab95344cc8501d6616730415012c29de47cd80889cccfe40",
+      "mode": "json_contract",
+      "observable_committed": false,
+      "private_present": true,
+      "proposal_action": "respond",
+      "provider_error_code": "",
+      "reason_code": "",
+      "seconds": 5.038156224,
+      "status": "validated"
+    }
+  ],
+  "http_records": [
+    {
+      "mode": "json_contract",
+      "context_sha256": "f3b267c898057e862f4d5a0afb0c37dcff1145889249b63e9b2897e71c86d216",
+      "context_bytes": 11797,
+      "original_request_bytes": 18351,
+      "max_completion_tokens": 4096,
+      "original_instruction_bytes": 2475,
+      "instruction_bytes": 5575,
+      "instruction_sha256": "37e119f4a8ba4ae1abdeed6b929abdca8ad0e9c8cc814bb5e86d31b54d294d30",
+      "enable_thinking": null,
+      "response_format": "json_object",
+      "forwarded_request_bytes": 18720,
+      "http_status": 200,
+      "seconds": 5.01,
+      "finish_reason": "stop",
+      "content_bytes": 458,
+      "reasoning_bytes": {
+        "reasoning": 462,
+        "reasoning_content": 462
+      },
+      "usage": {
+        "prompt_tokens": 6495,
+        "completion_tokens": 234,
+        "total_tokens": 6729
+      },
+      "response_model_matches_request": true
+    }
+  ],
+  "source_world_unchanged": true,
+  "npc_observables_committed": false,
+  "input_hash_and_head_identical": true
+}

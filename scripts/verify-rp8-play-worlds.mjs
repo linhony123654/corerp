@@ -7,13 +7,14 @@ import { resolve, join } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
+import { clickPlayWait, movePlayTo, openPlayTools, openPlayWorldPicker, setPlayInputMode } from './play-ui-helpers.mjs';
 
 const root = resolve(import.meta.dirname, '..'), temp = await mkdtemp(join(tmpdir(), 'corerp-rp8-play-worlds-'));
 const creatorUI = process.argv.includes('--creator-ui');
 const interactionIsolation = process.argv.includes('--interaction-isolation');
 const db = join(temp, 'world.db'), apiOrigin = 'http://127.0.0.1:4408', origin = 'http://127.0.0.1:4409';
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'pipe' }).toString();
-for (const [name, pkg] of [['runtime', 'corerp-server'], ['m1', 'corerp-m1'], ['setup', 'corerp-m2'], ['admin', 'corerp-admin']]) run('/usr/local/go/bin/go', ['build', '-o', join(temp, name), `./cmd/${pkg}`], join(root, 'backend'));
+for (const [name, pkg] of [['runtime', 'corerp-server'], ['m1', 'corerp-m1'], ['setup', 'corerp-m2'], ['admin', 'corerp-admin']]) run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, name), `./cmd/${pkg}`], join(root, 'backend'));
 run(join(temp, 'm1'), ['-db', db, '-action', 'inspect']);
 const setup = JSON.parse(run(join(temp, 'setup'), ['-db', db, '-action', 'rp-travel-prepare']));
 run(join(temp, 'admin'), ['-db', db, '-operator', 'principal_operator', '-instance', 'inst_m2_t09', '-branch', 'br_main', '-target', 'principal_creator', '-purpose', 'create_world', '-status', 'active', '-expected-head', String(setup.event_sequence), '-key', 'browser-create-authority']);
@@ -30,7 +31,12 @@ function bundle(kind) {
   const content = { version: 'corerp.studio-package.v1', ...(kind === 'system' ? { system_rules: { npc_daily_action_budget: 2 } } : { narrative_style: { version: 'corerp.style.v1', pov: 'second_person', tense: 'present', verbosity: 'terse', dialogue_ratio: 100, description_density: 0, inner_monologue_policy: 'none', prose_instructions: '', forbidden_patterns: [], narrative_pack_ref: 'builtin/plain@1' } }) };
   return { manifest: { schema_version: 'm0-draft-2026-09-22', id: `browser.${kind}`, kind, version: '1.0.0', engine_api: 'm0-draft-2026-09-22', requires: [], optional: [], capabilities: [kind === 'system' ? 'rules.npc.daily_budget' : 'narrative.style'], schema_hash: 'sha256:0b7d979a3384df06726118c293ec3533e501cd0740f0819067e8e6191c2667a0', content_hash: `sha256:${createHash('sha256').update(canonical(content)).digest('hex')}`, content_files: [`${kind}.json`] }, content };
 }
-const request = { authority_instance_id: 'inst_m2_t09', authority_branch_id: 'br_main', instance_id: 'browser-created-world', idempotency_key: 'browser-create', player_principal_id: 'principal_m2_rp_player', system_package: bundle('system'), narrative_package: bundle('narrative'), spec: { version: 'corerp.studio-world.v1', name: '浏览器世界', start_world_time: '2026-09-22T00:00:00Z', population: 2, opening_money_minor: 20, opening_stock_minor: 2, places: [{ key: 'home', name: '新世界的家', kind: 'home' }, { key: 'square', name: '新世界广场', kind: 'public' }], links: [{ from: 'home', to: 'square', minutes: 5 }], people: [{ key: 'lin', name: '新世界玩家', place: 'home', player: true }, { key: 'cai', name: '新世界邻居', place: 'home', player: false }] } };
+async function screenshotPlay(page, path) {
+  // Let the visualViewport resize handler and Chromium's next paint settle.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  return page.screenshot({ path, animations: 'disabled' });
+}
+const request = { authority_instance_id: 'inst_m2_t09', authority_branch_id: 'br_main', instance_id: 'browser-created-world', idempotency_key: 'browser-create', player_principal_id: 'principal_m2_rp_player', system_package: bundle('system'), narrative_package: bundle('narrative'), spec: { version: 'corerp.studio-world.v1', name: '浏览器世界', start_world_time: '2026-09-22T00:00:00Z', population: 2, opening_money_minor: 20, opening_stock_minor: 2, places: [{ key: 'home', name: '新世界的家', kind: 'home' }, { key: 'square', name: '新世界广场', kind: 'public' }], links: [{ from: 'home', to: 'square', minutes: 5 }], people: [{ key: 'lin', name: '新世界玩家', place: 'home', player: true }, { key: 'cai', name: '新世界邻居', place: 'home', player: false }], objects: [{ key: 'front_door', name: '前门', place: 'home', kind: 'door', initial_state: 'closed' }] } };
 try {
   runtime = start(); await ready();
   let created;
@@ -51,7 +57,15 @@ try {
     await page.getByLabel('玩家身份标识', { exact: true }).fill('principal_m2_rp_player');
     await page.getByLabel('世界名称', { exact: true }).fill('浏览器创建世界');
     await page.getByLabel('玩家角色名称', { exact: true }).fill('新世界玩家');
-    await page.getByLabel('邻居名称', { exact: true }).fill('新世界邻居');
+    await page.getByLabel('NPC 名称', { exact: true }).fill('新世界邻居');
+    const privatePersona = '私有人设检查标记：愿意听玩家讲心事，但不替玩家认定原因。';
+    await page.getByLabel('NPC 人设', { exact: true }).fill(privatePersona);
+    await page.getByLabel('公开说话风格（可选）', { exact: true }).fill('言辞温和、简短。');
+    await page.getByLabel('双方关系', { exact: true }).selectOption('authored');
+    await page.getByLabel('NPC 对玩家的关系身份', { exact: true }).fill('老友');
+    await page.getByLabel('玩家对 NPC 的关系身份', { exact: true }).fill('老友');
+    await page.getByLabel('NPC 怎样称呼玩家', { exact: true }).fill('新世界玩家');
+    await page.getByLabel('玩家怎样称呼 NPC', { exact: true }).fill('新世界邻居');
     await page.getByLabel('起始居所', { exact: true }).fill('新世界的家');
     await page.getByLabel('公共地点', { exact: true }).fill('新世界广场');
     await page.getByLabel('叙事包风格', { exact: true }).selectOption('dialogue');
@@ -68,6 +82,13 @@ try {
       const response = await route.fetch();
       const envelope = await response.json(); assert.equal(response.status(), 201, JSON.stringify(envelope));
       created = envelope.data;
+      assert.equal(created.rp_readiness.status, 'READY');
+      assert.deepEqual(created.rp_readiness.characters[0].readiness, { persona: 'READY', relationship_to_interlocutor: 'READY', address_to_interlocutor: 'READY' });
+      assert.equal(submitted.spec.people[1].persona, privatePersona);
+      assert.equal(submitted.spec.people[1].public_presentation, '言辞温和、简短。');
+      assert.deepEqual(submitted.spec.relationships.map(relation => [relation.from, relation.to, relation.role, relation.address_to]), [['neighbour', 'player', '老友', ['新世界玩家']], ['player', 'neighbour', '老友', ['新世界邻居']]]);
+      const storedPersona = run('sqlite3', [db, `SELECT persona_text FROM agent_profiles WHERE agent_id IN (SELECT entity_id FROM materialized_entities WHERE instance_id='${created.instance_id}' AND display_name='新世界邻居');`]).trim();
+      assert.equal(storedPersona, privatePersona, 'creator UI lost persona before the world owner committed it');
       await route.abort('failed');
     }, { times: 1 });
     await page.getByRole('button', { name: '保存世界与安装包', exact: true }).click();
@@ -83,6 +104,7 @@ try {
     await page.getByRole('button', { name: '重试 / 核对原保存请求', exact: true }).click();
     assert.deepEqual((await retried).postDataJSON(), submitted);
     await page.getByRole('heading', { name: '世界已保存', exact: true }).waitFor();
+    await page.getByRole('heading', { name: '角色设定已提交', exact: true }).waitFor();
     assert.equal(counts(), before);
     await page.screenshot({ path: join(temp, 'creator-ready-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -109,6 +131,7 @@ try {
     await page.getByLabel('创建者访问凭证', { exact: true }).fill(creator);
     await page.getByLabel('授权来源世界', { exact: true }).fill('inst_m2_t09');
     await page.getByLabel('玩家身份标识', { exact: true }).fill('principal_m2_rp_player');
+    await page.getByLabel('NPC 人设', { exact: true }).fill('新的测试角色，保留独立设定。');
     await page.getByText('安装自定义包 JSON', { exact: true }).click();
     const invalidPackage = bundle('system'); invalidPackage.content.system_rules.npc_daily_action_budget = 9;
     await page.getByLabel('System 包 JSON', { exact: true }).fill(JSON.stringify(invalidPackage));
@@ -134,9 +157,11 @@ try {
   await page.getByRole('button', { name: /新世界玩家/ }).waitFor();
   assert.equal(await page.locator('.world-picker li').count(), 2);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await page.screenshot({ path: join(temp, 'world-picker-mobile.png'), fullPage: true });
+  // Play fills a fixed viewport; its document body has no flow height.
+  // Capture the visible surface rather than a zero-height full-page clip.
+  await screenshotPlay(page, join(temp, 'world-picker-mobile.png'));
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({ path: join(temp, 'world-picker-desktop.png'), fullPage: true });
+  await screenshotPlay(page, join(temp, 'world-picker-desktop.png'));
   await page.setViewportSize({ width: 390, height: 844 });
   // Lose an actual committed open response, then reload and retry the frozen key.
   let openBody;
@@ -160,26 +185,40 @@ try {
   const bookmark = await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')));
   const demoHead = () => run('sqlite3', [db, "SELECT head_sequence FROM branches WHERE instance_id='inst_m2_t09' AND branch_id='br_main';"]).trim();
   const beforePlay = demoHead();
+  await setPlayInputMode(page, 'speech');
   const spoken = page.waitForResponse(r => r.url().endsWith('/rp/turns/run'));
   await page.getByLabel('你想说的话').fill('你好，这是我们新世界的第一天。');
   await page.getByRole('button', { name: '说出' }).click();
   const turnResponse = await spoken, turn = (await turnResponse.json()).data;
   assert.equal(turnResponse.status(), 200); assert.equal(turn.status, 'settled'); assert.ok(turn.npc_event_ids.length > 0);
+  assert.equal(JSON.stringify(turn).includes('私有人设检查标记'), false, 'creator persona leaked into player turn');
   assert.equal(turn.narrative_style.verbosity, 'terse');
   await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending);
-  await page.getByRole('button', { name: '去别处' }).click();
-  await page.locator('#destinations').getByRole('button', { name: /新世界广场/ }).click();
+  const tools = await openPlayTools(page);
+  await tools.getByRole('button', { name: /^世界观测/ }).click();
+  const observatory = page.getByRole('dialog', { name: '世界观测' });
+  await observatory.getByText('投影与事件一致', { exact: true }).waitFor();
+  const traceSummary = observatory.locator('summary').first();
+  await traceSummary.focus(); await page.keyboard.press('Enter');
+  await observatory.getByText('你好，这是我们新世界的第一天。', { exact: true }).waitFor();
+  assert.doesNotMatch(await observatory.innerText(), /entity_|event_|turn_rp_|principal_|goal_code|proposal_json/);
+  await screenshotPlay(page, join(temp, 'observatory-mobile.png'));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await screenshotPlay(page, join(temp, 'observatory-desktop.png'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await observatory.getByRole('button', { name: '关闭世界观测' }).click();
+  await movePlayTo(page, '新世界广场');
   await page.getByRole('heading', { name: '新世界广场' }).waitFor();
   const waited = page.waitForResponse(r => r.url().endsWith('/rp/actions/wait'));
-  await page.getByRole('button', { name: '等一小时', exact: true }).click();
+  await clickPlayWait(page, 1);
   assert.equal((await waited).status(), 200);
   await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending);
-  assert.equal(await page.locator('.scene time').innerText(), '01:00');
+  assert.equal(await page.locator('.scene time').getAttribute('datetime'), '2026-09-22T01:00:00Z');
   assert.equal(demoHead(), beforePlay, 'new-world actions mutated the administrative world');
-  await page.getByRole('button', { name: '切换世界', exact: true }).click();
+  await openPlayWorldPicker(page);
   await page.locator('.world-picker li button').filter({ hasText: 'inst_m2_t09' }).click();
   await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor();
-  await page.getByRole('button', { name: '切换世界', exact: true }).click();
+  await openPlayWorldPicker(page);
   await page.getByRole('button', { name: /新世界玩家/ }).click();
   await page.getByRole('heading', { name: '新世界广场' }).waitFor();
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).session), bookmark.session);
@@ -195,11 +234,13 @@ try {
       streamArrived(); await streamGate;
       try { await route.fulfill({ response }); } catch { /* page navigation aborts old stream */ }
     }, { times: 1 });
-    await page.getByLabel('输入方式').selectOption('DIALOGUE');
+    await setPlayInputMode(page, 'DIALOGUE');
     await page.getByLabel('你想说的话').fill(marker);
     await page.getByRole('button', { name: '说出' }).click();
     await streamReady;
-    assert.equal(await page.getByRole('button', { name: '切换世界', exact: true }).isDisabled(), true, 'pending stream forbids world switch');
+    await page.getByRole('button', { name: '打开侧边栏' }).click();
+    assert.equal(await page.getByRole('dialog', { name: 'CoreRP' }).getByRole('button', { name: '选择其他世界' }).isDisabled(), true, 'pending stream forbids world switch');
+    await page.getByRole('button', { name: '关闭侧边栏' }).click();
     const pending = await page.evaluate(() => JSON.parse(localStorage.getItem('corerp.play.v1')).pending);
     assert.equal(pending.path, 'interactions/run'); assert.ok(pending.narrative_turn_id);
     await page.goto(`${origin}/studio`); releaseStream(); await page.unroute(streamPattern);
@@ -207,11 +248,11 @@ try {
     await page.getByRole('button', { name: '继续这段生活' }).click();
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending);
     assert.match(await page.locator('.reading').innerText(), /迟到流只属于新世界/);
-    await page.getByRole('button', { name: '切换世界', exact: true }).click();
+    await openPlayWorldPicker(page);
     await page.locator('.world-picker li button').filter({ hasText: 'inst_m2_t09' }).click();
     await page.getByRole('heading', { name: 'M2 Cafe' }).waitFor();
     assert.doesNotMatch(await page.locator('.reading').innerText(), /迟到流只属于新世界/, 'late stream crossed world binding');
-    await page.getByRole('button', { name: '切换世界', exact: true }).click();
+    await openPlayWorldPicker(page);
     await page.getByRole('button', { name: /新世界玩家/ }).click();
     await page.getByRole('heading', { name: '新世界广场' }).waitFor();
     assert.equal(run('sqlite3', [db, `SELECT COUNT(*) FROM rp_utterances WHERE session_id='${bookmark.session}' AND speech_text='${marker}';`]).trim(), '1', 'late stream recovery repeated speech');
@@ -266,5 +307,5 @@ try {
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   assert.ok(!stored.includes(player) && !stored.includes(creator) && !stored.includes(operator));
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ status: 'PASS', creatorUI, interactionIsolation, artifacts: temp, checks: ['real Create API', ...(creatorUI ? ['creator form + generated packages', 'explicit persistence consent', 'lost create response + runtime restart + frozen retry', 'receipt-only ready state', 'late response after credential clear', 'tampered custom package/no writes', 'archived original request recovery', 'separate Play navigation'] : []), 'separate creator/player authority', 'authorized multi-world picker', 'mobile overflow', 'keyboard choice', 'lost open response/reload/same key', 'actual NPC dialogue/installed style/move/wait', ...(interactionIsolation ? ['delayed interaction stream cancelled on navigation', 'pending blocks world switch', 'original-session recovery before switching', 'late stream absent in other world'] : []), 'unchanged administrative world', 'per-binding session recovery', 'runtime restart', 'legacy bookmark upgrade + Studio return picker', 'no persisted credentials', 'no page errors'] }, null, 2));
+  console.log(JSON.stringify({ status: 'PASS', creatorUI, interactionIsolation, artifacts: temp, checks: ['real Create API', ...(creatorUI ? ['creator form + generated packages', 'explicit persistence consent', 'lost create response + runtime restart + frozen retry', 'receipt-only ready state', 'late response after credential clear', 'tampered custom package/no writes', 'archived original request recovery', 'separate Play navigation'] : ['typed scene object action + reload continuity']), 'separate creator/player authority', 'authorized multi-world picker', 'mobile overflow', 'keyboard choice', 'lost open response/reload/same key', 'observatory loading/error/empty/history + mobile/desktop', 'actual NPC dialogue/installed style/move/wait', ...(interactionIsolation ? ['delayed interaction stream cancelled on navigation', 'pending blocks world switch', 'original-session recovery before switching', 'late stream absent in other world'] : []), 'unchanged administrative world', 'per-binding session recovery', 'runtime restart', 'legacy bookmark upgrade + Studio return picker', 'no persisted credentials', 'no page errors'] }, null, 2));
 } finally { await browser?.close(); await vite?.close(); await stop(runtime); }

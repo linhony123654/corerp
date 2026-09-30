@@ -1,0 +1,69 @@
+{
+  "kind": "fresh_public_prose_diagnostic",
+  "model": "step-5-preview",
+  "binary_sha256": "db40ddd0fceeef0a1b90cb932234e809c3a93a774b6cff8fc237de7ae01976cb",
+  "world_facts_unchanged": true,
+  "new_provider_receipts": 1,
+  "fallback_reason": "",
+  "lines": [
+    "你：「有人吗？」",
+    "袭人：「我在这儿，二爷。」",
+    "黛玉：「寶玉，你既能開口，便該先看清這屋裡坐的是誰。我正對著一箋舊句，倒被你這聲「有人嗎」攪了。」",
+    "宝钗保持沉默。"
+  ],
+  "receipt": {
+    "result": "success",
+    "attempt_count": 1,
+    "fallback_kind": ""
+  },
+  "source_event_ids": [
+    "event_rp_speech_169e5bff63213ed226ce250ce912fa26abff3491df1822167d6240a66ba4190c",
+    "event_rp_npc_bc27f90317c3a155cd18f3b4a321d0199dd91c4ec70b3788b0c7dc4c6ced16e2",
+    "event_rp_npc_6bf3b53e422e4cdfd8ab82021677ea460b7fa7c37385a076b82ddda077993cde",
+    "event_rp_npc_330918a9e6fae4cb862c35d8d269606a4660e38daa916d716580e69f1a85bd0d"
+  ],
+  "public_facts": [
+    {
+      "actor": "宝玉",
+      "action": "说",
+      "text": "有人吗？",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂",
+      "controlled": true
+    },
+    {
+      "actor": "袭人",
+      "action": "回应",
+      "text": "我在这儿，二爷。",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂"
+    },
+    {
+      "actor": "黛玉",
+      "action": "回应",
+      "text": "寶玉，你既能開口，便該先看清這屋裡坐的是誰。我正對著一箋舊句，倒被你這聲「有人嗎」攪了。",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂"
+    },
+    {
+      "actor": "宝钗",
+      "action": "保持沉默",
+      "when": "2026-09-22T00:00:00Z",
+      "where": "荣庆堂"
+    }
+  ],
+  "narrative_config": {
+    "timeout_seconds": 90,
+    "max_completion_tokens": 4096,
+    "attempt_limit": 2
+  },
+  "before_evidence": {
+    "runtime_artifact": "/tmp/corerp-rp3-npc-HnoIYR",
+    "script_exit_code": 1,
+    "npc_decisions_success": 3,
+    "prose_attempts": 2,
+    "fallback_kind": "prose_validation_failure",
+    "original_drafts_captured": false
+  },
+  "interpretation": "Nested exact committed speech fails deterministically before the parser fix and passes focused tests after it. This fresh same-turn Step draft also passed in one attempt. The original failed model drafts were not captured, so their complete failure cause is unverified. This is not a 32-turn pass or RP experience acceptance."
+}

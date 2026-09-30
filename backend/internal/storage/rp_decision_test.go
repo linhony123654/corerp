@@ -17,6 +17,44 @@ func (f rpDecisionProviderFunc) Propose(ctx context.Context, input core.RPDecisi
 	return f(ctx, input)
 }
 
+func TestRPDecisionInputIgnoresUnsourcedLegacyOwnActionWithoutPlace(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "rp-decision-legacy-own-action.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	session, _, initial := newRPWaitTestSession(t, ctx, store)
+	speech, err := store.SpeakRP(ctx, core.RPSpeechRequest{
+		PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID,
+		Text: "还好吗？", ExpectedCursor: initial.ObservationCursor, IdempotencyKey: "legacy-own-action",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `
+		INSERT INTO rp_own_actions(agent_id,event_id,action,activity_code,text,place_id,world_time,status,instance_id,branch_id,last_event_sequence)
+		SELECT ?,event_id,'silence',NULL,NULL,NULL,world_time,NULL,instance_id,branch_id,event_sequence
+		FROM events WHERE event_id=?`, M2RPNPCID, speech.EventID); err != nil {
+		t.Fatal(err)
+	}
+	input, err := store.BuildRPDecisionInput(ctx, core.RPDecisionRequest{
+		PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID, TurnID: speech.TurnID, NPCEntityID: M2RPNPCID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, action := range input.OwnActions {
+		if action.Action == "silence" && action.PlaceID == "" {
+			found = true
+		}
+	}
+	if found {
+		t.Fatalf("unsourced legacy row entered NPC memory: %+v", input.OwnActions)
+	}
+}
+
 func TestRPDecisionInputIsNPCScopedAndProviderCannotCommitWorld(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, filepath.Join(t.TempDir(), "rp-decision.db"))
@@ -37,6 +75,9 @@ func TestRPDecisionInputIsNPCScopedAndProviderCannotCommitWorld(t *testing.T) {
 	}
 	if input.NPCEntityID != M2RPNPCID || input.PlaceID != M2AgentCafeID || input.PlayerSpeechText != "今天过得怎么样？" || input.GoalCode != "keep_daily_routine" || input.OwnAssetMinor <= 0 || input.CurrencyID == "" {
 		t.Fatalf("NPC input omitted own real state: %+v", input)
+	}
+	if input.ContextVersion != core.RPContextVersion || input.Readiness.Persona != "MISSING" || input.Readiness.RelationshipToInterlocutor != "UNKNOWN" || input.Readiness.AddressToInterlocutor != "UNKNOWN" || input.PersonaSourceEventID != "" {
+		t.Fatalf("legacy decision context invented authored relationship: %+v", input)
 	}
 	if len(input.VisibleEntities) != 1 || input.VisibleEntities[0].EntityID != M2RPPlayerID || len(input.Knowledge) == 0 || input.Knowledge[0].ClaimType != "speaker_said" {
 		t.Fatalf("NPC input lacks legal observation/knowledge: %+v", input)

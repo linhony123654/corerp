@@ -1,0 +1,51 @@
+{
+  "kind": "r1_private_observable_internal_verification",
+  "date": "2026-09-30",
+  "command": "go test ./internal/... -count=1 -timeout=20m",
+  "exit_code": 0,
+  "packages": [
+    {
+      "package": "corerp.local/backend/internal/core",
+      "duration": "0.150s",
+      "result": "PASS"
+    },
+    {
+      "package": "corerp.local/backend/internal/decision",
+      "duration": "0.475s",
+      "result": "PASS"
+    },
+    {
+      "package": "corerp.local/backend/internal/endpointpolicy",
+      "duration": "0.026s",
+      "result": "PASS"
+    },
+    {
+      "package": "corerp.local/backend/internal/narrative",
+      "duration": "1.377s",
+      "result": "PASS"
+    },
+    {
+      "package": "corerp.local/backend/internal/outbound",
+      "duration": "0.011s",
+      "result": "PASS"
+    },
+    {
+      "package": "corerp.local/backend/internal/storage",
+      "duration": "875.446s",
+      "result": "PASS"
+    },
+    {
+      "package": "corerp.local/backend/internal/transport/httpapi",
+      "duration": "69.948s",
+      "result": "PASS"
+    }
+  ],
+  "log_path": "/tmp/corerp-r1-private-observable-internal-20260930.log",
+  "log_sha256": "009d007cfdcb062f051f9778c182701a27614ef7e654d37fc4b9cac001e6472f",
+  "runtime_sha256": "sha256:31041504fb84c49571cb62fde5cab31fdbfddf12c2e44b9839f9b49f2a266900",
+  "focused_expression_checks": "PASS after correcting fixture to use legal shouted speech and zone movement",
+  "related_vet": "PASS",
+  "script_syntax": "PASS",
+  "world_integrity_live32": "FAILED at turn28; see private-observable-32-result-2026-09-30.json (this source31041504, before target/type increment)",
+  "rp_experience_exit": "NOT PASSED; this source Golden15/17. Latest sourcef9c6769f captured17/17 but still no clear experience improvement/canon/human approval; see observable-contract-golden-review."
+}

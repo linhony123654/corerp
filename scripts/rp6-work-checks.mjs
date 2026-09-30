@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { openPlayBusiness, scrollPlayToEnd } from './play-ui-helpers.mjs'
 
 export async function checkWork({ page, sql, temp, stage, expectedJobs }) {
   const facts = () => sql("SELECT (SELECT COUNT(*) FROM events)||':'||(SELECT COUNT(*) FROM agent_knowledge)||':'||(SELECT current_world_time FROM world_clocks WHERE instance_id='inst_m2_t09' AND branch_id='br_main')")
   const before = facts()
   const bookmark = await page.evaluate(() => localStorage.getItem('corerp.play.v1'))
   const response = page.waitForResponse(r => r.url().endsWith('/rp/work/read'))
-  const opener = page.getByRole('button', { name: '工作信息', exact: true })
+  const opener = page.getByRole('button', { name: '行动与功能', exact: true })
   const dialog = page.getByRole('dialog', { name: '工作信息', exact: true })
-  await opener.click()
+  await openPlayBusiness(page, '工作信息')
   const { data } = await (await response).json()
   assert.ok(data, 'real service must return work data')
   assert.equal(data.jobs.length, expectedJobs)
@@ -49,7 +50,7 @@ export async function checkWork({ page, sql, temp, stage, expectedJobs }) {
   assert.equal(await opener.evaluate(el => document.activeElement === el), true)
   assert.equal(facts(), before, 'work read cannot advance time or write events/knowledge')
   assert.equal(await page.evaluate(() => localStorage.getItem('corerp.play.v1')), bookmark)
-  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
+  await scrollPlayToEnd(page)
   console.log(JSON.stringify({ work: 'PASS', stage, jobs: data.jobs.length, appointments: data.appointments.length, checks: ['real own contract and schedule', 'exact wage string', 'no invented pay period', 'keyboard/Escape', 'error/retry snapshot', 'read-only world/bookmark'] }))
   return data
 }
