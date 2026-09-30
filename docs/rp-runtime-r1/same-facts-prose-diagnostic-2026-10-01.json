@@ -1,0 +1,144 @@
+{
+  "kind": "same_committed_facts_existing_prose_style_diagnostic",
+  "status": "CAPTURED",
+  "runtime_sha256": "f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21",
+  "source_checkpoint": "scene-activity-context-verification-2026-10-01.json",
+  "baseline_checkpoint": "conversation-default-after-2026-09-30.json",
+  "artifact_directory": "/dev/shm/corerp-r1-same-facts-prose-r9n702ci",
+  "model": "step-5-preview",
+  "original_input": "我今天总有些失落，又说不清为什么。",
+  "original_public_lines": [
+    "你说：「我今天总有些失落，又说不清为什么。」",
+    "Nora 回应：「Lin，说不清就先别逼自己想。我就在这儿陪着你，你想说我就听，不想说我们安静待会儿也挺好。」",
+    "Nora 点了点头。"
+  ],
+  "variants": [
+    {
+      "label": "concise",
+      "requested_style": {
+        "narrative_density": "concise",
+        "verbosity": "terse",
+        "dialogue_ratio": 100,
+        "description_density": 0,
+        "full_prose": true
+      },
+      "resolved_style": {
+        "profile": {
+          "version": "corerp.style.v1",
+          "pov": "second_person",
+          "tense": "present",
+          "verbosity": "terse",
+          "narrative_density": "concise",
+          "dialogue_ratio": 100,
+          "description_density": 0,
+          "inner_monologue_policy": "none",
+          "full_prose": true,
+          "prose_instructions": "",
+          "forbidden_patterns": [],
+          "narrative_pack_ref": "builtin/plain@1"
+        },
+        "sources": [
+          "event_studio_package_502ca2476b2c95f0d1458da4c4807c454ec9dadd701edeb90e85290e1f029d39"
+        ]
+      },
+      "public_lines": [
+        "Lin：「我今天总有些失落，又说不清为什么。」",
+        "Nora：「Lin，说不清就先别逼自己想。我就在这儿陪着你，你想说我就听，不想说我们安静待会儿也挺好。」（点头）"
+      ],
+      "public_character_count": 79,
+      "source_event_ids": [
+        "event_rp_speech_53cc6e9e448488d0c8b9c8065793e6afa12e20abb9dd7606aca1316468d16933",
+        "event_rp_npc_2dbd93821f02b7bc56087998369648d354e81b2fd221c590eb711bbcd016afc8",
+        "event_rp_npc_expression_2dbd93821f02b7bc56087998369648d354e81b2fd221c590eb711bbcd016afc8",
+        "studio_event_03e03127dffe781dc56622f085679d3ee004d324b3cf609b9c1f781f2e603f17"
+      ],
+      "provider_kind": "full_prose",
+      "fallback": false,
+      "seconds": 20.336,
+      "model_id": "step-5-preview",
+      "extraction_basis": "Existing persisted authorized public render; original first capture mistakenly read data.lines instead of data.view.lines."
+    },
+    {
+      "label": "standard",
+      "requested_style": {
+        "narrative_density": "standard",
+        "verbosity": "normal",
+        "dialogue_ratio": 70,
+        "description_density": 40,
+        "full_prose": true
+      },
+      "resolved_style": {
+        "profile": {
+          "version": "corerp.style.v1",
+          "pov": "second_person",
+          "tense": "present",
+          "verbosity": "normal",
+          "narrative_density": "standard",
+          "dialogue_ratio": 70,
+          "description_density": 40,
+          "inner_monologue_policy": "none",
+          "full_prose": true,
+          "prose_instructions": "",
+          "forbidden_patterns": [],
+          "narrative_pack_ref": "builtin/plain@1"
+        },
+        "sources": [
+          "event_studio_package_502ca2476b2c95f0d1458da4c4807c454ec9dadd701edeb90e85290e1f029d39"
+        ]
+      },
+      "public_lines": [
+        "你开口说道：「我今天总有些失落，又说不清为什么。」。Nora 语气温和地回应：「Lin，说不清就先别逼自己想。我就在这儿陪着你，你想说我就听，不想说我们安静待会儿也挺好。」，随后，她点了点头。"
+      ],
+      "public_character_count": 96,
+      "source_event_ids": [
+        "event_rp_speech_53cc6e9e448488d0c8b9c8065793e6afa12e20abb9dd7606aca1316468d16933",
+        "event_rp_npc_2dbd93821f02b7bc56087998369648d354e81b2fd221c590eb711bbcd016afc8",
+        "event_rp_npc_expression_2dbd93821f02b7bc56087998369648d354e81b2fd221c590eb711bbcd016afc8",
+        "studio_event_03e03127dffe781dc56622f085679d3ee004d324b3cf609b9c1f781f2e603f17"
+      ],
+      "provider_kind": "full_prose",
+      "fallback": false,
+      "seconds": 50.032,
+      "model_id": "step-5-preview",
+      "extraction_basis": "Existing persisted authorized public render; original first capture mistakenly read data.lines instead of data.view.lines."
+    }
+  ],
+  "checks": {
+    "world_utterances_decisions_turns_unchanged": "PASS",
+    "same_committed_event_sources": "PASS"
+  },
+  "human_review": "PENDING",
+  "limits": "Two existing style overrides on a SQLite backup of the exact same committed fictional turn. No NPC decision rerun, new canon, world proposal or authored Rongqing Golden. Original eight-turn evidence is immutable. This diagnoses presentation configuration; it is not a same-input architecture before/after or an RP Experience Exit.",
+  "provider_receipts": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 8,
+      "attempts": 8
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 8,
+      "attempts": 0
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "result": "success",
+      "fallback_kind": "",
+      "calls": 2,
+      "attempts": 3
+    }
+  ],
+  "captured_at_utc": "2026-09-30T17:11:52.568751+00:00",
+  "initial_capture_failure": {
+    "artifact": "/dev/shm/corerp-r1-same-facts-prose-r9n702ci/result.json",
+    "status": "FAIL",
+    "cause": "Probe used wrong public HTTP envelope level; two real render receipts succeeded. Public render rows recovered read-only, no additional model request."
+  }
+}

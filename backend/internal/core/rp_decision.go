@@ -171,14 +171,18 @@ type RPOwnAction struct {
 	Status string `json:"status,omitempty"`
 }
 
-// RPSceneActivity is an in-progress or recently-ended activity observed at
-// the observer's current place: the "who is doing what right now" channel.
+// RPSceneActivity contains a currently visible ongoing activity or an actor's
+// own sourced history. Current visibility does not reveal an unseen start time
+// or another person's unobserved terminal outcome. WorldTime is the snapshot
+// time for current_visibility and the source time for own_action.
 type RPSceneActivity struct {
-	ActivityID   string `json:"activity_id"`
-	ActorID      string `json:"actor_id"`
-	ActivityCode string `json:"activity_code"`
-	Status       string `json:"status"`
-	WorldTime    string `json:"world_time"`
+	ActivityID       string `json:"activity_id"`
+	ActorID          string `json:"actor_id"`
+	ActivityCode     string `json:"activity_code"`
+	Status           string `json:"status"`
+	WorldTime        string `json:"world_time"`
+	SourceEventID    string `json:"source_event_id,omitempty"`
+	ObservationBasis string `json:"observation_basis,omitempty"` // current_visibility or own_action
 }
 
 type RPDecisionProposal struct {

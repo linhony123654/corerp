@@ -385,33 +385,10 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 	if err != nil {
 		return core.RPDecisionInput{}, err
 	}
-	sceneWindow := input.WorldTime
-	if parsed, err := time.Parse(time.RFC3339, input.WorldTime); err == nil {
-		sceneWindow = parsed.Add(-24 * time.Hour).UTC().Format(time.RFC3339)
-	}
-	rows, err = conn.QueryContext(ctx, `
-		SELECT a.activity_id, a.actor_id, a.activity_code, a.status, COALESCE(ee.world_time, a.started_world_time)
-		FROM rp_activities a LEFT JOIN events ee ON ee.event_id = a.end_event_id
-		WHERE a.instance_id = ? AND a.branch_id = ? AND a.place_id = ?
-		  AND (a.status = 'in_progress' OR ee.world_time >= ?)
-		ORDER BY a.status = 'in_progress' DESC, COALESCE(ee.world_time, a.started_world_time) DESC
-		LIMIT 10`, input.InstanceID, input.BranchID, input.PlaceID, sceneWindow)
+	input.SceneActivities, err = readRPSceneActivityContext(ctx, conn, input)
 	if err != nil {
-		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read scene activities", err)
+		return core.RPDecisionInput{}, err
 	}
-	for rows.Next() {
-		var activity core.RPSceneActivity
-		if err := rows.Scan(&activity.ActivityID, &activity.ActorID, &activity.ActivityCode, &activity.Status, &activity.WorldTime); err != nil {
-			rows.Close()
-			return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "scan scene activity", err)
-		}
-		input.SceneActivities = append(input.SceneActivities, activity)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "iterate scene activities", err)
-	}
-	rows.Close()
 	input.Life, err = buildRPLifeContext(ctx, conn, input)
 	if err != nil {
 		return core.RPDecisionInput{}, err

@@ -47,6 +47,10 @@ func TestRPConversationFocusNameCuesRespectLatinWordBoundaries(t *testing.T) {
 }
 
 func newRPFocusFixture(t *testing.T, mode string, familiar ...bool) *rpFocusFixture {
+	return newRPFocusFixtureWithSystem(t, mode, studioTestPackage("system"), familiar...)
+}
+
+func newRPFocusFixtureWithSystem(t *testing.T, mode string, system core.StudioPackageBundle, familiar ...bool) *rpFocusFixture {
 	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "focus.db")
@@ -60,6 +64,7 @@ func newRPFocusFixture(t *testing.T, mode string, familiar ...bool) *rpFocusFixt
 	}
 	const world = "conversation-focus-world"
 	create := studioCreateFixture(world)
+	create.SystemPackage = system
 	create.Spec.Population, create.Spec.OpeningStockMinor = 4, 4
 	create.Spec.People = []core.StudioWorldPerson{{Key: "lin", Name: "Lin", Place: "home", Player: true}, {Key: "ada", Name: "Ada", Place: "home"}, {Key: "bo", Name: "Bo", Place: "home"}, {Key: "cai", Name: "Cai", Place: "home"}}
 	create.Spec.Acquaintances = [][2]string{{"lin", "ada"}, {"lin", "bo"}, {"lin", "cai"}}
