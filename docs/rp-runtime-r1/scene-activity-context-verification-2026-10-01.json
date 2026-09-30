@@ -826,10 +826,10 @@
   "source_delta_archive": "/dev/shm/corerp-r1-scene-activity-context-source-20261001",
   "R1": "NOT DONE",
   "backend_full": "PASS package coverage across two source-identical commands; initial default-timeout command FAIL preserved",
-  "browser32": "RUNNING 82456, not a pass",
+  "browser32": "FAIL round29 provider deadline; no full32 pass",
   "human_experience": "NOT VERIFIED",
   "kind": "rp_runtime_r1_scene_activity_visibility_checkpoint",
-  "captured_at_utc": "2026-09-30T17:21:31.825167+00:00",
+  "captured_at_utc": "2026-09-30T18:13:19.718903+00:00",
   "runtime": {
     "status": "PASS",
     "path": "/dev/shm/corerp-r1-scene-activity-context-runtime-20261001",
@@ -886,8 +886,7 @@
       "reason": "Default aggregate 10-minute Go test timeout. Current active old opportunity test had run under one second and was executing initial migration; no blocked stack observed. Prior full storage suite exceeded ten minutes. Explicit 30-minute storage follow-up required; unaffected packages are terminal PASS."
     },
     "complete_browser32": {
-      "status": "RUNNING",
-      "confirmed_session": 82456,
+      "status": "FAIL",
       "log": "/dev/shm/corerp-r1-scene-activity-original32-20261001.log",
       "runner": "/dev/shm/corerp-r1-scene-activity-original32-20261001.mjs",
       "adaptation_receipt": "/dev/shm/corerp-r1-scene-activity-32-runner-receipt-20261001.json",
@@ -898,7 +897,56 @@
       "decision_format": "tool_call",
       "cases_assertions_unchanged": true,
       "runtime_sha256": "f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21",
-      "limits": "Original three-NPC technical fixture. Not the frozen eleven-NPC authored Rongqing Golden and not human experience acceptance."
+      "limits": "Original three-NPC technical fixture. Not the frozen eleven-NPC authored Rongqing Golden and not human experience acceptance.",
+      "terminal_session": 82456,
+      "exit_code": 1,
+      "artifacts": "/dev/shm/corerp-rp3-npc-16fb92",
+      "main_browser_rounds_passed": 28,
+      "settled_turns": 29,
+      "successful_npc_decisions": 86,
+      "total_npc_attempts": 93,
+      "timeout_fallback_decisions": 1,
+      "successful_real_prose_turns": 29,
+      "failure": "Round29 one NPC decision exceeded shared120s deadline after2 attempts; committed silence fallback. Original strict no-fallback assertion failed.",
+      "postchecks": "NOT REACHED: rounds30-32, mixed interaction, meta continue, deliberate fault and final restart",
+      "provider_receipt_summary": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "result": "success",
+          "fallback_kind": "",
+          "calls": 86,
+          "attempts": 91
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "result": "timeout",
+          "fallback_kind": "silence",
+          "calls": 1,
+          "attempts": 2
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "result": "success",
+          "fallback_kind": "",
+          "calls": 29,
+          "attempts": 0
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "full_prose",
+          "result": "success",
+          "fallback_kind": "",
+          "calls": 29,
+          "attempts": 29
+        }
+      ],
+      "db_quick_check": "ok",
+      "public_artifact": "scene-activity-32-public-2026-10-01.json",
+      "public_artifact_sha256": "c029c26fc059c3d6881d42dddf1182bbf27de43134257436c34eb7c0fda6d018",
+      "public_case_count": 28
     },
     "human_experience": {
       "status": "NOT VERIFIED",
@@ -957,13 +1005,60 @@
       "status": "PASS",
       "receipt": "/dev/shm/corerp-r1-root-build-cache-space-20261001.json",
       "scope": "Regenerable Go build output only; explicit go clean -cache. No module/source/database/runtime/evidence deletion."
+    },
+    "frozen_golden_capture": {
+      "status": "CAPTURED; RP EXPERIENCE NOT PASSED",
+      "log": "/dev/shm/corerp-r1-scene-activity-golden-20261001.log",
+      "runner": "/dev/shm/corerp-r1-scene-activity-golden-20261001.mjs",
+      "adaptation_receipt": "/dev/shm/corerp-r1-scene-activity-golden-runner-receipt-20261001.json",
+      "runtime_sha256": "f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21",
+      "frozen_inputs_packages_scenes_unchanged": true,
+      "limits": "Exit0 means sample collection completed. All seventeen NPC decisions NOT READY and no NPC model request; no role/relationship/continuity/initiative/expressiveness improvement over fixed missing-canon configuration. G8 real prose is player speech plus silence, not a functioning NPC scene. Four frozen artifacts unchanged.",
+      "terminal_session": 2602,
+      "exit_code": 0,
+      "artifact": "/dev/shm/corerp-rp-runtime-r1-after-mxV95x/golden-samples.json",
+      "public_artifact": "scene-activity-golden-samples-2026-10-01.json",
+      "public_artifact_sha256": "693a80bbe288ece7b1ac545c0f46c19b3f8347afa2f8e6bd5c746c44163cd39e",
+      "sample_records": 16,
+      "npc_decision_receipts": 17,
+      "npc_model_http_attempts": 0,
+      "npc_result": "not_used/rp_context_not_ready",
+      "successful_true_g8_prose_renders": 1,
+      "provider_receipt_summary": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "result": "not_used",
+          "fallback_kind": "rp_context_not_ready",
+          "calls": 17,
+          "attempts": 0
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "result": "success",
+          "fallback_kind": "",
+          "calls": 15,
+          "attempts": 0
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "full_prose",
+          "result": "success",
+          "fallback_kind": "",
+          "calls": 1,
+          "attempts": 1
+        }
+      ],
+      "human_review": "PENDING"
     }
   },
   "publication": {
     "audit_branch": "rp-preview-integration-20260929",
     "deployed": false,
     "status_authority": "Exact source publication status is local Git HEAD and remote branch; this source-bounded test manifest does not infer release or merge state.",
-    "main_audit_base_commit": "ab4580d834fe3a4ceb39033abc336984934db32e"
+    "main_audit_base_commit": "ab4580d834fe3a4ceb39033abc336984934db32e",
+    "source_fix_remote_verified_commit": "8acd85f51fe06630d4db9c24e48e0ce11048be4b"
   },
   "limits": [
     "Existing activity owner does not record terminal witnesses for other NPCs; current scene never guesses another actor completed/cancelled from later visibility. Own sourced outcomes remain.",
@@ -971,11 +1066,18 @@
     "No changes to NPC private contract, response schema, retries, narrators, typed owners, ledger or migrations.",
     "No inference or application of missing Rongqing canon."
   ],
-  "all_current_jobs_terminal": false,
+  "all_current_jobs_terminal": true,
   "frozen_golden_sha256": {
     "real-rongqing-world-spec.json": "e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
     "real-rongqing-packages.json": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
     "before-samples.json": "9e4ddf8a948be6d80f7fa46365fe4320c3d7577437e6dd4f839eee06d1c52c2a",
     "after-samples.json": "924f55ba7b77ed2358d514b6c5161a3232b280174e9d8f926685af80fd3a9709"
+  },
+  "source_code_git_commit": "8acd85f51fe06630d4db9c24e48e0ce11048be4b",
+  "acceptance": {
+    "world_integrity_exit": "NOT PASSED: original full32 exited at29; later original checks NOT REACHED despite backend12-package coverage PASS",
+    "rp_experience_exit": "NOT PASSED: frozen NPC canon incomplete/notready; no actual human Golden review",
+    "R1": "NOT DONE",
+    "following_phase_started": false
   }
 }

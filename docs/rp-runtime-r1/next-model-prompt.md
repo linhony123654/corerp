@@ -1,36 +1,32 @@
 # CoreRP R1 接续提示词
 
-若用于独立审计，直接复制 [dot-audit-prompt](dot-audit-prompt.md)。继续开发则复制下面内容。
+独立审计使用 [dot-audit-prompt](dot-audit-prompt.md)。继续开发复制以下内容。
 
 ```text
-继续 CoreRP RP Runtime R1。用户允许改变原实施顺序：先可读真实短对话，再针对结构性失败修改既有运行层，候选成立后做完整世界回归和Golden/真人验收。保留canon优先、事件账本、typed owner、恢复与private/observable边界，不扩R2/R3、插件、无关owner或UI重做。
+继续 CoreRP RP Runtime R1。先阅读真实终态，不把推送当完成。保留canon优先、ledger、typed owner、恢复和private/observable边界；不扩R2/R3、插件、新世界机制、无关owner或UI大改。
 
 目录 /home/ubuntu/corerp-preview-integration-20260929
-分支 rp-preview-integration-20260929；GitHub https://github.com/linhony123654/corerp
-用户已授权本次审计快照提交/推送；未授权合并或部署。先git status和git rev-parse HEAD读取实际状态，保留所有本地改动，禁止reset/rebase/强制checkout。文档中的7fc3b3b是Git审计比较基点，不是声称最新HEAD。
+分支 rp-preview-integration-20260929
+GitHub https://github.com/linhony123654/corerp
+功能源码已远端核实8acd85f51fe06630d4db9c24e48e0ce11048be4b，之后是结果文档；主审计快照ab4580d，整轮比较基点7fc3b3b。先git status/rev-parse HEAD确认实际状态，保留所有改动。用户授权审计提交/推送，未授权合并/部署/reset/rebase/强制checkout。
 
-读AGENTS.md，再读：
-docs/rp-runtime-r1/scene-activity-context-verification-2026-10-01.json
-docs/rp-runtime-r1/scene-activity-context-2026-10-01.md
-docs/rp-runtime-r1/same-facts-prose-review-2026-10-01.md
-docs/rp-runtime-r1/dot-audit-prompt.md
-798源码hash已冻结复核；runtime f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21。
-GitHub固定主审计快照ab4580d已经推送并核实；最新五文件代码增量修复原活动context未按感知过滤的问题。复用VisibleEntities，过滤后再limit10；只保留当前可见进行中活动和自己的来源结束记录。他人未目击的结束不能由后来可见推定。current_visibility/own_action和source_event_id明确快照/自己行动来源，未看见的开始时间不交给NPC。拒绝无来源或超过head的活动；不改owner/Event/NPC输出/Prompt/retry/deadline/migration。有效RED和最终两项定向1.743s PASS均保留。
-当前任务状态以JSON为准：首次全后端11678 TERMINAL FAIL，11个测试包PASS/1无测试，storage默认累计10m超时，当时旧测试才开始初始化(<1s)，没有阻塞栈。storage显式30m复验4551已终态PASS728.028s，合计12个测试包通过覆盖；仅原完整browser32 82456正在运行；不要poll旧终态11678或重复启动活跃任务。当前完整出口不能提前写PASS。另一次本轮SQLite失败已由test-only安全overlay证明SQLITE_FULL code13，原core/errors.go不变，缓存恢复记录保留；不能把这一新诊断倒推成旧所有STORAGE_FAILURE的根因。
-同事实真实Step叙事两个style对照CAPTURED：79→96字，只有措辞/衔接差异、世界/台词/决策/来源不变，仍机械，没有真人通过。首次probe错读data.lines的FAIL保留，成功公开render由持久化只读恢复，没有再调用模型；修正data.view脚本尚未重跑。不是NPC重评、架构before/after、长RP或真实Golden。
+先读AGENTS.md与docs/rp-runtime-r1/scene-activity-acceptance-2026-10-01.md、scene-activity-context-verification-2026-10-01.json、scene-activity-context-2026-10-01.md、dot-audit-prompt.md，再读scene-activity-32-public-2026-10-01.json、scene-activity-golden-samples-2026-10-01.json及same-facts-prose-review-2026-10-01.md。所有本轮任务TERMINAL，没有待poll句柄；不要恢复旧running段或盲跑全32。
 
-以下796/0f为已推主审计快照的历史证据：新Studio系统包orchestrated/1/version1.1.0，hash包含策略，旧/导入包保留；原focus查询允许已提交wait/silence沿用其原激活计划中个人听见的speech来源。等待不能建立交流，不能复活点名新对象未获回应前的旧对象，仍遵守chapter/time/place/witness/controller边界。不是第二套RP状态/owner，不强制发言。历史定向focus/activation15.009s、backend build、Studio创建与Vue/TS检查PASS；并行首跑SQLite初始化FAIL原因未确认。
-原真实八轮 conversation-default-live-2026-09-30.json FAIL保留：第3轮wait，第4轮stable_fallback且source为空，碰巧仍选Nora。修复后 conversation-default-after-2026-09-30.json PASS：同输入/初始设定/包/Step配置，8真实首试成功/0mock，5无点名回合有明确来源，Nora5→Iris2→Nora1、每轮1激活，旁听/未激活记录保持。复跑没有再选wait；等待修复由确定性连续wait/silence、restart/rebuild和负例证明。两组公开读样仍有机械笑/点头；旧样“热的还温着”是未经物品动作提交的台词风险。不要把合法发言等同于台词主张真实，也不能把承诺直接执行成物品/动作。
+798源码/四个冻结Golden文件hash未变；runtime f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21。唯一NPC入口仍是BuildRPDecisionInput。最新五代码文件增量按canonical VisibleEntities过滤SceneActivities后limit10，只给当前可见进行中和自己有来源的结束历史；source_event_id/observation_basis/head明确来源、当前快照不披露未见开始时间，也不由后来可见推定他人隐藏结束。无新owner/状态/migration/Prompt链/输出schema/重试deadline变化；有效RED及最终两项定向PASS1.743s、restart/rebuild和负例保存。
 
-原BuildRPDecisionInput是NPC唯一入口，readiness/persona/关系称呼/实际heard/relevant/own private/activity/head/source保留，provider view遮罩选择后canonical/typed链验证。未知关系可当陌生人；persona或已有关系必要称呼缺失在HTTP前NOT READY，不从原著补canon。完整V3 private+one observable，短src_N只绑定本包获准真实事件，未知/重复/alias+raw重复拒绝。同一正式schema进入消息与传输；tool_call单函数或finish=stop完整JSONcontent同解析，不接受自由台词/半截/额外效果。private短句不是长推理，不进Narrator/Event/公开观测。玩家解释器沿已有闭合schema和候选/typed提交，不读取NPCprivate。诊断只有限类别/形状/count/hash，不持久化提案或推理原文。
+后端12包同源覆盖PASS：首跑其余11包PASS/1无测试，storage默认累计10m超时；按已有30m要求复验PASS728.028s，初次FAIL保留，不能说整套单次exit0。本轮另次SQLite由测试overlay证明SQLITE_FULL code13，生产errors.go未改；不能倒推旧所有STORAGE_FAILURE均盘满。
 
-当前完整后端12包通过覆盖，当前完整浏览器32仍待上述终态。以下均旧源码证据：d329原32主段全部通过96NPC/100attempts/0decisionfallback/32Play真Prose，但整套后置混合物品解释失败exit1；STORAGE_FAILURE为解释错误通用包装，quick_check ok，不是这次数据库损坏证据。edf从冻结库副本做真实API后置续验2解释+6NPC首试通过，混合实际杯子/原话一次/精确重放/继续非台词/重启事实与已选叙事保持；不能改原失败或冒充当前完整浏览器32。
+原完整browser32终态FAIL：28轮通过/29settled，86NPCsuccess+1两attempt后120s timeout/silence，总93attempt，29真实Prose成功。原no-fallback断言失败；30–32及混合物品/meta/fault/最终restart未到。quick_check ok不能代替后置检查。不得删案例/断言或用旧续验拼新PASS。
 
-冻结荣庆堂11NPC仍缺作者人设/关系/称呼；d329复评17notready/0NPC HTTP，不是RP改善证据。四个冻结文件禁止覆盖：real-rongqing-world-spec.json / real-rongqing-packages.json / before-samples.json / after-samples.json，hash见当前manifest。新Nora/Lin/Iris世界只是明确测试作者世界，不能代替真实canon。canon-review.md只是待填写非权威表；作者设定和真人评价问题已问未答，不重复问/推定同意。不把助手读样、自动机器绿或8轮当作真人/长期RP/表现力验收。
+冻结实际荣庆堂采集exit0，16记录、17NPC not_used/rp_context_not_ready/0NPC模型HTTP，G8一次真Prose但只有玩家对白/陌生人沉默；作者canon与真人rubric仍缺，体验未通过。canon-review.md只是非权威待填表；不按名字/原著补设定、不反复询问已问未答的问题。real-rongqing-world-spec/packages/before-samples/after-samples不能覆盖。新设定overlay单独标记；旧binary不接受新字段，不能把换数据后的产品验证说成同输入架构改善。
 
-下一步先根据dot具体审计findings定位最小结构改法。重点现有当前活动与静态persona的冲突、private意图连续性、speech主张与共享事实边界、相关记忆对长对话是否足够，不再堆单句prompt或盲目新增调度器/状态系统。每个增量须源hash/binary hash和定向证据。体验候选成立后一次最终完整世界回归/原32和可比较authored Golden，真人签收两个出口后停止R1。
+Nora/Lin/Iris同输入八轮after8/8首试、0mock、每轮1激活及明确延续来源是独立测试作者世界；after未选wait，具体wait修复由确定性测试证明。两现有style同事实真实render79→96字、世界/台词/决策/来源不变，仍机械；首次probe误读HTTP envelope的FAIL保留，公开持久化render只读恢复无追加请求，修正helper未重跑。均不是长期RP/真实Golden/真人通过。
 
-模型用户指定step-5-preview，low/4096/120s、显式tool_call。endpoint/key仅从 /home/ubuntu/.local/share/corerp-preview/env 在内存读，不能输出/写文档/提交。Go用 /usr/local/go/bin/go；临时和缓存走/dev/shm（先确认空间，避免并行大构建/SQLite测试）。不能删除用户库/源码/证据。source/runtime在manifest中；未部署本轮backend，旧预览fea2067a，前端服务路径未核实。
+既有V3 private+one observable/短src_N/正式schema/自己的已应用private历史继续用actual provider view及canonical/typed链验证。private不送Narrator；合法台词中的承诺/主张不自动创建物品或动作。可靠字段/引用/权限/actor/head/来源/owner/replay/visibility是硬边界；重复、漂移、答非所问、自然度/趣味是soft或人工，正则不是完整语义证明。
 
-R1 NOT DONE。不要以推送审计快照表示功能完成，不自动进入下一阶段。
+下一步先接dot具体findings，检查静态persona任务与动态活动、意图连续性、公开表达、台词主张/物品、旧对话检索。最小结构改法先定向验证，再冻结源码/binary、完整原32、可比较Golden/真人验收。不要堆单句Prompt或建平行RP状态。
+
+用户模型step-5-preview，low/4096/120s/tool_call；endpoint/key只从/home/ubuntu/.local/share/corerp-preview/env内存读取，不输出/写文档/提交。Go /usr/local/go/bin/go，TMPDIR/GOTMPDIR/GOCACHE用足量/dev/shm，完整测试timeout30m，保留库/源码/binary/证据。原生GitHTTPS本轮失败；GitHub Git数据库API备用发布可精确保留blob/tree/commit SHA及+0800时间，force=false，远端确认后才对齐tracking。不能改写历史或关闭TLS验证。
+
+R1 NOT DONE，两个出口未通过。旧预览后端仍fea2067a，本轮未部署、前端实际服务路径未核实。停止扩功能，不自动进入下一阶段。
 ```

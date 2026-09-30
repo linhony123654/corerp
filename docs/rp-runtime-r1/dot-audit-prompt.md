@@ -6,7 +6,7 @@
 
 先读 `AGENTS.md`，然后按这个入口顺序读：
 
-1. `docs/rp-runtime-r1/scene-activity-context-2026-10-01.md` 和 `scene-activity-context-verification-2026-10-01.json`：主审计快照 `ab4580d` 之后的活动可见性/事件来源修复、798源码hash、当前原32任务的准确状态。其下的 `conversation-default-review-2026-10-01.md` 与 `conversation-default-verification-2026-10-01.json` 属于主快照历史证据。另读 `same-facts-prose-review-2026-10-01.md`：同事实现有style对照，79→96字仍机械，首次采集envelope错误保留，不能冒充架构/人工体验改善。
+1. `docs/rp-runtime-r1/scene-activity-context-2026-10-01.md` 和 `scene-activity-context-verification-2026-10-01.json`：主审计快照 `ab4580d` 之后的活动可见性/事件来源修复、798源码hash、当前原32与冻结Golden的终态及准确验收限制。其下的 `conversation-default-review-2026-10-01.md` 与 `conversation-default-verification-2026-10-01.json` 属于主快照历史证据。先看 `scene-activity-acceptance-2026-10-01.md`、`scene-activity-32-public-2026-10-01.json` 与 `scene-activity-golden-samples-2026-10-01.json`：原32第29轮deadline FAIL、冻结17notready/0NPC HTTP，不能写任一出口PASS。另读 `same-facts-prose-review-2026-10-01.md`：同一组已提交事实的style对照，79→96字仍机械，首次采集envelope错误保留，不能冒充架构/人工体验改善。
 2. `conversation-default-live-2026-09-30.json` 与 `conversation-default-after-2026-09-30.json`：同一明确测试作者世界、Studio 实际生成的包、同一八轮输入、同一 Step 模型配置的真实公开样本。前者保留原失败，后者是修复后的复评；不是冻结荣庆堂或真人验收。
 3. `source-refs-32-result-2026-09-30.json`、`source-refs-32-public-2026-09-30.json` 和 `interaction-contract-postchecks-2026-09-30.json`：原完整 runner 在后置解释失败退出，主32轮成功不能冒充全套成功；后置 API 续验也不能替代当前完整浏览器32复跑。
 4. `golden-baseline.md`、`real-rongqing-world-spec.json`、`real-rongqing-packages.json`、`before-samples.json`、`after-samples.json`、`source-refs-golden-samples-2026-09-30.json`：冻结配置与历史样本。真实11个NPC缺 persona、关系和称呼；最近复评17次 NOT READY、零NPC模型调用。禁止从《红楼梦》常识替作者补 canon。

@@ -1,0 +1,630 @@
+{
+  "label": "after",
+  "model": "step-5-preview",
+  "model_config": {
+    "decision_timeout": "120s",
+    "decision_max_tokens": "4096",
+    "reasoning_effort": "low",
+    "decision_attempts": "2",
+    "narrative_timeout": "90s",
+    "narrative_attempts": "2"
+  },
+  "runtime_sha256": "sha256:f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21",
+  "world_spec_sha256": "sha256:e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+  "world_packages_sha256": "sha256:a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+  "world": "rp-runtime-r1-golden-world",
+  "world_head": 52,
+  "samples": [
+    {
+      "scene": "G6",
+      "place": "yihongyuan",
+      "text": "你们好呀",
+      "turn_run_id": "rpturn_bc15b3036c4e212b3c1249e8120b37735a9af727719e69a975232aa4c5f584b0",
+      "world_head": 20,
+      "decisions": [
+        {
+          "event_sequence": 19,
+          "speaker": "晴雯",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_bbc838c8a6f6465e887410e5aa3d04e2e22d8f163425d32c8458a7d50d3f8408"
+        },
+        {
+          "event_sequence": 20,
+          "speaker": "袭人",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_6f37adcfdb6c48d642397a58cf32f56acf68804bcd4e86401a02fd73be06ccf5"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「你们好呀」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 保持沉默。",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G6",
+      "place": "yihongyuan",
+      "text": "你们叫什么名字呀",
+      "turn_run_id": "rpturn_b262fb22f72d0019b6c5d92f7192e7a2cf8e1d494783c51d84986536840f7bfe",
+      "world_head": 23,
+      "decisions": [
+        {
+          "event_sequence": 22,
+          "speaker": "晴雯",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_42904896d5cb1c8898fa72c104f995c7d91d6812ba3c217793166a4a0ba6b2f3"
+        },
+        {
+          "event_sequence": 23,
+          "speaker": "袭人",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_a88627af31c3674dfe12be05f3eea461e83aed934b77fcda25c63665302e7a24"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「你们叫什么名字呀」",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 保持沉默。",
+        "（2026-09-22T00:00:00Z）在怡红院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "来看看凤姐呗",
+      "turn_run_id": "rpturn_6fdddf9dc0f62496822ad6252e8b9224787edf30d28d51231616412816033bb3",
+      "world_head": 27,
+      "decisions": [
+        {
+          "event_sequence": 27,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_0f80f1cd003f6f1e5009e0a991452be24309f7ae768f253018e7084df6e8d40d"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「来看看凤姐呗」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "那就谢谢凤姐了",
+      "turn_run_id": "rpturn_f4782ae7a251c08b9982bf7d572953f7b450530e05e2f7abc6ed23edadfece44",
+      "world_head": 29,
+      "decisions": [
+        {
+          "event_sequence": 29,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_e7a9c43af3ab4d8ce1599a29017a7e0835ca2cea124a3149fb1039b2a0cad778"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「那就谢谢凤姐了」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G7",
+      "place": "fengjieyuan",
+      "text": "你刚才已经把茶递给我了吗？",
+      "turn_run_id": "rpturn_7cfa032d1dd1e722b688abe2e026c1c4c397af921257affc75f7888c3abc4194",
+      "world_head": 31,
+      "decisions": [
+        {
+          "event_sequence": 31,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_7c8133b1871df1bf9e857447a909eac3e3843710d650195d684b4b5a476725cf"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「你刚才已经把茶递给我了吗？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G4",
+      "place": "fengjieyuan",
+      "text": "我这几日总惦记着姐姐，前儿你说的那桩事，可有下文了？",
+      "turn_run_id": "rpturn_3c31f21733db4035c79cfa1e1591ca242c4e3725ab90995918111438ac52006c",
+      "world_head": 33,
+      "decisions": [
+        {
+          "event_sequence": 33,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_3b8b2fdd88c4c124a5a324b38c7dfaba7fd6e5bdada50a1dc1e726a799a012b9"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「我这几日总惦记着姐姐，前儿你说的那桩事，可有下文了？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G5",
+      "place": "fengjieyuan",
+      "text": "凤姐姐天天都好忙",
+      "turn_run_id": "rpturn_e80f6540f86e3791b2f12a9d7993ccb6789c0ec8f49b10efefb3a2943f04bac1",
+      "world_head": 35,
+      "decisions": [
+        {
+          "event_sequence": 35,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_87799beedbec6c595ad49fa32ba1b48f2fcc9dbebf2966fb4d4f2941ec81e218"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「凤姐姐天天都好忙」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G5",
+      "place": "fengjieyuan",
+      "text": "那凤姐你先处理",
+      "turn_run_id": "rpturn_4a8d3fe7f7700da39a3f0e06b046004ac7ececdf1a1ce13b48c97efd98c0a260",
+      "world_head": 37,
+      "decisions": [
+        {
+          "event_sequence": 37,
+          "speaker": "王熙凤",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_211eb4fc8961123258ffa7262e3400b88a5d0f77b4f266e9380978b1ffa38578"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「那凤姐你先处理」",
+        "（2026-09-22T00:00:00Z）在凤姐院，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "有谁呀",
+      "turn_run_id": "rpturn_959a60910220caeb19614e9406495eac2de5eebc1544259cfddb3492fee3a1a2",
+      "world_head": 40,
+      "decisions": [
+        {
+          "event_sequence": 40,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_66a84975c46f1fde2c855db7c1ad189f651118fd249c02aa9a3fc77321819d60"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有谁呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "你是谁",
+      "turn_run_id": "rpturn_bf256f45ea0c4713138847a493f1dc7df3fb429c3e9822058c4cf0d551e81ef3",
+      "world_head": 42,
+      "decisions": [
+        {
+          "event_sequence": 42,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_d42cf3da48630ebe7e4b6c4c4a8a5949194251f2239eec243945b006c5326a6b"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「你是谁」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "有人吗",
+      "turn_run_id": "rpturn_98679cf06b34e403a8a4ecfed0020043b34f881175a4a11a80ab3065197daa8d",
+      "world_head": 44,
+      "decisions": [
+        {
+          "event_sequence": 44,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_b9e58c437b9e7a7775b206a00fcf3d6744e59ac076798d27fd963776ea0b3edd"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有人吗」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G2",
+      "place": "rongqingtang",
+      "text": "你是谁呀",
+      "turn_run_id": "rpturn_f79a9d749ad041bdbee6ee701a1a08707cbb0f9073da7288f5780d8e72c0de9a",
+      "world_head": 46,
+      "decisions": [
+        {
+          "event_sequence": 46,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_90750d9b29ca8af207f49c4535105a24e28aafcbdbe61c00dce7020236ec3a1f"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「你是谁呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G3",
+      "place": "rongqingtang",
+      "text": "想你了",
+      "turn_run_id": "rpturn_e6812cf9a869c7dba035f7f1c4b2525506a4b7eaed96684161fc7cd079a4d462",
+      "world_head": 48,
+      "decisions": [
+        {
+          "event_sequence": 48,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_2a51f9bd6cadfbea7cd176e10f5adc28d642c2bb413b0b11ba33027ec9758e4a"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「想你了」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G1",
+      "place": "rongqingtang",
+      "text": "有人吗",
+      "turn_run_id": "rpturn_41f320b7f6d2f00624dc7403cb3f1ef451cb91a3c2545754cb14b6fd0c74ecf4",
+      "world_head": 50,
+      "decisions": [
+        {
+          "event_sequence": 50,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_4cfde80f7f8ca65e2350480362aa5c5634e0ae0ae2776d3754d6caa840be6faa"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「有人吗」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G1",
+      "place": "rongqingtang",
+      "text": "找老祖宗呀",
+      "turn_run_id": "rpturn_ffeff537f96443ef0881599af8db8c664e3243b85923819f6a51c3d7418aa90c",
+      "world_head": 52,
+      "decisions": [
+        {
+          "event_sequence": 52,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_a9aa8e807847e10ab8aad7976987d5a0198aea453d39c0aae426fb130dbd5ed1"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "not_used",
+          "attempt_count": 0,
+          "fallback_kind": "rp_context_not_ready"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "original_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「找老祖宗呀」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，陌生人 保持沉默。"
+      ]
+    },
+    {
+      "scene": "G8",
+      "source_turn": "rpturn_ffeff537f96443ef0881599af8db8c664e3243b85923819f6a51c3d7418aa90c",
+      "narrative": [
+        "你：「找老祖宗呀」",
+        "陌生人沉默着。"
+      ],
+      "fallback_reason": ""
+    }
+  ]
+}
