@@ -10,6 +10,11 @@
 
 真实采集发生在隔离库；采集时线上隔离预览仍是 feea/schema079。不要用“已构建”替代“已发布”，也不要把后来部署的结果倒写成采集当时的状态。当前部署身份以预览 `/release.json` 和独立发布回执为准。
 
+
+本轮交付已完成：代码提交 `300597c26eeaef4089402a7a02aca253086fdb8d` 精确发布到该分支，同一预览已升级080并运行7e814 runtime和对应前端。旧201Events/15provider receipts/66旧回合的原列与所有heads在迁移时不变。线上默认Step实际点头回应13.821s首试成功，speech与smile提交后可读，重启/原key重试零新增effects/calls。当前R1世界head34，其他旧worldheads不变。
+
+该线上回复仍说“站惯了”“这座儿总给你留着”，没有相应姿态/座位canon或owner来源；旧NPC说法也不是其真实状态来源。它进一步证明动作链通过不等于自由对白准确度通过。逐字输出与独立交付回执见[action-trigger-preview-release](action-trigger-preview-release-2026-10-01.json)，[在线动作审阅](https://code.linhony.xyz:4188/rp-review/actions/)仍将人评标PENDING。后续文档提交与这个代码提交分开，不伪造新的runtime构建。
+
 ## 为什么底层跑通了，功能仍不准确
 
 | 已有能力 | 实际断点 | 本轮处理 |

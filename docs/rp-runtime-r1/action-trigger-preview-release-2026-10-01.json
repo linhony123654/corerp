@@ -1,0 +1,288 @@
+{
+  "kind": "corerp.r1-action-trigger-preview-release.v1",
+  "date": "2026-10-01",
+  "status": "AUTHORIZED PREVIEW RELEASE PASS; SPEECH ACCURACY NOT PASSED; R1 NOT DONE",
+  "code_publication": {
+    "kind": "corerp.exact-git-publication.v1",
+    "branch": "rp-preview-integration-20260929",
+    "commit": "300597c26eeaef4089402a7a02aca253086fdb8d",
+    "expected_parent": "cfc6c9a7ca84a5d88b76ba2134a84fa7c3f5f579",
+    "expected_tree": "05a80aa111a4454d24b36a6049ac76307343f1db",
+    "transport": "Git database API; exact local objects",
+    "status": "PASS",
+    "tree_verified": true,
+    "changed_files": 63,
+    "commit_verified": true,
+    "remote_commit": "300597c26eeaef4089402a7a02aca253086fdb8d",
+    "url": "https://github.com/linhony123654/corerp/commit/300597c26eeaef4089402a7a02aca253086fdb8d"
+  },
+  "activation": {
+    "kind": "corerp.r1-action-trigger-preview-activation.v1",
+    "status": "PASS: existing preview activated with exact runtime/frontend; old world and receipts unchanged",
+    "source_commit": "300597c26eeaef4089402a7a02aca253086fdb8d",
+    "runtime_sha256": "7e8145d421fa0a8ab265af8037234652a80bc1f0b9c1165127a96791b81864ec",
+    "production_source_sha256": "e2e7b01977b68a5c94b4a9561e6ba26667bfa20d0cb0954ae6c1247bd91c42ea",
+    "backup_dir": "/home/ubuntu/.local/share/corerp-preview/backups/20261001-action-trigger-080-300597c2",
+    "old_static_dir": "/var/www/corerp-preview.prev-20261001-300597c2",
+    "human_experience": "PENDING",
+    "semantic_speech_accuracy": "NOT PASSED",
+    "scope": "authorized existing isolated preview; targeted nod only; R1 NOT DONE",
+    "database_before": {
+      "tables": {
+        "events": {
+          "rows": 201,
+          "sha256": "09f9c922f3c4af100f099194b286be61a1467555aae32be95dc8d847b6e3c5fb"
+        },
+        "event_batches": {
+          "rows": 197,
+          "sha256": "93bef0e0ed208fd37b51a6569cc4700d30aa58ee3668a034ed8b71023c23845a"
+        },
+        "commands": {
+          "rows": 197,
+          "sha256": "3959c82fba9d7dc81e73fff4ce6c2f762ed836ff6321fcf7a8fd17f487a37a11"
+        },
+        "rp_provider_calls": {
+          "rows": 15,
+          "sha256": "af80cd10ecda7411ac2845b15f9a39588d02f25a52952a0e00d164bbf58fbe2d"
+        },
+        "rp_turn_runs": {
+          "rows": 66,
+          "sha256": "3773b8d6c76a5fdc002a43fd9ff82d321f3a45adc0ca4d34f73726f033e3b45f"
+        }
+      },
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          31
+        ]
+      ],
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "database_after_migration": {
+      "tables": {
+        "events": {
+          "rows": 201,
+          "sha256": "09f9c922f3c4af100f099194b286be61a1467555aae32be95dc8d847b6e3c5fb"
+        },
+        "event_batches": {
+          "rows": 197,
+          "sha256": "93bef0e0ed208fd37b51a6569cc4700d30aa58ee3668a034ed8b71023c23845a"
+        },
+        "commands": {
+          "rows": 197,
+          "sha256": "3959c82fba9d7dc81e73fff4ce6c2f762ed836ff6321fcf7a8fd17f487a37a11"
+        },
+        "rp_provider_calls": {
+          "rows": 15,
+          "sha256": "af80cd10ecda7411ac2845b15f9a39588d02f25a52952a0e00d164bbf58fbe2d"
+        },
+        "rp_turn_runs": {
+          "rows": 66,
+          "sha256": "3773b8d6c76a5fdc002a43fd9ff82d321f3a45adc0ca4d34f73726f033e3b45f"
+        }
+      },
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          31
+        ]
+      ],
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "latest_migrations": [
+      "corerp-rp-action-triggers-080-2026-10-01",
+      "corerp-rp-session-opened-window-079-2026-10-01",
+      "corerp-rp-narrative-artifacts-078-2026-10-01"
+    ],
+    "public_url": "https://code.linhony.xyz:4188/",
+    "review_url": "https://code.linhony.xyz:4188/rp-review/actions/",
+    "actual_pid": 1695703,
+    "database_backup_consistent": true,
+    "old_history_assets_preserved": true,
+    "model_calls_during_activation": 0,
+    "availability": "readyz and public routes200"
+  },
+  "actual_default_model_smoke": {
+    "kind": "corerp.r1-action-trigger-preview-smoke.v1",
+    "status": "PASS: actual default Step nod reaction, committed v2, restart and exact retry; human experience pending",
+    "source_commit": "300597c26eeaef4089402a7a02aca253086fdb8d",
+    "runtime_sha256": "7e8145d421fa0a8ab265af8037234652a80bc1f0b9c1165127a96791b81864ec",
+    "public_url": "https://code.linhony.xyz:4188/",
+    "instance_id": "world_rp_runtime_r1_20261001",
+    "default_model": "step-5-preview",
+    "human_experience": "PENDING",
+    "semantic_speech_accuracy": "NOT PASSED",
+    "scope": "one actual directed nod on the existing authorized preview; not Golden or original32",
+    "before": {
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 31
+        }
+      ],
+      "events": 201,
+      "provider_calls": 15,
+      "utterances": 137,
+      "decisions": 72
+    },
+    "generation_seconds": 13.821,
+    "turn_run_id": "rpturn_246b6d37c3e800d1dd0ae37f74daa01d4953db933c13a798ac843cfca545fea1",
+    "player_action_event_id": "event_rp_nonverbal_aa20b740608ebdaafb786d90c3873d245700ca3bd141a91a78f065353f13a29e",
+    "narrative_lines": [
+      "在荣庆堂，你向贾母点头。",
+      "「你既点了头，老祖宗就当你听见我了。站惯了也无妨，什么时候腿酸了，这座儿总给你留着。想说什么便慢慢说，我不催你。」贾母答，笑了笑。"
+    ],
+    "fact_groups": [
+      [
+        "event_rp_nonverbal_aa20b740608ebdaafb786d90c3873d245700ca3bd141a91a78f065353f13a29e"
+      ],
+      [
+        "event_rp_npc_565dd7ee68b3fc519afd17ed956195e729c3c8e441d570d88aafde54cb0b6415",
+        "event_rp_npc_expression_565dd7ee68b3fc519afd17ed956195e729c3c8e441d570d88aafde54cb0b6415"
+      ]
+    ],
+    "receipts": [
+      {
+        "phase": "decision",
+        "provider_kind": "chat_completions",
+        "model_id": "step-5-preview",
+        "result": "success",
+        "attempt_count": 1,
+        "fallback_kind": ""
+      },
+      {
+        "phase": "narrative",
+        "provider_kind": "deterministic",
+        "model_id": "",
+        "result": "success",
+        "attempt_count": 0,
+        "fallback_kind": ""
+      }
+    ],
+    "player_utterances_for_action": 0,
+    "after_action": {
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 34
+        }
+      ],
+      "events": 204,
+      "provider_calls": 17,
+      "utterances": 138,
+      "decisions": 73
+    },
+    "other_world_heads_preserved": true,
+    "restart": "PASS: exact public history and no extra effects/calls",
+    "after": {
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 34
+        }
+      ],
+      "events": 204,
+      "provider_calls": 17,
+      "utterances": 138,
+      "decisions": 73
+    },
+    "actual_successful_npc_model_calls": 1,
+    "r1_status": "NOT DONE"
+  },
+  "semantic_counterexample": {
+    "status": "NOT PASSED",
+    "unsupported_premises": [
+      "站惯了",
+      "这座儿总给你留着"
+    ],
+    "basis": "Current authored world/state provides no player pose or available seat. Earlier NPC speech records attributed words, not verified posture or furniture. The live reaction repeats the unsupported premises.",
+    "world_effects": "No player posture, seat object, agreement or movement was committed by this nod; only the player action and approved NPC observables.",
+    "interpretation": "The action route is functional. Safe persistence/rendering does not establish semantic accuracy of the committed NPC speech."
+  },
+  "release_scope": "Existing authorized isolated preview only. No production target, settings/keys, original worlds or canon replaced. Current branch code is300597c; later documentation-only commits need not rebuild this exact439-file runtime.",
+  "world_integrity_exit": "NOT PASSED: current original32 not run",
+  "rp_experience_exit": "PENDING: frozen comparable full Golden and actual human evaluation remain open",
+  "private_credentials_or_requests_exported": false
+}

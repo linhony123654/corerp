@@ -707,5 +707,19 @@
     "all_old_columns_hash_preserved": true,
     "public_history_turns": 5,
     "restart": "PASS"
+  },
+  "authorized_delivery": {
+    "artifact": "action-trigger-preview-release-2026-10-01.json",
+    "code_commit": "300597c26eeaef4089402a7a02aca253086fdb8d",
+    "git_remote_exact_tree_and_commit": "PASS",
+    "preview_url": "https://code.linhony.xyz:4188/",
+    "review_url": "https://code.linhony.xyz:4188/rp-review/actions/",
+    "schema": "080",
+    "actual_runtime_verified": true,
+    "actual_default_step_calls": 1,
+    "fallbacks": 0,
+    "generation_seconds": 13.821,
+    "restart_and_same_key_retry": "PASS: no extra effects or calls",
+    "semantic_counterexample": "Still asserts unprovided standing habit and seat availability; not a speech accuracy pass."
   }
 }
