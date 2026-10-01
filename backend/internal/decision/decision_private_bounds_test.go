@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -50,7 +49,7 @@ func TestDecisionPrivateSingleLineContractAndBoundedRepair(t *testing.T) {
 					}
 					messages := body["messages"].([]any)
 					var got decisionContext
-					if json.Unmarshal([]byte(messages[1].(map[string]any)["content"].(string)), &got) != nil || !reflect.DeepEqual(got.Character, contextFixture()) {
+					if json.Unmarshal([]byte(messages[1].(map[string]any)["content"].(string)), &got) != nil || !decisionCharacterMatches(t, got.Character, contextFixture()) {
 						t.Error("repair changed authorized character input")
 					}
 					parameters := body["tools"].([]any)[0].(map[string]any)["function"].(map[string]any)["parameters"].(map[string]any)

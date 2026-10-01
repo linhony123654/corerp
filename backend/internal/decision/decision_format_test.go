@@ -27,7 +27,7 @@ func TestDecisionJSONModeCarriesClosedSchemaAndUnchangedCharacterContext(t *test
 			t.Fatal("JSON Mode request lacks its explicit transport contract")
 		}
 		var got decisionContext
-		if err := json.Unmarshal([]byte(body.Messages[1].Content), &got); err != nil || !reflect.DeepEqual(got.Character, in) {
+		if err := json.Unmarshal([]byte(body.Messages[1].Content), &got); err != nil || !decisionCharacterMatches(t, got.Character, in) {
 			t.Fatal("transport format changed the authorized character context", err)
 		}
 		if strings.Contains(body.Messages[0].Content, in.PlayerSpeechText) {
@@ -126,7 +126,7 @@ func TestDecisionJSONModeRepairsInvalidRootOnceWithoutChangingContextOrFormat(t 
 					t.Fatal("repair changed or lost the configured transport format")
 				}
 				var in decisionContext
-				if json.Unmarshal([]byte(body.Messages[1].Content), &in) != nil || !reflect.DeepEqual(in.Character, contextFixture()) {
+				if json.Unmarshal([]byte(body.Messages[1].Content), &in) != nil || !decisionCharacterMatches(t, in.Character, contextFixture()) {
 					t.Fatal("repair added facts or changed the received context")
 				}
 				if calls == 2 && (len(body.Messages) != 3 || !strings.Contains(body.Messages[2].Content, "rejected response")) {

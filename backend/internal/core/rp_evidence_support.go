@@ -53,6 +53,21 @@ func RPDecisionEvidenceSupport(in RPDecisionInput) map[string][]RPEvidenceSuppor
 		}
 		return "missing"
 	}
+	// Optional text disappears from the serialized packet. Anchor the explicit
+	// reference marker (or its source when no marker exists), never a missing
+	// JSON member. This does not resolve or invent the original words.
+	optionalTextLocator := func(base, source, text string, from bool) string {
+		if text != "" {
+			return base + "/text"
+		}
+		if from {
+			return base + "/text_from_event"
+		}
+		return source
+	}
+	if action := in.ObservedPlayerAction; action != nil {
+		add(action.SourceEventID, "/observed_player_action/source_event_id", "/observed_player_action", "observed_player_action", action.ActorEntityID, action.TargetEntityID, action.WorldTime, "complete", "witnessed_at_time", "observed_nonverbal_action_at_time")
+	}
 	if in.Persona != "" {
 		add(in.PersonaSourceEventID, "/persona_source_event_id", "/persona", "authored_persona", in.NPCEntityID, "", "", "complete", "declared", "authored_characterization")
 	}
@@ -91,14 +106,25 @@ func RPDecisionEvidenceSupport(in RPDecisionInput) map[string][]RPEvidenceSuppor
 		base := fmt.Sprintf("/knowledge/%d", i)
 		switch k.ClaimType {
 		case "speaker_said":
-			speech(k.SourceEventID, base+"/source_event_id", base+"/text", k.SubjectEntityID, "", complete(k.Text, k.TextFromEvent))
+			speech(k.SourceEventID, base+"/source_event_id", optionalTextLocator(base, base+"/source_event_id", k.Text, k.TextFromEvent), k.SubjectEntityID, "", complete(k.Text, k.TextFromEvent))
 		case "agent_presence":
 			if k.PlaceID != "" {
 				add(k.SourceEventID, base+"/source_event_id", base+"/place_id", "observed_presence", k.SubjectEntityID, "", "", "complete", "observed", "sourced_presence")
 			}
-		case "nonverbal_action", "object_interaction":
+		case "nonverbal_action":
 			if k.Text != "" || k.TextFromEvent {
-				add(k.SourceEventID, base+"/source_event_id", base+"/text", "observed_description", k.SubjectEntityID, "", "", complete(k.Text, k.TextFromEvent), "observed", "recorded_observation")
+				add(k.SourceEventID, base+"/source_event_id", optionalTextLocator(base, base+"/source_event_id", k.Text, k.TextFromEvent), "observed_description", k.SubjectEntityID, k.TargetEntityID, k.WorldTime, complete(k.Text, k.TextFromEvent), "observed", "recorded_observation")
+			}
+			for _, field := range []struct{ name, value string }{
+				{"action", k.Action}, {"gesture_code", k.GestureCode}, {"target_entity_id", k.TargetEntityID},
+			} {
+				if field.value != "" {
+					add(k.SourceEventID, base+"/source_event_id", base+"/"+field.name, "observed_nonverbal", k.SubjectEntityID, k.TargetEntityID, k.WorldTime, "complete", "witnessed_at_time", "recorded_nonverbal_at_time")
+				}
+			}
+		case "object_interaction":
+			if k.Text != "" || k.TextFromEvent {
+				add(k.SourceEventID, base+"/source_event_id", optionalTextLocator(base, base+"/source_event_id", k.Text, k.TextFromEvent), "observed_description", k.SubjectEntityID, "", "", complete(k.Text, k.TextFromEvent), "observed", "recorded_observation")
 			}
 		}
 	}
@@ -109,7 +135,7 @@ func RPDecisionEvidenceSupport(in RPDecisionInput) map[string][]RPEvidenceSuppor
 	for i, a := range in.OwnActions {
 		base := fmt.Sprintf("/own_actions/%d", i)
 		if a.Action == "speech" {
-			speech(a.EventID, base+"/event_id", base+"/text", in.NPCEntityID, a.WorldTime, complete(a.Text, a.TextFromEvent))
+			speech(a.EventID, base+"/event_id", optionalTextLocator(base, base+"/event_id", a.Text, a.TextFromEvent), in.NPCEntityID, a.WorldTime, complete(a.Text, a.TextFromEvent))
 			continue
 		}
 		// Classify only the current server projection's recognized observable kinds.
@@ -122,6 +148,15 @@ func RPDecisionEvidenceSupport(in RPDecisionInput) map[string][]RPEvidenceSuppor
 			base := fmt.Sprintf("/scene_activities/%d", i)
 			add(a.SourceEventID, base+"/source_event_id", base, "observed_activity", a.ActorID, "", a.WorldTime, "complete", a.Status, "activity_status_at_time")
 		}
+	}
+	for i, object := range in.SceneObjects {
+		base := fmt.Sprintf("/scene_objects/%d", i)
+		add(object.DefinitionSourceEventID, base+"/definition_source_event_id", base,
+			"observed_object_definition", in.NPCEntityID, "", object.WorldTime,
+			"complete", "observed_at_snapshot", "listed_object_identity_kind_and_location")
+		add(object.StateSourceEventID, base+"/state_source_event_id", base+"/state",
+			"observed_object_state", in.NPCEntityID, "", object.WorldTime,
+			"complete", "observed_at_snapshot", "listed_object_state_at_snapshot")
 	}
 	if s := in.NextSchedule; s != nil {
 		add(s.SourceEventID, "/next_schedule/source_event_id", "/next_schedule", "schedule", in.NPCEntityID, "", s.WorldTime, "complete", "planned", "scheduled_plan")

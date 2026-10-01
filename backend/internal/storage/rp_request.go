@@ -90,6 +90,16 @@ func (s *Store) RetireRPRequest(ctx context.Context, r RPRequestRetireRequest) (
 		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status IN ('settled','stopped','clarification') THEN 'completed' ELSE 'in_progress' END FROM rp_interactions WHERE session_id=? AND idempotency_key=?`, r.SessionID, r.IdempotencyKey).Scan(&status)
 	case "move", "social", "object", "nonverbal":
 		commandTypes := map[string]string{"move": "RPPlayerMove", "social": "RPSocial", "object": "RPObjectInteraction", "nonverbal": "RPNonverbalAction"}
+		if r.Operation == "nonverbal" {
+			err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status='settled' THEN 'completed' ELSE 'in_progress' END FROM rp_turn_runs WHERE session_id=? AND idempotency_key=? AND player_turn_id IS NULL`, r.SessionID, r.IdempotencyKey).Scan(&status)
+			if err == nil {
+				out.Status = status
+				return out, nil
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return out, core.WrapError(core.CodeStorageFailure, "read RP action turn acceptance", err)
+			}
+		}
 		err = tx.conn.QueryRowContext(ctx, `SELECT CASE WHEN status='committed' THEN 'completed' ELSE 'in_progress' END FROM commands WHERE instance_id=? AND branch_id=? AND command_type=? AND idempotency_key=?`, session.InstanceID, session.BranchID, commandTypes[r.Operation], "rp_"+r.Operation+":"+r.SessionID+":"+r.IdempotencyKey).Scan(&status)
 	}
 	if err == nil {

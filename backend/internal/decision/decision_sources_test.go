@@ -34,12 +34,13 @@ func TestDecisionBoundRefsAndSameContractReachEveryTransport(t *testing.T) {
 					}
 					messages := request["messages"].([]any)
 					var packet decisionContext
-					if json.Unmarshal([]byte(messages[1].(map[string]any)["content"].(string)), &packet) != nil || !reflect.DeepEqual(packet.Character, input) {
+					if json.Unmarshal([]byte(messages[1].(map[string]any)["content"].(string)), &packet) != nil || !decisionCharacterMatches(t, packet.Character, input) {
 						t.Fatal("provider view changed canonical data or heard speech")
 					}
-					if packet.EvidenceSupportVersion != core.RPEvidenceSupportVersion || !reflect.DeepEqual(packet.GroundingSources, decisionSourceRefs(input)) || len(packet.GroundingSources) != 1 || packet.GroundingSources[0].SourceEventID != input.SpeechEventID || packet.GroundingSources[0].Ref != "src_1" {
+					if packet.EvidenceSupportVersion != decisionEvidenceSupportWireVersion || len(packet.GroundingSources) != 1 || packet.GroundingSources[0].SourceEventID != input.SpeechEventID || packet.GroundingSources[0].Ref != "src_1" {
 						t.Fatal("ref binding missing or outside this authorized packet")
 					}
+					verifyDecisionSupportPaths(t, input, packet)
 					var declared any
 					if format == "tool_call" {
 						declared = request["tools"].([]any)[0].(map[string]any)["function"].(map[string]any)["parameters"]

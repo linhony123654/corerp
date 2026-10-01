@@ -124,7 +124,7 @@ func TestRPDecisionProviderProjectionCoversReachablePersonSchema(t *testing.T) {
 				// These identify provenance, locations, world scope or non-person
 				// records. Exclude them before person suffix classification.
 				unrelated := false
-				for _, suffix := range []string{"EventID", "ObservationID", "InstanceID", "BranchID", "TurnID", "DecisionID", "SessionID", "PlaceID", "ActivityID", "CurrencyID", "CohortID", "ContractID", "PositionID", "OccupationID", "WorkplaceID", "OrganizationID", "InstitutionID", "LawID", "ScopeID", "CultureID", "NormID", "SKUID", "MessageID"} {
+				for _, suffix := range []string{"EventID", "ObservationID", "InstanceID", "BranchID", "TurnID", "DecisionID", "SessionID", "PlaceID", "ObjectID", "ActivityID", "CurrencyID", "CohortID", "ContractID", "PositionID", "OccupationID", "WorkplaceID", "OrganizationID", "InstitutionID", "LawID", "ScopeID", "CultureID", "NormID", "SKUID", "MessageID"} {
 					unrelated = unrelated || strings.HasSuffix(name, suffix)
 				}
 				person := false
@@ -185,7 +185,7 @@ func TestRPDecisionProviderProjectionMapsOnlyExactEntityReferences(t *testing.T)
 			}
 		})
 	}
-	for _, key := range []string{"text", "excerpt", "player_speech_text", "persona", "intent", "emotion", "relationship_stance", "source_event_id", "event_id", "decision_id", "basis_event_ids", "source_event_ids", "place_id", "contract_id", "message_id", "sender_handle", "conflicts_with"} {
+	for _, key := range []string{"text", "excerpt", "player_speech_text", "persona", "intent", "emotion", "relationship_stance", "source_event_id", "event_id", "decision_id", "basis_event_ids", "source_event_ids", "place_id", "object_id", "contract_id", "message_id", "sender_handle", "conflicts_with"} {
 		input := map[string]any{key: id}
 		got := walkRPDecisionEntityReferences(input, "", func(string) string { t.Fatalf("unrelated field %s projected", key); return alias }).(map[string]any)
 		if got[key] != id {

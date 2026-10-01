@@ -56,6 +56,13 @@ type RPDecisionKnowledge struct {
 	Text            string `json:"text,omitempty"`
 	TextFromEvent   bool   `json:"text_from_event,omitempty"`
 	SourceEventID   string `json:"source_event_id"`
+	// For a nonverbal witness, retain the typed fields already present in that
+	// witness's claim. An absent target stays unknown; it is not an untargeted
+	// action. Time is the source event's time, never a continuing pose.
+	Action         string `json:"action,omitempty"`
+	GestureCode    string `json:"gesture_code,omitempty"`
+	TargetEntityID string `json:"target_entity_id,omitempty"`
+	WorldTime      string `json:"world_time,omitempty"`
 }
 
 // RPDecisionDialogue is an accepted utterance the NPC spoke or personally
@@ -115,6 +122,33 @@ type RPDecisionSchedule struct {
 	ActivityCode       string `json:"activity_code"`
 }
 
+// RPDecisionSceneObject is a currently observed projection of an existing
+// authored object. It grants no action capability and says nothing about
+// unlisted objects, posture, occupancy or distance. The builder's head fixes
+// this snapshot; the two Events ground the definition and current state.
+type RPDecisionSceneObject struct {
+	ObjectID                string `json:"object_id"`
+	DisplayName             string `json:"display_name"`
+	Kind                    string `json:"kind"`
+	State                   string `json:"state"`
+	PlaceID                 string `json:"place_id"`
+	WorldTime               string `json:"world_time"`
+	DefinitionSourceEventID string `json:"definition_source_event_id"`
+	StateSourceEventID      string `json:"state_source_event_id"`
+}
+
+// RPDecisionObservedAction is the current turn's personally witnessed player
+// action, not player speech or a statement about a continuing body pose.
+type RPDecisionObservedAction struct {
+	SourceEventID  string `json:"source_event_id"`
+	ActorEntityID  string `json:"actor_entity_id"`
+	TargetEntityID string `json:"target_entity_id,omitempty"`
+	Action         string `json:"action"`
+	GestureCode    string `json:"gesture_code,omitempty"`
+	PlaceID        string `json:"place_id"`
+	WorldTime      string `json:"world_time"`
+}
+
 // RPDecisionInput is the only data boundary exposed to a replaceable provider.
 // No account identifiers, other people's finances, creator data or raw DB rows.
 type RPDecisionInput struct {
@@ -134,6 +168,7 @@ type RPDecisionInput struct {
 	ContactOpportunity     *RPContactOpportunityContext   `json:"contact_opportunity,omitempty"`
 	Law                    *RPLawContext                  `json:"law,omitempty"`
 	Trigger                *RPDecisionTrigger             `json:"trigger,omitempty"`
+	ObservedPlayerAction   *RPDecisionObservedAction      `json:"observed_player_action,omitempty"`
 	Life                   *RPLifeContext                 `json:"life,omitempty"`
 	InstanceID             string                         `json:"instance_id"`
 	BranchID               string                         `json:"branch_id"`
@@ -165,6 +200,7 @@ type RPDecisionInput struct {
 	ReachablePlaceIDs      []string                       `json:"reachable_place_ids"`
 	OwnActions             []RPOwnAction                  `json:"own_actions,omitempty"`
 	SceneActivities        []RPSceneActivity              `json:"scene_activities,omitempty"`
+	SceneObjects           []RPDecisionSceneObject        `json:"scene_objects,omitempty"`
 }
 
 // RPDecisionPresentation describes the NPC-only projection, never new canon.
@@ -256,6 +292,29 @@ func (DeterministicRPDecisionProvider) Propose(_ context.Context, input RPDecisi
 		}
 	}
 	if input.Trigger != nil {
+		if input.Trigger.Kind == "nonverbal" {
+			observed := input.ObservedPlayerAction
+			if input.Trigger.SourceEventID == "" || input.TurnID != input.Trigger.SourceEventID || input.SpeechEventID != "" || input.PlayerSpeechText != "" || input.PlayerSpeechWorldTime != "" || observed == nil || observed.SourceEventID != input.Trigger.SourceEventID {
+				return RPDecisionProposal{}, NewError(CodeInvalidArgument, "nonverbal reaction requires its observed action and no player speech")
+			}
+			// A reciprocal visible nod is neutral, not agreement or invented
+			// dialogue. Unrecognized/undirected actions receive legal silence.
+			for _, action := range input.LegalActions {
+				if action == "silence" {
+					response := RPDecisionProposal{Action: "silence"}
+					if observed.TargetEntityID == input.NPCEntityID && observed.Action == "nod" {
+						response.ExpressionCode = "nod"
+					}
+					return response, nil
+				}
+			}
+			for _, action := range input.LegalActions {
+				if action == "wait" {
+					return RPDecisionProposal{Action: "wait"}, nil
+				}
+			}
+			return RPDecisionProposal{}, NewError(CodeInvalidArgument, "nonverbal reaction has no legal silent action")
+		}
 		return proposeRPInitiative(input)
 	}
 	if input.Life != nil {

@@ -17,11 +17,18 @@ type RPNonverbalResult struct {
 	WorldTime     string `json:"world_time"`
 	Description   string `json:"description"`
 	Replayed      bool   `json:"replayed"`
+	// Present only when the product completed a witnessed-action reaction
+	// turn. The action receipt above continues to describe the actor alone.
+	Turn *RPTurnResult `json:"turn,omitempty"`
 }
 
 // NonverbalRP commits only the actor's visible expression. It does not assert
 // that a target responded, interpret their feelings, or change a relationship.
 func (s *Store) NonverbalRP(ctx context.Context, request core.RPNonverbalRequest) (RPNonverbalResult, error) {
+	return s.nonverbalRP(ctx, request, "")
+}
+
+func (s *Store) nonverbalRP(ctx context.Context, request core.RPNonverbalRequest, turnRunID string) (RPNonverbalResult, error) {
 	var empty RPNonverbalResult
 	if err := request.Validate(); err != nil {
 		return empty, err
@@ -72,10 +79,19 @@ func (s *Store) NonverbalRP(ctx context.Context, request core.RPNonverbalRequest
 	if err := validateRPBinding(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return empty, err
 	}
+	if turnRunID != "" {
+		var pinned int
+		if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND trigger_kind='nonverbal' AND request_hash=? AND idempotency_key=? AND status='open' AND player_turn_id IS NULL AND player_event_id IS NULL`, turnRunID, session.SessionID, requestHash, request.IdempotencyKey).Scan(&pinned); err != nil {
+			return empty, err
+		}
+		if pinned != 1 {
+			return empty, core.NewError(core.CodeBranchConflict, "nonverbal owner is not this pinned action turn")
+		}
+	}
 	var pending int
 	if err := tx.conn.QueryRowContext(ctx, `SELECT
-	 (SELECT COUNT(*) FROM rp_turn_runs t JOIN rp_sessions s ON s.session_id=t.session_id WHERE s.instance_id=? AND s.branch_id=? AND t.status<>'settled')+
-	 (SELECT COUNT(*) FROM rp_wait_intents w JOIN rp_sessions s ON s.session_id=w.session_id WHERE s.instance_id=? AND s.branch_id=? AND w.status='pending')`, session.InstanceID, session.BranchID, session.InstanceID, session.BranchID).Scan(&pending); err != nil {
+	 (SELECT COUNT(*) FROM rp_turn_runs t JOIN rp_sessions s ON s.session_id=t.session_id WHERE s.instance_id=? AND s.branch_id=? AND t.status<>'settled' AND t.turn_run_id<>?)+
+	 (SELECT COUNT(*) FROM rp_wait_intents w JOIN rp_sessions s ON s.session_id=w.session_id WHERE s.instance_id=? AND s.branch_id=? AND w.status='pending')`, session.InstanceID, session.BranchID, turnRunID, session.InstanceID, session.BranchID).Scan(&pending); err != nil {
 		return empty, core.WrapError(core.CodeStorageFailure, "check pending RP action", err)
 	}
 	if pending != 0 {
@@ -92,35 +108,9 @@ func (s *Store) NonverbalRP(ctx context.Context, request core.RPNonverbalRequest
 	if head != request.ExpectedCursor || session.ObservationCursor != head {
 		return empty, core.NewError(core.CodeBranchConflict, "observe current world before nonverbal action")
 	}
-	if request.TargetEntityID != "" {
-		// Public aliases are resolvable. Raw IDs must already be known, rather
-		// than letting an unobserved actor be guessed into an action.
-		if !strings.HasPrefix(request.TargetEntityID, "person_") {
-			known, err := rpIdentityKnown(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, request.TargetEntityID)
-			if err != nil {
-				return empty, err
-			}
-			if !known {
-				return empty, core.NewError(core.CodeNotFound, "unidentified nonverbal target")
-			}
-		}
-		request.TargetEntityID, err = rpResolvePublicEntityID(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, request.TargetEntityID)
-		if err != nil {
-			return empty, err
-		}
-		if request.TargetEntityID == session.ControlledEntityID {
-			return empty, core.NewError(core.CodeInvalidArgument, "nonverbal target must be another actor")
-		}
-		if err := validateRPBinding(ctx, tx.conn, session.InstanceID, session.BranchID, request.TargetEntityID); err != nil {
-			return empty, err
-		}
-		visible, err := rpCanPerceive(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, request.TargetEntityID, "visual", "")
-		if err != nil {
-			return empty, err
-		}
-		if !visible {
-			return empty, core.NewError(core.CodeNotFound, "nonverbal target is not visible")
-		}
+	request.TargetEntityID, err = validateRPNonverbalTarget(ctx, tx.conn, session, request.TargetEntityID)
+	if err != nil {
+		return empty, err
 	}
 	if err := ensureCohortTransitionChronology(ctx, tx.conn, session.InstanceID, session.BranchID, worldTime); err != nil {
 		return empty, err
@@ -320,4 +310,41 @@ func rpNonverbalDescription(action, gesture string, targetVisible bool) string {
 		}
 	}
 	return "有人做出一个动作。"
+}
+
+// Resolve exactly the existing observer-visible target under the owner lock.
+// Fresh reaction intents use this same check before pinning an invalid action.
+func validateRPNonverbalTarget(ctx context.Context, conn *sql.Conn, session RPSession, target string) (string, error) {
+	var err error
+	if target != "" {
+		// Public aliases are resolvable. Raw IDs must already be known, rather
+		// than letting an unobserved actor be guessed into an action.
+		if !strings.HasPrefix(target, "person_") {
+			known, err := rpIdentityKnown(ctx, conn, session.InstanceID, session.BranchID, session.ControlledEntityID, target)
+			if err != nil {
+				return "", err
+			}
+			if !known {
+				return "", core.NewError(core.CodeNotFound, "unidentified nonverbal target")
+			}
+		}
+		target, err = rpResolvePublicEntityID(ctx, conn, session.InstanceID, session.BranchID, session.ControlledEntityID, target)
+		if err != nil {
+			return "", err
+		}
+		if target == session.ControlledEntityID {
+			return "", core.NewError(core.CodeInvalidArgument, "nonverbal target must be another actor")
+		}
+		if err := validateRPBinding(ctx, conn, session.InstanceID, session.BranchID, target); err != nil {
+			return "", err
+		}
+		visible, err := rpCanPerceive(ctx, conn, session.InstanceID, session.BranchID, session.ControlledEntityID, target, "visual", "")
+		if err != nil {
+			return "", err
+		}
+		if !visible {
+			return "", core.NewError(core.CodeNotFound, "nonverbal target is not visible")
+		}
+	}
+	return target, nil
 }

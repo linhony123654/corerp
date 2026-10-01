@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"sort"
 
 	"corerp.local/backend/internal/core"
@@ -45,7 +46,36 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 	var input core.RPNarrativeInput
 	player := core.RPNarrativeFact{EventID: playerEventID, Action: "speak"}
 	var utterancePlaceID string
-	if err := conn.QueryRowContext(ctx, `SELECT u.speech_text,u.speaker_entity_id,n.display_name,u.world_time,p.display_name,u.place_id
+	var triggerKind string
+	if err := conn.QueryRowContext(ctx, `SELECT event_type FROM events WHERE event_id=?`, playerEventID).Scan(&triggerKind); err != nil {
+		return input, classifyMissing(err, "committed RP narrative trigger")
+	}
+	if triggerKind == "RPNonverbalAction" {
+		var raw, controlled, instance, branch string
+		var sourceHead int64
+		if err := conn.QueryRowContext(ctx, `SELECT e.payload,e.actor_id,n.display_name,e.world_time,p.display_name,json_extract(e.payload,'$.place_id'),s.controlled_entity_id,s.instance_id,s.branch_id,b.head_sequence
+		 FROM rp_turn_runs r JOIN rp_sessions s ON s.session_id=r.session_id
+		 JOIN events e ON e.event_id=r.player_event_id AND e.instance_id=s.instance_id AND e.branch_id=s.branch_id
+		 JOIN materialized_entities n ON n.entity_id=e.actor_id
+		 JOIN agent_places p ON p.place_id=json_extract(e.payload,'$.place_id')
+		 JOIN branches b ON b.instance_id=s.instance_id AND b.branch_id=s.branch_id
+		 WHERE r.session_id=? AND r.trigger_kind='nonverbal' AND r.player_turn_id IS NULL AND r.player_event_id=?`, sessionID, playerEventID).Scan(&raw, &player.ActorID, &player.ActorName, &player.WorldTime, &player.PlaceName, &utterancePlaceID, &controlled, &instance, &branch, &sourceHead); err != nil {
+			return input, classifyMissing(err, "committed player action for RP narrative")
+		}
+		var fact core.RPNonverbalFact
+		if playerTurnID != playerEventID || json.Unmarshal([]byte(raw), &fact) != nil || fact.ActorEntityID != controlled || player.ActorID != controlled || fact.SessionID != sessionID || fact.Action != "nod" || fact.TargetEntityID == "" || fact.PlaceID != utterancePlaceID {
+			return input, narrativeDiverged("RP narrative action trigger differs from its owner")
+		}
+		if head > 0 {
+			sourceHead = head
+		}
+		if _, err := loadRPNarrativeSource(ctx, conn, instance, branch, playerEventID, sourceHead); err != nil {
+			return input, err
+		}
+		player.Action, player.ExpressionCode, player.TargetActorID = "expression", fact.Action, fact.TargetEntityID
+	} else if triggerKind != "RPSpeechAccepted" {
+		return input, narrativeDiverged("RP narrative trigger is not accepted speech or an approved player action")
+	} else if err := conn.QueryRowContext(ctx, `SELECT u.speech_text,u.speaker_entity_id,n.display_name,u.world_time,p.display_name,u.place_id
 		FROM rp_utterances u JOIN materialized_entities n ON n.entity_id=u.speaker_entity_id JOIN agent_places p ON p.place_id=u.place_id
 		WHERE u.session_id = ? AND u.turn_id = ? AND u.event_id = ?`, sessionID, playerTurnID, playerEventID).Scan(&player.Text, &player.ActorID, &player.ActorName, &player.WorldTime, &player.PlaceName, &utterancePlaceID); err != nil {
 		return input, classifyMissing(err, "accepted player utterance for RP narrative")
@@ -257,7 +287,7 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 	// committed sequences and a 24 h world-time cutoff, so a settled turn
 	// renders identically forever.
 	var windowFloor int64
-	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(settled_sequence),0) FROM rp_turn_runs WHERE session_id=? AND status='settled' AND player_turn_id IS NOT NULL AND settled_sequence<?`, sessionID, playerEventSeq).Scan(&windowFloor); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(settled_sequence),0) FROM rp_turn_runs WHERE session_id=? AND status='settled' AND player_event_id IS NOT NULL AND settled_sequence<?`, sessionID, playerEventSeq).Scan(&windowFloor); err != nil {
 		return input, core.WrapError(core.CodeStorageFailure, "read narrative window floor", err)
 	}
 	// A fresh session starts its narration at its immutable opening head.

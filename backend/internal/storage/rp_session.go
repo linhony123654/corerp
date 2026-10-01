@@ -478,6 +478,11 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		 FROM events e LEFT JOIN agent_places p ON p.place_id = json_extract(e.payload, '$.to_place_id')
 		 WHERE e.instance_id = ? AND e.branch_id = ? AND e.actor_id = ? AND e.event_sequence>?
 		 AND e.event_type IN ('RPPlayerMoved', 'RPWaitCompleted', 'RPInterpersonalAction', 'RPObjectInteracted', 'RPNonverbalAction')
+		 AND NOT (e.event_type='RPNonverbalAction' AND EXISTS (
+			 SELECT 1 FROM rp_turn_runs r JOIN rp_sessions h ON h.session_id=r.session_id
+			 WHERE r.player_turn_id IS NULL AND r.player_event_id=e.event_id AND r.status='settled'
+			 AND h.instance_id=e.instance_id AND h.branch_id=e.branch_id AND h.controlled_entity_id=e.actor_id
+		 ))
 		 UNION ALL
 		 SELECT e.event_id,json_array(CASE e.event_type
 		 WHEN 'RPSpeechAccepted' THEN n.display_name || '说：“' || u.speech_text || '”'
@@ -499,7 +504,7 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 			 AND NOT (e.event_type='RPNonverbalAction' AND EXISTS (
 				 SELECT 1 FROM events parent
 				 JOIN rp_npc_decisions d ON d.event_id=parent.event_id
-				 JOIN rp_turn_runs r ON r.session_id=d.session_id AND r.player_turn_id=d.parent_turn_id
+				 JOIN rp_turn_runs r ON r.session_id=d.session_id AND COALESCE(r.player_turn_id,r.player_event_id)=d.parent_turn_id
 				 JOIN rp_sessions h ON h.session_id=r.session_id
 				 WHERE parent.batch_id=e.batch_id AND parent.event_id=e.causation_event_id
 				 AND parent.actor_id=e.actor_id AND parent.instance_id=e.instance_id AND parent.branch_id=e.branch_id

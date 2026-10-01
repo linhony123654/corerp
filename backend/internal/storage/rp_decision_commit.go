@@ -83,16 +83,30 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 	if result, found, err := findCommittedRPDecisionOnConn(ctx, tx.conn, session.SessionID, request, decision.InputHash, proposalHash); err != nil || found {
 		return result, err
 	}
-	if session.Status != "active" || session.TurnCursor != request.TurnID || (session.TurnState != "speech_committed" && session.TurnState != "npc_effects_committed") {
+	if session.Status != "active" || session.TurnCursor != request.TurnID || (session.TurnState != "speech_committed" && session.TurnState != "action_committed" && session.TurnState != "npc_effects_committed") {
 		return RPNPCDecisionCommitResult{}, core.NewError(core.CodeBranchConflict, "NPC decision turn is no longer active")
 	}
 	var runStatus string
-	err = tx.conn.QueryRowContext(ctx, `SELECT status FROM rp_turn_runs WHERE session_id = ? AND player_turn_id = ?`, session.SessionID, request.TurnID).Scan(&runStatus)
+	err = tx.conn.QueryRowContext(ctx, `SELECT status FROM rp_turn_runs WHERE session_id = ? AND COALESCE(player_turn_id,player_event_id) = ?`, session.SessionID, request.TurnID).Scan(&runStatus)
 	if err == nil && runStatus != "npc_deciding" {
 		return RPNPCDecisionCommitResult{}, core.NewError(core.CodeBranchConflict, "orchestrated NPC decision stage is no longer open")
 	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return RPNPCDecisionCommitResult{}, core.WrapError(core.CodeStorageFailure, "check NPC decision turn stage", err)
+	}
+	if input.ObservedPlayerAction != nil {
+		if input.Trigger == nil || input.Trigger.Kind != "nonverbal" || input.Trigger.SourceEventID != request.TurnID || input.SpeechEventID != "" || input.PlayerSpeechText != "" || input.PlayerSpeechWorldTime != "" {
+			return RPNPCDecisionCommitResult{}, core.NewError(core.CodeProjectionDiverged, "action decision contains an incompatible trigger")
+		}
+		observed, err := readRPDecisionActionTrigger(ctx, tx.conn, session, request.TurnID, request.NPCEntityID)
+		if err != nil {
+			return RPNPCDecisionCommitResult{}, err
+		}
+		if *observed != *input.ObservedPlayerAction {
+			return RPNPCDecisionCommitResult{}, core.NewError(core.CodeBranchConflict, "action witness changed after decision observation")
+		}
+	} else if session.TurnState == "action_committed" {
+		return RPNPCDecisionCommitResult{}, core.NewError(core.CodeProjectionDiverged, "action turn lacks its witnessed trigger")
 	}
 	var head, currentDay int64
 	var worldTime, npcPlace, playerPlace string

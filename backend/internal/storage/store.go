@@ -95,7 +95,8 @@ const (
 	RPNarrativeCompositionSchemaVersion      = "corerp-rp-narrative-composition-077-2026-10-01"
 	RPNarrativeArtifactsSchemaVersion        = "corerp-rp-narrative-artifacts-078-2026-10-01"
 	RPSessionOpenedWindowSchemaVersion       = "corerp-rp-session-opened-window-079-2026-10-01"
-	SchemaVersion                            = RPSessionOpenedWindowSchemaVersion
+	RPActionTriggerSchemaVersion             = "corerp-rp-action-triggers-080-2026-10-01"
+	SchemaVersion                            = RPActionTriggerSchemaVersion
 	legacyStudioLifeSeedingSchemaVersion     = "corerp-studio-life-seeding-042-2026-09-26"
 	legacyRPActivityContinuitySchemaVersion  = "corerp-rp-activity-continuity-043-2026-09-26"
 	legacyRPNarrativeFallbackSchemaVersion   = "corerp-rp-narrative-fallback-044-2026-09-26"
@@ -274,6 +275,7 @@ var schemaMigrations = []struct {
 	{RPNarrativeCompositionSchemaVersion, "077_rp_narrative_composition.sql"},
 	{RPNarrativeArtifactsSchemaVersion, "078_rp_narrative_artifacts.sql"},
 	{RPSessionOpenedWindowSchemaVersion, "079_rp_session_opened_window.sql"},
+	{RPActionTriggerSchemaVersion, "080_rp_action_triggers.sql"},
 }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -401,22 +403,22 @@ func (s *Store) applyMigration(ctx context.Context, filename string) error {
 		tx.Rollback(ctx)
 		return core.WrapError(core.CodeStorageFailure, "apply migration "+filename, err)
 	}
-	if filename == "072_rp_object_stow.sql" {
+	if filename == "072_rp_object_stow.sql" || filename == "080_rp_action_triggers.sql" {
 		rows, err := tx.conn.QueryContext(ctx, `PRAGMA foreign_key_check`)
 		if err != nil {
 			tx.Rollback(ctx)
-			return core.WrapError(core.CodeStorageFailure, "check migrated object references", err)
+			return core.WrapError(core.CodeStorageFailure, "check migrated references in "+filename, err)
 		}
 		broken := rows.Next()
 		err = rows.Err()
 		rows.Close()
 		if err != nil {
 			tx.Rollback(ctx)
-			return core.WrapError(core.CodeStorageFailure, "check migrated object references", err)
+			return core.WrapError(core.CodeStorageFailure, "check migrated references in "+filename, err)
 		}
 		if broken {
 			tx.Rollback(ctx)
-			return core.NewError(core.CodeStorageFailure, "object migration has invalid foreign keys")
+			return core.NewError(core.CodeStorageFailure, "migration has invalid foreign keys: "+filename)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

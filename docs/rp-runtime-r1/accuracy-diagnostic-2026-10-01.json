@@ -1,0 +1,83 @@
+{
+  "kind": "corerp.r1-accuracy-diagnostic-public.v1",
+  "scope": "single diagnostic extension to seven-turn authored world; all arms use identical selected input; proposals never committed; not Golden acceptance",
+  "model": "step-5-preview",
+  "model_config_base": {
+    "decision_timeout": "120s",
+    "decision_attempts": 2,
+    "decision_max_tokens": 4096,
+    "decision_format": "tool_call",
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "narrative_timeout": "90s",
+    "narrative_attempts": 2
+  },
+  "selected_input_sha256": "dc6de5311c2d56b9d59d8ae3cc4a9823e796753c1d53cdaf974c1754d447553f",
+  "variants": [
+    {
+      "variant": "control",
+      "reasoning_effort": "low",
+      "seconds": 47.2700795,
+      "http_attempts": 1,
+      "error_kind": "",
+      "observable": {
+        "action": "respond",
+        "text": "好，那老祖宗便说给你听。我啊，也没甚么大想头，只盼着你们小辈平安喜乐。今日见你这样没精打采的，我这心里也跟着难受。你不用急着让自己高兴，就在这里陪老祖宗坐一会儿，说说话，我便知足了。",
+        "expression_code": "smile"
+      }
+    },
+    {
+      "variant": "current_last_one_message",
+      "reasoning_effort": "low",
+      "seconds": 9.834021802,
+      "http_attempts": 1,
+      "error_kind": "",
+      "observable": {
+        "action": "respond",
+        "text": "好，老祖宗不劝你，只管说几句自己的心思。我如今别无所盼，只盼你身子结结实实的，常来我这儿坐坐，说两句家常话。你幼时在我跟前撒娇玩耍，一晃眼都长成大人了；你来了，我心里就踏实，也快活。",
+        "expression_code": "smile"
+      }
+    },
+    {
+      "variant": "current_last_separate_message",
+      "reasoning_effort": "low",
+      "seconds": 22.049508406,
+      "http_attempts": 1,
+      "error_kind": "",
+      "observable": {
+        "action": "respond",
+        "text": "好，老祖宗便说几句自己的话给你听。我一个老人家，心里头装的全是你们。你今日肯来陪我坐坐，我便已经欢喜得很，哪还有什么大不了的事。你要听我自己想说的，那我便说：这几日我腰虽有些酸，却总惦记着你天冷了添没添衣、夜里读书睡得可还安稳。你若得空，常来坐坐，跟我讲讲外头的趣事，我这心里头就亮堂了。",
+        "expression_code": "smile"
+      }
+    },
+    {
+      "variant": "direct_high",
+      "reasoning_effort": "high",
+      "seconds": 27.108039038,
+      "http_attempts": 1,
+      "error_kind": "",
+      "observable": {
+        "action": "respond",
+        "text": "玉儿，你既想听老祖宗说，我便说说我这心里话。我这把年纪，图的不多，每日里有碗热茶、晒会儿太阳，再看你们晚辈平平安安的，便已足了。你今日肯来陪我坐一坐，说说话，我打心眼里是高兴的。旁的事我管不了，也不想管，我只盼你身上暖、精神好。你既愿意在这儿，咱们便多坐一会儿，让我多瞧瞧你。",
+        "expression_code": "smile"
+      }
+    },
+    {
+      "variant": "grounded_revision_low",
+      "reasoning_effort": "low",
+      "seconds": 54.544902884,
+      "http_attempts": 1,
+      "error_kind": "",
+      "observable": {
+        "action": "respond",
+        "text": "你既想听老祖宗自己说，那我便说给你听。我如今也没什么大想头，只盼着我这宝玉在人前不必逞强，欢喜是欢喜，闷是闷，都尽可露给我看。你今日肯把这些说与我听，我便知足了；不用急着让自己高兴，在这儿宽宽松松地陪我说说话，比什么都强。",
+        "expression_code": "smile"
+      }
+    }
+  ],
+  "result": "framing and higher effort do not clearly improve this case; one low-effort grounding revision removes unsupported physical/backstory premises in that one sample; not causal proof, generalized improvement or human approval",
+  "privacy": "original selected input, full request bodies and private proposal metadata retained only in local 0600 diagnostics",
+  "actual_human_experience": "PENDING",
+  "source_baseline_runtime_sha256": "487e679c64658f3974fcb877dcf7b7ddd3869be117bbac695adb40b7fd973771",
+  "actual_execution": "Go adapter diagnostic harness, not the corerp-server binary; raw same-input request bodies are retained privately"
+}

@@ -1,0 +1,231 @@
+{
+  "kind": "corerp.r1-rejected-review-accuracy.v1",
+  "label": "after",
+  "model": "step-5-preview",
+  "model_config": {
+    "decision_timeout": "120s",
+    "decision_attempts": 2,
+    "decision_max_tokens": 4096,
+    "decision_format": "tool_call",
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "narrative_timeout": "90s",
+    "narrative_attempts": 2
+  },
+  "runner_sha256": "06bcdcac4fb4e099dcd1f7d49e776aaa84b5e2f269ba012f7283922cc3fc48cf",
+  "fixture_sha256": "2d71a64daeb29e8cdcd9d9c3008260d8b8ce0108efa281457c1c7fb63d144aca",
+  "spec_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+  "packages_sha256": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+  "runtime_sha256": "bb39599f911b368d3a36b4190cd610c81e45aa4d0b1769a80dad723bbd997571",
+  "status": "FAIL",
+  "human_experience": "PENDING",
+  "scope": "targeted accuracy slice; not the full Golden or original32",
+  "selected_scene_ids": [
+    "P2",
+    "P3",
+    "P6"
+  ],
+  "failure_kind": "AssertionError",
+  "failure_message": "ERR_ASSERTION",
+  "production_source_sha256": "b4cd7a976c676e9c576e4255e222d3d2bf8fbbaa4f13209137acc2b92bb05f1c",
+  "disposition": "REJECTED AND REMOVED: not deployed; no bounded review in retained production code",
+  "decision_attempt_total": 11,
+  "completed_scene_turns": 5,
+  "planned_scene_turns": 7,
+  "successful_decisions": 4,
+  "failed_decisions": 1,
+  "restart_conservation": "NOT VERIFIED: failed before restart/P6",
+  "samples": [
+    {
+      "index": 1,
+      "scene": "P2",
+      "text": "老祖宗，我来看您了。",
+      "duration_seconds": 45.306,
+      "decisions": [
+        {
+          "event_sequence": 21,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿来了，快过来让老祖宗瞧瞧。今日怎么得空到我这荣庆堂来，可是有什么话想同我说？",
+          "event_id": "event_rp_npc_c39446d74c5222f4f93811c8d3e08fefc6d086a823f483625e2bced17da3b5bb"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 3,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「老祖宗，我来看您了。」",
+        "「玉儿来了，快过来让老祖宗瞧瞧。今日怎么得空到我这荣庆堂来，可是有什么话想同我说？」贾母答，露出笑容。"
+      ],
+      "warnings": []
+    },
+    {
+      "index": 2,
+      "scene": "P2",
+      "text": "我是谁，您还认得么？我是逗您玩呢。",
+      "duration_seconds": 34.267,
+      "decisions": [
+        {
+          "event_sequence": 24,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "怎么不认得？你是我的宝玉，是我的玉儿。长这么大了，还学会逗老祖宗玩了。快过来坐，同我说句实话——今日来，究竟有什么心事？",
+          "event_id": "event_rp_npc_a47b993a761472f0a64748dd5b25ee06f9229477e6c888bbfaffae7bf179806d"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 2,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「我是谁，您还认得么？我是逗您玩呢。」",
+        "「怎么不认得？你是我的宝玉，是我的玉儿。长这么大了，还学会逗老祖宗玩了。快过来坐，同我说句实话——今日来，究竟有什么心事？」贾母答，露出笑容。"
+      ],
+      "warnings": []
+    },
+    {
+      "index": 3,
+      "scene": "P3",
+      "text": "今天心里有点闷，却又说不清为什么。",
+      "duration_seconds": 61.435,
+      "decisions": [
+        {
+          "event_sequence": 27,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你既肯同老祖宗说这话，便是把心里头的门开了一道缝。闷一点怕什么？你坐在我身边慢慢讲——是白日里见了什么人、听了什么话，还是夜里没睡安稳么？说不清也不要紧，想到哪里说到哪里，老祖宗听着呢。",
+          "event_id": "event_rp_npc_a2164e51e8f2160cd36c19054e9c568fa36f8dc8b977bc27aa3a268e861f0ff0"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 2,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「今天心里有点闷，却又说不清为什么。」",
+        "「玉儿，你既肯同老祖宗说这话，便是把心里头的门开了一道缝。闷一点怕什么？你坐在我身边慢慢讲——是白日里见了什么人、听了什么话，还是夜里没睡安稳么？说不清也不要紧，想到哪里说到哪里，老祖宗听着呢。」贾母答，点头。"
+      ],
+      "warnings": []
+    },
+    {
+      "index": 4,
+      "scene": "P3",
+      "text": "不急着问原因，您先陪我说一会儿话，好不好？",
+      "duration_seconds": 16.026,
+      "decisions": [
+        {
+          "event_sequence": 30,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "好，好，老祖宗依你。不问了，什么也不问了——你只管在我身边坐着，想说什么就说，不想说就安安静静地待一会儿。玉儿，我这不是一直在么？",
+          "event_id": "event_rp_npc_88e5f84dcd4cf0fcfd899ca881a3f52e53bc078858d29e9fee8da96d900d32c4"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 2,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「不急着问原因，您先陪我说一会儿话，好不好？」",
+        "「好，好，老祖宗依你。不问了，什么也不问了——你只管在我身边坐着，想说什么就说，不想说就安安静静地待一会儿。玉儿，我这不是一直在么？」贾母答，露出笑容。"
+      ],
+      "warnings": []
+    },
+    {
+      "index": 5,
+      "scene": "P3",
+      "text": "也别急着劝我高兴起来，我想听您自己想说的。",
+      "duration_seconds": 22.655,
+      "decisions": [
+        {
+          "event_sequence": 33,
+          "speaker": "贾母",
+          "action": "silence",
+          "text": "",
+          "event_id": "event_rp_npc_519198ae4e03f1c228a3ed54c50d26bbb11e68e11077c113b60f126df390af6c"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "failed",
+          "attempt_count": 2,
+          "fallback_kind": "silence"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「也别急着劝我高兴起来，我想听您自己想说的。」",
+        "贾母没有作答。"
+      ],
+      "warnings": []
+    }
+  ],
+  "limitations": "This experiment failed. Real-model output remained semantically unsupported before schema failure. No new human acceptance or fresh32/full22 result. No private proposal/raw request/auth exported."
+}

@@ -270,6 +270,9 @@ func (s *RPService) StopRPInteraction(ctx context.Context, r RPInteractionResume
 				commandType = "RPNonverbalAction"
 			}
 			err = tx.conn.QueryRowContext(ctx, `SELECT 1 FROM commands WHERE instance_id=? AND branch_id=? AND command_type=? AND idempotency_key=?`, session.InstanceID, session.BranchID, commandType, "rp_"+run.PendingKind+":"+r.SessionID+":"+child.IdempotencyKey).Scan(&accepted)
+			if errors.Is(err, sql.ErrNoRows) && run.PendingKind == "nonverbal" {
+				err = tx.conn.QueryRowContext(ctx, `SELECT 1 FROM rp_turn_runs WHERE session_id=? AND idempotency_key=?`, r.SessionID, child.IdempotencyKey).Scan(&accepted)
+			}
 		default:
 			return RPInteractionResult{}, core.NewError(core.CodeProjectionDiverged, "unknown pinned interaction child kind")
 		}
@@ -706,8 +709,11 @@ func (s *RPService) executeRPInteractionStep(ctx context.Context, run rpInteract
 		if err := json.Unmarshal([]byte(run.PendingRequest), &request); err != nil {
 			return out, false, core.WrapError(core.CodeProjectionDiverged, "decode pinned nonverbal action", err)
 		}
-		result, err := s.Store.NonverbalRP(ctx, request)
+		result, err := s.NonverbalRPWith(ctx, request, provider)
 		out.EventID, out.EventSequence, out.SettledSequence, out.WorldTime = result.EventID, result.EventSequence, result.EventSequence, result.WorldTime
+		if result.Turn != nil {
+			out.SettledSequence, out.TurnRunID = result.Turn.SettledSequence, result.Turn.TurnRunID
+		}
 		return out, false, err
 	default:
 		return out, false, core.NewError(core.CodeProjectionDiverged, "invalid pending interaction step")
@@ -784,8 +790,19 @@ func (s *RPService) commitRPInteractionStep(ctx context.Context, run rpInteracti
 			SessionID      string `json:"session_id"`
 			IdempotencyKey string `json:"idempotency_key"`
 		}
-		if json.Unmarshal([]byte(current.PendingRequest), &child) != nil || child.SessionID != run.SessionID || child.IdempotencyKey == "" || outcome.SettledSequence != outcome.EventSequence {
+		if json.Unmarshal([]byte(current.PendingRequest), &child) != nil || child.SessionID != run.SessionID || child.IdempotencyKey == "" {
 			return run, core.NewError(core.CodeProjectionDiverged, "typed child receipt differs from pinned identity")
+		}
+		if outcome.Kind == "nonverbal" && outcome.TurnRunID != "" {
+			var settled int
+			if err := tx.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND idempotency_key=? AND trigger_kind='nonverbal' AND player_turn_id IS NULL AND player_event_id=? AND status='settled' AND settled_sequence=?`, outcome.TurnRunID, child.SessionID, child.IdempotencyKey, outcome.EventID, outcome.SettledSequence).Scan(&settled); err != nil {
+				return run, err
+			}
+			if settled != 1 {
+				return run, core.NewError(core.CodeProjectionDiverged, "typed action reaction turn has not settled")
+			}
+		} else if outcome.SettledSequence != outcome.EventSequence {
+			return run, core.NewError(core.CodeProjectionDiverged, "raw typed child has unowned continuation events")
 		}
 		var accepted int
 		err = tx.conn.QueryRowContext(ctx, `SELECT 1 FROM events e JOIN event_batches b ON b.batch_id=e.batch_id JOIN commands c ON c.command_id=b.command_id WHERE e.event_id=? AND e.event_sequence=? AND e.event_type=? AND c.command_type=? AND c.idempotency_key=? AND c.status='committed'`, outcome.EventID, outcome.EventSequence, map[string]string{"object": "RPObjectInteracted", "nonverbal": "RPNonverbalAction"}[outcome.Kind], map[string]string{"object": "RPObjectInteraction", "nonverbal": "RPNonverbalAction"}[outcome.Kind], "rp_"+outcome.Kind+":"+child.SessionID+":"+child.IdempotencyKey).Scan(&accepted)

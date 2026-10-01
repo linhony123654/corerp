@@ -33,7 +33,12 @@ func TestRPModelNativeFunctionProposalCommitsOnlyObservableAndReplays(t *testing
 				}
 				var packet struct {
 					Character struct {
-						SpeechEventID string `json:"speech_event_id"`
+						CurrentTurn struct {
+							Data struct {
+								SpeechEventID string `json:"speech_event_id"`
+								PlayerSpeech  string `json:"player_speech_text"`
+							} `json:"data"`
+						} `json:"current_turn"`
 					} `json:"character"`
 					Sources []struct {
 						Ref           string `json:"ref"`
@@ -44,9 +49,12 @@ func TestRPModelNativeFunctionProposalCommitsOnlyObservableAndReplays(t *testing
 				if len(request.Messages) != 2 || json.Unmarshal([]byte(request.Messages[1].Content), &packet) != nil || packet.Schema["additionalProperties"] != false {
 					t.Error("proposal contract did not reach the model message")
 				}
+				if packet.Character.CurrentTurn.Data.SpeechEventID == "" || packet.Character.CurrentTurn.Data.PlayerSpeech != "你好。" {
+					t.Error("actual player speech did not reach grouped current-turn data")
+				}
 				ref := ""
 				for _, source := range packet.Sources {
-					if source.SourceEventID == packet.Character.SpeechEventID {
+					if source.SourceEventID == packet.Character.CurrentTurn.Data.SpeechEventID {
 						ref = source.Ref
 					}
 				}

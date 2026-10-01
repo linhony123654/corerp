@@ -53,7 +53,7 @@ func TestChatProviderStructuredProposalAndDataBoundary(t *testing.T) {
 			t.Error("open schema")
 		}
 		var got decisionContext
-		if json.Unmarshal([]byte(body.Messages[1].Content), &got) != nil || got.Character.PlayerSpeechText != contextFixture().PlayerSpeechText || got.Version != "corerp.decision.v3" || got.Character.ContextVersion != core.RPContextVersion {
+		if json.Unmarshal([]byte(body.Messages[1].Content), &got) != nil || presentedValue(t, got.Character.CurrentTurn, "player_speech_text") != contextFixture().PlayerSpeechText || got.Version != "corerp.decision.v3" || presentedValue(t, got.Character.Provenance, "context_version") != core.RPContextVersion {
 			t.Error("context changed")
 		}
 		properties, _ := body.ResponseFormat.Schema.Definition["properties"].(map[string]any)

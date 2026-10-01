@@ -45,13 +45,6 @@ func ValidateRPDecisionProposalEvidence(input RPDecisionInput, proposal RPDecisi
 			return "expression_target_missing", NewError(CodeInvalidArgument, "NPC beckon requires a current interlocutor")
 		}
 	}
-	if ExplicitSelfIntroduction(proposal.Text, input.NPCName) && input.InterlocutorEntityID != "" {
-		for _, relation := range input.Relationships {
-			if relation.SubjectEntityID == input.InterlocutorEntityID {
-				return "known_relationship_introduction", NewError(CodeInvalidArgument, "NPC cannot introduce identity to an authored known relation")
-			}
-		}
-	}
 	allowed := false
 	for _, action := range input.LegalActions {
 		if action == proposal.Action {

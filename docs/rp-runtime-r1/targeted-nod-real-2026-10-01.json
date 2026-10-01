@@ -1,0 +1,224 @@
+{
+  "kind": "corerp.r1-targeted-nod-functional-comparison.v1",
+  "date": "2026-10-01",
+  "status": "FUNCTIONAL ROUTE PASS; RP EXPERIENCE PENDING; R1 NOT DONE",
+  "scope": "New targeted-nod vertical-slice smoke in isolated authored Rongqing worlds. This is not the frozen Golden, original32, or a human experience acceptance.",
+  "shared_conditions": {
+    "model": "step-5-preview",
+    "model_config": {
+      "decision_timeout": "120s",
+      "decision_attempts": 2,
+      "decision_max_tokens": 4096,
+      "decision_format": "tool_call",
+      "reasoning_effort": "low",
+      "disable_thinking": false,
+      "narrative_timeout": "90s",
+      "narrative_attempts": 2
+    },
+    "fixture_sha256": "2d71a64daeb29e8cdcd9d9c3008260d8b8ce0108efa281457c1c7fb63d144aca",
+    "spec_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+    "packages_sha256": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d"
+  },
+  "before": {
+    "runtime_sha256": "feea3b32f0315d95fa447e89d48f1bae3e991e690fe0b98e9f6d20bf18eb834d",
+    "samples": [
+      {
+        "index": 1,
+        "scene": "new-targeted-nod",
+        "request_kind": "RPNonverbalAction",
+        "duration_seconds": 0.029,
+        "narrative": [
+          "有人点了点头。"
+        ],
+        "decisions": [],
+        "receipts": [],
+        "world": {
+          "head": 20,
+          "events": 20,
+          "utterances": 0,
+          "decisions": 0
+        },
+        "player_action": {
+          "event_id": "event_rp_nonverbal_0e183f87dff961dbac1997c0b162ee7a9ff85865e75b569566e39eda9336ff05",
+          "event_sequence": 20,
+          "world_time": "2026-09-22T00:00:00Z",
+          "description": "有人点了点头。",
+          "replayed": false
+        }
+      }
+    ],
+    "restart_checks": [
+      {
+        "after_scene": "new-targeted-nod",
+        "status": "PASS",
+        "effects_unchanged": true,
+        "provider_calls_unchanged": true
+      }
+    ],
+    "human_experience": "PENDING"
+  },
+  "after": {
+    "runtime_sha256": "7e8145d421fa0a8ab265af8037234652a80bc1f0b9c1165127a96791b81864ec",
+    "samples": [
+      {
+        "index": 1,
+        "scene": "new-targeted-nod",
+        "request_kind": "RPNonverbalAction",
+        "duration_seconds": 0.041,
+        "original_capture_duration_seconds": 7.659,
+        "resumed_from_committed_action": true,
+        "narrative": [
+          "在荣庆堂，你向贾母点头。",
+          "「玉儿，来了就坐吧。老祖宗正想着，你怎么得空过来？有什么话，慢慢说给我听。」贾母答，露出笑容。"
+        ],
+        "decisions": [
+          {
+            "event_sequence": 21,
+            "speaker": "贾母",
+            "action": "respond",
+            "text": "玉儿，来了就坐吧。老祖宗正想着，你怎么得空过来？有什么话，慢慢说给我听。",
+            "event_id": "event_rp_npc_cb7a1f59358252dbe01ca5505178b2f04006503d761e2210f8ebf9ef06aa142a"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "result": "success",
+            "attempt_count": 1,
+            "fallback_kind": ""
+          },
+          {
+            "phase": "narrative",
+            "provider_kind": "deterministic",
+            "model_id": "",
+            "result": "success",
+            "attempt_count": 0,
+            "fallback_kind": ""
+          }
+        ],
+        "world": {
+          "head": 22,
+          "events": 22,
+          "utterances": 1,
+          "decisions": 1
+        },
+        "player_action": {
+          "event_id": "event_rp_nonverbal_019488a0428c7bfbed2f78d5541b64ed2ed9b2c3e7b892088e24b7c01a4aa5a4",
+          "event_sequence": 20,
+          "world_time": "2026-09-22T00:00:00Z",
+          "description": "有人点了点头。",
+          "replayed": true
+        },
+        "reaction_turn": {
+          "turn_run_id": "rpturn_4f23efe4d1c4dda57061691d2db1c03d2fa63d113fc0b2796d526497aa41f060",
+          "player_event_id": "event_rp_nonverbal_019488a0428c7bfbed2f78d5541b64ed2ed9b2c3e7b892088e24b7c01a4aa5a4",
+          "npc_event_ids": [
+            "event_rp_npc_cb7a1f59358252dbe01ca5505178b2f04006503d761e2210f8ebf9ef06aa142a"
+          ],
+          "composition_version": "corerp.fact-composition.v2",
+          "fact_groups": [
+            [
+              "event_rp_nonverbal_019488a0428c7bfbed2f78d5541b64ed2ed9b2c3e7b892088e24b7c01a4aa5a4"
+            ],
+            [
+              "event_rp_npc_cb7a1f59358252dbe01ca5505178b2f04006503d761e2210f8ebf9ef06aa142a",
+              "event_rp_npc_expression_cb7a1f59358252dbe01ca5505178b2f04006503d761e2210f8ebf9ef06aa142a"
+            ]
+          ],
+          "settled_sequence": 22,
+          "status": "settled",
+          "replayed": true
+        }
+      },
+      {
+        "index": 2,
+        "scene": "nod-followup",
+        "duration_seconds": 14.824,
+        "narrative": [
+          "在荣庆堂，你说：「老祖宗，我刚才只是向您点头，还没有答应做任何事。您有什么想同我说的？」",
+          "「傻孩子，老祖宗几时逼你答应什么了？你方才点头，不过是礼数，我难道还当真要去讹你？我这儿没什么大事，只是闲着，想瞧瞧你为何得空过来。你既来了，有什么话便慢慢说给我听，我听着呢。」贾母答，笑了笑。"
+        ],
+        "decisions": [
+          {
+            "event_sequence": 24,
+            "speaker": "贾母",
+            "action": "respond",
+            "text": "傻孩子，老祖宗几时逼你答应什么了？你方才点头，不过是礼数，我难道还当真要去讹你？我这儿没什么大事，只是闲着，想瞧瞧你为何得空过来。你既来了，有什么话便慢慢说给我听，我听着呢。",
+            "event_id": "event_rp_npc_388185ccd38abd553d1e2b6d02a79ef20bd1b0861be12534277218fb44b91929"
+          }
+        ],
+        "receipts": [
+          {
+            "phase": "decision",
+            "provider_kind": "chat_completions",
+            "model_id": "step-5-preview",
+            "result": "success",
+            "attempt_count": 1,
+            "fallback_kind": ""
+          },
+          {
+            "phase": "narrative",
+            "provider_kind": "deterministic",
+            "model_id": "",
+            "result": "success",
+            "attempt_count": 0,
+            "fallback_kind": ""
+          }
+        ],
+        "world": {
+          "head": 25,
+          "events": 25,
+          "utterances": 3,
+          "decisions": 2
+        }
+      }
+    ],
+    "restart_checks": [
+      {
+        "after_scene": "new-targeted-nod",
+        "status": "PASS",
+        "effects_unchanged": true,
+        "provider_calls_unchanged": true
+      }
+    ],
+    "human_experience": "PENDING"
+  },
+  "capture_integrity": {
+    "before_artifact_sha256": "32e878447ffb30b995f5cc7dfc54c184ccb0c2d8063b3274e8a4fd43ab4acff1",
+    "after_artifact_sha256": "1361f09bf4f005f249dc11c30cabd10c8b72fdea7bc13c5443fcb594684604a6",
+    "initial_after_capture": "FAIL: harness incorrectly expected one total history row; legitimate preceding travel history remained.",
+    "recovery": "Corrected assertion matches the action turn and excludes duplicate raw nod; resumed the same DB/runtime and original action key. The first nod and NPC response were not regenerated.",
+    "initial_failure_retained": true,
+    "first_action_original_seconds": 7.659,
+    "first_action_resumed_read_seconds": 0.041,
+    "latency_comparison": "No before/after performance claim; old route performs no NPC model call, resumed new read is not a new generation."
+  },
+  "observable_checks": [
+    "One real player RPNonverbalAction; zero synthetic player utterances for the nod.",
+    "One actual targeted-NPC decision call, successful first HTTP attempt; no fallback.",
+    "NPC speech and visible smile committed through existing owners before public narration.",
+    "Bystanders were not activated; private decision contents absent from the exported public artifact.",
+    "Same-key retry/restart preserves events and provider-call counts; preceding travel history is retained.",
+    "Nod commits no agreement, consent, seated/standing pose or player movement."
+  ],
+  "human_review": {
+    "status": "PENDING",
+    "questions": [
+      "Does 贾母 recognize and address 宝玉 naturally in this explicitly authored world?",
+      "Does the response feel like a reaction to the nod?",
+      "Does the follow-up preserve the difference between礼数 and agreement?",
+      "Are care/listen/invitation phrases still repetitive or generic?",
+      "Can you continue naturally from the committed public action and NPC response?",
+      "Are there unsupported premises or leaked private information in the visible text?"
+    ]
+  },
+  "remaining_limits": [
+    "This slice supports targeted nod only; other nonverbal/object owners do not yet share this immediate NPC reaction route.",
+    "One real model sample and one continuation do not prove general character quality or semantic accuracy.",
+    "The new reply still repeats care/listen/invitation patterns. Spoken invitation is not a committed player action.",
+    "No fresh full32/full22/full-backend pass exists for this runtime; human RP acceptance remains pending.",
+    "The production preview was still feea/schema079 when the isolated capture ran."
+  ]
+}

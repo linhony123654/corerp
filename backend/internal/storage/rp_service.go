@@ -68,6 +68,45 @@ func (s *RPService) PlayResumeRPTurnWith(ctx context.Context, request RPTurnResu
 	return s.Store.ResumeRPTurn(ctx, request, provider)
 }
 
+func (s *RPService) NonverbalRP(ctx context.Context, request core.RPNonverbalRequest) (RPNonverbalResult, error) {
+	return s.NonverbalRPWith(ctx, request, nil)
+}
+
+func (s *RPService) NonverbalRPWith(ctx context.Context, request core.RPNonverbalRequest, provider core.RPDecisionProvider) (RPNonverbalResult, error) {
+	if err := request.Validate(); err != nil {
+		return RPNonverbalResult{}, err
+	}
+	if request.Action != "nod" || request.TargetEntityID == "" {
+		return s.Store.NonverbalRP(ctx, request)
+	}
+	// Pre-upgrade raw-action receipts retain their exact retry outcome. Do
+	// not add retroactive reactions to an action that already completed alone.
+	session, err := loadRPSessionRecord(ctx, s.Store.db, request.PrincipalID, request.SessionID)
+	if err != nil {
+		return RPNonverbalResult{}, err
+	}
+	var legacy int
+	if err := s.Store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM commands c WHERE c.instance_id=? AND c.branch_id=? AND c.command_type='RPNonverbalAction' AND c.idempotency_key=? AND NOT EXISTS (SELECT 1 FROM rp_turn_runs r WHERE r.session_id=? AND r.idempotency_key=?)`, session.InstanceID, session.BranchID, "rp_nonverbal:"+session.SessionID+":"+request.IdempotencyKey, session.SessionID, request.IdempotencyKey).Scan(&legacy); err != nil {
+		return RPNonverbalResult{}, err
+	}
+	if legacy != 0 {
+		return s.Store.NonverbalRP(ctx, request)
+	}
+	if provider == nil {
+		provider = s.provider
+	}
+	turn, err := s.Store.RunRPNonverbalTurn(ctx, request, provider)
+	if err != nil {
+		return RPNonverbalResult{}, err
+	}
+	action, err := s.Store.NonverbalRP(ctx, request)
+	if err != nil {
+		return RPNonverbalResult{}, err
+	}
+	action.Replayed, action.Turn = turn.Replayed, &turn
+	return action, nil
+}
+
 // A wait is the product's explicit time advance, not an invented player speech.
 // Its committed roster owns retry identity. Individual effects remain atomic;
 // after a lost response, committed actors are replayed without model calls.

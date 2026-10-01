@@ -1,25 +1,27 @@
-# CoreRP R1 接续提示词
-
-复制以下提示词；当前交接和新版本证据优先于历史记录中的 runtime、运行句柄或未部署说明。
+# 下一模型继续提示词
 
 ```text
-继续 CoreRP RP Runtime R1。项目 /home/ubuntu/corerp-preview-integration-20260929，分支 rp-preview-integration-20260929。先核对 git status/HEAD、AGENTS.md、docs/rp-runtime-r1/handoff-2026-10-01.md，再读 source-support-accuracy-2026-10-01.md、source-support-verification-2026-10-01.json、source-support-preview-release-2026-10-01.json 与 architecture.md。不要重复已完成任务或将历史 FAIL 改写成 PASS。
+继续 CoreRP RP Runtime R1。用户已委托架构/代码/文档修改，并授权既有GitHub分支与同一隔离预览发布；不得扩大到其他生产系统。目标是可信世界中连续、自然、可引用的角色扮演，两出口满足后停止，不自动进入R2。
 
-当前问题是已实现的 RP 功能不够准确。可信世界内核能证明谁说了什么、动作确实提交、权限与恢复正确；它不证明自由对白中的经历、姿态、物品和计划兑现。优先查实际 source/context/proposal 行为，不默认推翻账本或新增长期目标系统。
+先读 /home/ubuntu/corerp-preview-integration-20260929/AGENTS.md、docs/rp-runtime-r1/handoff-2026-10-01.md、rp-function-accuracy-2026-10-01.md、rp-function-verification-2026-10-01.json 和 .planning/2026-09-29-rp-runtime-r1 三文件顶部CURRENT。项目cwd不是/home/ubuntu。分支rp-preview-integration-20260929；核对git status/log/远端和release.json实际身份，不猜HEAD。
 
-已实现并发布到既有隔离预览：原 BuildRPDecisionInput 的统一选择、身份投影、完整问答与自己的历史 private；v3 private + observable；v2 来源绑定的有限自然叙述与冻结 artifact；READY 作者世界；最新 typed source-support ranges 和079不可变 session opening。当前 runtime feea3b32f0315d95fa447e89d48f1bae3e991e690fe0b98e9f6d20bf18eb834d，433生产文件摘要0200985bba147b36d7cdf6578b9276e88d87a44b55e54c44410942c7bc032ee6；实际发布身份见 https://code.linhony.xyz:4188/release.json。
+当前源码439个生产文件sha e2e7b01977b68a5c94b4a9561e6ba26667bfa20d0cb0954ae6c1247bd91c42ea，runtime7e8145d421fa0a8ab265af8037234652a80bc1f0b9c1165127a96791b81864ec，schema080。采集时线上还是feea/079；最新是否部署必须读独立发布回执，不能把构建说成已发布。保留19个无关untracked planning/截图，只stage明确本轮文件。
 
-最新 sources catalog 分类明确：作者声明、谁说过什么、具体时点的动作/状态、计划、历史 private、仅祖先来源。它不是自由对白蕴含检查器。079只改变新会话当前叙述窗口，不清正确长历史；旧会话opening0，Observe/replay/recovery不推进opening，真正打开后发生的动作仍可见。Narrator仍只能读公开、已提交的observable，不读私有NPC packet。
+核心结论不是“底层全坏了”：真实断点是玩家动作提交后没触发NPC、现有witness字段投影丢失、语义hard gate误拒正常询名，以及自由speech的无依据前提。已做定向点头垂直闭环，只有这一类动作接入。其余原owner还可能只提交动作，不反应。不能把一条路线修好说成全部R1已完成。
 
-新代码的定向core/decision/storage/privacy/recovery与完整HTTP通过；实际长ID input预算通过。相同作者设定/runner/helpers/Step参数的P2/P3/P6七轮对照两边各7成功模型调用，重启守恒。新public烟测一次Step成功，opening28保留4段旧历史、排除3旧expression，仅提交2speech+1newsmile，重启零重复效果/调用。但最后仍说“那便站着说也无妨”“座儿总给你留着”。玩家只说留在原处，场景未声明可用座位；旧说法不创造canon。语义准确度NOT PASSED、真正人工体验PENDING、R1 NOT DONE。
+原BuildRPDecisionInput仍唯一入口。当前单份分区character presentation/无损source-support v2压缩，131072B不变，最大128994B。061场景对象只读，未新增物件/NPC对象authority。移除known_relationship_introduction硬拒绝，介绍/familiarity/权限/来源照旧。nonverbal knowledge恢复现有action/gesture/target/time，只读角色自己的冻结observation，不从raw Event补不可见目标。
 
-下一步先复现这两类统一契约问题：未提供的玩家姿态和可交互场景内容，如何通过NPC speech变成玩家合理理解。基于代码事实提出并实现最小结构修复，保留猜测/愿望/比喻/正常问题，不把不可靠语义分类器设为绝对硬门。不要临时加椅子canon、清历史、堆贾母prompt特例或扩插件/world/owner/R2/R3。只读审计还确认known_relationship_introduction对熟人明确询名会过度硬拒绝，尚未修改；其单向身份泄露怀疑已被合法互相acquaintance投影证据否定。
+080原rp_turn_runs typed trigger：speech保留FK，nonverbal parent真实RPNonverbalAction Event，不造玩家speech/wait。目标NPC须实际frozen visual witness；旁观者不激活、external controller不代演。原RunRPTurn与RunRPNonverbalTurn共享finishRPTurn NPC提交/叙述/结算。continuation只容许同parent完整NPC batches。审计和provider receipt不能再假定parent只有speech。
 
-新binary没有完整backend、新32或新完整22PASS。旧e3原backend命令FAIL，test-only fixture修复后定向storage/fullHTTP PASS但整条命令未重跑；旧原32完成32turns/96decisions/32realNarrator后固定三听者postcheck FAIL，实际NPC离席剩2听者；精确集合检查修复后同DB/同binary/零真实模型恢复后置PASS，原FAIL保留，--persist未选。不要混用证据版本。
+NPC response仍v3 private/observable/grounding；private不上public。NPC speech/expression经原owner提交再叙述。自己动作来源自己receipt，不伪造自我witness；其他动作靠历史witness。Narrator沿用有限v2公开renderer，未放宽事实/自由prose。nod不提交agreement/pose/move。source handle存在不等于对白每个命题成立。
 
-先用必要局部检查和真实短输出验证所改问题，再跑同条件完整Golden与人工rubric，32用于世界回归。两个出口满足后写报告并停止，不自动R2。预览 https://code.linhony.xyz:4188/；最新七轮 /rp-review/accuracy/，原22 /rp-review/。当前世界world_rp_runtime_r1_20261001，名称红楼梦·大观园 · R1，选择宝玉的对应绑定；旧世界/原baseline均保留。
+AUTO复用请求provider；Stop/Retire不抹已接受action；legacyraw同key不追补NPC；Play读取有turn_run_id的动作结果。六阶段恢复与HTTP/AUTO入口有证据。本版core/decision/fullHTTP77.274s/vet/frontendbuild通过，旧路径105项回归初次FAIL是schema inventory漏分类ObjectID，保留原FAIL并做显式不mask对象断言；当前完整相关复验PASS138.301s，105项+78子项，见verification。
 
-保留19个无关untracked旧planning/截图。Go /usr/local/go/bin/go，TMPDIR=/tmp GOTMPDIR=/tmp，沿用GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930；/dev/shm近满，串行编译和现有低debug flags，不删证据或DB。079新正文需要079-aware reader，不降回078或自动恢复live DB。既有GitHub分支发布和同一隔离预览部署授权持续有效，其他目标不自动授权。
+真实step-5-preview对照：旧点头0NPC调用，当前1首试成功speech+smile、然后一轮能引用动作；重启/同key零新增effects/calls。首次采集FAIL是“历史总数必须为1”的harness错误，改成匹配action/no raw duplicate后同DB/runtime/key恢复，未再次抽样。7.659s是真生成，0.041s只是恢复读取。公开逐字页面/JSON targeted-nod-*。这不是冻结Golden或原32；人评PENDING，仍有care/listen/invitation模板和自由speech前提错误。
 
-使用用户指定step-5-preview；仅从ignored/private配置读取凭证，绝不输出/记录/提交。机器通过不能替代真人角色体验验收，真实输出失败必须原样保留。
+不要重新加入已失败并移除的额外draft-review模型回合；五臂重排/high-effort没有明确提升，失败证据均保留。不要盲跑大套来代替功能交付；先把已有动作逐条接入统一反应/下一轮可引用，再对未支持同地点走近/坐下明确能力边界。不得用creator-zone冒充playerauthority，不能补椅子canon、清历史、另建RP世界、堆人物Prompt特例或扩大owner/plugin。
+
+自由对白准确度NOT PASSED，真正人评PENDING，R1 NOT DONE。当前没有新fullbackend/原32/full22 PASS。旧原32完成32/96成功/32Narrator后固定三听者postcheck FAIL，修正精确集合后同DB/binary零真模型后置PASS；不能借成新80的32通过。后续必须同条件Golden前后+人评，机器不能代替体验出口。
+
+Go /usr/local/go/bin/go，backend cwd，GOCACHE=/home/ubuntu/.cache/go-build GOPROXY=off GOTOOLCHAIN=local TMPDIR=/tmp GOTMPDIR=/tmp，-p1、storage -dwarf=false、-ldflags='-s -w'；shm满/根盘紧，不删除共享DB/cache/证据。模型使用用户指定step-5-preview，凭证仅从ignored/private配置读取，绝不输出/提交。080写入后不要自动降reader或restore liveDB。发布前对现存预览库副本升级并核对heads/events/public-history/private boundaries。
 ```

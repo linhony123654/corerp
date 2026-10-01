@@ -1,6 +1,37 @@
 package core
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+func TestRPProposalAllowsKnownCharacterIdentityDialogue(t *testing.T) {
+	for _, tc := range []struct {
+		name, request, text string
+		introduceSelf       bool
+	}{
+		{"explicit_name_request", "您叫什么？请告诉我姓名。", "我是贾母。", true},
+		{"rehearsal", "我们排练一遍自我介绍。", "我是贾母，这一句这样说可好？", false},
+		{"reported_words", "你刚才是怎么向客人报姓名的？", "我是贾母——方才我这样告诉那位客人。", false},
+		{"repeated_name", "您再说一遍自己的姓名吧。", "我是贾母。", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := RPDecisionInput{NPCName: "贾母", InterlocutorEntityID: "baoyu", PlayerSpeechText: tc.request, LegalActions: []string{"respond"},
+				Relationships: []RPCharacterRelationship{{SubjectEntityID: "baoyu", Role: "grandmother", SourceEventID: "identity-event"}}}
+			proposal := RPDecisionProposal{Action: "respond", Text: tc.text, IntroduceSelf: tc.introduceSelf, ExpressionCode: "nod"}
+			before := proposal
+			if reason, err := ValidateRPDecisionProposalEvidence(input, proposal); reason != "" || err != nil {
+				t.Fatalf("valid identity dialogue rejected: %q %v", reason, err)
+			}
+			if err := ValidateRPDecisionProposal(input, proposal); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(proposal, before) {
+				t.Fatal("validation changed the proposed observable")
+			}
+		})
+	}
+}
 
 func TestRPProposalEvidencePreservesValidation(t *testing.T) {
 	input := RPDecisionInput{LegalActions: []string{"respond", "refuse", "leave", "silence", "wait", "unknown"}, ReachablePlaceIDs: []string{"home"}}
@@ -29,12 +60,12 @@ func TestRPProposalEvidencePreservesValidation(t *testing.T) {
 	}
 }
 
-func TestRPProposalRejectsSourcedRelationSelfIntroductionWithoutHint(t *testing.T) {
+func TestRPProposalAcceptsSourcedRelationSelfIntroductionWithoutHint(t *testing.T) {
 	input := RPDecisionInput{NPCName: "贾母", InterlocutorEntityID: "baoyu", LegalActions: []string{"respond"},
 		Relationships: []RPCharacterRelationship{{SubjectEntityID: "baoyu", Role: "grandmother", SourceEventID: "identity-event"}}}
 	proposal := RPDecisionProposal{Action: "respond", Text: "我是贾母，你是谁？"}
-	if reason, err := ValidateRPDecisionProposalEvidence(input, proposal); reason != "known_relationship_introduction" || !HasCode(err, CodeInvalidArgument) {
-		t.Fatalf("unflagged self introduction passed known relationship: %q %v", reason, err)
+	if reason, err := ValidateRPDecisionProposalEvidence(input, proposal); reason != "" || err != nil {
+		t.Fatalf("known relationship imposed a semantic speech prohibition: %q %v", reason, err)
 	}
 	input.Relationships = nil
 	if reason, err := ValidateRPDecisionProposalEvidence(input, proposal); reason != "" || err != nil {

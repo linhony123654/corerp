@@ -40,6 +40,8 @@ func SelectRPDecisionContext(input RPDecisionInput, budget int) (RPDecisionInput
 	if err != nil {
 		return RPDecisionInput{}, err
 	}
+	// The current trigger and observed player action are required input, not
+	// optional history. Preserve them in base; mandatory overflow is an error.
 	base := input
 	base.RecentDialogue, base.RelevantDialogue, base.HeardPlayerHistory = nil, nil, nil
 	base.RecentPrivateDecisions, base.OwnActions, base.Knowledge = nil, nil, nil

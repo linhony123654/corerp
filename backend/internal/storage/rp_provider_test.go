@@ -52,8 +52,14 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 			return
 		}
 		var packet struct {
-			Version   string               `json:"version"`
-			Character core.RPDecisionInput `json:"character"`
+			Version   string `json:"version"`
+			Character struct {
+				CurrentTurn struct {
+					Data struct {
+						SpeechEventID string `json:"speech_event_id"`
+					} `json:"data"`
+				} `json:"current_turn"`
+			} `json:"character"`
 		}
 		for _, message := range request.Messages {
 			if message.Role == "user" {
@@ -62,11 +68,11 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 				}
 			}
 		}
-		if packet.Version != "corerp.decision.v3" || packet.Character.SpeechEventID == "" {
+		if packet.Version != "corerp.decision.v3" || packet.Character.CurrentTurn.Data.SpeechEventID == "" {
 			t.Error("configured adapter did not receive the versioned sourced context")
 		}
 		proposal, err := json.Marshal(map[string]any{
-			"private":    core.RPDecisionPrivate{Intent: privateIntent, Emotion: "平静", RelationshipStance: "谨慎", BasisEventIDs: []string{packet.Character.SpeechEventID}},
+			"private":    core.RPDecisionPrivate{Intent: privateIntent, Emotion: "平静", RelationshipStance: "谨慎", BasisEventIDs: []string{packet.Character.CurrentTurn.Data.SpeechEventID}},
 			"observable": map[string]any{"action": "respond", "text": "这句话来自配置的模型接口。", "introduce_self": false, "expression_code": "beckon"},
 		})
 		if err != nil {

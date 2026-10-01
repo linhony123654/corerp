@@ -313,9 +313,9 @@ async function finishPending(useSavedNarrative = false) {
         return
       }
       if (result.status !== 'settled') throw new Error('交互尚未确认结束，请继续原请求。')
-      const speech = result.outcomes?.slice().reverse().find(outcome => outcome.kind === 'speech')
-      if (speech?.turn_run_id) {
-        pending.narrative_turn_id = speech.turn_run_id
+      const narratedTurn = result.outcomes?.slice().reverse().find(outcome => outcome.turn_run_id)
+      if (narratedTurn?.turn_run_id) {
+        pending.narrative_turn_id = narratedTurn.turn_run_id
         save() // Do not rerun the interaction if the narrative stream fails.
       }
     }

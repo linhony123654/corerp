@@ -121,6 +121,21 @@ func validateRPNarrativeFact(ctx context.Context, conn *sql.Conn, instance, bran
 		if fact.ExpressionCode != code {
 			return narrativeDiverged("narrative expression code differs from its source")
 		}
+		// An actor's own committed expression has no self-observation row.
+		// Its original typed owner and complete committed source are the proof;
+		// other characters still require their independently frozen witness.
+		if source.Actor == observer {
+			if source.CommandKind != "RPNonverbalAction" || event.PlaceID == "" {
+				return narrativeDiverged("own narrative expression lacks its typed owner")
+			}
+			if event.TargetEntityID == "" {
+				if fact.TargetActorID != "" || fact.TargetActorName != "" {
+					return narrativeDiverged("own expression acquired an uncommitted target")
+				}
+				return nil
+			}
+			return validateRPNarrativePublicIdentity(ctx, conn, instance, branch, observer, event.TargetEntityID, fact.TargetActorID, fact.TargetActorName, head)
+		}
 		var witness *core.RPNonverbalWitness
 		for i := range event.Witnesses {
 			if event.Witnesses[i].ObserverEntityID == observer {
@@ -284,7 +299,7 @@ func validateRPNarrativeArtifactOnConn(ctx context.Context, conn *sql.Conn, inst
 
 	var sessionID, playerTurnID, playerEventID, ownerObserver, ownerInstance, ownerBranch, status string
 	var settled sql.NullInt64
-	if err := conn.QueryRowContext(ctx, `SELECT t.session_id,t.player_turn_id,t.player_event_id,s.controlled_entity_id,s.instance_id,s.branch_id,t.status,t.settled_sequence FROM rp_turn_runs t JOIN rp_sessions s ON s.session_id=t.session_id WHERE t.turn_run_id=?`, turnID).Scan(&sessionID, &playerTurnID, &playerEventID, &ownerObserver, &ownerInstance, &ownerBranch, &status, &settled); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT t.session_id,COALESCE(t.player_turn_id,t.player_event_id),t.player_event_id,s.controlled_entity_id,s.instance_id,s.branch_id,t.status,t.settled_sequence FROM rp_turn_runs t JOIN rp_sessions s ON s.session_id=t.session_id WHERE t.turn_run_id=?`, turnID).Scan(&sessionID, &playerTurnID, &playerEventID, &ownerObserver, &ownerInstance, &ownerBranch, &status, &settled); err != nil {
 		return view, err
 	}
 	if observer != ownerObserver || instance != ownerInstance || branch != ownerBranch || (settled.Valid && settled.Int64 > 0 && canonical && artifact.Input.SourceHead != settled.Int64) || (settled.Valid && settled.Int64 > 0 && artifact.Input.SourceHead < settled.Int64) {

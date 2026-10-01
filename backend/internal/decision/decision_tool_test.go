@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -42,7 +41,7 @@ func TestDecisionNativeToolUsesOnePrivateProposalAndUnchangedContext(t *testing.
 					t.Fatal("context message missing")
 				}
 				var got decisionContext
-				if json.Unmarshal([]byte(messages[1].Content), &got) != nil || !reflect.DeepEqual(got.Character, contextFixture()) {
+				if json.Unmarshal([]byte(messages[1].Content), &got) != nil || !decisionCharacterMatches(t, got.Character, contextFixture()) {
 					t.Fatal("native function changed the authorized context")
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": finish, "message": map[string]any{"content": "Unapproved narration: I moved to a new place.", "tool_calls": []any{proposalTool(wireDecision(`{"action":"respond","text":"我在。","introduce_self":false,"expression_code":"none"}`))}}}}})

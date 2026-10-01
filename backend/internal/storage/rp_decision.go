@@ -23,7 +23,7 @@ type RPDecisionResult struct {
 }
 
 // BuildRPDecisionInput is deliberately narrower than the world's state. It
-// requires proof that this NPC heard the committed player speech in this turn.
+// requires personally received evidence for the active speech or action turn.
 func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisionRequest) (core.RPDecisionInput, error) {
 	if err := request.Validate(); err != nil {
 		return core.RPDecisionInput{}, err
@@ -40,8 +40,8 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return core.RPDecisionInput{}, err
 	}
-	if session.Status != "active" || session.TurnCursor != request.TurnID || (session.TurnState != "speech_committed" && session.TurnState != "npc_effects_committed") {
-		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "NPC decision requires the active committed speech turn")
+	if session.Status != "active" || session.TurnCursor != request.TurnID || (session.TurnState != "speech_committed" && session.TurnState != "action_committed" && session.TurnState != "npc_effects_committed") {
+		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "NPC decision requires the active committed speech or action turn")
 	}
 	if request.NPCEntityID == session.ControlledEntityID {
 		return core.RPDecisionInput{}, core.NewError(core.CodeInvalidArgument, "player cannot be selected as NPC")
@@ -54,6 +54,32 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 		Knowledge:         make([]core.RPDecisionKnowledge, 0),
 		ReachablePlaceIDs: make([]string, 0),
 		LegalActions:      []string{"respond", "refuse", "silence", "wait"},
+	}
+	var parentType string
+	err = tx.conn.QueryRowContext(ctx, `SELECT event_type FROM events WHERE event_id=? AND instance_id=? AND branch_id=?`, request.TurnID, session.InstanceID, session.BranchID).Scan(&parentType)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read decision parent kind", err)
+	}
+	if session.TurnState == "action_committed" || parentType == "RPNonverbalAction" {
+		observed, err := readRPDecisionActionTrigger(ctx, tx.conn, session, request.TurnID, request.NPCEntityID)
+		if err != nil {
+			return core.RPDecisionInput{}, err
+		}
+		input.ObservedPlayerAction = observed
+		input.Trigger = &core.RPDecisionTrigger{Kind: "nonverbal", SourceEventID: observed.SourceEventID}
+		input.InterlocutorEntityID = observed.ActorEntityID
+		input, err = readRPOwnDecisionContext(ctx, tx.conn, input)
+		if err != nil {
+			return core.RPDecisionInput{}, err
+		}
+		var playerPlace string
+		if err := tx.conn.QueryRowContext(ctx, `SELECT place_id FROM agent_positions WHERE agent_id=?`, session.ControlledEntityID).Scan(&playerPlace); err != nil {
+			return core.RPDecisionInput{}, classifyMissing(err, "current action actor position")
+		}
+		if input.PlaceID != observed.PlaceID || playerPlace != input.PlaceID {
+			return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "NPC or player has left the action scene")
+		}
+		return core.SelectRPDecisionContext(input, core.DefaultRPDecisionContextBudgetBytes)
 	}
 	var speakerID, speechPlace string
 	err = tx.conn.QueryRowContext(ctx, `
@@ -91,6 +117,47 @@ func (s *Store) BuildRPDecisionInput(ctx context.Context, request core.RPDecisio
 		return core.RPDecisionInput{}, core.NewError(core.CodeBranchConflict, "player has left the speech scene")
 	}
 	return core.SelectRPDecisionContext(input, core.DefaultRPDecisionContextBudgetBytes)
+}
+
+// Scene objects are observed state, not NPC action authority or body posture.
+// Compare with the existing event replay at this head before exposing the
+// projection: a later state must never be attached to an earlier snapshot.
+func readRPDecisionSceneObjects(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) ([]core.RPDecisionSceneObject, error) {
+	available, err := rpSceneObjectProjectionAvailable(ctx, conn)
+	if err != nil || !available {
+		return nil, err
+	}
+	want, err := rpSceneObjectsExpected(ctx, conn, input.InstanceID, input.BranchID, input.HeadSequence)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `SELECT object_id,object_key,display_name,object_kind,place_id,state_code,definition_event_id,state_event_id,projection_version,last_event_sequence FROM rp_scene_objects WHERE instance_id=? AND branch_id=? AND place_id=? ORDER BY object_key`, input.InstanceID, input.BranchID, input.PlaceID)
+	if err != nil {
+		return nil, core.WrapError(core.CodeStorageFailure, "read NPC scene objects", err)
+	}
+	defer rows.Close()
+	objects := make([]core.RPDecisionSceneObject, 0)
+	for rows.Next() {
+		var got rpSceneObjectProjection
+		if err := rows.Scan(&got.ObjectID, &got.ObjectKey, &got.DisplayName, &got.ObjectKind, &got.PlaceID, &got.State, &got.DefinitionEvent, &got.StateEvent, &got.ProjectionVersion, &got.LastSequence); err != nil {
+			return nil, core.WrapError(core.CodeStorageFailure, "scan NPC scene object", err)
+		}
+		expected, ok := want[got.ObjectID]
+		if !ok || !sceneObjectDefinitionEqual(got, expected) || got.State != expected.State || got.StateEvent != expected.StateEvent || got.LastSequence != expected.LastSequence || got.ProjectionVersion != expected.ProjectionVersion {
+			return nil, core.NewError(core.CodeProjectionDiverged, "NPC scene object differs from its source head")
+		}
+		objects = append(objects, core.RPDecisionSceneObject{ObjectID: got.ObjectID, DisplayName: got.DisplayName, Kind: got.ObjectKind, State: got.State, PlaceID: got.PlaceID, WorldTime: input.WorldTime, DefinitionSourceEventID: got.DefinitionEvent, StateSourceEventID: got.StateEvent})
+		delete(want, got.ObjectID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, core.WrapError(core.CodeStorageFailure, "iterate NPC scene objects", err)
+	}
+	for _, missing := range want {
+		if missing.PlaceID == input.PlaceID {
+			return nil, core.NewError(core.CodeProjectionDiverged, "NPC scene object projection is missing")
+		}
+	}
+	return objects, nil
 }
 
 // readRPOwnDecisionContext shares only own/visible evidence. Callers must first
@@ -252,18 +319,23 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 		}
 	}
 	rows, err = conn.QueryContext(ctx, `
-		SELECT k.subject_agent_id, k.place_id, k.source_event_id, k.claim_payload
+		SELECT k.subject_agent_id, k.place_id, k.source_event_id, k.claim_payload,
+		       o.claim_payload,e.world_time,e.actor_id,e.event_type,e.payload,
+		       (o.observer_agent_id=k.observer_agent_id AND o.subject_agent_id=k.subject_agent_id
+		        AND o.source_event_id=k.source_event_id AND o.place_id=k.place_id
+		        AND o.claim_key=k.claim_key AND o.observed_world_time=e.world_time)
 		FROM agent_knowledge k JOIN events e ON e.event_id=k.source_event_id
 		JOIN observation_records o ON o.observation_id=k.observation_id
-		WHERE k.observer_agent_id = ? AND e.instance_id=? AND e.branch_id=?
+		WHERE k.observer_agent_id = ? AND e.instance_id=? AND e.branch_id=? AND e.event_sequence<=?
 		AND e.event_type<>'RPInformationDelivered' AND o.channel NOT IN ('direct_message','rumor','organization_announcement','public_notice') AND k.claim_key NOT LIKE 'information:%'
-		ORDER BY k.last_event_sequence DESC, k.claim_key LIMIT 20`, input.NPCEntityID, input.InstanceID, input.BranchID)
+		ORDER BY k.last_event_sequence DESC, k.claim_key LIMIT 20`, input.NPCEntityID, input.InstanceID, input.BranchID, input.HeadSequence)
 	if err != nil {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC own knowledge", err)
 	}
 	for rows.Next() {
-		var subjectID, placeID, eventID, payloadJSON string
-		if err := rows.Scan(&subjectID, &placeID, &eventID, &payloadJSON); err != nil {
+		var subjectID, placeID, eventID, payloadJSON, observedJSON, worldTime, eventActor, eventType, sourceJSON string
+		var consistent bool
+		if err := rows.Scan(&subjectID, &placeID, &eventID, &payloadJSON, &observedJSON, &worldTime, &eventActor, &eventType, &sourceJSON, &consistent); err != nil {
 			rows.Close()
 			return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "scan NPC own knowledge", err)
 		}
@@ -282,7 +354,28 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 			claim.PlaceID = placeID
 		case "speaker_said":
 			claim.Text = payload.Text
-		case "nonverbal_action", "object_interaction":
+		case "nonverbal_action":
+			// The observer's frozen claim, not the raw Event target, owns
+			// disclosure. Later visibility cannot fill an absent old target.
+			var witnessed core.RPNonverbalClaim
+			var knowledge, observation map[string]any
+			if json.Unmarshal([]byte(observedJSON), &witnessed) != nil || json.Unmarshal([]byte(payloadJSON), &knowledge) != nil || json.Unmarshal([]byte(observedJSON), &observation) != nil {
+				rows.Close()
+				return core.RPDecisionInput{}, core.NewError(core.CodeProjectionDiverged, "invalid NPC nonverbal witness claim")
+			}
+			knowledgeHash, knowledgeErr := core.HashJSON(knowledge)
+			observationHash, observationErr := core.HashJSON(observation)
+			if !consistent || eventType != "RPNonverbalAction" || eventActor != subjectID || witnessed.ClaimType != "nonverbal_action" || (witnessed.ActorEntityID != "" && witnessed.ActorEntityID != subjectID) || knowledgeErr != nil || observationErr != nil || knowledgeHash != observationHash {
+				rows.Close()
+				return core.RPDecisionInput{}, core.NewError(core.CodeProjectionDiverged, "NPC nonverbal knowledge differs from its observer source")
+			}
+			if !rpDecisionNonverbalWitnessMatchesSource(sourceJSON, observation, input.NPCEntityID, subjectID, placeID) {
+				rows.Close()
+				return core.RPDecisionInput{}, core.NewError(core.CodeProjectionDiverged, "NPC nonverbal claim differs from its frozen event witness")
+			}
+			claim.Text, claim.Action, claim.GestureCode = witnessed.Description, witnessed.Action, witnessed.GestureCode
+			claim.TargetEntityID, claim.WorldTime = witnessed.TargetEntityID, worldTime
+		case "object_interaction":
 			claim.Text = payload.Description
 		default:
 			continue // Unknown claim types are not provider-visible by default.
@@ -389,6 +482,10 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 	if err != nil {
 		return core.RPDecisionInput{}, err
 	}
+	input.SceneObjects, err = readRPDecisionSceneObjects(ctx, conn, input)
+	if err != nil {
+		return core.RPDecisionInput{}, err
+	}
 	input.Life, err = buildRPLifeContext(ctx, conn, input)
 	if err != nil {
 		return core.RPDecisionInput{}, err
@@ -415,6 +512,39 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 
 // Relationships are read from the same committed Studio identity event used
 // by the familiarity projection. There is no second mutable RP canon store.
+// Legacy witness claims may omit typed fields. Compare every supplied field
+// with the exact observer's frozen claim, but never fill omitted fields from
+// the privileged Event. Matching two projections alone cannot prove a source.
+func rpDecisionNonverbalWitnessMatchesSource(raw string, observed map[string]any, observer, actor, place string) bool {
+	var fact core.RPNonverbalFact
+	if json.Unmarshal([]byte(raw), &fact) != nil || fact.ClaimType != "nonverbal_action" || fact.ActorEntityID != actor || fact.PlaceID != place {
+		return false
+	}
+	var expected core.RPNonverbalClaim
+	found := false
+	for _, witness := range fact.Witnesses {
+		if witness.ObserverEntityID != observer {
+			continue
+		}
+		if found {
+			return false
+		}
+		found = true
+		expected = rpNonverbalWitnessClaim(fact, witness)
+	}
+	if !found || observed["claim_type"] != expected.ClaimType || observed["description"] != expected.Description {
+		return false
+	}
+	fields := map[string]string{"claim_type": expected.ClaimType, "description": expected.Description, "actor_entity_id": expected.ActorEntityID, "action": expected.Action, "gesture_code": expected.GestureCode, "target_entity_id": expected.TargetEntityID}
+	for key, value := range observed {
+		want, known := fields[key]
+		if !known || value != want {
+			return false
+		}
+	}
+	return true
+}
+
 func readRPAuthoredRelationships(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) ([]core.RPCharacterRelationship, error) {
 	var sourceID, raw string
 	err := conn.QueryRowContext(ctx, `SELECT event_id,payload FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPIdentitiesDeclared' AND event_sequence<=? ORDER BY event_sequence LIMIT 1`, input.InstanceID, input.BranchID, input.HeadSequence).Scan(&sourceID, &raw)
@@ -474,7 +604,7 @@ func (s *Store) DecideRP(ctx context.Context, request core.RPDecisionRequest, pr
 	}
 	result := RPDecisionResult{NPCEntityID: request.NPCEntityID, TurnID: request.TurnID, HeadSequence: input.HeadSequence, InputHash: inputHash}
 	var runID string
-	if err := s.db.QueryRowContext(ctx, `SELECT turn_run_id FROM rp_turn_runs WHERE session_id=? AND player_turn_id=?`, request.SessionID, request.TurnID).Scan(&runID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := s.db.QueryRowContext(ctx, `SELECT turn_run_id FROM rp_turn_runs WHERE session_id=? AND COALESCE(player_turn_id,player_event_id)=?`, request.SessionID, request.TurnID).Scan(&runID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return RPDecisionResult{}, core.WrapError(core.CodeStorageFailure, "find RP provider turn", err)
 	}
 	metadata := rpProviderMetadata(provider, "custom")
@@ -577,7 +707,11 @@ func (s *Store) auditRPDecision(ctx context.Context, input core.RPDecisionInput,
 	if result.Status != "validated" {
 		recordType = "runtime_diagnostic"
 	}
-	if err := execAgentOne(ctx, tx.conn, "record non-authoritative NPC decision", `INSERT INTO audit_records(record_id, instance_id, branch_id, record_order, record_type, authority, related_event_id, trace_id, world_time, recorded_at_utc, audience_scope, payload) VALUES (?, ?, ?, ?, ?, 'non-authoritative', ?, ?, ?, ?, ?, ?)`, "audit_rp_decision_"+id, input.InstanceID, input.BranchID, order, recordType, input.SpeechEventID, "trace_rp_decision_"+id, input.WorldTime, now, string(scopeJSON), string(payloadJSON)); err != nil {
+	relatedEvent := input.SpeechEventID
+	if input.ObservedPlayerAction != nil {
+		relatedEvent = input.ObservedPlayerAction.SourceEventID
+	}
+	if err := execAgentOne(ctx, tx.conn, "record non-authoritative NPC decision", `INSERT INTO audit_records(record_id, instance_id, branch_id, record_order, record_type, authority, related_event_id, trace_id, world_time, recorded_at_utc, audience_scope, payload) VALUES (?, ?, ?, ?, ?, 'non-authoritative', ?, ?, ?, ?, ?, ?)`, "audit_rp_decision_"+id, input.InstanceID, input.BranchID, order, recordType, relatedEvent, "trace_rp_decision_"+id, input.WorldTime, now, string(scopeJSON), string(payloadJSON)); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

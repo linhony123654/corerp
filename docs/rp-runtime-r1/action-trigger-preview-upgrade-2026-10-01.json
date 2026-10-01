@@ -1,0 +1,112 @@
+{
+  "kind": "corerp.r1-action-trigger-preview-upgrade.v1",
+  "status": "PASS: populated079→080 with exact old rows/public history and restart conservation",
+  "runtime_sha256": "7e8145d421fa0a8ab265af8037234652a80bc1f0b9c1165127a96791b81864ec",
+  "production_source_sha256": "e2e7b01977b68a5c94b4a9561e6ba26667bfa20d0cb0954ae6c1247bd91c42ea",
+  "actual_model_calls": 0,
+  "scope": "existing preview database clone only; no live world writes",
+  "before": {
+    "tables": {
+      "events": {
+        "rows": 201,
+        "sha256": "09f9c922f3c4af100f099194b286be61a1467555aae32be95dc8d847b6e3c5fb"
+      },
+      "event_batches": {
+        "rows": 197,
+        "sha256": "93bef0e0ed208fd37b51a6569cc4700d30aa58ee3668a034ed8b71023c23845a"
+      },
+      "commands": {
+        "rows": 197,
+        "sha256": "3959c82fba9d7dc81e73fff4ce6c2f762ed836ff6321fcf7a8fd17f487a37a11"
+      },
+      "rp_provider_calls": {
+        "rows": 15,
+        "sha256": "af80cd10ecda7411ac2845b15f9a39588d02f25a52952a0e00d164bbf58fbe2d"
+      },
+      "rp_turn_runs": {
+        "rows": 66,
+        "sha256": "3773b8d6c76a5fdc002a43fd9ff82d321f3a45adc0ca4d34f73726f033e3b45f"
+      }
+    },
+    "branches": [
+      [
+        "inst_m1",
+        "br_main",
+        1
+      ],
+      [
+        "inst_m2_t09",
+        "br_main",
+        75
+      ],
+      [
+        "world_honglou_60615b11",
+        "br_main",
+        94
+      ],
+      [
+        "world_rp_runtime_r1_20261001",
+        "br_main",
+        31
+      ]
+    ],
+    "integrity": "ok",
+    "fk_errors": 0
+  },
+  "after": {
+    "tables": {
+      "events": {
+        "rows": 201,
+        "sha256": "09f9c922f3c4af100f099194b286be61a1467555aae32be95dc8d847b6e3c5fb"
+      },
+      "event_batches": {
+        "rows": 197,
+        "sha256": "93bef0e0ed208fd37b51a6569cc4700d30aa58ee3668a034ed8b71023c23845a"
+      },
+      "commands": {
+        "rows": 197,
+        "sha256": "3959c82fba9d7dc81e73fff4ce6c2f762ed836ff6321fcf7a8fd17f487a37a11"
+      },
+      "rp_provider_calls": {
+        "rows": 15,
+        "sha256": "af80cd10ecda7411ac2845b15f9a39588d02f25a52952a0e00d164bbf58fbe2d"
+      },
+      "rp_turn_runs": {
+        "rows": 66,
+        "sha256": "3773b8d6c76a5fdc002a43fd9ff82d321f3a45adc0ca4d34f73726f033e3b45f"
+      }
+    },
+    "branches": [
+      [
+        "inst_m1",
+        "br_main",
+        1
+      ],
+      [
+        "inst_m2_t09",
+        "br_main",
+        75
+      ],
+      [
+        "world_honglou_60615b11",
+        "br_main",
+        94
+      ],
+      [
+        "world_rp_runtime_r1_20261001",
+        "br_main",
+        31
+      ]
+    ],
+    "integrity": "ok",
+    "fk_errors": 0
+  },
+  "latest_migrations": [
+    "corerp-rp-action-triggers-080-2026-10-01",
+    "corerp-rp-session-opened-window-079-2026-10-01",
+    "corerp-rp-narrative-artifacts-078-2026-10-01"
+  ],
+  "public_history_turns": 5,
+  "all_legacy_triggers": "speech",
+  "restart": "PASS"
+}

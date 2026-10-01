@@ -7,6 +7,35 @@ import (
 	"testing"
 )
 
+func TestRPEvidenceSupportMissingOptionalTextAnchorsProvidedReference(t *testing.T) {
+	in := RPDecisionInput{NPCEntityID: "self", Knowledge: []RPDecisionKnowledge{
+		{ClaimType: "speaker_said", SourceEventID: "heard-ref", TextFromEvent: true},
+		{ClaimType: "speaker_said", SourceEventID: "heard-missing"},
+		{ClaimType: "object_interaction", SourceEventID: "object-ref", TextFromEvent: true},
+	}, OwnActions: []RPOwnAction{
+		{Action: "speech", EventID: "self-ref", TextFromEvent: true},
+		{Action: "speech", EventID: "self-missing"},
+	}}
+	want := map[string]string{"heard-ref": "/knowledge/0/text_from_event", "heard-missing": "/knowledge/1/source_event_id",
+		"object-ref": "/knowledge/2/text_from_event", "self-ref": "/own_actions/0/text_from_event", "self-missing": "/own_actions/1/event_id"}
+	before, _ := HashJSON(in)
+	support := RPDecisionEvidenceSupport(in)
+	for id, locator := range want {
+		if len(support[id]) != 1 || support[id][0].Locator != locator {
+			t.Fatalf("missing body claimed a nonexistent member for %q: %#v", id, support[id])
+		}
+		for _, use := range support[id][0].AllowedUses {
+			if use == "exact_quote" {
+				t.Fatalf("reference marker invented complete speech: %#v", support[id])
+			}
+		}
+	}
+	after, _ := HashJSON(in)
+	if before != after {
+		t.Fatal("missing reference was filled or input changed")
+	}
+}
+
 func TestRPEvidenceSupportSeparatesSameEventAndAncestralPrivateBasis(t *testing.T) {
 	in := rpSelectionFixture()
 	in.PersonaSourceEventID = "same"

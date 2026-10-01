@@ -1,0 +1,428 @@
+{
+  "kind": "corerp.r1-context-presentation-accuracy-checkpoint.v1",
+  "source_base_commit": "cfc6c9a7ca84a5d88b76ba2134a84fa7c3f5f579",
+  "runtime_sha256": "487e679c64658f3974fcb877dcf7b7ddd3869be117bbac695adb40b7fd973771",
+  "production_source_sha256": "cd362a39d8e2a52cde4dca501fb4b87089b8ffcee3dfc4ceae04f46ede8046e3",
+  "raw_report_sha256": "06e77b89fa7c430dbbd6eab0d11a612ad31bce20964465c939d342897bd7bb6a",
+  "scope": "targeted accuracy slice; not the full Golden or original32",
+  "runner_sha256": "cd35577ea63dc4383ae2584c9740af5a6c9968721186a269252f375f841102d4",
+  "fixture_sha256": "2d71a64daeb29e8cdcd9d9c3008260d8b8ce0108efa281457c1c7fb63d144aca",
+  "spec_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+  "packages_sha256": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+  "model": "step-5-preview",
+  "model_config": {
+    "decision_timeout": "120s",
+    "decision_attempts": 2,
+    "decision_max_tokens": 4096,
+    "decision_format": "tool_call",
+    "reasoning_effort": "low",
+    "disable_thinking": false,
+    "narrative_timeout": "90s",
+    "narrative_attempts": 2
+  },
+  "technical_capture": "PASS: real authored product capture and persistence checks; human experience pending",
+  "agent_qualitative_review": "NOT PASSED: no clear RP experience improvement over cfc/feea seven-turn capture; unsupported breath/complexion/posture and repetitive care invitations remain",
+  "actual_human_experience": "PENDING",
+  "samples": [
+    {
+      "index": 1,
+      "scene": "P2",
+      "text": "老祖宗，我来看您了。",
+      "duration_seconds": 5.12,
+      "turn_run_id": "rpturn_4861ebf3574fc283236c2574033d2917494b5578aad115f94a5ac40bbef91134",
+      "world": {
+        "head": 22,
+        "events": 22,
+        "utterances": 2,
+        "decisions": 1
+      },
+      "decisions": [
+        {
+          "event_sequence": 21,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿来了，快过来让老祖宗瞧瞧。今日怎么得空过来？有什么话，坐下慢慢说与我听。",
+          "event_id": "event_rp_npc_6474e0e1657464102c09e9830965003a9ed90db43c3c3a8cbe997d3f4101a29e"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「老祖宗，我来看您了。」",
+        "「玉儿来了，快过来让老祖宗瞧瞧。今日怎么得空过来？有什么话，坐下慢慢说与我听。」贾母答，笑了笑。"
+      ],
+      "composition_version": "corerp.fact-composition.v2",
+      "fact_groups": [
+        [
+          "event_rp_speech_8571d9c068787ba18e0b159e657d6bc83e4b3718632ec1a7ddfef233cce85056"
+        ],
+        [
+          "event_rp_npc_6474e0e1657464102c09e9830965003a9ed90db43c3c3a8cbe997d3f4101a29e",
+          "event_rp_npc_expression_6474e0e1657464102c09e9830965003a9ed90db43c3c3a8cbe997d3f4101a29e"
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "index": 2,
+      "scene": "P2",
+      "text": "我是谁，您还认得么？我是逗您玩呢。",
+      "duration_seconds": 9.063,
+      "turn_run_id": "rpturn_473d7d82f62c924681ed34cb11c35622d814f7b4dbf2cedf29769c0a95541f77",
+      "world": {
+        "head": 25,
+        "events": 25,
+        "utterances": 4,
+        "decisions": 2
+      },
+      "decisions": [
+        {
+          "event_sequence": 24,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "猴儿，老祖宗若连你都认不得，还得了？除了我这宝玉，谁敢在我跟前这样没大没小地逗趣。快过来坐下，把气喘匀了，有什么话慢慢说与我听。",
+          "event_id": "event_rp_npc_0a3905a122fba6ceb89fcbc39f22b0709612e6e62f88492265233e6b024815b2"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「我是谁，您还认得么？我是逗您玩呢。」",
+        "「猴儿，老祖宗若连你都认不得，还得了？除了我这宝玉，谁敢在我跟前这样没大没小地逗趣。快过来坐下，把气喘匀了，有什么话慢慢说与我听。」贾母答，露出笑容。"
+      ],
+      "composition_version": "corerp.fact-composition.v2",
+      "fact_groups": [
+        [
+          "event_rp_speech_bd8cc3641818330b3b9e217fdd55ebaf22da685b3f835f8b7b1f81451850a29f"
+        ],
+        [
+          "event_rp_npc_0a3905a122fba6ceb89fcbc39f22b0709612e6e62f88492265233e6b024815b2",
+          "event_rp_npc_expression_0a3905a122fba6ceb89fcbc39f22b0709612e6e62f88492265233e6b024815b2"
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "index": 3,
+      "scene": "P3",
+      "text": "今天心里有点闷，却又说不清为什么。",
+      "duration_seconds": 9.945,
+      "turn_run_id": "rpturn_0744545d1a2ece3cad34f413931c31526df6398855339eaab2d1937ebca2d021",
+      "world": {
+        "head": 28,
+        "events": 28,
+        "utterances": 6,
+        "decisions": 3
+      },
+      "decisions": [
+        {
+          "event_sequence": 27,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，心里闷就别一个人憋着。天大的事，也有老祖宗在呢。你既来了，就坐下慢慢说与我听，说出来心里也松快些。",
+          "event_id": "event_rp_npc_f711e144124173bac2620706930844a4ac9259499ad2f05fb4c2c12a10bb291e"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「今天心里有点闷，却又说不清为什么。」",
+        "「玉儿，心里闷就别一个人憋着。天大的事，也有老祖宗在呢。你既来了，就坐下慢慢说与我听，说出来心里也松快些。」贾母答，点头。"
+      ],
+      "composition_version": "corerp.fact-composition.v2",
+      "fact_groups": [
+        [
+          "event_rp_speech_6cc0c0a3eecfe4f6dc7b23f5282c288044cacb60c7eb3c8ddd0b98a22ee374b4"
+        ],
+        [
+          "event_rp_npc_f711e144124173bac2620706930844a4ac9259499ad2f05fb4c2c12a10bb291e",
+          "event_rp_npc_expression_f711e144124173bac2620706930844a4ac9259499ad2f05fb4c2c12a10bb291e"
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "index": 4,
+      "scene": "P3",
+      "text": "不急着问原因，您先陪我说一会儿话，好不好？",
+      "duration_seconds": 4.965,
+      "turn_run_id": "rpturn_586d0611a68fd6d99260bd33c39978fecca3b18febf9fb6e0c369528b48a9969",
+      "world": {
+        "head": 31,
+        "events": 31,
+        "utterances": 8,
+        "decisions": 4
+      },
+      "decisions": [
+        {
+          "event_sequence": 30,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "好，好，老祖宗依你，不急着问缘由。你既想陪我说说话，那便坐下，咱们娘儿俩慢慢聊，聊到什么时候都成。",
+          "event_id": "event_rp_npc_e7de6661fd16dcdbc34c26473d5c369255dce8dd0fe817874768998dcc324210"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「不急着问原因，您先陪我说一会儿话，好不好？」",
+        "「好，好，老祖宗依你，不急着问缘由。你既想陪我说说话，那便坐下，咱们娘儿俩慢慢聊，聊到什么时候都成。」贾母答，笑了笑。"
+      ],
+      "composition_version": "corerp.fact-composition.v2",
+      "fact_groups": [
+        [
+          "event_rp_speech_fd560a83fd9dc1519b999e369c080a6983df76c583a964b5795f730f94afaaea"
+        ],
+        [
+          "event_rp_npc_e7de6661fd16dcdbc34c26473d5c369255dce8dd0fe817874768998dcc324210",
+          "event_rp_npc_expression_e7de6661fd16dcdbc34c26473d5c369255dce8dd0fe817874768998dcc324210"
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "index": 5,
+      "scene": "P3",
+      "text": "也别急着劝我高兴起来，我想听您自己想说的。",
+      "duration_seconds": 7.34,
+      "turn_run_id": "rpturn_b647aa38cb7c0e2325e96b94cd792a2364881a5bb25b1bbba2ba46a3f1d9fcf8",
+      "world": {
+        "head": 34,
+        "events": 34,
+        "utterances": 10,
+        "decisions": 5
+      },
+      "decisions": [
+        {
+          "event_sequence": 33,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "猴儿，你今日倒乖，还想着听老祖宗说两句。老祖宗也没什么大事，只是盼你常常来坐坐，别一个人把心事憋着。你愿意说，我便听；你不想说，我也在这儿陪着你。",
+          "event_id": "event_rp_npc_31a2d795558464eae6e0bda68ecf8009e75f374c3638647e304aef9e1764142d"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「也别急着劝我高兴起来，我想听您自己想说的。」",
+        "「猴儿，你今日倒乖，还想着听老祖宗说两句。老祖宗也没什么大事，只是盼你常常来坐坐，别一个人把心事憋着。你愿意说，我便听；你不想说，我也在这儿陪着你。」贾母答，露出笑容。"
+      ],
+      "composition_version": "corerp.fact-composition.v2",
+      "fact_groups": [
+        [
+          "event_rp_speech_6b2fe4d018ab79de88bea60bf6baca4a07332879430f5593249e2f93a8209c25"
+        ],
+        [
+          "event_rp_npc_31a2d795558464eae6e0bda68ecf8009e75f374c3638647e304aef9e1764142d",
+          "event_rp_npc_expression_31a2d795558464eae6e0bda68ecf8009e75f374c3638647e304aef9e1764142d"
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "index": 6,
+      "scene": "P6",
+      "text": "老祖宗，若愿意我近前，您招一下手好吗？",
+      "duration_seconds": 13.626,
+      "turn_run_id": "rpturn_ea4597559592d89f04a297cee8f9a9c00d057f8d2bb01e2b3109c94641b09603",
+      "world": {
+        "head": 37,
+        "events": 37,
+        "utterances": 12,
+        "decisions": 6
+      },
+      "decisions": [
+        {
+          "event_sequence": 36,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "快过来，到老祖宗跟前来。坐到这边来，让我好好瞧瞧你，有什么话慢慢说与我听。",
+          "event_id": "event_rp_npc_2f3734c7c563c162f20fef90a876ec2da5834a391ad869e974f150dfb41f9813"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「老祖宗，若愿意我近前，您招一下手好吗？」",
+        "「快过来，到老祖宗跟前来。坐到这边来，让我好好瞧瞧你，有什么话慢慢说与我听。」贾母答，向你招手。"
+      ],
+      "composition_version": "corerp.fact-composition.v2",
+      "fact_groups": [
+        [
+          "event_rp_speech_53fe6606c503e710afed717090faa33794bbda94bda561f32691f37aba5c1ac5"
+        ],
+        [
+          "event_rp_npc_2f3734c7c563c162f20fef90a876ec2da5834a391ad869e974f150dfb41f9813",
+          "event_rp_npc_expression_2f3734c7c563c162f20fef90a876ec2da5834a391ad869e974f150dfb41f9813"
+        ]
+      ],
+      "warnings": []
+    },
+    {
+      "index": 7,
+      "scene": "P6",
+      "text": "您方才若招了手，是让我过去么？我还在原处，没有过去。",
+      "duration_seconds": 10.595,
+      "turn_run_id": "rpturn_432124ff5d13e336ed7ec3f4e2b233c5a39a6366549f1e9e6cc9469ef0e6a175",
+      "world": {
+        "head": 40,
+        "events": 40,
+        "utterances": 14,
+        "decisions": 7
+      },
+      "decisions": [
+        {
+          "event_sequence": 39,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "正是老祖宗招你呢。你这孩子，站在那里做什么？过来，坐到我跟前来，让我好好瞧瞧你。外头的事再大，也大不过你这气色，咱们娘儿俩坐着慢慢说。",
+          "event_id": "event_rp_npc_a4fab949ad33401554d77ce1b87c81a29b31dad533d61ca237dd8e106eecbea9"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "narrative": [
+        "在荣庆堂，你说：「您方才若招了手，是让我过去么？我还在原处，没有过去。」",
+        "「正是老祖宗招你呢。你这孩子，站在那里做什么？过来，坐到我跟前来，让我好好瞧瞧你。外头的事再大，也大不过你这气色，咱们娘儿俩坐着慢慢说。」贾母答，向你招了招手。"
+      ],
+      "composition_version": "corerp.fact-composition.v2",
+      "fact_groups": [
+        [
+          "event_rp_speech_8b32e03c44d0ab81230bff36164f648dfb709c64067247927775f06079996a1d"
+        ],
+        [
+          "event_rp_npc_a4fab949ad33401554d77ce1b87c81a29b31dad533d61ca237dd8e106eecbea9",
+          "event_rp_npc_expression_a4fab949ad33401554d77ce1b87c81a29b31dad533d61ca237dd8e106eecbea9"
+        ]
+      ],
+      "warnings": []
+    }
+  ],
+  "restarts": [
+    {
+      "after_scene": "P6",
+      "turn_run_id": "rpturn_432124ff5d13e336ed7ec3f4e2b233c5a39a6366549f1e9e6cc9469ef0e6a175",
+      "status": "PASS",
+      "world": {
+        "head": 40,
+        "events": 40,
+        "utterances": 14,
+        "decisions": 7
+      }
+    }
+  ],
+  "full32": "NOT RUN on this runtime; historical artifacts retain their original statuses",
+  "deployment": "NOT DEPLOYED; live preview remains cfc6c9a/feea"
+}

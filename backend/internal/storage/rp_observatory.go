@@ -114,12 +114,12 @@ func (s *Store) ReadRPObservatory(ctx context.Context, request RPObservatoryRequ
 	rows, err := conn.QueryContext(ctx, `
 		SELECT r.turn_run_id,r.status,r.execution_mode,r.responder_limit,
 		       COALESCE(r.settled_sequence,e.event_sequence,0),COALESCE(e.world_time,''),
-		       COALESCE(l.display_name,''),COALESCE(u.speech_text,''),COALESCE(r.narrative_fallback,''),
-		       COALESCE(r.player_turn_id,'')
+		       COALESCE(l.display_name,''),COALESCE(u.speech_text,json_extract(e.payload,'$.description'),''),COALESCE(r.narrative_fallback,''),
+		       COALESCE(r.player_turn_id,r.player_event_id,'')
 		FROM rp_turn_runs r
 		LEFT JOIN events e ON e.event_id=r.player_event_id
 		LEFT JOIN rp_utterances u ON u.turn_id=r.player_turn_id AND u.session_id=r.session_id
-		LEFT JOIN agent_places l ON l.place_id=u.place_id
+		LEFT JOIN agent_places l ON l.place_id=COALESCE(u.place_id,json_extract(e.payload,'$.place_id'))
 		WHERE r.session_id=? AND (?=0 OR COALESCE(r.settled_sequence,e.event_sequence,0)<?)
 		ORDER BY CASE WHEN e.event_sequence IS NULL THEN ? ELSE COALESCE(r.settled_sequence,e.event_sequence) END DESC,r.created_at_utc DESC
 		LIMIT ?`, session.SessionID, request.BeforeSequence, request.BeforeSequence, head+1, limit+1)
