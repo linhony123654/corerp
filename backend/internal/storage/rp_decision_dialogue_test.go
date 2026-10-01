@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -38,7 +39,9 @@ func TestRPDecisionDialogueUsesOnlyAcceptedPersonallyHeardWordsAfterRestart(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SpeakRP(ctx, core.RPSpeechRequest{PrincipalID: rpTestPrincipal, SessionID: ada.SessionID, Text: "不在场的私下话语。", ExpectedCursor: adaView.ObservationCursor, IdempotencyKey: "dialogue-offsite"}); err != nil {
+	const offsiteText = "不在场的私下话语。"
+	offsite, err := store.SpeakRP(ctx, core.RPSpeechRequest{PrincipalID: rpTestPrincipal, SessionID: ada.SessionID, Text: offsiteText, ExpectedCursor: adaView.ObservationCursor, IdempotencyKey: "dialogue-offsite"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -67,16 +70,68 @@ func TestRPDecisionDialogueUsesOnlyAcceptedPersonallyHeardWordsAfterRestart(t *t
 		if !foundOwn {
 			t.Errorf("accepted NPC speech disappeared from sourced own memory: %+v", input.OwnActions)
 		}
-		if len(input.RecentDialogue) != 3 {
-			t.Errorf("wanted player, NPC, player accepted utterances, got %+v", input.RecentDialogue)
+		// V3 retains the older question/reply as one peer unit, rather than
+		// duplicating its members in RecentDialogue. Verify the unified sources
+		// against the actual Events; field placement must not imply word loss.
+		wantDialogue := []struct{ actor, text, eventID string }{
+			{M2RPPlayerID, first.Text, firstTurn.PlayerEventID},
+			{M2RPNPCID, "我记得你刚才的问题。", firstTurn.NPCEventIDs[0]},
+			{M2RPPlayerID, second.Text, input.SpeechEventID},
+		}
+		sequences, times := map[string]int64{}, map[string]string{}
+		for _, want := range wantDialogue {
+			var sequence int64
+			var worldTime, actor string
+			if err := store.db.QueryRowContext(ctx, `SELECT event_sequence,world_time,actor_id FROM events WHERE event_id=? AND instance_id=? AND branch_id=? AND event_type='RPSpeechAccepted'`, want.eventID, input.InstanceID, input.BranchID).Scan(&sequence, &worldTime, &actor); err != nil {
+				t.Errorf("accepted dialogue source missing: %v", err)
+			} else if actor != want.actor || worldTime == "" || sequence > input.HeadSequence {
+				t.Errorf("dialogue source crossed actor/time/head: %s", want.eventID)
+			}
+			sequences[want.eventID], times[want.eventID] = sequence, worldTime
+		}
+		var unified []core.RPDecisionDialogue
+		seenEvents := map[string]bool{}
+		collect := func(dialogue []core.RPDecisionDialogue) {
+			var previous int64
+			for _, d := range dialogue {
+				sequence, known := sequences[d.EventID]
+				if !known || seenEvents[d.EventID] || sequence <= previous {
+					t.Errorf("dialogue has an extra/duplicate/out-of-order source: %+v", d)
+				}
+				previous = sequence
+				seenEvents[d.EventID] = true
+				unified = append(unified, d)
+			}
+		}
+		collect(input.RecentDialogue)
+		peerPairs := 0
+		for _, exchange := range input.RelevantDialogue {
+			collect(exchange.Dialogue)
+			if exchange.PeerContext && len(exchange.Dialogue) == 2 && exchange.Dialogue[0].EventID == firstTurn.PlayerEventID && exchange.Dialogue[1].EventID == firstTurn.NPCEventIDs[0] {
+				peerPairs++
+			}
+		}
+		if peerPairs != 1 {
+			t.Errorf("earlier heard question/reply no longer form one complete peer unit: %+v", input.RelevantDialogue)
+		}
+		sort.Slice(unified, func(i, j int) bool { return sequences[unified[i].EventID] < sequences[unified[j].EventID] })
+		if len(unified) != len(wantDialogue) {
+			t.Errorf("wanted three unique accepted utterances across recent/peer dialogue, got %+v", unified)
 		} else {
-			for i, want := range []struct{ actor, text string }{{M2RPPlayerID, first.Text}, {M2RPNPCID, "我记得你刚才的问题。"}, {M2RPPlayerID, second.Text}} {
-				got := input.RecentDialogue[i]
+			for i, want := range wantDialogue {
+				got := unified[i]
 				text, complete := core.ResolveRPDecisionSpeech(input, got.EventID, got.SpeakerEntityID)
-				if got.SpeakerEntityID != want.actor || !complete || text != want.text || got.EventID == "" || got.WorldTime == "" {
-					t.Errorf("dialogue %d lacks accepted provenance or order: %+v", i, got)
+				if got.EventID != want.eventID || got.SpeakerEntityID != want.actor || !complete || text != want.text || got.WorldTime != times[want.eventID] || got.WorldTime == "" {
+					t.Errorf("dialogue %d lacks exact accepted words/provenance/time/order: %+v", i, got)
 				}
 			}
+		}
+		encoded, encodeErr := json.Marshal(input)
+		if encodeErr != nil || strings.Contains(string(encoded), offsiteText) || strings.Contains(string(encoded), offsite.EventID) || core.RPDecisionEvidenceEventIDs(input)[offsite.EventID] {
+			t.Errorf("offsite speech leaked into provider words or grounding: %v", encodeErr)
+		}
+		if _, complete := core.ResolveRPDecisionSpeech(input, offsite.EventID, M2AgentAdaID); complete {
+			t.Error("unheard offsite utterance resolved as accepted dialogue")
 		}
 		return core.RPDecisionProposal{Action: "respond", Text: "你问我记不记得，我记得。"}, nil
 	}))

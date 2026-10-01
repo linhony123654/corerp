@@ -12,12 +12,14 @@ import (
 // Handles are bound to one authorized packet, not persistent RP state. The
 // model chooses a short ref; existing world validation still receives Event IDs.
 type decisionSourceRef struct {
-	Ref           string `json:"ref"`
-	SourceEventID string `json:"source_event_id"`
+	Ref           string                        `json:"ref"`
+	SourceEventID string                        `json:"source_event_id"`
+	SupportRanges []core.RPEvidenceSupportRange `json:"support_ranges"`
 }
 
 func decisionSourceRefs(input core.RPDecisionInput) []decisionSourceRef {
 	allowed := core.RPDecisionEvidenceEventIDs(input)
+	support := core.RPDecisionEvidenceSupport(input)
 	ids := make([]string, 0, len(allowed))
 	for id := range allowed {
 		ids = append(ids, id)
@@ -34,7 +36,7 @@ func decisionSourceRefs(input core.RPDecisionInput) []decisionSourceRef {
 				break
 			}
 		}
-		refs = append(refs, decisionSourceRef{Ref: ref, SourceEventID: id})
+		refs = append(refs, decisionSourceRef{Ref: ref, SourceEventID: id, SupportRanges: support[id]})
 	}
 	return refs
 }

@@ -1,0 +1,311 @@
+{
+  "kind": "corerp.r1-source-support-preview-release.v1",
+  "recorded_at_utc": "2026-10-01T11:55:52.988825+00:00",
+  "upgrade_check": {
+    "kind": "corerp.r1-accuracy-upgrade-check.v1",
+    "runtime_sha256": "feea3b32f0315d95fa447e89d48f1bae3e991e690fe0b98e9f6d20bf18eb834d",
+    "status": "PASS:078→079 exact legacy history/world preserved; new opening boundary and shared history verified",
+    "before": {
+      "events": 198,
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          28
+        ]
+      ],
+      "provider_calls": 13,
+      "canonical_sha256": "afc846e9a4fb847ca4a88ceedd9d62669212aafd0f273af2219d7f23869307b6",
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "actual_model_calls": 0,
+    "after": {
+      "events": 198,
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          28
+        ]
+      ],
+      "provider_calls": 13,
+      "canonical_sha256": "afc846e9a4fb847ca4a88ceedd9d62669212aafd0f273af2219d7f23869307b6",
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "legacy_history_turns": 4,
+    "new_opening_sequence": 28,
+    "new_session_preserves_history": true
+  },
+  "activation": {
+    "kind": "corerp.r1-accuracy-preview-activation.v1",
+    "status": "PASS: exact frozen runtime activated; 079 preserves all old records",
+    "source_base_commit": "e3cdc8c9534bb8519d85c162bd1129b9f7184475",
+    "production_source_sha256": "0200985bba147b36d7cdf6578b9276e88d87a44b55e54c44410942c7bc032ee6",
+    "runtime_sha256": "feea3b32f0315d95fa447e89d48f1bae3e991e690fe0b98e9f6d20bf18eb834d",
+    "backup_dir": "/home/ubuntu/.local/share/corerp-preview/backups/20261001-source-support-079",
+    "scope": "backend-only update to authorized isolated review preview",
+    "human_experience": "PENDING",
+    "speech_semantics": "NOT PASSED",
+    "before": {
+      "events": 198,
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          28
+        ]
+      ],
+      "provider_calls": 13,
+      "canonical_sha256": "afc846e9a4fb847ca4a88ceedd9d62669212aafd0f273af2219d7f23869307b6",
+      "sessions": 24,
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "pid": 1646357,
+    "after_migration": {
+      "events": 198,
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          28
+        ]
+      ],
+      "provider_calls": 13,
+      "canonical_sha256": "afc846e9a4fb847ca4a88ceedd9d62669212aafd0f273af2219d7f23869307b6",
+      "sessions": 24,
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "latest_migration": "corerp-rp-session-opened-window-079-2026-10-01",
+    "existing_opening_boundaries_zero": true,
+    "env_and_frontend_unchanged": true,
+    "review_artifact_sha256": {
+      "source-support-before-2026-10-01.json": "598c77b3d489d267fa3fab255fa6cabb1753760b8472f32b3b0d106825eb6388",
+      "source-support-after-2026-10-01.json": "eed7770148cc5cf4f4968ccdfcc8c5a5202f01e01cfabf830a2f32fc5fcdccd5",
+      "index.html": "78258091361d2367daa9439e899af94c05c923bb907a8c6cd8b5c81a12373224",
+      "source-support-accuracy-2026-10-01.md": "6d96ac884aac16cee932bbbba73623e69f8706438d261cfa1cdb3661d13fb5df",
+      "source-support-verification-2026-10-01.json": "5c865a92547d7cc386f67c926a834eb65227ac3c52326d286beb1942dd97bceb"
+    },
+    "public_url": "https://code.linhony.xyz:4188/",
+    "review_url": "https://code.linhony.xyz:4188/rp-review/accuracy/",
+    "ready_http": 200,
+    "public_identity": "PASS",
+    "canonical_text_preserved": true
+  },
+  "world_smoke": {
+    "kind": "corerp.r1-accuracy-preview-world-smoke.v1",
+    "status": "PASS: actual Step/default v2; opening excludes old actions, shared history/restart preserved",
+    "instance_id": "world_rp_runtime_r1_20261001",
+    "public_url": "https://code.linhony.xyz:4188/",
+    "runtime_sha256": "feea3b32f0315d95fa447e89d48f1bae3e991e690fe0b98e9f6d20bf18eb834d",
+    "human_experience": "PENDING",
+    "speech_semantics": "NOT PASSED",
+    "release_scope": "one actual default-model turn in existing authorized review world",
+    "initial_harness_failure": "Nullable legacy event_ids was treated as iterable; no turn/model call occurred. Derive exact sources from published fact_groups and optional independent IDs.",
+    "before": {
+      "events": 198,
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 28
+        }
+      ],
+      "provider_calls": 13
+    },
+    "entity_id": "studio_entity_84bbed1f7b0e7e34bf4ea56ed85ba1a12b1df868be7cc4527a875648ba09db56",
+    "session_id": "rps_773d17cbe05438e0fe06c48fb0f873a7",
+    "opened_sequence": 28,
+    "legacy_history_preserved": {
+      "status": "PASS",
+      "turns": 4,
+      "per_session_regeneration_authority": "separate; old turns cannot be regenerated from new session"
+    },
+    "prior_expression_source_count": 3,
+    "seconds": 8.205,
+    "text": "我还在原处，先听您说说自己眼下最想做什么。",
+    "turn_run_id": "rpturn_0629383988219d6b9b4d311a1caf71011eed81f5165f7e81ba69ebaa3283b477",
+    "narrative_lines": [
+      "在荣庆堂，你说：「我还在原处，先听您说说自己眼下最想做什么。」",
+      "「老祖宗此刻最想做的，就是听你把话说完。你既在原处，那便站着说也无妨，我不催你——真有一日腿脚酸了，再自己走过来，座儿总给你留着。」贾母答，露出笑容。"
+    ],
+    "fact_groups": [
+      [
+        "event_rp_speech_ab878461943e22aa3928c3d6f37259e74e3010bb98d7c8e4c2ee1e833b5c0dbc"
+      ],
+      [
+        "event_rp_npc_9948492fb9bcb89e58efd841fad1da44ee51783bf09f41524b3acbcac0635502",
+        "event_rp_npc_expression_9948492fb9bcb89e58efd841fad1da44ee51783bf09f41524b3acbcac0635502"
+      ]
+    ],
+    "composition_version": "corerp.fact-composition.v2",
+    "receipts": [
+      {
+        "phase": "decision",
+        "provider_kind": "chat_completions",
+        "model_id": "step-5-preview",
+        "result": "success",
+        "attempt_count": 1,
+        "fallback_kind": ""
+      },
+      {
+        "phase": "narrative",
+        "provider_kind": "deterministic",
+        "model_id": "",
+        "result": "success",
+        "attempt_count": 0,
+        "fallback_kind": ""
+      }
+    ],
+    "old_actions_not_replayed_as_current": true,
+    "new_public_event_types": [
+      "RPSpeechAccepted",
+      "RPSpeechAccepted",
+      "RPNonverbalAction"
+    ],
+    "old_world_heads_preserved": true,
+    "real_decision_count": 1,
+    "extra_narrator_model_calls": 0,
+    "after": {
+      "events": 201,
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 31
+        }
+      ],
+      "provider_calls": 15
+    },
+    "restart": "PASS: exact saved public fields; zero extra effects or calls"
+  },
+  "initial_harness_failures": [
+    {
+      "path": "/home/ubuntu/.local/share/corerp-preview/r1-accuracy-release-20261001/upgrade-check-harness-failure-0.json",
+      "status": "FAIL",
+      "actual_model_calls": 0,
+      "scope": "pre-model harness/configuration or field-comparison assumption; preserved separately from final PASS"
+    },
+    {
+      "path": "/home/ubuntu/.local/share/corerp-preview/r1-accuracy-release-20261001/upgrade-check-harness-failure-1.json",
+      "status": "FAIL",
+      "actual_model_calls": 0,
+      "scope": "pre-model harness/configuration or field-comparison assumption; preserved separately from final PASS"
+    },
+    {
+      "path": "/home/ubuntu/.local/share/corerp-preview/r1-accuracy-release-20261001/upgrade-check-harness-failure-2.json",
+      "status": "FAIL",
+      "actual_model_calls": 0,
+      "scope": "pre-model harness/configuration or field-comparison assumption; preserved separately from final PASS"
+    },
+    {
+      "path": "/home/ubuntu/.local/share/corerp-preview/r1-accuracy-release-20261001/upgrade-check-initial-harness-failure.json",
+      "status": "FAIL",
+      "actual_model_calls": 0,
+      "scope": "pre-model harness/configuration or field-comparison assumption; preserved separately from final PASS"
+    },
+    {
+      "path": "/home/ubuntu/.local/share/corerp-preview/r1-accuracy-release-20261001/world-smoke-initial-harness-failure.json",
+      "status": "FAIL",
+      "actual_model_calls": 0,
+      "scope": "pre-model harness/configuration or field-comparison assumption; preserved separately from final PASS"
+    }
+  ],
+  "status": "PASS: verified isolated preview; not R1 experience acceptance",
+  "semantic_accuracy": "NOT PASSED",
+  "human_experience": "PENDING",
+  "publication": "branch source identity is independently verified in public /release.json; same production manifest"
+}

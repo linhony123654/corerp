@@ -11,14 +11,21 @@ import { join, resolve } from 'node:path';
 // old frozen Golden nor the preview DB is opened or overwritten.
 const root = resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
-assert.equal(args.length, 4, 'usage: --bin-dir /path --label before|after');
+assert.ok([4, 7].includes(args.length), 'usage: --bin-dir /path --label before|after [--scenes P2,P3,P6 --skip-render]');
 assert.equal(args[0], '--bin-dir'); assert.equal(args[2], '--label');
 const binaries = resolve(args[1]), label = args[3];
 assert.ok(['before', 'after'].includes(label));
+const sliceIDs = args.length === 7 ? args[5].split(',') : null;
+if (sliceIDs) {
+  assert.equal(args[4], '--scenes'); assert.equal(args[6], '--skip-render');
+  assert.ok(sliceIDs.length > 0 && new Set(sliceIDs).size === sliceIDs.length);
+}
 for (const name of ['runtime', 'm1', 'setup', 'admin', 'preflight']) await access(join(binaries, name));
 for (const key of ['CORERP_LLM_ENDPOINT', 'CORERP_LLM_API_KEY']) assert.ok(process.env[key], `${key} is required`);
 const fixturePath = join(root, 'docs/rp-runtime-r1/product-golden-scenes-2026-10-01.json');
 const fixtureBytes = await readFile(fixturePath), fixture = JSON.parse(fixtureBytes);
+const scenes = sliceIDs ? fixture.scenes.filter(scene => sliceIDs.includes(scene.id)) : fixture.scenes;
+if (sliceIDs) assert.equal(scenes.length, sliceIDs.length, 'unknown frozen scene ID');
 const specBytes = await readFile(join(root, fixture.spec_file)), spec = JSON.parse(specBytes);
 const sha = value => createHash('sha256').update(value).digest('hex');
 assert.equal(sha(specBytes), fixture.spec_sha256, 'authored canon changed after the comparison was frozen');
@@ -60,6 +67,7 @@ const report = {kind: 'corerp.product-golden-capture.v1', label, model: fixture.
   spec_sha256: sha(specBytes), packages_sha256: sha(packagesBytes), runtime_sha256: sha(await readFile(join(binaries, 'runtime'))),
   world, artifact_dir: temp, readiness: preflight.rp_readiness, samples: [], restarts: [], renders: [],
   status: 'RUNNING', human_experience: 'PENDING', limits: fixture.limits};
+if (sliceIDs) Object.assign(report, {scope: 'targeted accuracy slice; not the full Golden or original32', selected_scene_ids: scenes.map(scene => scene.id), optional_real_render: 'SKIPPED: focus on NPC decisions'});
 const reportPath = join(temp, 'product-golden.json');
 const save = () => writeFile(reportPath, JSON.stringify(report, null, 2) + '\n', {mode: 0o600});
 let runtime, session, serial = 0, place = spec.people.find(p => p.player).place;
@@ -112,7 +120,7 @@ try {
   const created = await post('studio/worlds/create', {authority_instance_id: 'inst_m2_t09', authority_branch_id: branch, instance_id: world, idempotency_key: 'product-world', player_principal_id: 'principal_m2_rp_player', system_package: systemPackage, narrative_package: narrativePackage, spec}, creatorToken, 201);
   assert.equal(created.rp_readiness.status, 'READY');
   session = await post('rp/sessions/open', {instance_id: world, branch_id: branch, entity_id: created.entity_id, pov: 'second_person', idempotency_key: 'product-session'});
-  for (const scene of fixture.scenes) {
+  for (const scene of scenes) {
     await travel(scene.place);
     for (const text of scene.inputs) {
       const observation = await post('rp/observe', {session_id: session.session_id}), started = Date.now();
@@ -128,7 +136,7 @@ try {
       const shown = await displayed(turn.turn_run_id);
       assert.deepEqual(shown.narrative_lines, turn.narrative_lines, 'history changed the settled public output');
     }
-    if (scene.id === 'P7') {
+    if (scene.id === 'P7' || sliceIDs && scene === scenes.at(-1)) {
       const last = report.samples.at(-1), before = counts(), calls = rows('SELECT COUNT(*) AS n FROM rp_provider_calls')[0].n;
       await stop(); await start();
       const shown = await displayed(last.turn_run_id);
@@ -138,12 +146,14 @@ try {
       report.restarts.push({after_scene: scene.id, turn_run_id: last.turn_run_id, status: 'PASS', world: before}); await save();
     }
   }
+  if (!sliceIDs) {
   const last = report.samples.at(-1), before = counts();
   const render = await post('rp/narrative/render', {session_id: session.session_id, turn_run_id: last.turn_run_id, style_override: {narrative_density: 'standard', verbosity: 'normal', full_prose: true}});
   const proseReceipts = rows(`SELECT phase,provider_kind,model_id,result,attempt_count,fallback_kind FROM rp_provider_calls WHERE turn_run_id='${last.turn_run_id}' AND phase='narrative' ORDER BY rowid`);
   report.renders.push({source_turn: last.turn_run_id, narrative: render.view.lines, event_ids: render.view.event_ids, fact_groups: render.view.fact_groups || [], composition_version: render.view.composition_version || '', fallback: render.view.fallback_reason || '', receipts: proseReceipts}); await save();
   assert.deepEqual(counts(), before, 'presentation render mutated the committed world');
   assert.ok(!render.view.fallback_reason && proseReceipts.some(r => r.provider_kind === 'full_prose' && r.result === 'success' && r.attempt_count > 0 && !r.fallback_kind), 'optional real composition render failed');
+  }
   report.status = 'PASS: real authored product capture and persistence checks; human experience pending';
 } catch (error) {
   report.status = 'FAIL'; report.failure_kind = error?.name || 'Error';

@@ -1,0 +1,358 @@
+{
+  "kind": "corerp.product-preview-release.v1",
+  "scope": "authorized isolated review preview; not R1 completion",
+  "human_experience": "PENDING",
+  "reports": {
+    "activation": {
+      "kind": "corerp.preview-activation.v1",
+      "status": "PASS: authorized review preview activated; role experience pending",
+      "source_commit": "e3cdc8c9534bb8519d85c162bd1129b9f7184475",
+      "backup_dir": "/home/ubuntu/.local/share/corerp-preview/backups/20261001-e3cdc8c-r1",
+      "old_static_dir": "/var/www/corerp-preview.prev-20261001-e3cdc8c",
+      "default_model": "step-5-preview",
+      "proxy_timeout_seconds": 660,
+      "human_experience": "PENDING",
+      "release_scope": "authorized isolated review preview; R1 is not DONE",
+      "database_before": {
+        "events": 170,
+        "branches": [
+          [
+            "inst_m1",
+            "br_main",
+            1
+          ],
+          [
+            "inst_m2_t09",
+            "br_main",
+            75
+          ],
+          [
+            "world_honglou_60615b11",
+            "br_main",
+            94
+          ]
+        ],
+        "integrity": "ok",
+        "fk_errors": 0
+      },
+      "pid": 1622717,
+      "runtime_sha256": "f5dd16967733d6ded29466cb8c0bdf38f7bc19cf276a69fd5dce3f244e6a0e4a",
+      "database_after_migration": {
+        "events": 170,
+        "branches": [
+          [
+            "inst_m1",
+            "br_main",
+            1
+          ],
+          [
+            "inst_m2_t09",
+            "br_main",
+            75
+          ],
+          [
+            "world_honglou_60615b11",
+            "br_main",
+            94
+          ]
+        ],
+        "integrity": "ok",
+        "fk_errors": 0
+      },
+      "latest_migrations": [
+        "corerp-rp-narrative-artifacts-078-2026-10-01",
+        "corerp-rp-narrative-composition-077-2026-10-01",
+        "corerp-rp-conversation-focus-076-2026-09-30"
+      ],
+      "public_url": "https://code.linhony.xyz:4188/",
+      "review_url": "https://code.linhony.xyz:4188/rp-review/",
+      "ready_http": 200,
+      "index_http": 200,
+      "review_http": 200,
+      "static_identity": "matches built index",
+      "existing_worlds_preserved": true,
+      "database_backup_consistent": true
+    },
+    "world-smoke": {
+      "kind": "corerp.preview-ready-world-smoke.v1",
+      "status": "PASS: actual default Step calls, persisted v2 and restart; human experience pending",
+      "instance_id": "world_rp_runtime_r1_20261001",
+      "world_name": "红楼梦·大观园 · R1",
+      "public_url": "https://code.linhony.xyz:4188/",
+      "source_fixture_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+      "deployment_content_change": "name suffix only; original author declarations preserved",
+      "human_experience": "PENDING",
+      "samples": [
+        {
+          "index": 1,
+          "text": "老祖宗，我来看您了。今天只想陪您闲聊，不急着谈什么事。",
+          "seconds": 13.197,
+          "turn_run_id": "rpturn_90d4c0c6287c21550d3ca3b8f49a6ad388ae81690bb55f97e26db57224069512",
+          "narrative_lines": [
+            "在荣庆堂，你说：「老祖宗，我来看您了。今天只想陪您闲聊，不急着谈什么事。」",
+            "「宝玉，过来坐。既然不忙着议事，就陪老祖宗说几句闲话。」贾母答，笑了笑。"
+          ],
+          "composition_version": "corerp.fact-composition.v2",
+          "fact_groups": [
+            [
+              "event_rp_speech_bd16d5f7eada590744f5eebc7ce62c38d32e300e7849a111602b4787f7c3d4c4"
+            ],
+            [
+              "event_rp_npc_dfbedb6d34988c3e2fc4c29004be232d935f3b90c4394ae4361cc603baca62d4",
+              "event_rp_npc_expression_dfbedb6d34988c3e2fc4c29004be232d935f3b90c4394ae4361cc603baca62d4"
+            ]
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "result": "success",
+              "attempt_count": 1,
+              "fallback_kind": ""
+            },
+            {
+              "phase": "narrative",
+              "provider_kind": "deterministic",
+              "model_id": "",
+              "result": "success",
+              "attempt_count": 0,
+              "fallback_kind": ""
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "您方才怎么称呼我来着？我还在原处，只是说话，没有坐下。",
+          "seconds": 10.0,
+          "turn_run_id": "rpturn_763f817abf1faf2a10d3ee95ee78b047e84b23eb58f52271ee0e82539b326c3e",
+          "narrative_lines": [
+            "在荣庆堂，你说：「您方才怎么称呼我来着？我还在原处，只是说话，没有坐下。」",
+            "「老祖宗方才唤你「宝玉」——莫非这个称呼也忘了？你既还在原处，便再走近些，坐下陪我说几句，这儿正空着座儿呢。」贾母答，露出笑容。"
+          ],
+          "composition_version": "corerp.fact-composition.v2",
+          "fact_groups": [
+            [
+              "event_rp_speech_4a9a05854de6a493e282d99315433194d155de10cfe9ad980f1ca93ea2585953"
+            ],
+            [
+              "event_rp_npc_5b13a9a5dc53296f0cf96b8493f269d04ba1c846402fd5ae85e6ec162564d486",
+              "event_rp_npc_expression_5b13a9a5dc53296f0cf96b8493f269d04ba1c846402fd5ae85e6ec162564d486"
+            ]
+          ],
+          "receipts": [
+            {
+              "phase": "decision",
+              "provider_kind": "chat_completions",
+              "model_id": "step-5-preview",
+              "result": "success",
+              "attempt_count": 1,
+              "fallback_kind": ""
+            },
+            {
+              "phase": "narrative",
+              "provider_kind": "deterministic",
+              "model_id": "",
+              "result": "success",
+              "attempt_count": 0,
+              "fallback_kind": ""
+            }
+          ]
+        }
+      ],
+      "initial_harness_failure": "Script assumed baoyu key; fixture declares jia_baoyu. READY world created with no speech/model calls; resume exact owner request idempotently.",
+      "readiness": {
+        "status": "READY",
+        "characters": [
+          {
+            "key": "lin_daiyu",
+            "name": "林黛玉",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "xue_baochai",
+            "name": "薛宝钗",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "jia_mu",
+            "name": "贾母",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "wang_xifeng",
+            "name": "王熙凤",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "li_wan",
+            "name": "李纨",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "miao_yu",
+            "name": "妙玉",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "jia_tanchun",
+            "name": "贾探春",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "xi_ren",
+            "name": "袭人",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "qing_wen",
+            "name": "晴雯",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          },
+          {
+            "key": "zi_juan",
+            "name": "紫鹃",
+            "readiness": {
+              "persona": "READY",
+              "relationship_to_interlocutor": "READY",
+              "address_to_interlocutor": "READY"
+            },
+            "public_presentation": "READY"
+          }
+        ],
+        "incomplete_relationships": []
+      },
+      "binding_discovery": "verified by browser in separate check",
+      "session_id": "rps_e05f3812fc355d42eb91ce4044958cea",
+      "old_world_heads_preserved": true,
+      "restart": "PASS: exact public output, no duplicate effects/calls",
+      "after": {
+        "branches": [
+          {
+            "instance_id": "inst_m1",
+            "branch_id": "br_main",
+            "head_sequence": 1
+          },
+          {
+            "instance_id": "inst_m2_t09",
+            "branch_id": "br_main",
+            "head_sequence": 75
+          },
+          {
+            "instance_id": "world_honglou_60615b11",
+            "branch_id": "br_main",
+            "head_sequence": 94
+          },
+          {
+            "instance_id": "world_rp_runtime_r1_20261001",
+            "branch_id": "br_main",
+            "head_sequence": 25
+          }
+        ],
+        "events": 195,
+        "provider_calls": 11
+      }
+    },
+    "client-smoke": {
+      "kind": "corerp.preview-client-smoke.v1",
+      "status": "PASS",
+      "url": "https://code.linhony.xyz:4188/",
+      "instance_id": "world_rp_runtime_r1_20261001",
+      "viewport_width": 390,
+      "turn_run_id": "rpturn_58067130b05ddccc2f5a1296ad0e0dc66823452f51bb96afaa600b0279be238f",
+      "composition_version": "corerp.fact-composition.v2",
+      "narrative_lines": [
+        "在荣庆堂，贾母笑了笑。",
+        "贾母笑了笑。",
+        "你说：「您若愿意我近前，就招一下手好吗？我先留在原处听您说。」",
+        "「傻孩子，老祖宗还能不让你近前么？——过来吧，招你这只手都招酸了。座儿一直给你留着呢，坐下陪我说说话，只要闲话，不谈事。」贾母答，向你招了招手。"
+      ],
+      "fact_groups": [
+        [
+          "event_rp_npc_expression_dfbedb6d34988c3e2fc4c29004be232d935f3b90c4394ae4361cc603baca62d4"
+        ],
+        [
+          "event_rp_npc_expression_5b13a9a5dc53296f0cf96b8493f269d04ba1c846402fd5ae85e6ec162564d486"
+        ],
+        [
+          "event_rp_speech_ad806dbb000448d5892129592c413cb59c923a42c7d7011420cb8fc568d86a3d"
+        ],
+        [
+          "event_rp_npc_5404039a3e4eb72528645c77df7f2945988d84eb728d1930eef974d1f4cb834e",
+          "event_rp_npc_expression_5404039a3e4eb72528645c77df7f2945988d84eb728d1930eef974d1f4cb834e"
+        ]
+      ],
+      "provider_calls": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "attempted": true,
+          "attempt_count": 1,
+          "result": "success",
+          "started_at_utc": "2026-10-01T10:40:23.951510476Z"
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "attempted": false,
+          "attempt_count": 0,
+          "result": "success",
+          "render_source": "template",
+          "started_at_utc": "2026-10-01T10:40:34.347297572Z"
+        }
+      ],
+      "uses_server_default": true,
+      "actual_model": "step-5-preview",
+      "overflow": false,
+      "credential_persisted": false,
+      "page_errors": 0,
+      "initial_harness_failure": "first browser helper expected world name in scene heading; actual heading is sourced location; no turn was issued"
+    }
+  }
+}

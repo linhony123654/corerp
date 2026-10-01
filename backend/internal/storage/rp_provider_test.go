@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -119,9 +120,18 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 	defer store.Close()
 	service, _ = NewRPService(store, provider, "chat_completions")
 	result, err := service.PlayResumeRPTurn(ctx, RPTurnResumeRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID, IdempotencyKey: request.IdempotencyKey})
-	if err != nil || result.Status != "settled" || len(result.NarrativeLines) != 3 || !strings.Contains(strings.Join(result.NarrativeLines, "\n"), "配置的模型接口") {
+	if err != nil || result.Status != "settled" || result.CompositionVersion != core.RPFactCompositionVersionV2 || len(result.NPCEventIDs) != 1 {
 		t.Fatalf("resume %+v %v", result, err)
 	}
+	var expressionID string
+	if err := store.db.QueryRowContext(ctx, `SELECT event_id FROM events WHERE instance_id=? AND branch_id=? AND event_type='RPNonverbalAction' AND causation_event_id=?`, session.InstanceID, session.BranchID, result.NPCEventIDs[0]).Scan(&expressionID); err != nil {
+		t.Fatal("reply lost its committed expression child", err)
+	}
+	expectedGroups := [][]string{{result.PlayerEventID}, {result.NPCEventIDs[0], expressionID}}
+	if len(result.NarrativeLines) != len(expectedGroups) || !reflect.DeepEqual(result.FactGroups, expectedGroups) || strings.Count(strings.Join(result.NarrativeLines, "\n"), "「这句话来自配置的模型接口。」") != 1 || strings.Count(strings.Join(result.NarrativeLines, "\n"), "「你好」") != 1 {
+		t.Fatal("recovery lost exact dialogue or speech/expression source grouping", result)
+	}
+
 	public, err := json.Marshal(result)
 	if err != nil || strings.Contains(string(public), privateIntent) {
 		t.Fatal("new decision wire leaked a private sketch through recovered public output", err)
@@ -133,8 +143,10 @@ func TestRPLLMProviderUsesFilteredContextCommitsAndRecoversWithoutModel(t *testi
 	if err != nil || len(observation.RecentTurns) != 1 || len(observation.RecentTurns[0].ProviderCalls) != 2 || observation.RecentTurns[0].ProviderCalls[0].Result != "success" {
 		t.Fatalf("scoped history receipt %+v %v", observation.RecentTurns, err)
 	}
-	if strings.Count(strings.Join(observation.RecentTurns[0].NarrativeLines, "\n"), "招了招手") != 1 {
-		t.Fatal("settled turn lost or duplicated its witnessed gesture")
+	recent := observation.RecentTurns[0]
+	// Both closed beckon lexical choices (招手 / 招了招手) retain this action.
+	if strings.Count(strings.Join(recent.NarrativeLines, "\n"), "招手") != 1 || !reflect.DeepEqual(recent.NarrativeLines, result.NarrativeLines) || !reflect.DeepEqual(recent.FactGroups, expectedGroups) || !reflect.DeepEqual(recent.EventIDs, []string{result.PlayerEventID, result.NPCEventIDs[0], expressionID}) {
+		t.Fatal("settled turn lost or duplicated its witnessed gesture or receipt", recent)
 	}
 	second, err := store.OpenRPSession(ctx, core.RPSessionOpenRequest{PrincipalID: M2RPPlayerPrincipal, InstanceID: session.InstanceID, BranchID: session.BranchID, EntityID: session.ControlledEntityID, POV: "second_person", IdempotencyKey: "wire-v3-second-client"})
 	if err != nil {
@@ -171,8 +183,10 @@ func TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence(t *testing.T) {
 			}
 			defer store.Close()
 			session, _, initial := newRPAuthoredModelTestSession(t, ctx, store)
+			var calls atomic.Int32
 			release := make(chan struct{})
 			model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
 				switch mode {
 				case "unavailable":
 					w.WriteHeader(503)
@@ -198,9 +212,22 @@ func TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence(t *testing.T) {
 			service, _ := NewRPService(store, provider, "chat_completions")
 			request := core.RPSpeechRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID, ExpectedCursor: initial.ObservationCursor, Text: "你好", IdempotencyKey: "failure"}
 			result, err := service.PlayRPTurn(ctx, request)
-			if err != nil || result.Status != "settled" || !strings.Contains(result.NarrativeLines[1], "保持沉默") {
-				t.Fatalf("failure left partial turn %+v %v", result, err)
+			if err != nil || result.Status != "settled" || result.CompositionVersion != core.RPFactCompositionVersionV2 || len(result.NPCEventIDs) != 1 || calls.Load() != 1 {
+				t.Fatalf("failure left partial turn %+v %v calls=%d", result, err, calls.Load())
 			}
+			expectedGroups := [][]string{{result.PlayerEventID}, {result.NPCEventIDs[0]}}
+			if len(result.NarrativeLines) != len(expectedGroups) || !reflect.DeepEqual(result.FactGroups, expectedGroups) || !strings.Contains(result.NarrativeLines[1], "没有作答") {
+				t.Fatal("fallback lost its sourced public silence", result)
+			}
+			saved, err := store.ReadRPNarrative(ctx, RPNarrativeReadRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID, TurnRunID: result.TurnRunID})
+			if err != nil || saved.View.Artifact == nil || !reflect.DeepEqual(saved.View.Lines, result.NarrativeLines) || !reflect.DeepEqual(saved.View.EventIDs, []string{result.PlayerEventID, result.NPCEventIDs[0]}) {
+				t.Fatal("fallback lost complete canonical receipt", saved, err)
+			}
+			facts := saved.View.Artifact.Input.Facts
+			if len(facts) != 2 || facts[1].EventID != result.NPCEventIDs[0] || facts[1].Action != "silence" || facts[1].Text != "" || facts[1].ExpressionCode != "" || facts[1].CompanionEventID != "" {
+				t.Fatal("failure fabricated speech or expression instead of committed silence", facts)
+			}
+
 			if len(result.ProviderCalls) != 2 || !result.ProviderCalls[0].Attempted || result.ProviderCalls[0].ProviderKind != "chat_completions" || result.ProviderCalls[0].Result == "success" || result.ProviderCalls[0].AttemptCount != 1 || result.ProviderCalls[0].FallbackKind != "silence" || result.ProviderCalls[1].RenderSource != "template" {
 				t.Fatalf("technical failure disguised as ordinary silence: %+v", result.ProviderCalls)
 			}
@@ -217,6 +244,14 @@ func TestRPLLMFailureAndIllegalOutputSettleOnlyAuditedSilence(t *testing.T) {
 			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM audit_records WHERE json_extract(payload,'$.status')='provider_fallback'`, nil, 1)
 			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM audit_records WHERE payload LIKE '%secret-upstream-details%'`, nil, 0)
 			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM events WHERE instance_id=? AND branch_id=? AND event_sequence>? AND event_type NOT IN ('RPSpeechAccepted','RPNPCDecisionRecorded')`, []any{session.InstanceID, session.BranchID, initial.ObservationCursor}, 0)
+			replay, err := service.PlayRPTurn(ctx, request)
+			if err != nil || !replay.Replayed || replay.TurnRunID != result.TurnRunID || !reflect.DeepEqual(replay.NarrativeLines, result.NarrativeLines) || calls.Load() != 1 {
+				t.Fatal("fallback replay repeated provider or changed silence", replay, err, calls.Load())
+			}
+			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM rp_utterances`, nil, 1)
+			assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM rp_npc_decisions WHERE action='silence'`, nil, 1)
+			assertM2Value(t, ctx, store, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, []any{session.InstanceID, session.BranchID}, result.SettledSequence)
+
 		})
 	}
 }

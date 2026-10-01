@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -43,7 +45,7 @@ func TestRPNarrativeOverridePropagatesReasoningControls(t *testing.T) {
 					}
 					content := `{"pov":"second_person","tense":"present","verbosity":"normal","dialogue_ratio":50,"description_density":50,"narrative_pack_ref":"builtin/plain@1","unsupported_instructions":false}`
 					if prose {
-						content = `{"version":"corerp.fact-composition.v1","groups":[{"layout":"lines","atoms":[{"fact_ref":"f0","template":"dialogue"},{"fact_ref":"f1","template":"dialogue"}]}]}`
+						content = `{"version":"corerp.fact-composition.v2","register":"plain","paragraphs":[{"context":"none","beats":[{"fact_refs":["f0"],"form":"subject_first","lexical":"plain"}]},{"context":"none","beats":[{"fact_refs":["f1"],"form":"quote_first","lexical":"plain"}]}]}`
 					}
 					_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": content}}}})
 				}))
@@ -65,6 +67,9 @@ func TestRPNarrativeOverridePropagatesReasoningControls(t *testing.T) {
 				view, err := provider.Render(context.Background(), input)
 				if err != nil || view.FallbackReason != "" || calls.Load() != 1 {
 					t.Fatalf("narrative override failed: %v fallback=%q calls=%d", err, view.FallbackReason, calls.Load())
+				}
+				if prose && (view.CompositionVersion != core.RPFactCompositionVersionV2 || !reflect.DeepEqual(view.FactGroups, [][]string{{"speech-player"}, {"speech-npc"}}) || len(view.Lines) != 2 || !strings.Contains(view.Lines[0], "「你好。」") || !strings.Contains(view.Lines[1], "「你好，Lin。」")) {
+					t.Fatalf("v2 override lost ordered sources or immutable quotes: %+v", view)
 				}
 			})
 		}

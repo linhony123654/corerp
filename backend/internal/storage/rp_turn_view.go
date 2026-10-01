@@ -183,7 +183,15 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 	}
 	sort.SliceStable(facts, func(i, j int) bool { return sequenceByEvent[facts[i].EventID] < sequenceByEvent[facts[j].EventID] })
 	var instance, branch string
-	var chapterStart int64
+	var chapterStart, openedSequence int64
+	openedColumn := `0`
+	openedAvailable, err := rpSessionOpenedWindowAvailable(ctx, conn)
+	if err != nil {
+		return input, err
+	}
+	if openedAvailable {
+		openedColumn = `opened_sequence`
+	}
 	chapterColumn := `0`
 	chapterAvailable, err := rpSessionChapterAvailable(ctx, conn)
 	if err != nil {
@@ -192,7 +200,7 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 	if chapterAvailable {
 		chapterColumn = `chapter_start_sequence`
 	}
-	if err := conn.QueryRowContext(ctx, `SELECT instance_id,branch_id,`+chapterColumn+` FROM rp_sessions WHERE session_id=?`, sessionID).Scan(&instance, &branch, &chapterStart); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT instance_id,branch_id,`+chapterColumn+`,`+openedColumn+` FROM rp_sessions WHERE session_id=?`, sessionID).Scan(&instance, &branch, &chapterStart, &openedSequence); err != nil {
 		return input, err
 	}
 	if err := conn.QueryRowContext(ctx, `SELECT b.head_sequence FROM rp_sessions s JOIN branches b ON b.instance_id=s.instance_id AND b.branch_id=s.branch_id WHERE s.session_id=?`, sessionID).Scan(&input.SourceHead); err != nil {
@@ -251,6 +259,12 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 	var windowFloor int64
 	if err := conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(settled_sequence),0) FROM rp_turn_runs WHERE session_id=? AND status='settled' AND player_turn_id IS NOT NULL AND settled_sequence<?`, sessionID, playerEventSeq).Scan(&windowFloor); err != nil {
 		return input, core.WrapError(core.CodeStorageFailure, "read narrative window floor", err)
+	}
+	// A fresh session starts its narration at its immutable opening head.
+	// Shared history remains visible; genuinely new offline events after open
+	// remain eligible even when observation_cursor has since advanced.
+	if openedSequence > windowFloor {
+		windowFloor = openedSequence
 	}
 	if chapterStart > windowFloor {
 		windowFloor = chapterStart

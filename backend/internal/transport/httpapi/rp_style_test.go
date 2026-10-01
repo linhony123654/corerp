@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -104,9 +105,17 @@ func TestRPStyleHTTPPermissionsAndFactPreservingView(t *testing.T) {
 					t.Fatal("completion source differs from accepted facts")
 				}
 			}
-		} else if frame.Type != "line" || frame.Chunk.Index != i || frame.Chunk.Line != variant.View.Lines[i] || frame.Chunk.EventID != variant.View.EventIDs[i] {
+		} else if frame.Type != "line" || frame.Chunk.Index != i || frame.Chunk.Line != variant.View.Lines[i] || frame.Chunk.EventID != "" || !reflect.DeepEqual(frame.Chunk.EventIDs, variant.View.FactGroups[i]) {
 			t.Fatal("stream lost ordering or attributed fact")
 		}
+	}
+	wantSources := append([]string{turn.PlayerEventID}, turn.NPCEventIDs...)
+	var flattened []string
+	for _, group := range variant.View.FactGroups {
+		flattened = append(flattened, group...)
+	}
+	if variant.View.CompositionVersion != core.RPFactCompositionVersionV2 || !reflect.DeepEqual(flattened, wantSources) || !reflect.DeepEqual(variant.View.EventIDs, wantSources) || !strings.Contains(variant.View.Lines[0], "「你好」") {
+		t.Fatalf("styled v2 lost ordered committed sources or player quote: %+v", variant.View)
 	}
 	selection := storage.RPNarrativeSelectRequest{SessionID: session.SessionID, TurnRunID: turn.TurnRunID, RenderID: variant.View.RenderID}
 	response = performJSON(t, handler, "/api/v1/rp/narrative/select", creatorToken, selection)

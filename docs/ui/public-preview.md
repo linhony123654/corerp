@@ -18,3 +18,23 @@
 - 本机实测：Nginx 配置检查通过，HTTPS 域名证书校验通过，从本机访问公网域名/IP 返回 200；未认证 API 返回 401，外域 Origin 返回 403；Playwright 用相同 HTTPS 域名完成玩家登录、真实观察和抽屉操作，无浏览器错误。**没有独立外网客户端验证云安全组放行**；若外部访问超时，检查云侧入站 TCP 4188。
 
 运维：`sudo systemctl status corerp-preview` 查看服务，`sudo journalctl -u corerp-preview -n 50 --no-pager` 查看日志；如需暂停试玩，先执行 `sudo systemctl stop corerp-preview`，再按实际需求关闭 Nginx 的独立入口。更新页面需重新构建并仅复制 `dist/` 到 `/var/www/corerp-preview/`；源代码更改不会自动同步到已发布的静态文件或已构建的后端二进制。数据库迁移前先停服务并使用 SQLite `.backup` 生成一致快照。不要在此预览实例处理真实身份或生产凭证。
+
+## 2026-10-01 R1 来源与会话窗口更新
+
+最新隔离预览已采用 `feea3b32f0315d95fa447e89d48f1bae3e991e690fe0b98e9f6d20bf18eb834d` runtime 与 079 session opening 迁移；最终代码提交由公开 `release.json` 记录。433 个生产源文件摘要为 `0200985bba147b36d7cdf6578b9276e88d87a44b55e54c44410942c7bc032ee6`。默认 Step 模型、原页面与 READY 世界保持原样。新[七轮准确度对照](https://code.linhony.xyz:4188/rp-review/accuracy/)与此前完整22轮审阅分别保留。
+
+升级前后 198 条原事件、分支 head、13 个 provider 回执和旧 canonical 正文摘要一致，24 个旧 session 保留 opening=0。新 session 的 opening=28 保持四段共享旧历史；三条旧表情没有再次出现在当前正文。实际默认 Step 烟测一次成功、无额外模型叙述，重启后正文与来源不变，没有重复世界效果或调用。旧世界 head 保持不变，配置与前端 hash 完全一致。停服一致性备份位于 `backups/20261001-source-support-079/`。
+
+这只证明已修复的来源契约与叙述时间边界。实际回复仍从“原处”推断站姿，并重复未设定的座位；语义准确度 NOT PASSED、人工体验 PENDING、R1 NOT DONE。新的完整32/22尚未运行，不借旧结果宣称其通过。已新增079正文后不要未经验证降回078 reader 或还原 live DB。安全字段证据见 [本次发布记录](../rp-runtime-r1/source-support-preview-release-2026-10-01.json)与[当前交接](../rp-runtime-r1/handoff-2026-10-01.md)。
+
+## 2026-10-01 首次发布的 R1 审阅预览（e3/f5dd）
+
+以下是 10 月 1 日已激活的隔离试玩版本；上文保留为此前部署历史。主入口仍为 [CoreRP 试玩](https://code.linhony.xyz:4188/)，审阅入口为 [R1 审阅页](https://code.linhony.xyz:4188/rp-review/)。这次是可访问的产品预览发布，不代表 R1 已完成，也不代表语义准确度或角色体验验收通过。
+
+- **发布身份与默认模型：** 已部署源提交为 `e3cdc8c9534bb8519d85c162bd1129b9f7184475`，运行二进制 SHA-256 为 `f5dd16967733d6ded29466cb8c0bdf38f7bc19cf276a69fd5dce3f244e6a0e4a`。默认模型现为 `step-5-preview`，取代旧历史段所述的原默认配置。`release.json` 与激活报告一致；就绪、主页面、审阅页检查均为 HTTP 200，已发布主页面与本次构建匹配。普通产品世界首次使用自然事实叙述；世界作者明确开启时才允许首次模型组织，产品预设未开启该选项。
+- **新的已准备世界：** `world_rp_runtime_r1_20261001`，显示名称「红楼梦·大观园 · R1」。采用明确创作的十一人世界，十名 NPC 的人设、公开语气、与玩家的方向关系及称呼均 `READY`。作者源 SHA-256 为 `31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7`；发布时仅在世界名加 R1 后缀，保留其余作者声明。进入指引（发布者浏览器观测确认）：在授权世界选择器选择宝玉及上述实例的绑定；本次会话已来到荣庆堂，Play 的主标题显示当前地点「荣庆堂」。
+- **迁移与旧世界保全：** 已应用 076–078，最新为 `corerp-rp-narrative-artifacts-078-2026-10-01`。停服一致性备份得到确认；迁移前后事件数均为 **170**，旧分支 head 完全一致，`integrity=ok`、外键错误 0。170 指迁移阶段原有事件的保全检查；创建新世界和试玩随后会追加新事件，不表示当前总事件数冻结在 170。新世界烟测亦记录旧世界 head 保持不变，没有替换旧世界。
+- **实际调用与移动端证据：** 新世界先完成两轮真实默认 Step 调用，再完成 390 像素移动端浏览器的第三轮；三个回合标识不同，呈现均为 `corerp.fact-composition.v2`。每轮 NPC 决策回执为 `chat_completions / step-5-preview`、一次尝试成功；自然叙述回执为 deterministic、零模型尝试。移动端使用服务器默认而非自带 profile，报告无横向溢出、无页面脚本错误、凭证未持久化。新世界重启检查通过：已保存公开文本保持一致，没有重复效果或模型调用。这些是发布烟测与恢复证据，不是角色理解正确的证明。
+- **验收状态与未实现工作：** 激活、世界烟测及公开 release 元数据都将 `human_experience` 标为 **PENDING**。现有样本尚未通过用户体验与语义准确性验收，不得把 HTTP 200、schema 校验、来源完整或三个成功回合写成体验 PASS。后续更准确的角色理解、更充分的长期连续性及其他拟议改进仍是待实现/待验证工作，不能当作此版本已经具备或已经部署的能力。
+
+本次文档核对只读取已有报告的安全字段，没有重跑模型、浏览器或部署。证据是本机受限发布目录 `/home/ubuntu/.local/share/corerp-preview/r1-release-20261001-e3cdc8c/` 中的 `preparation.json`、`activation.json`、`world-smoke.json`、`client-smoke.json`，以及已发布的 `release.json`。文档未复制模型端点、密钥、凭证或数据库内容；保留报告的技术 PASS 与人的 PENDING 区别。

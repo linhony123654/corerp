@@ -36,6 +36,13 @@ func TestRPSharedHealthMigrationPreservesF3RoundRowsAndForeignKeys(t *testing.T)
 			t.Fatal("create pre-F5 schema", file, err)
 		}
 	}
+	// Current turn orchestration needs independent application receipts.
+	// Keep the shared-round domain at its historical shape until its target migration.
+	for _, file := range []string{"073_rp_narrative_renders.sql", "077_rp_narrative_composition.sql", "078_rp_narrative_artifacts.sql"} {
+		if err := s.applyMigration(ctx, file); err != nil {
+			t.Fatal("presentation prerequisite for shared-round fixture", file, err)
+		}
+	}
 	_, human, _ := newRPWaitTestSession(t, ctx, s)
 	for _, principal := range []struct{ id, kind string }{{"principal_migration_operator", "operator"}, {"principal_migration_service", "service"}} {
 		if _, err := db.ExecContext(ctx, `INSERT INTO principals(principal_id,principal_type,display_name,status) VALUES (?,?,?,'active')`, principal.id, principal.kind, principal.id); err != nil {

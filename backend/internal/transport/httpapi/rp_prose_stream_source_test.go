@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"corerp.local/backend/internal/core"
-	"corerp.local/backend/internal/narrative"
 	"corerp.local/backend/internal/storage"
 )
 
@@ -26,6 +25,7 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 	var calls atomic.Int32
 	var unavailable atomic.Bool
 	var factCount atomic.Int32
+	var modelQuotes []string
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		if unavailable.Load() {
@@ -45,7 +45,9 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 		}
 		var input struct {
 			Facts []struct {
-				Ref string `json:"fact_ref"`
+				Ref    string `json:"fact_ref"`
+				Action string `json:"action"`
+				Text   string `json:"text"`
 			} `json:"facts"`
 		}
 		if err := json.Unmarshal([]byte(request.Messages[1].Content), &input); err != nil || len(input.Facts) == 0 {
@@ -56,13 +58,20 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 		// Separate paragraphs must retain their own source set, rather than
 		// claiming every source for every line in a multi-fact narrative.
 		groups := make([]map[string]any, 0, len(input.Facts))
+		modelQuotes = nil
 		for _, fact := range input.Facts {
+			if fact.Text == "" {
+				t.Error("fixture expected committed speech facts")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			modelQuotes = append(modelQuotes, fact.Text)
 			groups = append(groups, map[string]any{
-				"layout": "inline", "atoms": []any{map[string]string{"fact_ref": fact.Ref, "template": "plain"}},
+				"context": "none", "beats": []any{map[string]any{"fact_refs": []string{fact.Ref}, "form": "subject_first", "lexical": "plain"}},
 			})
 		}
 		factCount.Store(int32(len(input.Facts)))
-		content, err := json.Marshal(map[string]any{"version": "corerp.fact-composition.v1", "groups": groups})
+		content, err := json.Marshal(map[string]any{"version": "corerp.fact-composition.v2", "register": "plain", "paragraphs": groups})
 		if err != nil {
 			t.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -79,6 +88,13 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 	})
 	assertStatus(t, open, http.StatusOK)
 	session := decodeData[storage.RPSession](t, open)
+	// Canonical refinement requires the settled turn to opt into full prose;
+	// an unconfigured turn now has a complete saved v2 primary artifact.
+	fullProse := true
+	styleResponse := performJSON(t, handler, "/api/v1/rp/style/set", rpPlayerToken, storage.RPStyleSetRequest{
+		InstanceID: storage.M2DemoInstanceID, BranchID: storage.M2DemoBranchID, Scope: "session", SessionID: session.SessionID, IdempotencyKey: "prose-source-style", Patch: core.RPStylePatch{FullProse: &fullProse},
+	})
+	assertStatus(t, styleResponse, http.StatusOK)
 	read := core.RPSessionReadRequest{SessionID: session.SessionID}
 	observed := decodeData[storage.RPObservation](t, performJSON(t, handler, "/api/v1/rp/observe", rpPlayerToken, read))
 	turnResponse := performJSON(t, handler, "/api/v1/rp/turns/run", rpPlayerToken, core.RPSpeechRequest{
@@ -132,13 +148,16 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 			}
 			seenRefs[frame.Chunk.EventIDs[0]] = true
 			refs = append(refs, frame.Chunk.EventIDs...)
+			if count >= len(modelQuotes) || !strings.Contains(frame.Chunk.Line, "「"+modelQuotes[count]+"」") {
+				t.Fatalf("stream changed literal quote: %+v", frame.Chunk)
+			}
 			firstChunks = append(firstChunks, frame.Chunk)
 			count++
 		case "done":
 			if count == 0 || frame.Count != count || frame.FallbackReason != "" || strings.Join(frame.EventIDs, ",") != strings.Join(refs, ",") {
 				t.Fatalf("prose completion mismatched source references: %+v", frame)
 			}
-			if !reflect.DeepEqual(frame.EventIDs, wantSources) || frame.CompositionVersion != "corerp.fact-composition.v1" || len(frame.FactGroups) != count {
+			if !reflect.DeepEqual(frame.EventIDs, wantSources) || frame.CompositionVersion != core.RPFactCompositionVersionV2 || len(frame.FactGroups) != count {
 				t.Fatalf("completion lost independent committed source/version evidence: %+v want=%v", frame, wantSources)
 			}
 			for i, group := range frame.FactGroups {
@@ -147,8 +166,8 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 				}
 			}
 			firstGroups = frame.FactGroups
-			if !reflect.DeepEqual(frame.Warnings, []string{narrative.CompositionCapabilityWarning}) {
-				t.Fatalf("fresh composition capability was not disclosed: %+v", frame.Warnings)
+			if len(frame.Warnings) != 0 {
+				t.Fatalf("unexpected v1 capability warning in fresh v2 composition: %+v", frame.Warnings)
 			}
 		default:
 			t.Fatalf("unexpected stream frame %q", frame.Type)
@@ -183,7 +202,7 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 			cachedCount++
 		case "done":
 			cachedDone = true
-			if frame.CompositionVersion != "corerp.fact-composition.v1" || !reflect.DeepEqual(frame.EventIDs, wantSources) || !reflect.DeepEqual(frame.FactGroups, firstGroups) || !reflect.DeepEqual(frame.Warnings, []string{narrative.CompositionCapabilityWarning}) {
+			if frame.CompositionVersion != core.RPFactCompositionVersionV2 || !reflect.DeepEqual(frame.EventIDs, wantSources) || !reflect.DeepEqual(frame.FactGroups, firstGroups) || len(frame.Warnings) != 0 {
 				t.Fatalf("saved completion changed composition disclosure or independent sources: %+v", frame)
 			}
 		default:
@@ -217,6 +236,8 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 		t.Fatal("upstream error or credential escaped in fallback")
 	}
 	var completed bool
+	var fallbackSources []string
+	var fallbackLines []string
 	for _, raw := range strings.Split(strings.TrimSpace(fallback.Body.String()), "\n") {
 		var frame struct {
 			Type           string                `json:"type"`
@@ -226,14 +247,26 @@ func TestRPFullProseStreamCitesBoundedFactsAndReceipts(t *testing.T) {
 		if err := json.Unmarshal([]byte(raw), &frame); err != nil {
 			t.Fatal(err)
 		}
-		if frame.Type == "line" && (frame.Chunk.EventID == "" || len(frame.Chunk.EventIDs) != 0) {
+		if frame.Type == "line" && (frame.Chunk.EventID != "" || len(frame.Chunk.EventIDs) == 0 || frame.Chunk.Index != len(fallbackLines)) {
 			t.Fatalf("fallback lost deterministic attribution: %+v", frame.Chunk)
+		}
+		if frame.Type == "line" {
+			fallbackSources = append(fallbackSources, frame.Chunk.EventIDs...)
+			fallbackLines = append(fallbackLines, frame.Chunk.Line)
 		}
 		if frame.Type == "done" {
 			completed = true
 			if frame.FallbackReason != "prose_unavailable" {
 				t.Fatalf("failure rendered as model success: %+v", frame)
 			}
+		}
+	}
+	if !reflect.DeepEqual(fallbackSources, wantSources) {
+		t.Fatalf("fallback changed committed source ordering: %v want %v", fallbackSources, wantSources)
+	}
+	for _, quote := range modelQuotes {
+		if !strings.Contains(strings.Join(fallbackLines, "\n"), "「"+quote+"」") {
+			t.Fatalf("fallback changed literal quote %q", quote)
 		}
 	}
 	if !completed {

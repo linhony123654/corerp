@@ -417,7 +417,13 @@ try {
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending, null, { timeout: modelResponseTimeoutMs });
     const failedTurn = failedEnvelope.data;
     const failures = failedTurn.provider_calls?.filter(call => call.phase === 'decision') || [];
-    assert.equal(failures.length, 3, 'provider failure lacks three decision receipts');
+    // CONTINUE may legitimately move an NPC away. Failure coverage follows
+    // the immutable hearing snapshot of this speech, not the opening cast.
+    const heardActors = JSON.parse(sql(`SELECT json_extract(e.payload,'$.listener_ids') FROM rp_turn_runs r JOIN events e ON e.event_id=r.player_event_id WHERE r.turn_run_id='${failedTurn.turn_run_id}'`));
+    assert.ok(heardActors.length > 0, 'failure check has no heard actors');
+    const receiptActors = JSON.parse(sql(`SELECT json_group_array(npc_entity_id) FROM rp_provider_calls WHERE turn_run_id='${failedTurn.turn_run_id}' AND phase='decision'`));
+    assert.deepEqual(receiptActors.sort(), [...heardActors].sort(), 'provider failure receipts differ from frozen heard actor set');
+    assert.equal(failures.length, heardActors.length, 'public failure receipt count differs from frozen heard actor set');
     assert.ok(failures.every(call => call.result !== 'success' && call.fallback_kind === 'silence'), 'provider failure was hidden as ordinary NPC choice');
     assert.equal(sql(`SELECT COUNT(*) FROM rp_utterances WHERE speaker_entity_id='${created.entity_id}' AND speech_text='你们现在还能听见我吗？'`), '1', 'failed provider duplicated or lost player speech');
     await page.locator('.turn.narrator').last().getByText('本轮人物模型调用失败或超时', { exact: false }).waitFor();

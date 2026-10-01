@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -114,8 +115,19 @@ func TestRPTurnProviderFailureSettlesSilenceWithoutPromotingFalseClaim(t *testin
 	})
 	result, err := store.RunRPTurn(ctx, core.RPSpeechRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID,
 		Text: "我有一百万。", ExpectedCursor: initial.ObservationCursor, IdempotencyKey: "fallback-turn"}, failing)
-	if err != nil || result.Status != "settled" || len(result.NarrativeLines) != 2 || !strings.Contains(result.NarrativeLines[0], "你说") || !strings.Contains(result.NarrativeLines[1], "保持沉默") {
+	if err != nil || result.Status != "settled" || result.CompositionVersion != core.RPFactCompositionVersionV2 || len(result.NarrativeLines) != 2 || !strings.Contains(result.NarrativeLines[0], "你说：「我有一百万。」") || !strings.Contains(result.NarrativeLines[1], "没有作答") {
 		t.Fatalf("provider failure did not settle to safe narrative: %+v, %v", result, err)
+	}
+	if len(result.NPCEventIDs) != 1 || !reflect.DeepEqual(result.FactGroups, [][]string{{result.PlayerEventID}, {result.NPCEventIDs[0]}}) {
+		t.Fatal("false claim or silence lost source coverage", result)
+	}
+	saved, err := store.ReadRPNarrative(ctx, RPNarrativeReadRequest{PrincipalID: M2RPPlayerPrincipal, SessionID: session.SessionID, TurnRunID: result.TurnRunID})
+	if err != nil || saved.View.Artifact == nil || len(saved.View.Artifact.Input.Facts) != 2 {
+		t.Fatal("fallback canonical artifact missing", saved, err)
+	}
+	fact := saved.View.Artifact.Input.Facts[1]
+	if fact.EventID != result.NPCEventIDs[0] || fact.Action != "silence" || fact.Text != "" || fact.ExpressionCode != "" {
+		t.Fatal("failure promoted speech or expression instead of silence", fact)
 	}
 	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM rp_npc_decisions WHERE parent_turn_id = ? AND action = 'silence'`, []any{result.PlayerTurnID}, 1)
 	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM events WHERE event_type IN ('PurchaseCommitted', 'CurrencyIssued') AND event_sequence > ?`, []any{initial.ObservationCursor}, 0)
@@ -150,6 +162,12 @@ func TestRPTurnSchemaUpgradeFrom024PreservesCommittedSpeechAndNPC(t *testing.T) 
 	}
 	if _, err := store.db.ExecContext(ctx, `DELETE FROM schema_meta WHERE schema_version IN (?,?)`, RPTurnActivationSchemaVersion, RPConversationFocusSchemaVersion); err != nil {
 		t.Fatal(err)
+	}
+	// Removing the receipt owner also removes its later dependent presentation schema.
+	for _, statement := range []string{`DROP TABLE rp_narrative_selections`, `DROP TABLE rp_narrative_renders`, `DELETE FROM schema_meta WHERE schema_version IN ('corerp-rp-narrative-renders-073-2026-09-28','corerp-rp-narrative-composition-077-2026-10-01','corerp-rp-narrative-artifacts-078-2026-10-01')`} {
+		if _, err := store.db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := store.db.ExecContext(ctx, `DROP TABLE rp_turn_runs`); err != nil {
 		t.Fatal(err)

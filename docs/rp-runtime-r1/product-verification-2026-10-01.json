@@ -1,0 +1,254 @@
+{
+  "kind": "corerp.product-r1-terminal-verification.v1",
+  "recorded_at_utc": "2026-10-01T10:55:19.216379+00:00",
+  "source_commit": "e3cdc8c9534bb8519d85c162bd1129b9f7184475",
+  "scope": "shipped product increment; subsequent source-support implementation requires new evidence",
+  "r1_status": "NOT DONE: semantic accuracy not passed; human experience PENDING",
+  "build": {
+    "backend_source_sha256": "5cd3c19dd8eeda460eea5f64dcc5691c84b3218b8dda1666158f2a4cb1174bbe",
+    "backend_file_count": 804,
+    "binaries_sha256": {
+      "runtime": "f5dd16967733d6ded29466cb8c0bdf38f7bc19cf276a69fd5dce3f244e6a0e4a",
+      "m1": "ec00bca445efe5958e5bc3e85519570fa67cf4193cd02bd0fc2ccdd1d804ea3c",
+      "setup": "07b0afc122e8f934a0ea4552c6889e521c4cd98d320577f1b2da5ea9eb3cc3e8",
+      "admin": "f32a3ae4e6006bcc63629f7918da6451ef8fbe7b0d45ae9eebe474637583f1bb",
+      "preflight": "97ccc848d8bb5c568a60ae7c515b855fc2fd861c2d7e3c0a004dc28b6886d378"
+    },
+    "flags": [
+      "-p=1",
+      "-buildvcs=false",
+      "-gcflags=corerp.local/backend/internal/storage=-dwarf=false",
+      "-ldflags=-s -w"
+    ]
+  },
+  "test_only_fixture_repair_checkpoint": {
+    "production_files_compared": 431,
+    "changed_production_files": 0,
+    "full_804_file_source_digest_not_reused_for_modified_tests": true
+  },
+  "full_backend_original_run": {
+    "command": [
+      "/usr/local/go/bin/go",
+      "test",
+      "-json",
+      "-p=1",
+      "-gcflags=corerp.local/backend/internal/storage=-dwarf=false",
+      "-ldflags=-s -w",
+      "-timeout=30m",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 1852.017,
+    "log": "/tmp/corerp-product-r1-full-backend-20261001.jsonl",
+    "status": "FAIL retained; corrected failed fixtures subsequently checked below; entire command not rerun",
+    "log_sha256": "579218a6d614f35f822767e69512b2e44865c73d8e3fb729f11ca392482c575f"
+  },
+  "corrected_scope_results": [
+    {
+      "label": "full-http-after-fixture-correction",
+      "log": "/tmp/corerp-product-r1-http-v2-repair-complete-20261001.jsonl",
+      "sha256": "2c4ff9988f7d8153e94dfa67c0055a424bd870a252676616114f2ccaed45251b",
+      "package_results": [
+        {
+          "Time": "2026-10-01T18:40:41.721579023+08:00",
+          "Action": "pass",
+          "Package": "corerp.local/backend/internal/transport/httpapi",
+          "Elapsed": 69.793
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "label": "all-failed-storage-cases-and-adjacent-dialogue",
+      "status": "PASS",
+      "elapsed_seconds": 22.802,
+      "evidence_file": "audits/2026-10-01-commit-recovery.md",
+      "production_modified": false,
+      "actual_model_calls": 0
+    },
+    {
+      "label": "dialogue-filter-identity-focused",
+      "status": "PASS",
+      "elapsed_seconds": 10.377,
+      "production_modified": false,
+      "actual_model_calls": 0
+    }
+  ],
+  "original32_original_run": {
+    "command": [
+      "node",
+      "scripts/verify-rp3-npc-play.mjs",
+      "--rongqing",
+      "--prose",
+      "--binary-dir",
+      "/tmp/corerp-product-r1-20261001"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 2333.43,
+    "log": "/tmp/corerp-product-r1-original32-20261001.log",
+    "runtime_sha256": "f5dd16967733d6ded29466cb8c0bdf38f7bc19cf276a69fd5dce3f244e6a0e4a",
+    "status": "FAIL after 32 live turns; fixed-three listener assumption",
+    "log_sha256": "b66ce4eb01e8e47a233ae63325dce09b170119c29c43264fe974aed32c8feef3",
+    "actual_live_turns": 32,
+    "successful_live_npc_decisions": 96,
+    "successful_initial_live_narrative_renders": 32,
+    "remaining_postchecks": {
+      "kind": "corerp.original32-postchecks.v1",
+      "original_status": "FAIL at fixed-three failure receipt assertion; preserved",
+      "status": "PASS: resumed deterministic postchecks; original live FAIL retained",
+      "artifact": "/tmp/corerp-rp3-npc-oLyFcI",
+      "runtime_sha256": "f5dd16967733d6ded29466cb8c0bdf38f7bc19cf276a69fd5dce3f244e6a0e4a",
+      "samples_sha256": "8e82c2631c51e359a24cab92644ebfcfc5eeecbeee0d1e969a55b1c50c100ce3",
+      "original_live_turns": 32,
+      "original_live_decisions": 96,
+      "actual_model_calls_added": 0,
+      "failure_turn_id": "rpturn_74ba09362b9028a014566ddc7fecbb8c0ffe7d2352d5b48660e41c6806d979a4",
+      "frozen_heard_actors": [
+        "studio_entity_8a309c4fae3a9f5c35651512d12e70cf288f3640a097e7c65a297fa3504dee93",
+        "studio_entity_f2a6aadf1da66443433ea45e806172a52ea140606d56e24c849f04d8ff7d43f4"
+      ],
+      "departure_evidence": [
+        {
+          "event_id": "event_rp_initiative_758849b93f6a2b8bdac78665ec05ddf425bf21e2f5651d7501e6d8dd1ef2ec48",
+          "event_sequence": 243,
+          "actor_id": "studio_entity_077e22ffae48b81ea451af755c47ee7cd080059c6be89f3e25a04988070e31e6",
+          "actor_name": "袭人",
+          "payload": "{\"action\":\"leave\",\"from_place_id\":\"studio_place_d932de5cc6159b944a99d773f5c57f63c0dc1920c6db3ab52a7213e8c8cb52ee\",\"input_hash\":\"sha256:43dee57e77eba78a0875b8d3d8afe1f0017a10d00dff5d5224126afead716695\",\"npc_entity_id\":\"studio_entity_077e22ffae48b81ea451af755c47ee7cd080059c6be89f3e25a04988070e31e6\",\"place_id\":\"studio_place_d932de5cc6159b944a99d773f5c57f63c0dc1920c6db3ab52a7213e8c8cb52ee\",\"proposal\":{\"action\":\"leave\",\"destination_place_id\":\"studio_place_c28d03ef14049196637e3111fac1c93f49c98911e1a536c13208bcc6987115cc\"},\"session_id\":\"rps_5c180cecc894c3e4471aa56efbb50cd2\",\"status\":\"validated\",\"to_place_id\":\"studio_place_c28d03ef14049196637e3111fac1c93f49c98911e1a536c13208bcc6987115cc\",\"trigger_event_id\":\"event_rp_wait_8a9547605a62078af3c03228e7138eb046b28dced83db443876c6d492cf587be\"}",
+          "from_place_name": "荣庆堂",
+          "to_place_name": "庭院小径",
+          "final_place_id": "studio_place_c28d03ef14049196637e3111fac1c93f49c98911e1a536c13208bcc6987115cc",
+          "position_sequence": 243
+        }
+      ],
+      "canonical_restore_branch": {
+        "status": "N/A",
+        "reason": "Original --rongqing --prose rejects --persist; persisted is assigned only inside --persist && index===0, so its canonical restore branch was not entered."
+      },
+      "selected_previous_turn": "rpturn_51009b968d8d4bffa69acbb9fca9dd3dda2963a970fdc7ea3ea88f03385e823b",
+      "selected_render_id": "rpr_ebe35e2e663ccd10193ff52192934c11",
+      "before": {
+        "events": 248,
+        "utterances": 133,
+        "provider_calls": 173,
+        "head": 248
+      },
+      "failed_speech_once": true,
+      "all_heard_failed_silence": true,
+      "public_failure_receipts": 2,
+      "ui_warning": true,
+      "selected_regeneration_restart_history": true,
+      "final_counts_unchanged": true,
+      "after": {
+        "events": 248,
+        "utterances": 133,
+        "provider_calls": 173,
+        "head": 248
+      },
+      "browser_errors": [],
+      "checked_at_utc": "2026-10-01T10:53:01.797Z"
+    },
+    "persist_flag": false
+  },
+  "paired_golden": {
+    "before": {
+      "status": "PASS: real authored product capture and persistence checks; human experience pending",
+      "model": "step-5-preview",
+      "model_config": {
+        "decision_timeout": "120s",
+        "decision_attempts": 2,
+        "decision_max_tokens": 4096,
+        "decision_format": "tool_call",
+        "reasoning_effort": "low",
+        "disable_thinking": false,
+        "narrative_timeout": "90s",
+        "narrative_attempts": 2
+      },
+      "runner_sha256": "4cab44ced415fb458ae7ed01dae8317fb682cc06814399181d1125452aca6f97",
+      "fixture_sha256": "2d71a64daeb29e8cdcd9d9c3008260d8b8ce0108efa281457c1c7fb63d144aca",
+      "spec_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+      "packages_sha256": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+      "runtime_sha256": "a4d640139ee0c98b429ab80dffa0d8bf9bacfdba9e53db75e620a5e5318ccac8",
+      "human_experience": "PENDING",
+      "artifact_file": "product-golden-before-2026-10-01.json",
+      "sha256": "abdadca90d9f16d47b636feaaed30ba023384250eb47e514405506b52e90a710",
+      "turns": 22,
+      "successful_decisions": 24,
+      "http_attempts": 26,
+      "summed_turn_duration_seconds": 354.899,
+      "restarts": [
+        {
+          "after_scene": "P7",
+          "turn_run_id": "rpturn_2426fc92b5b4779f6ef9df9ea546dd4fe1f4e6795c3ca28a6d7fd5a973cf02b7",
+          "status": "PASS",
+          "world": {
+            "head": 77,
+            "events": 77,
+            "utterances": 38,
+            "decisions": 20
+          }
+        }
+      ],
+      "optional_real_renders": 1
+    },
+    "after": {
+      "status": "PASS: real authored product capture and persistence checks; human experience pending",
+      "model": "step-5-preview",
+      "model_config": {
+        "decision_timeout": "120s",
+        "decision_attempts": 2,
+        "decision_max_tokens": 4096,
+        "decision_format": "tool_call",
+        "reasoning_effort": "low",
+        "disable_thinking": false,
+        "narrative_timeout": "90s",
+        "narrative_attempts": 2
+      },
+      "runner_sha256": "4cab44ced415fb458ae7ed01dae8317fb682cc06814399181d1125452aca6f97",
+      "fixture_sha256": "2d71a64daeb29e8cdcd9d9c3008260d8b8ce0108efa281457c1c7fb63d144aca",
+      "spec_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+      "packages_sha256": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+      "runtime_sha256": "f5dd16967733d6ded29466cb8c0bdf38f7bc19cf276a69fd5dce3f244e6a0e4a",
+      "human_experience": "PENDING",
+      "artifact_file": "product-golden-after-2026-10-01.json",
+      "sha256": "0fc947a132c3d4597c02a986ec73b6bd49031aa7b77e18c4a92ecbaff250f5f8",
+      "turns": 22,
+      "successful_decisions": 24,
+      "http_attempts": 24,
+      "summed_turn_duration_seconds": 387.006,
+      "restarts": [
+        {
+          "after_scene": "P7",
+          "turn_run_id": "rpturn_6addf0fba9c1fbf052931899a6e3089088f997ddc7e45192ca21777c10874476",
+          "status": "PASS",
+          "world": {
+            "head": 77,
+            "events": 77,
+            "utterances": 38,
+            "decisions": 20
+          }
+        }
+      ],
+      "optional_real_renders": 1
+    }
+  },
+  "comparison_browser": {
+    "status": "PASS",
+    "artifact": "product-golden-compare-2026-10-01.html",
+    "viewport_width": 390,
+    "all_turns": 22,
+    "both_arms": 44,
+    "P6_turns": 2,
+    "overflow": false,
+    "page_errors": 0
+  },
+  "preview_release_artifact": "product-preview-release-2026-10-01.json",
+  "known_semantic_failures": [
+    "invented earlier remarks and childhood shared history",
+    "uncommitted sitting premise",
+    "unprovided weather/cold hands and repetitions",
+    "preview empty-seat and earlier-beckon premises"
+  ],
+  "source_ref_limitation": "authorized Event-ID membership does not prove dialogue propositions",
+  "human_acceptance": "PENDING; no reviewer model substitutes for player acceptance"
+}

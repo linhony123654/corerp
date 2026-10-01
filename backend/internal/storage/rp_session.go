@@ -24,6 +24,7 @@ type RPSession struct {
 	POV                  string `json:"pov"`
 	ObservationCursor    int64  `json:"observation_cursor"`
 	ChapterStartSequence int64  `json:"chapter_start_sequence"`
+	OpenedSequence       int64  `json:"-"` // Immutable application narration boundary; not world state.
 	TurnCursor           string `json:"turn_cursor"`
 	TurnState            string `json:"turn_state"`
 	Status               string `json:"status"`
@@ -135,10 +136,26 @@ func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenReq
 	if err != nil {
 		return RPSession{}, err
 	}
+	openedAvailable, err := rpSessionOpenedWindowAvailable(ctx, tx.conn)
+	if err != nil {
+		return RPSession{}, err
+	}
+	var openedSequence int64
+	if openedAvailable {
+		// Freeze under the same write transaction as the session insert. Observe,
+		// resumption and idempotent replay must never advance this boundary.
+		if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, request.InstanceID, request.BranchID).Scan(&openedSequence); err != nil {
+			return RPSession{}, classifyMissing(err, "session opening branch head")
+		}
+	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
-	_, err = tx.conn.ExecContext(ctx, `
-		INSERT INTO rp_sessions(session_id, principal_id, instance_id, branch_id, controlled_entity_id, pov, idempotency_key, request_hash, created_at_utc, resumed_at_utc, control_generation, controller_instance_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, request.PrincipalID, request.InstanceID, request.BranchID, request.EntityID, request.POV, request.IdempotencyKey, requestHash, now, now, generation, controller)
+	insert := `INSERT INTO rp_sessions(session_id, principal_id, instance_id, branch_id, controlled_entity_id, pov, idempotency_key, request_hash, created_at_utc, resumed_at_utc, control_generation, controller_instance_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	args := []any{id, request.PrincipalID, request.InstanceID, request.BranchID, request.EntityID, request.POV, request.IdempotencyKey, requestHash, now, now, generation, controller}
+	if openedAvailable {
+		insert = `INSERT INTO rp_sessions(session_id, principal_id, instance_id, branch_id, controlled_entity_id, pov, idempotency_key, request_hash, created_at_utc, resumed_at_utc, control_generation, controller_instance_id, opened_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		args = append(args, openedSequence)
+	}
+	_, err = tx.conn.ExecContext(ctx, insert, args...)
 	if err != nil {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "insert RP session", err)
 	}
@@ -150,7 +167,7 @@ func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenReq
 	if err := tx.Commit(ctx); err != nil {
 		return RPSession{}, core.WrapError(core.CodeStorageFailure, "commit RP session open", err)
 	}
-	return RPSession{SessionID: id, InstanceID: request.InstanceID, BranchID: request.BranchID, ControlledEntityID: request.EntityID, ControlGeneration: generation, ControllerInstanceID: controller, POV: request.POV, TurnState: "idle", Status: "active", CreatedAtUTC: now, ResumedAtUTC: now}, nil
+	return RPSession{OpenedSequence: openedSequence, SessionID: id, InstanceID: request.InstanceID, BranchID: request.BranchID, ControlledEntityID: request.EntityID, ControlGeneration: generation, ControllerInstanceID: controller, POV: request.POV, TurnState: "idle", Status: "active", CreatedAtUTC: now, ResumedAtUTC: now}, nil
 }
 
 func (s *Store) ReadRPSession(ctx context.Context, request core.RPSessionReadRequest) (RPSession, error) {
@@ -621,11 +638,27 @@ func loadRPSession(ctx context.Context, q rpQueryer, principalID, sessionID stri
 	return session, nil
 }
 
+func rpSessionOpenedWindowAvailable(ctx context.Context, q rpQueryer) (bool, error) {
+	var count int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_meta WHERE schema_version=?`, RPSessionOpenedWindowSchemaVersion).Scan(&count); err != nil {
+		return false, core.WrapError(core.CodeStorageFailure, "read session opening window schema", err)
+	}
+	return count == 1, nil
+}
+
 // Exact completed-command receipts remain readable by their original
 // principal/session after a controller handoff. This loader alone does not
 // authorize a new world effect or access to the current observation.
 func loadRPSessionRecord(ctx context.Context, q rpQueryer, principalID, sessionID string) (RPSession, error) {
 	var session RPSession
+	openedColumn := `0`
+	openedAvailable, err := rpSessionOpenedWindowAvailable(ctx, q)
+	if err != nil {
+		return RPSession{}, err
+	}
+	if openedAvailable {
+		openedColumn = `opened_sequence`
+	}
 	chapterColumn := `0`
 	chapterAvailable, err := rpSessionChapterAvailable(ctx, q)
 	if err != nil {
@@ -635,11 +668,11 @@ func loadRPSessionRecord(ctx context.Context, q rpQueryer, principalID, sessionI
 		chapterColumn = `chapter_start_sequence`
 	}
 	err = q.QueryRowContext(ctx, `
-		SELECT session_id, instance_id, branch_id, controlled_entity_id, pov, observation_cursor, `+chapterColumn+`,
+		SELECT session_id, instance_id, branch_id, controlled_entity_id, pov, observation_cursor, `+chapterColumn+`, `+openedColumn+`,
 		       turn_cursor, turn_state, status, created_at_utc, resumed_at_utc, control_generation, controller_instance_id
 		FROM rp_sessions WHERE session_id = ? AND principal_id = ?`, sessionID, principalID,
 	).Scan(&session.SessionID, &session.InstanceID, &session.BranchID, &session.ControlledEntityID,
-		&session.POV, &session.ObservationCursor, &session.ChapterStartSequence, &session.TurnCursor, &session.TurnState,
+		&session.POV, &session.ObservationCursor, &session.ChapterStartSequence, &session.OpenedSequence, &session.TurnCursor, &session.TurnState,
 		&session.Status, &session.CreatedAtUTC, &session.ResumedAtUTC, &session.ControlGeneration, &session.ControllerInstanceID)
 	if err != nil {
 		return RPSession{}, classifyMissing(err, "RP session")

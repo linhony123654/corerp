@@ -36,6 +36,13 @@ func TestRPSharedInformationMigrationPreservesPopulatedRounds(t *testing.T) {
 			t.Fatal("create pre-information-round schema", file, err)
 		}
 	}
+	// Current turn orchestration needs independent application receipts.
+	// Keep the shared-round domain at its historical shape until its target migration.
+	for _, file := range []string{"073_rp_narrative_renders.sql", "077_rp_narrative_composition.sql", "078_rp_narrative_artifacts.sql"} {
+		if err := s.applyMigration(ctx, file); err != nil {
+			t.Fatal("presentation prerequisite for shared-round fixture", file, err)
+		}
+	}
 	humanSession, human, _ := newRPWaitTestSession(t, ctx, s)
 	for _, p := range []struct{ id, kind string }{{"principal_info_migrate_operator", "operator"}, {"principal_info_migrate_service", "service"}} {
 		if _, err := db.ExecContext(ctx, `INSERT INTO principals(principal_id,principal_type,display_name,status) VALUES (?,?,?,'active')`, p.id, p.kind, p.id); err != nil {

@@ -339,12 +339,22 @@ func TestRPInteractionLongNarrativeFixtureStreamRecoveryAndWorldInvariance(t *te
 	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_knowledge`).Scan(&knowledge); err != nil {
 		t.Fatal(err)
 	}
+	const canonicalReceiptQuery = `SELECT json_object('lines',narrative_json,'version',narrative_composition_version,'groups',narrative_fact_groups_json,'ids',narrative_fact_event_ids_json,'artifact',narrative_artifact_json,'head',settled_sequence) FROM rp_turn_runs WHERE turn_run_id=?`
+	var canonicalBefore string
+	if err := store.db.QueryRowContext(ctx, canonicalReceiptQuery, readNarrative.TurnRunID).Scan(&canonicalBefore); err != nil {
+		t.Fatal(err)
+	}
 	concise := "concise"
 	variant := readNarrative
 	variant.StyleOverride = &core.RPStylePatch{NarrativeDensity: &concise}
-	if _, err := store.ReadRPNarrative(ctx, variant); err != nil {
-		t.Fatal(err)
+	selectedVariant, err := store.ReadRPNarrative(ctx, variant)
+	if err != nil || selectedVariant.View.RenderID == "" || selectedVariant.View.CompositionVersion != core.RPFactCompositionVersionV2 || !reflect.DeepEqual(selectedVariant.View.EventIDs, view.View.EventIDs) {
+		t.Fatal("explicit concise variant lost source receipt", selectedVariant, err)
 	}
+	if reflect.DeepEqual(selectedVariant.View.Lines, view.View.Lines) {
+		t.Fatal("fixture must distinguish concise selected and long canonical prose")
+	}
+
 	assertM2Value(t, ctx, store, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, []any{M2DemoInstanceID, M2DemoBranchID}, head)
 	assertM2Value(t, ctx, store, `SELECT COUNT(*) FROM agent_knowledge`, nil, knowledge)
 	checkMoneyAndClock(store)
@@ -361,9 +371,35 @@ func TestRPInteractionLongNarrativeFixtureStreamRecoveryAndWorldInvariance(t *te
 		streamed = append(streamed, chunk)
 		return nil
 	})
-	if err != nil || !reflect.DeepEqual(after.View.Lines, view.View.Lines) || !reflect.DeepEqual(after.View.EventIDs, view.View.EventIDs) || after.View.RenderID != "" || len(streamed) != len(view.View.Lines) || streamed[0].EventID != result.Outcomes[0].EventID || streamed[0].Line != view.View.Lines[0] {
-		t.Fatalf("long stream changed after reopen: %+v chunks=%d %v", after, len(streamed), err)
+	if err != nil || !reflect.DeepEqual(after.View.Lines, view.View.Lines) || !reflect.DeepEqual(after.View.EventIDs, view.View.EventIDs) || !reflect.DeepEqual(after.View.FactGroups, view.View.FactGroups) || after.View.CompositionVersion != view.View.CompositionVersion || after.View.RenderID != "" || len(streamed) != len(view.View.Lines) {
+		t.Fatalf("canonical long receipt changed after reopen: %+v chunks=%d %v", after, len(streamed), err)
 	}
+	for i, chunk := range streamed {
+		if chunk.Index != i || chunk.Line != view.View.Lines[i] || chunk.EventID != "" || !reflect.DeepEqual(chunk.EventIDs, view.View.FactGroups[i]) {
+			t.Fatalf("versioned stream lost exact group attribution at %d: %+v", i, chunk)
+		}
+	}
+	history, err := store.ObserveRPSession(ctx, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, recent := range history.RecentTurns {
+		if recent.TurnRunID == readNarrative.TurnRunID {
+			found = true
+			if recent.RenderID != selectedVariant.View.RenderID || !reflect.DeepEqual(recent.NarrativeLines, selectedVariant.View.Lines) || !reflect.DeepEqual(recent.EventIDs, selectedVariant.View.EventIDs) || !reflect.DeepEqual(recent.FactGroups, selectedVariant.View.FactGroups) || recent.CompositionVersion != selectedVariant.View.CompositionVersion {
+				t.Fatal("selected concise history did not survive restart", recent)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("selected own turn absent after restart")
+	}
+	var canonicalAfter string
+	if err := store.db.QueryRowContext(ctx, canonicalReceiptQuery, readNarrative.TurnRunID).Scan(&canonicalAfter); err != nil || canonicalAfter != canonicalBefore {
+		t.Fatal("selected variant changed exact canonical DB receipt", err)
+	}
+
 	service, err = NewRPService(store, core.DeterministicRPDecisionProvider{}, "deterministic")
 	if err != nil {
 		t.Fatal(err)

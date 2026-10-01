@@ -37,7 +37,7 @@ func TestDecisionBoundRefsAndSameContractReachEveryTransport(t *testing.T) {
 					if json.Unmarshal([]byte(messages[1].(map[string]any)["content"].(string)), &packet) != nil || !reflect.DeepEqual(packet.Character, input) {
 						t.Fatal("provider view changed canonical data or heard speech")
 					}
-					if len(packet.GroundingSources) != 1 || packet.GroundingSources[0].SourceEventID != input.SpeechEventID || packet.GroundingSources[0].Ref != "src_1" {
+					if packet.EvidenceSupportVersion != core.RPEvidenceSupportVersion || !reflect.DeepEqual(packet.GroundingSources, decisionSourceRefs(input)) || len(packet.GroundingSources) != 1 || packet.GroundingSources[0].SourceEventID != input.SpeechEventID || packet.GroundingSources[0].Ref != "src_1" {
 						t.Fatal("ref binding missing or outside this authorized packet")
 					}
 					var declared any

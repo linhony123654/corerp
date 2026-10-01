@@ -1,0 +1,55 @@
+{
+  "kind": "corerp.original32-postchecks.v1",
+  "original_status": "FAIL at fixed-three failure receipt assertion; preserved",
+  "status": "PASS: resumed deterministic postchecks; original live FAIL retained",
+  "artifact": "/tmp/corerp-rp3-npc-oLyFcI",
+  "runtime_sha256": "f5dd16967733d6ded29466cb8c0bdf38f7bc19cf276a69fd5dce3f244e6a0e4a",
+  "samples_sha256": "8e82c2631c51e359a24cab92644ebfcfc5eeecbeee0d1e969a55b1c50c100ce3",
+  "original_live_turns": 32,
+  "original_live_decisions": 96,
+  "actual_model_calls_added": 0,
+  "failure_turn_id": "rpturn_74ba09362b9028a014566ddc7fecbb8c0ffe7d2352d5b48660e41c6806d979a4",
+  "frozen_heard_actors": [
+    "studio_entity_8a309c4fae3a9f5c35651512d12e70cf288f3640a097e7c65a297fa3504dee93",
+    "studio_entity_f2a6aadf1da66443433ea45e806172a52ea140606d56e24c849f04d8ff7d43f4"
+  ],
+  "departure_evidence": [
+    {
+      "event_id": "event_rp_initiative_758849b93f6a2b8bdac78665ec05ddf425bf21e2f5651d7501e6d8dd1ef2ec48",
+      "event_sequence": 243,
+      "actor_id": "studio_entity_077e22ffae48b81ea451af755c47ee7cd080059c6be89f3e25a04988070e31e6",
+      "actor_name": "袭人",
+      "payload": "{\"action\":\"leave\",\"from_place_id\":\"studio_place_d932de5cc6159b944a99d773f5c57f63c0dc1920c6db3ab52a7213e8c8cb52ee\",\"input_hash\":\"sha256:43dee57e77eba78a0875b8d3d8afe1f0017a10d00dff5d5224126afead716695\",\"npc_entity_id\":\"studio_entity_077e22ffae48b81ea451af755c47ee7cd080059c6be89f3e25a04988070e31e6\",\"place_id\":\"studio_place_d932de5cc6159b944a99d773f5c57f63c0dc1920c6db3ab52a7213e8c8cb52ee\",\"proposal\":{\"action\":\"leave\",\"destination_place_id\":\"studio_place_c28d03ef14049196637e3111fac1c93f49c98911e1a536c13208bcc6987115cc\"},\"session_id\":\"rps_5c180cecc894c3e4471aa56efbb50cd2\",\"status\":\"validated\",\"to_place_id\":\"studio_place_c28d03ef14049196637e3111fac1c93f49c98911e1a536c13208bcc6987115cc\",\"trigger_event_id\":\"event_rp_wait_8a9547605a62078af3c03228e7138eb046b28dced83db443876c6d492cf587be\"}",
+      "from_place_name": "荣庆堂",
+      "to_place_name": "庭院小径",
+      "final_place_id": "studio_place_c28d03ef14049196637e3111fac1c93f49c98911e1a536c13208bcc6987115cc",
+      "position_sequence": 243
+    }
+  ],
+  "canonical_restore_branch": {
+    "status": "N/A",
+    "reason": "Original --rongqing --prose rejects --persist; persisted is assigned only inside --persist && index===0, so its canonical restore branch was not entered."
+  },
+  "selected_previous_turn": "rpturn_51009b968d8d4bffa69acbb9fca9dd3dda2963a970fdc7ea3ea88f03385e823b",
+  "selected_render_id": "rpr_ebe35e2e663ccd10193ff52192934c11",
+  "before": {
+    "events": 248,
+    "utterances": 133,
+    "provider_calls": 173,
+    "head": 248
+  },
+  "failed_speech_once": true,
+  "all_heard_failed_silence": true,
+  "public_failure_receipts": 2,
+  "ui_warning": true,
+  "selected_regeneration_restart_history": true,
+  "final_counts_unchanged": true,
+  "after": {
+    "events": 248,
+    "utterances": 133,
+    "provider_calls": 173,
+    "head": 248
+  },
+  "browser_errors": [],
+  "checked_at_utc": "2026-10-01T10:53:01.797Z"
+}

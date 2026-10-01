@@ -94,7 +94,8 @@ const (
 	RPConversationFocusSchemaVersion         = "corerp-rp-conversation-focus-076-2026-09-30"
 	RPNarrativeCompositionSchemaVersion      = "corerp-rp-narrative-composition-077-2026-10-01"
 	RPNarrativeArtifactsSchemaVersion        = "corerp-rp-narrative-artifacts-078-2026-10-01"
-	SchemaVersion                            = RPNarrativeArtifactsSchemaVersion
+	RPSessionOpenedWindowSchemaVersion       = "corerp-rp-session-opened-window-079-2026-10-01"
+	SchemaVersion                            = RPSessionOpenedWindowSchemaVersion
 	legacyStudioLifeSeedingSchemaVersion     = "corerp-studio-life-seeding-042-2026-09-26"
 	legacyRPActivityContinuitySchemaVersion  = "corerp-rp-activity-continuity-043-2026-09-26"
 	legacyRPNarrativeFallbackSchemaVersion   = "corerp-rp-narrative-fallback-044-2026-09-26"
@@ -272,6 +273,7 @@ var schemaMigrations = []struct {
 	{RPConversationFocusSchemaVersion, "076_rp_conversation_focus.sql"},
 	{RPNarrativeCompositionSchemaVersion, "077_rp_narrative_composition.sql"},
 	{RPNarrativeArtifactsSchemaVersion, "078_rp_narrative_artifacts.sql"},
+	{RPSessionOpenedWindowSchemaVersion, "079_rp_session_opened_window.sql"},
 }
 
 func (s *Store) migrate(ctx context.Context) error {
