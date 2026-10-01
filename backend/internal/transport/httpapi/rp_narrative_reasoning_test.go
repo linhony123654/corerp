@@ -43,7 +43,7 @@ func TestRPNarrativeOverridePropagatesReasoningControls(t *testing.T) {
 					}
 					content := `{"pov":"second_person","tense":"present","verbosity":"normal","dialogue_ratio":50,"description_density":50,"narrative_pack_ref":"builtin/plain@1","unsupported_instructions":false}`
 					if prose {
-						content = "你：[[corerp-speech:0]]\nCai：[[corerp-speech:1]]"
+						content = `{"version":"corerp.fact-composition.v1","groups":[{"layout":"lines","atoms":[{"fact_ref":"f0","template":"dialogue"},{"fact_ref":"f1","template":"dialogue"}]}]}`
 					}
 					_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": content}}}})
 				}))

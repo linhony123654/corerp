@@ -17,10 +17,11 @@ const rpRelevantExchangeLimit = 4
 const rpRelevantDialogueRuneBudget = 6000
 
 type rpDialogueCandidate struct {
-	dialogue core.RPDecisionDialogue
-	sequence int64
-	session  string
-	turn     string
+	dialogue  core.RPDecisionDialogue
+	sequence  int64
+	session   string
+	turn      string
+	groupSize int
 }
 
 // Retrieval is a read projection over the same accepted/heard speech as the
@@ -31,7 +32,8 @@ func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDe
 	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT u.speaker_entity_id,u.speech_text,u.event_id,u.world_time,e.event_sequence,
-		       u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id)
+		       u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id),
+		       COUNT(*) OVER (PARTITION BY u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id))
 		FROM rp_utterances u JOIN events e ON e.event_id=u.event_id
 		WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence<=?
 		  AND (u.speaker_entity_id=? OR EXISTS (
@@ -50,7 +52,7 @@ func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDe
 	for rows.Next() {
 		var candidate rpDialogueCandidate
 		d := &candidate.dialogue
-		if err := rows.Scan(&d.SpeakerEntityID, &d.Text, &d.EventID, &d.WorldTime, &candidate.sequence, &candidate.session, &candidate.turn); err != nil {
+		if err := rows.Scan(&d.SpeakerEntityID, &d.Text, &d.EventID, &d.WorldTime, &candidate.sequence, &candidate.session, &candidate.turn, &candidate.groupSize); err != nil {
 			return nil, core.WrapError(core.CodeStorageFailure, "scan NPC relevant dialogue", err)
 		}
 		candidates = append(candidates, candidate)
@@ -61,15 +63,18 @@ func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDe
 	return selectRPRelevantDialogue(input, candidates), nil
 }
 
-// Rank shared words/Han bigrams using their frequency in this authorized
-// candidate set. This is lexical relevance only: paraphrases may not match.
+// Repair split recent exchanges first, then rank older exchanges by shared
+// words/Han bigrams. Lexical retrieval alone cannot match every paraphrase.
 // Sort every ranking input/tie so a reread at the same head has the same hash.
 func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogueCandidate) []core.RPDecisionExchange {
 	type group struct {
 		dialogue []rpDialogueCandidate
 		terms    map[string]bool
 		sequence int64
+		missing  bool
 		recent   bool
+		current  bool
+		size     int
 		score    float64
 	}
 	recent := map[string]bool{}
@@ -88,8 +93,15 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 		if c.sequence > g.sequence {
 			g.sequence = c.sequence
 		}
-		if recent[c.dialogue.EventID] || c.dialogue.EventID == input.SpeechEventID {
+		if c.groupSize > g.size {
+			g.size = c.groupSize
+		}
+		if c.dialogue.EventID == input.SpeechEventID {
+			g.current = true
+		} else if recent[c.dialogue.EventID] {
 			g.recent = true
+		} else {
+			g.missing = true
 		}
 		for term := range rpDialogueTerms(c.dialogue.Text) {
 			g.terms[term] = true
@@ -111,7 +123,11 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 	}
 	var ranked []*group
 	for _, g := range groups {
-		if g.recent {
+		// A recent reply must not hide its older question or qualification.
+		// Keep the authorized group together, including overlapping recent words.
+		// The SQL count excludes unheard/out-of-head siblings. Reject a group cut
+		// by the candidate window rather than presenting it as a full exchange.
+		if !g.missing || g.current || len(g.dialogue) < g.size {
 			continue
 		}
 		for _, term := range terms {
@@ -123,11 +139,17 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 				g.score += math.Log(1 + float64(len(groups))/float64(frequency[term]))
 			}
 		}
-		if g.score > 0 {
+		if g.recent || g.score > 0 {
 			ranked = append(ranked, g)
 		}
 	}
 	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].recent != ranked[j].recent {
+			return ranked[i].recent
+		}
+		if ranked[i].recent {
+			return ranked[i].sequence > ranked[j].sequence
+		}
 		if ranked[i].score != ranked[j].score {
 			return ranked[i].score > ranked[j].score
 		}
@@ -142,7 +164,7 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 		}
 		if size > remaining {
 			continue
-		} // Preserve complete original utterances.
+		} // Preserve complete authorized groups and original utterances.
 		remaining -= size
 		selected = append(selected, g)
 		if len(selected) == rpRelevantExchangeLimit {
@@ -153,7 +175,7 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 	var result []core.RPDecisionExchange
 	for _, g := range selected {
 		sort.Slice(g.dialogue, func(i, j int) bool { return g.dialogue[i].sequence < g.dialogue[j].sequence })
-		exchange := core.RPDecisionExchange{}
+		exchange := core.RPDecisionExchange{RecentContext: g.recent}
 		for _, c := range g.dialogue {
 			exchange.Dialogue = append(exchange.Dialogue, c.dialogue)
 		}

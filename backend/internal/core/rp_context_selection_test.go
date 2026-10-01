@@ -12,6 +12,59 @@ func rpSelectionFixture() RPDecisionInput {
 	return RPDecisionInput{ContextVersion: RPContextVersion, NPCEntityID: "npc", InterlocutorEntityID: "player", InstanceID: "world", BranchID: "main", HeadSequence: 77, WorldTime: "2026-09-22T00:02:00Z", PlaceID: "hall", Persona: "作者声明的温和长辈，习惯认真听完再回答。", PersonaSourceEventID: "identity", Readiness: RPContextReadiness{Persona: "READY", RelationshipToInterlocutor: "READY", AddressToInterlocutor: "READY"}, Relationships: []RPCharacterRelationship{{SubjectEntityID: "player", Role: "student", AddressTo: []string{"小林"}, SourceEventID: "identity"}, {SubjectEntityID: "other", Role: "colleague", SourceEventID: "identity"}}, LegalActions: []string{"respond", "silence", "wait"}, ReachablePlaceIDs: []string{"lane"}, PlayerSpeechText: "那本蓝皮诗集，你当时怎么答应我的？", SpeechEventID: "current", PlayerSpeechWorldTime: "2026-09-22T00:02:00Z"}
 }
 
+func TestRPContextSelectionRestoresRecentExchangeAtomically(t *testing.T) {
+	in := rpSelectionFixture()
+	question := RPDecisionDialogue{SpeakerEntityID: "player", Text: "蓝皮诗集的事，只能向我说，不要告诉其他人。", EventID: "qualified-question", WorldTime: in.WorldTime}
+	reply := RPDecisionDialogue{SpeakerEntityID: "npc", Text: "好，我记住这个条件。", EventID: "recent-answer", WorldTime: in.WorldTime}
+	in.RecentDialogue = []RPDecisionDialogue{reply}
+	in.RelevantDialogue = []RPDecisionExchange{{RecentContext: true, Dialogue: []RPDecisionDialogue{question, reply}}}
+	before, _ := HashJSON(in)
+	complete, err := SelectRPDecisionContext(in, DefaultRPDecisionContextBudgetBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := complete.ContextSelection.EncodedBytes + 64
+	for i := 0; i < 20; i++ {
+		in.RecentDialogue = append(in.RecentDialogue, RPDecisionDialogue{SpeakerEntityID: "other", Text: strings.Repeat("旁人的闲谈。", 500), EventID: fmt.Sprintf("crowded-%d", i), WorldTime: in.WorldTime})
+	}
+	got, err := SelectRPDecisionContext(in, budget)
+	if err != nil || len(got.RelevantDialogue) != 1 || !got.RelevantDialogue[0].RecentContext {
+		t.Fatalf("complete recent context did not survive pressure: %+v %v", got.RelevantDialogue, err)
+	}
+	for _, expected := range []RPDecisionDialogue{question, reply} {
+		text, ok := ResolveRPDecisionSpeech(got, expected.EventID, expected.SpeakerEntityID)
+		if !ok || text != expected.Text {
+			t.Fatal("restored exchange lost its original attribution/words")
+		}
+	}
+	for _, d := range got.RecentDialogue {
+		if d.EventID == reply.EventID {
+			t.Fatal("restored group was also offered as an independent recent member")
+		}
+	}
+	repeated, err := SelectRPDecisionContext(got, budget)
+	a, _ := HashJSON(got)
+	b, _ := HashJSON(repeated)
+	if err != nil || a != b {
+		t.Fatal("second provider projection lost group metadata or changed selection", err)
+	}
+	base := rpSelectionFixture()
+	baseView, err := SelectRPDecisionContext(base, DefaultRPDecisionContextBudgetBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minimal := baseView.ContextSelection.EncodedBytes + 64
+	omitted, err := SelectRPDecisionContext(in, minimal)
+	if err != nil || len(omitted.RelevantDialogue) != 0 || len(omitted.RecentDialogue) != 0 || omitted.ContextSelection.Omitted.RelevantExchanges != 1 {
+		t.Fatalf("oversize group became an unexplained partial exchange: %+v %v", omitted.ContextSelection, err)
+	}
+	in.RecentDialogue = []RPDecisionDialogue{reply}
+	after, _ := HashJSON(in)
+	if after != before {
+		t.Fatal("selection mutated the source packet")
+	}
+}
+
 func TestRPContextSelectionDeduplicatesBodiesWithoutLosingMetadata(t *testing.T) {
 	in := rpSelectionFixture()
 	const reply = "蓝皮诗集我会带来，不过末页还要核对。"

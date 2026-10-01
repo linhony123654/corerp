@@ -68,11 +68,13 @@ func (s *Server) handleRPNarrativeStream(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	_ = writeFrame(struct {
-		Type           string   `json:"type"`
-		Count          int      `json:"count"`
-		EventIDs       []string `json:"event_ids"`
-		Warnings       []string `json:"warnings"`
-		FallbackReason string   `json:"fallback_reason,omitempty"`
-		RenderID       string   `json:"render_id,omitempty"`
-	}{"done", len(result.View.Lines), result.View.EventIDs, result.View.Warnings, result.View.FallbackReason, result.View.RenderID})
+		Type               string     `json:"type"`
+		Count              int        `json:"count"`
+		EventIDs           []string   `json:"event_ids"`
+		Warnings           []string   `json:"warnings"`
+		FallbackReason     string     `json:"fallback_reason,omitempty"`
+		RenderID           string     `json:"render_id,omitempty"`
+		CompositionVersion string     `json:"composition_version,omitempty"`
+		FactGroups         [][]string `json:"fact_groups,omitempty"`
+	}{"done", len(result.View.Lines), result.View.EventIDs, result.View.Warnings, result.View.FallbackReason, result.View.RenderID, result.View.CompositionVersion, result.View.FactGroups})
 }

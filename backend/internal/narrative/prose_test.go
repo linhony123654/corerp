@@ -16,6 +16,17 @@ import (
 
 const validSourcedProse = "你问：「今晚有空吗？」\nCai 应声：「有啊，坐这儿吧。」"
 
+// Fresh success fixtures speak the closed wire protocol. Raw prose constants
+// remain for legacy guards and negative/fallback cases only.
+func factCompositionFixture(refs ...string) string {
+	groups := make([]map[string]any, 0, len(refs))
+	for _, ref := range refs {
+		groups = append(groups, map[string]any{"layout": "inline", "atoms": []any{map[string]string{"fact_ref": ref, "template": "plain"}}})
+	}
+	raw, _ := json.Marshal(map[string]any{"version": CompositionVersion, "groups": groups})
+	return string(raw)
+}
+
 func proseFixture() core.RPNarrativeInput {
 	return core.RPNarrativeInput{
 		ControlledEntityID: "entity_lin",
@@ -55,7 +66,7 @@ func proseServer(t *testing.T, content string, calls *atomic.Int32) *httptest.Se
 
 func TestChatProseProviderRendersSourcedParagraphs(t *testing.T) {
 	var calls atomic.Int32
-	server := proseServer(t, validSourcedProse, &calls)
+	server := proseServer(t, factCompositionFixture("f0", "f1"), &calls)
 	defer server.Close()
 	provider, err := NewChatProseProvider(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "prose-model", APIKey: "k"})
 	if err != nil {
@@ -75,9 +86,15 @@ func TestChatProseProviderRendersSourcedParagraphs(t *testing.T) {
 	if len(view.EventIDs) != 2 || view.EventIDs[0] != "e1" || view.EventIDs[1] != "e2" {
 		t.Fatalf("prose view lost fact attribution: %+v", view.EventIDs)
 	}
-	for _, chunk := range streamed {
-		if chunk.EventID != "" || len(chunk.EventIDs) != 2 || chunk.EventIDs[0] != "e1" || chunk.EventIDs[1] != "e2" {
-			t.Fatalf("synthetic paragraph pretended to cite a single event: %+v", chunk)
+	if view.CompositionVersion != CompositionVersion || len(view.FactGroups) != 2 {
+		t.Fatalf("render lacks closed composition receipt: %+v", view)
+	}
+	for i, chunk := range streamed {
+		if chunk.EventID != "" || len(chunk.EventIDs) != 1 || chunk.EventIDs[0] != view.EventIDs[i] || len(view.FactGroups[i]) != 1 || view.FactGroups[i][0] != chunk.EventIDs[0] {
+			t.Fatalf("paragraph lost its actual fact attribution: %+v", chunk)
+		}
+		if !strings.Contains(chunk.Line, proseFixture().Facts[i].Text) {
+			t.Fatalf("paragraph changed accepted speech: %+v", chunk)
 		}
 	}
 	if calls.Load() != 1 {
@@ -104,7 +121,7 @@ func TestChatProseProviderUsesSourcedPublicPresentationOnly(t *testing.T) {
 			t.Errorf("public style not isolated in prose payload: %+v %v", payload, err)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{
-			"finish_reason": "stop", "message": map[string]any{"content": "你问：「今晚有空吗？」Cai答：「有啊，坐这儿吧。」"},
+			"finish_reason": "stop", "message": map[string]any{"content": factCompositionFixture("f0", "f1")},
 		}}})
 	}))
 	defer server.Close()
@@ -137,15 +154,20 @@ func TestChatProseProviderCapsDensityWhenOnlyTwoPublicUtterancesExist(t *testing
 			return
 		}
 		var payload struct {
-			Density string `json:"density"`
+			Density string      `json:"density"`
+			Facts   []proseFact `json:"facts"`
 		}
 		if err := json.Unmarshal([]byte(body.Messages[1].Content), &payload); err != nil {
 			t.Error(err)
 			return
 		}
 		densities = append(densities, payload.Density)
+		refs := make([]string, len(payload.Facts))
+		for i, fact := range payload.Facts {
+			refs[i] = fact.FactRef
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{
-			"finish_reason": "stop", "message": map[string]any{"content": "你：「今晚有空吗？」\nCai：「有啊，坐这儿吧。」"},
+			"finish_reason": "stop", "message": map[string]any{"content": factCompositionFixture(refs...)},
 		}}})
 	}))
 	defer server.Close()
@@ -194,12 +216,12 @@ func TestChatProseProviderRepairsDroppedSpeechWithExplicitFeedback(t *testing.T)
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		content := "你问：「今晚有空吗？」Cai 回应了。"
+		content := factCompositionFixture("f0")
 		if call == 2 {
-			if len(body.Messages) != 4 || body.Messages[2].Role != "assistant" || body.Messages[3].Role != "user" || !strings.Contains(body.Messages[3].Content, "逐字保留") {
+			if len(body.Messages) != 4 || body.Messages[2].Role != "assistant" || body.Messages[3].Role != "user" || !strings.Contains(body.Messages[3].Content, "每个 fact_ref 按原序恰好一次") || body.Messages[2].Content != factCompositionFixture("f0") {
 				t.Fatalf("repair request lacks explicit rejected-draft feedback: %+v", body.Messages)
 			}
-			content = validSourcedProse
+			content = factCompositionFixture("f0", "f1")
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": content}}}})
 	}))
@@ -209,7 +231,7 @@ func TestChatProseProviderRepairsDroppedSpeechWithExplicitFeedback(t *testing.T)
 		t.Fatal(err)
 	}
 	view, err := provider.Render(context.Background(), proseFixture())
-	if err != nil || len(view.Warnings) != 0 || len(view.Lines) != 2 || calls.Load() != 2 {
+	if err != nil || len(view.Warnings) != 1 || view.Warnings[0] != compositionCapabilityWarning || view.FallbackReason != "" || len(view.Lines) != 2 || calls.Load() != 2 {
 		t.Fatalf("draft with dropped speech was not repaired: %+v %v calls=%d", view, err, calls.Load())
 	}
 }
@@ -351,13 +373,13 @@ func TestChatProseProviderInsertsCommittedSpeechByReference(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if payload.Facts[0].QuoteToken == "" || payload.Facts[1].QuoteToken == "" || payload.Facts[1].Text != input.Facts[1].Text {
+		if payload.Facts[0].FactRef != "f0" || payload.Facts[1].FactRef != "f1" || payload.Facts[0].Actor != input.Facts[0].ActorName || payload.Facts[1].Actor != input.Facts[1].ActorName || payload.Facts[1].Text != input.Facts[1].Text {
 			t.Error("wire references missing or original speech changed")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{
-			"finish_reason": "stop", "message": map[string]any{"content": "你：" + payload.Facts[0].QuoteToken + "\nCai：" + payload.Facts[1].QuoteToken},
+			"finish_reason": "stop", "message": map[string]any{"content": factCompositionFixture(payload.Facts[0].FactRef, payload.Facts[1].FactRef)},
 		}}})
 	}))
 	defer server.Close()
@@ -525,10 +547,10 @@ func TestChatProseProviderRepairsAmbiguousExpressionWithActorFeedback(t *testing
 		}
 		content := "你问：「今晚有空吗？」Cai 回答：「有啊，坐这儿吧。」她点头。"
 		if call == 2 {
-			if len(body.Messages) != 4 || !strings.Contains(body.Messages[3].Content, "actor 名字") {
+			if len(body.Messages) != 4 || !strings.Contains(body.Messages[3].Content, "fact_ref") || !strings.Contains(body.Messages[3].Content, "禁止所有额外字段") {
 				t.Errorf("repair feedback lacks actor attribution: %+v", body.Messages)
 			}
-			content = "你问：「今晚有空吗？」Cai 回答：「有啊，坐这儿吧。」Cai点头。"
+			content = factCompositionFixture("f0", "f1", "f2", "f3")
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": content}}}})
 	}))
@@ -540,6 +562,10 @@ func TestChatProseProviderRepairsAmbiguousExpressionWithActorFeedback(t *testing
 	view, err := provider.Render(context.Background(), input)
 	if err != nil || view.FallbackReason != "" || calls.Load() != 2 {
 		t.Fatalf("ambiguous expression was not repaired: %+v %v calls=%d", view, err, calls.Load())
+	}
+	joined := strings.Join(view.Lines, "\n")
+	if !strings.Contains(joined, "Cai 点了点头") || !strings.Contains(joined, "Mei 保持沉默") || strings.Contains(joined, "Mei 点了点头") || len(view.EventIDs) != 4 {
+		t.Fatalf("repair changed gesture actor or lost public facts: %+v", view)
 	}
 }
 
@@ -566,7 +592,7 @@ func TestChatProseProviderSendsDeclaredActivityLabels(t *testing.T) {
 		}
 		gotFacts = payload.Facts
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{
-			"finish_reason": "stop", "message": map[string]any{"content": "你看着 Cai 沏茶。"},
+			"finish_reason": "stop", "message": map[string]any{"content": factCompositionFixture("f0", "f1", "f2")},
 		}}})
 	}))
 	defer server.Close()
@@ -577,8 +603,9 @@ func TestChatProseProviderSendsDeclaredActivityLabels(t *testing.T) {
 	input := proseFixture()
 	input.ActivityLabels = map[string]string{"brew_tea": "沏茶"}
 	input.Facts = append(input.Facts, core.RPNarrativeFact{EventID: "e3", ActorID: "entity_cai", ActorName: "Cai", Action: "activity_done", ActivityCode: "brew_tea", PlaceName: "咖啡馆", WorldTime: "2026-09-22T19:40:00Z"})
-	if _, err := provider.Render(context.Background(), input); err != nil {
-		t.Fatal(err)
+	view, err := provider.Render(context.Background(), input)
+	if err != nil || view.FallbackReason != "" || !strings.Contains(strings.Join(view.Lines, "\n"), "做完了 沏茶") {
+		t.Fatalf("declared activity did not render from its source: %+v %v", view, err)
 	}
 	if len(gotFacts) != 3 || gotFacts[2].Action != "沏茶" {
 		t.Fatalf("activity label not sent as prose verb: %+v", gotFacts)

@@ -75,11 +75,13 @@ type RPVisiblePlace struct {
 }
 
 type RPHistoryTurn struct {
-	TurnRunID      string           `json:"turn_run_id"`
-	NarrativeLines []string         `json:"narrative_lines"`
-	RenderID       string           `json:"render_id,omitempty"`
-	ProviderCalls  []RPProviderCall `json:"provider_calls,omitempty"`
-	CanRegenerate  bool             `json:"can_regenerate"`
+	TurnRunID          string           `json:"turn_run_id"`
+	NarrativeLines     []string         `json:"narrative_lines"`
+	RenderID           string           `json:"render_id,omitempty"`
+	CompositionVersion string           `json:"composition_version,omitempty"`
+	FactGroups         [][]string       `json:"fact_groups,omitempty"`
+	ProviderCalls      []RPProviderCall `json:"provider_calls,omitempty"`
+	CanRegenerate      bool             `json:"can_regenerate"`
 }
 
 func (s *Store) OpenRPSession(ctx context.Context, request core.RPSessionOpenRequest) (RPSession, error) {
@@ -535,14 +537,29 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		if originSessionID == "" {
 			continue
 		}
+		var canonicalVersion, canonicalGroups, canonicalFactIDs string
+		if err := tx.conn.QueryRowContext(ctx, `SELECT narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=?`, view.RecentTurns[i].TurnRunID, originSessionID).Scan(&canonicalVersion, &canonicalGroups, &canonicalFactIDs); err != nil {
+			return RPObservation{}, core.WrapError(core.CodeStorageFailure, "read canonical narrative composition", err)
+		}
+		view.RecentTurns[i].FactGroups, err = decodeRPNarrativeComposition(canonicalVersion, canonicalGroups, canonicalFactIDs, view.RecentTurns[i].NarrativeLines)
+		if err != nil {
+			return RPObservation{}, err
+		}
+		view.RecentTurns[i].CompositionVersion = canonicalVersion
 		if renderSelectionsAvailable {
 			var selectedID, selectedJSON string
-			err = tx.conn.QueryRowContext(ctx, `SELECT r.render_id,r.lines_json FROM rp_narrative_selections s JOIN rp_narrative_renders r ON r.render_id=s.render_id AND r.turn_run_id=s.turn_run_id WHERE s.turn_run_id=?`, view.RecentTurns[i].TurnRunID).Scan(&selectedID, &selectedJSON)
+			var version, groupsJSON, factIDsJSON string
+			err = tx.conn.QueryRowContext(ctx, `SELECT r.render_id,r.lines_json,r.composition_version,r.fact_groups_json,r.fact_event_ids_json FROM rp_narrative_selections s JOIN rp_narrative_renders r ON r.render_id=s.render_id AND r.turn_run_id=s.turn_run_id WHERE s.turn_run_id=?`, view.RecentTurns[i].TurnRunID).Scan(&selectedID, &selectedJSON, &version, &groupsJSON, &factIDsJSON)
 			if err == nil {
 				if err := json.Unmarshal([]byte(selectedJSON), &view.RecentTurns[i].NarrativeLines); err != nil {
 					return RPObservation{}, core.WrapError(core.CodeProjectionDiverged, "decode selected narrative history", err)
 				}
 				view.RecentTurns[i].RenderID = selectedID
+				view.RecentTurns[i].FactGroups, err = decodeRPNarrativeComposition(version, groupsJSON, factIDsJSON, view.RecentTurns[i].NarrativeLines)
+				if err != nil {
+					return RPObservation{}, err
+				}
+				view.RecentTurns[i].CompositionVersion = version
 			} else if !errors.Is(err, sql.ErrNoRows) {
 				return RPObservation{}, core.WrapError(core.CodeStorageFailure, "read selected narrative history", err)
 			}

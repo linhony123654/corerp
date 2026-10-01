@@ -40,7 +40,7 @@ func TestNarrativeReasoningConfigurationIsExplicitAndIndependent(t *testing.T) {
 					}
 					content := validPlan
 					if mode == "full_prose" {
-						content = "你：[[corerp-speech:0]]"
+						content = factCompositionFixture("f0")
 					}
 					_, _ = io.WriteString(w, envelope(content))
 				}))

@@ -8,7 +8,7 @@ import (
 
 const DefaultRPDecisionContextBudgetBytes = 64 << 10
 
-const rpContextSelectionVersion = "corerp.context-selection.v1"
+const rpContextSelectionVersion = "corerp.context-selection.v2"
 
 // This is NPC-only selection metadata over authorized, bounded candidates.
 // It is neither a world fact nor a claim that all history is in the packet.
@@ -60,11 +60,25 @@ func SelectRPDecisionContext(input RPDecisionInput, budget int) (RPDecisionInput
 	base.ContextSelection = &RPContextSelection{PolicyVersion: rpContextSelectionVersion, Scope: "bounded_authorized_candidates", BudgetBytes: budget}
 	type candidate struct{ kind, index, priority, order int }
 	var candidates []candidate
+	// Restored local exchanges are selected atomically. Do not separately
+	// re-offer one recent member if the complete unit cannot fit; its omission
+	// is explicit in RelevantExchanges, rather than an apparently complete reply.
+	restored := map[string]bool{}
+	for _, exchange := range input.RelevantDialogue {
+		if exchange.RecentContext {
+			for _, d := range exchange.Dialogue {
+				restored[d.EventID] = true
+			}
+		}
+	}
 	// Only the recent local exchange gets preference over topic-selected older
 	// exchanges. Other speakers cannot crowd all of the actor's own motivation out.
 	peer := 0
 	for i := len(input.RecentDialogue) - 1; i >= 0; i-- {
 		d := input.RecentDialogue[i]
+		if restored[d.EventID] {
+			continue
+		}
 		priority := 5
 		if peer < 4 && (d.SpeakerEntityID == input.NPCEntityID || d.SpeakerEntityID == input.InterlocutorEntityID) {
 			priority = 1
@@ -73,7 +87,11 @@ func SelectRPDecisionContext(input RPDecisionInput, budget int) (RPDecisionInput
 		candidates = append(candidates, candidate{0, i, priority, -i})
 	}
 	for i := range input.RelevantDialogue {
-		candidates = append(candidates, candidate{1, i, 3, -i})
+		priority := 3
+		if input.RelevantDialogue[i].RecentContext {
+			priority = 0
+		}
+		candidates = append(candidates, candidate{1, i, priority, -i})
 	}
 	for i := range input.RecentPrivateDecisions {
 		candidates = append(candidates, candidate{2, i, 4, -i})
@@ -417,6 +435,7 @@ func normalizeRPContextQuotes(in RPDecisionInput, quotes map[rpContextQuoteKey]r
 	out.RecentDialogue = append([]RPDecisionDialogue(nil), in.RecentDialogue...)
 	out.RelevantDialogue = make([]RPDecisionExchange, len(in.RelevantDialogue))
 	for i, g := range in.RelevantDialogue {
+		out.RelevantDialogue[i] = g
 		out.RelevantDialogue[i].Dialogue = append([]RPDecisionDialogue(nil), g.Dialogue...)
 	}
 	out.Knowledge = append([]RPDecisionKnowledge(nil), in.Knowledge...)

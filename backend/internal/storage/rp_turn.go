@@ -9,20 +9,23 @@ import (
 	"time"
 
 	"corerp.local/backend/internal/core"
+	"corerp.local/backend/internal/narrative"
 )
 
 type RPTurnResult struct {
-	NarrativeStyle    core.RPStyleProfile `json:"narrative_style"`
-	NarrativeWarnings []string            `json:"narrative_warnings"`
-	TurnRunID         string              `json:"turn_run_id"`
-	PlayerTurnID      string              `json:"player_turn_id"`
-	PlayerEventID     string              `json:"player_event_id"`
-	NPCEventIDs       []string            `json:"npc_event_ids"`
-	NarrativeLines    []string            `json:"narrative_lines"`
-	ProviderCalls     []RPProviderCall    `json:"provider_calls"`
-	SettledSequence   int64               `json:"settled_sequence"`
-	Status            string              `json:"status"`
-	Replayed          bool                `json:"replayed"`
+	NarrativeStyle     core.RPStyleProfile `json:"narrative_style"`
+	NarrativeWarnings  []string            `json:"narrative_warnings"`
+	TurnRunID          string              `json:"turn_run_id"`
+	PlayerTurnID       string              `json:"player_turn_id"`
+	PlayerEventID      string              `json:"player_event_id"`
+	NPCEventIDs        []string            `json:"npc_event_ids"`
+	NarrativeLines     []string            `json:"narrative_lines"`
+	CompositionVersion string              `json:"composition_version,omitempty"`
+	FactGroups         [][]string          `json:"fact_groups,omitempty"`
+	ProviderCalls      []RPProviderCall    `json:"provider_calls"`
+	SettledSequence    int64               `json:"settled_sequence"`
+	Status             string              `json:"status"`
+	Replayed           bool                `json:"replayed"`
 }
 
 type RPTurnResumeRequest struct {
@@ -32,15 +35,18 @@ type RPTurnResumeRequest struct {
 }
 
 type rpTurnRun struct {
-	ID              string
-	SessionID       string
-	SpeechKey       string
-	Status          string
-	PlayerTurnID    string
-	PlayerEventID   string
-	ListenerIDsJSON string
-	NarrativeJSON   string
-	SettledSequence sql.NullInt64
+	ID                 string
+	SessionID          string
+	SpeechKey          string
+	Status             string
+	PlayerTurnID       string
+	PlayerEventID      string
+	ListenerIDsJSON    string
+	NarrativeJSON      string
+	CompositionVersion string
+	FactGroupsJSON     string
+	FactEventIDsJSON   string
+	SettledSequence    sql.NullInt64
 }
 
 // PlayRPTurn is the local deterministic product path. A deployment with a
@@ -262,7 +268,7 @@ func (s *Store) ensureRPTurnRun(ctx context.Context, request core.RPSpeechReques
 	var run rpTurnRun
 	var existingHash, existingJSON string
 	var playerTurnID, playerEventID sql.NullString
-	err = tx.conn.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence, request_hash, request_json FROM rp_turn_runs WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &existingHash, &existingJSON)
+	err = tx.conn.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence, request_hash, request_json,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &existingHash, &existingJSON, &run.CompositionVersion, &run.FactGroupsJSON, &run.FactEventIDsJSON)
 	if err == nil {
 		run.PlayerTurnID = playerTurnID.String
 		run.PlayerEventID = playerEventID.String
@@ -526,7 +532,7 @@ func (s *Store) settleRPTurn(ctx context.Context, runID, sessionID, playerTurnID
 func (s *Store) loadRPTurnRun(ctx context.Context, runID string) (rpTurnRun, error) {
 	var run rpTurnRun
 	var playerTurnID, playerEventID sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence FROM rp_turn_runs WHERE turn_run_id = ?`, runID).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence)
+	err := s.db.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE turn_run_id = ?`, runID).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &run.CompositionVersion, &run.FactGroupsJSON, &run.FactEventIDsJSON)
 	if err != nil {
 		return rpTurnRun{}, classifyMissing(err, "RP turn run")
 	}
@@ -542,6 +548,12 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 	if err := json.Unmarshal([]byte(run.NarrativeJSON), &result.NarrativeLines); err != nil {
 		return RPTurnResult{}, core.WrapError(core.CodeProjectionDiverged, "decode RP narrative view", err)
 	}
+	result.CompositionVersion = run.CompositionVersion
+	groups, err := decodeRPNarrativeComposition(run.CompositionVersion, run.FactGroupsJSON, run.FactEventIDsJSON, result.NarrativeLines)
+	if err != nil {
+		return RPTurnResult{}, err
+	}
+	result.FactGroups = groups
 	style, err := s.loadRPTurnStyle(ctx, run.ID)
 	if err != nil {
 		return RPTurnResult{}, err
@@ -554,6 +566,9 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 			return RPTurnResult{}, err
 		}
 		result.NarrativeWarnings = view.Warnings
+	}
+	if run.CompositionVersion == narrative.CompositionVersion {
+		result.NarrativeWarnings = append(result.NarrativeWarnings, narrative.CompositionCapabilityWarning)
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.event_id FROM rp_npc_decisions d JOIN events e ON e.event_id = d.event_id WHERE d.session_id = ? AND d.parent_turn_id = ? ORDER BY e.event_sequence`, run.SessionID, run.PlayerTurnID)
 	if err != nil {

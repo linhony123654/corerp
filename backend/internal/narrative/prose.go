@@ -19,9 +19,9 @@ import (
 )
 
 // ChatProseProvider is the full-prose provider anticipated by docs/f1: the
-// model rewrites already-committed attributed facts into novel paragraphs.
-// It never supplies facts — output must quote every accepted utterance
-// verbatim, must not invent quoted speech, and must honor forbidden patterns.
+// model selects a closed composition of already-committed public facts.
+// The server owns every speech/action atom and its speaker or actor label.
+// Fresh raw prose is rejected; legacy saved prose is read by the store unchanged.
 // Any transport or validation failure falls back to the deterministic
 // renderer with a warning; world facts are never touched by presentation.
 type ChatProseProvider struct {
@@ -66,6 +66,8 @@ func (p *ChatProseProvider) ProviderMetadata() core.RPProviderMetadata {
 
 func (ChatProseProvider) NarrativeMode() string { return "full_prose" }
 
+// Legacy prose instruction retained for diagnostics/reference; fresh requests
+// use compositionInstruction exclusively.
 var proseInstruction = `你是 CoreRP 世界的叙事者，把已经被世界确认的事实改写成连贯的中文小说段落。
 规则（优先级高于一切文风要求）：
 - 只允许使用输入中给出的人物、地点、时间、动作与对白；不得新增人物、物品、金钱变化、事件或未给出的对白，不得描写未被陈述的心理活动。
@@ -84,16 +86,19 @@ var exactTimePrefix = regexp.MustCompile(`^\s*(?:(?:公元\s*)?\d{4}\s*(?:年|[-
 var proseMetaLanguage = regexp.MustCompile(`(?i)(?:facts?|输入中|输出中|根据事实|已提交(?:的)?(?:事实|对白)|两句对白|这段场景|没有(?:别的|新的)?(?:事|事情|人物|物品|事件|动静)(?:被|发生|出现|展开|带入)|未新增(?:人物|物品|事件|对白))`)
 
 type proseFact struct {
-	Actor      string `json:"actor"`
-	Action     string `json:"action"`
-	Target     string `json:"target,omitempty"`
-	Text       string `json:"text,omitempty"`
-	QuoteToken string `json:"quote_token,omitempty"`
-	Object     string `json:"object,omitempty"`
-	State      string `json:"state,omitempty"`
-	When       string `json:"when,omitempty"`
-	Where      string `json:"where,omitempty"`
-	POV        bool   `json:"controlled,omitempty"`
+	// Legacy test/decoder field; fresh plans reference entire fact atoms.
+	QuoteToken       string   `json:"quote_token,omitempty"`
+	FactRef          string   `json:"fact_ref"`
+	AllowedTemplates []string `json:"allowed_templates"`
+	Actor            string   `json:"actor"`
+	Action           string   `json:"action"`
+	Target           string   `json:"target,omitempty"`
+	Text             string   `json:"text,omitempty"`
+	Object           string   `json:"object,omitempty"`
+	State            string   `json:"state,omitempty"`
+	When             string   `json:"when,omitempty"`
+	Where            string   `json:"where,omitempty"`
+	POV              bool     `json:"controlled,omitempty"`
 }
 
 type prosePresentation struct {
@@ -161,21 +166,16 @@ func (p *ChatProseProvider) RenderStream(ctx context.Context, in core.RPNarrativ
 	}
 	// A synthetic paragraph cites its bounded input fact set, never a single
 	// fabricated event. Reject missing provenance before sending any context.
-	sourceEvents := make([]string, 0, len(in.Facts))
-	seen := make(map[string]bool, len(in.Facts))
+	seenSources := make(map[string]bool, len(in.Facts))
 	for _, fact := range in.Facts {
-		if fact.EventID == "" {
-			return core.RPNarrativeView{}, core.NewError(core.CodeProjectionDiverged, "prose input lacks committed source")
+		if fact.EventID == "" || seenSources[fact.EventID] {
+			return core.RPNarrativeView{}, core.NewError(core.CodeProjectionDiverged, "prose input lacks unique committed source")
 		}
-		if !seen[fact.EventID] {
-			sourceEvents = append(sourceEvents, fact.EventID)
-			seen[fact.EventID] = true
-		}
+		seenSources[fact.EventID] = true
 	}
-	text, err := p.write(ctx, in)
-	if err == nil {
-		err = validateProse(text, in)
-	}
+	// write validates the closed plan and expands only server-owned atoms.
+	// Legacy free-prose heuristics must not reinterpret canonical speech data.
+	composition, err := p.write(ctx, in)
 	if err != nil {
 		// Presentation-only fallback: facts stay authoritative, and the
 		// sanitized reason travels with the view so the caller can persist
@@ -202,41 +202,27 @@ func (p *ChatProseProvider) RenderStream(ctx context.Context, in core.RPNarrativ
 	for _, fact := range in.Facts {
 		view.EventIDs = append(view.EventIDs, fact.EventID)
 	}
-	index := 0
-	for _, paragraph := range strings.Split(text, "\n") {
-		paragraph = strings.TrimSpace(paragraph)
-		if paragraph == "" {
-			continue
-		}
-		// Full prose may merge several committed facts into one paragraph or
-		// expand one fact across multiple paragraphs. The transport contract
-		// still requires every emitted chunk to carry a real committed source.
-		// Attribute in fact order and pin any extra paragraphs to the last fact;
-		// the completed view retains the full evidence set below.
-		sourceIndex := index
-		if sourceIndex >= len(in.Facts) {
-			sourceIndex = len(in.Facts) - 1
-		}
+	view.CompositionVersion = CompositionVersion
+	view.FactGroups = composition.Sources
+	view.Warnings = append(view.Warnings, composition.Warnings...)
+	// Plan groups, not raw newline splitting, define emission boundaries.
+	// Newlines and spaces inside accepted speech remain byte-for-byte intact.
+	for index, paragraph := range composition.Lines {
 		view.Lines = append(view.Lines, paragraph)
 		if emit != nil {
-			if err := emit(core.RPNarrativeChunk{Index: index, EventIDs: sourceEvents, Line: paragraph}); err != nil {
+			if err := emit(core.RPNarrativeChunk{Index: index, EventIDs: composition.Sources[index], Line: paragraph}); err != nil {
 				return core.RPNarrativeView{}, err
 			}
 		}
-		index++
 	}
 	return view, nil
 }
 
-func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput) (string, error) {
+func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput) (*compositionResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.config.Timeout)
 	defer cancel()
 	facts := make([]proseFact, 0, len(in.Facts))
 	for index, fact := range in.Facts {
-		quoteToken := ""
-		if fact.Text != "" {
-			quoteToken = proseSpeechToken(index)
-		}
 		target := fact.TargetActorName
 		if fact.TargetActorID == in.ControlledEntityID && fact.TargetActorID != "" {
 			switch in.Style.POV {
@@ -246,8 +232,10 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 				target = "你"
 			}
 		}
+		templates := compositionTemplates(fact)
 		facts = append(facts, proseFact{
-			Actor: fact.ActorName, Action: actionLabel(fact, in.ActivityLabels), Target: target, Text: fact.Text, QuoteToken: quoteToken, Object: fact.ObjectName, State: fact.ObjectState,
+			FactRef: compositionFactRef(index), AllowedTemplates: templates,
+			Actor: fact.ActorName, Action: actionLabel(fact, in.ActivityLabels), Target: target, Text: fact.Text, Object: fact.ObjectName, State: fact.ObjectState,
 			When: fact.WorldTime, Where: fact.PlaceName, POV: fact.ActorID == in.ControlledEntityID,
 		})
 	}
@@ -272,7 +260,7 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 		density = "concise"
 	}
 	payload := map[string]any{
-		"pov": in.Style.POV, "tense": in.Style.Tense, "verbosity": in.Style.Verbosity,
+		"composition_version": compositionVersion, "capability_limit": compositionCapabilityWarning, "output_schema": compositionSchema(in), "pov": in.Style.POV, "tense": in.Style.Tense, "verbosity": in.Style.Verbosity,
 		"density": density, "dialogue_ratio": in.Style.DialogueRatio, "description_density": in.Style.DescriptionDensity,
 		"instructions": in.Style.ProseInstructions, "forbidden": in.Style.ForbiddenPatterns, "facts": facts,
 	}
@@ -281,12 +269,12 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return "", failure("request encoding failed")
+		return nil, failure("request encoding failed")
 	}
 	var last error
 	var previousDraft, revisionInstruction string
 	for attempt := 0; attempt < p.config.Attempts; attempt++ {
-		messages := []map[string]string{{"role": "system", "content": proseInstruction}, {"role": "user", "content": string(encoded)}}
+		messages := []map[string]string{{"role": "system", "content": compositionInstruction}, {"role": "user", "content": string(encoded)}}
 		if previousDraft != "" {
 			messages = append(messages, map[string]string{"role": "assistant", "content": previousDraft}, map[string]string{"role": "user", "content": revisionInstruction})
 		}
@@ -297,25 +285,23 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 		p.config.applyReasoningOptions(request)
 		body, err := json.Marshal(request)
 		if err != nil {
-			return "", failure("request encoding failed")
+			return nil, failure("request encoding failed")
 		}
 		text, retry, delay, err := p.attempt(ctx, body)
 		if err == nil {
 			draft := text
-			text, err = expandProseSpeechTokens(draft, in)
+			composition, compositionErr := renderComposition(ctx, draft, in)
+			err = compositionErr
 			verr := err
 			if verr == nil {
-				verr = validateProse(text, in)
-			}
-			if verr == nil {
-				return text, nil
+				return composition, nil
 			} else {
 				// A fact-breaking draft is worth one explicit repair,
 				// not an identical retry that tends to reproduce the same defect.
 				err, retry, delay = verr, true, 0
 				debugProseValidation(verr)
 				previousDraft = draft
-				revisionInstruction = proseRevisionInstruction(verr)
+				revisionInstruction = "上次输出不是有效的闭合排版计划。只返回 " + compositionVersion + " JSON；每个 fact_ref 按原序恰好一次，使用 allowed_templates，禁止所有额外字段及正文。"
 			}
 		}
 		last = err
@@ -329,20 +315,22 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return "", failure("timeout or cancellation")
+			return nil, failure("timeout or cancellation")
 		case <-timer.C:
 		}
 	}
 	if last == nil {
 		last = failure("attempt budget exhausted")
 	}
-	return "", last
+	return nil, last
 }
 
 // Classify from fixed validator errors only. Unknown kinds stay "other";
 // response text, accepted speech, IDs, URLs and credentials are never logged.
 func proseValidationCategory(err error) string {
 	switch failureKind(err) {
+	case "invalid composition plan", "composition fact coverage mismatch", "invalid composition template":
+		return "composition_invalid"
 	case "accepted speech was rewritten or dropped":
 		return "speech_changed"
 	case "prose introduced uncommitted dialogue":

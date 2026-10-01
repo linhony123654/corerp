@@ -128,7 +128,11 @@ func TestRPNarrativeRenderMigrationUpgradesPopulated052(t *testing.T) {
 	for _, statement := range []string{
 		`DROP TABLE rp_narrative_selections`,
 		`DROP TABLE rp_narrative_renders`,
+		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_fact_event_ids_json`,
+		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_fact_groups_json`,
+		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_composition_version`,
 		`DELETE FROM schema_meta WHERE schema_version='corerp-rp-narrative-renders-073-2026-09-28'`,
+		`DELETE FROM schema_meta WHERE schema_version='corerp-rp-narrative-composition-077-2026-10-01'`,
 	} {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			t.Fatal(err)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"corerp.local/backend/internal/core"
+	"corerp.local/backend/internal/narrative"
 )
 
 type RPStyleSetRequest struct {
@@ -336,8 +337,9 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 		return empty, err
 	}
 	var playerTurnID, playerEventID, savedNarrative, savedMode, savedFallback string
+	var savedCompositionVersion, savedGroupsJSON, savedFactIDsJSON string
 	var savedAt sql.NullString
-	if err := tx.conn.QueryRowContext(ctx, `SELECT player_turn_id,player_event_id,narrative_json,narrative_presentation_mode,narrative_presented_at_utc,COALESCE(narrative_fallback,'') FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, r.TurnRunID, r.SessionID).Scan(&playerTurnID, &playerEventID, &savedNarrative, &savedMode, &savedAt, &savedFallback); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT player_turn_id,player_event_id,narrative_json,narrative_presentation_mode,narrative_presented_at_utc,COALESCE(narrative_fallback,''),narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, r.TurnRunID, r.SessionID).Scan(&playerTurnID, &playerEventID, &savedNarrative, &savedMode, &savedAt, &savedFallback, &savedCompositionVersion, &savedGroupsJSON, &savedFactIDsJSON); err != nil {
 		return empty, classifyMissing(err, "settled own turn narrative")
 	}
 	tx.Rollback(ctx)
@@ -360,7 +362,7 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 		return empty, err
 	}
 	if r.StyleOverride == nil && savedAt.Valid && savedMode != "base" {
-		view, err := savedRPOfficialNarrative(ctx, savedNarrative, savedFallback, input, emit)
+		view, err := savedRPOfficialNarrative(ctx, savedNarrative, savedFallback, savedCompositionVersion, savedGroupsJSON, savedFactIDsJSON, input, emit)
 		if err != nil {
 			return empty, err
 		}
@@ -446,7 +448,7 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 	return RPNarrativeReadResult{Style: style, View: view}, nil
 }
 
-func savedRPOfficialNarrative(ctx context.Context, encoded, fallback string, input core.RPNarrativeInput, emit func(core.RPNarrativeChunk) error) (core.RPNarrativeView, error) {
+func savedRPOfficialNarrative(ctx context.Context, encoded, fallback, compositionVersion, groupsJSON, factIDsJSON string, input core.RPNarrativeInput, emit func(core.RPNarrativeChunk) error) (core.RPNarrativeView, error) {
 	var lines []string
 	if err := json.Unmarshal([]byte(encoded), &lines); err != nil || len(lines) == 0 || len(input.Facts) == 0 {
 		return core.RPNarrativeView{}, core.NewError(core.CodeProjectionDiverged, "saved RP narrative is invalid")
@@ -454,6 +456,18 @@ func savedRPOfficialNarrative(ctx context.Context, encoded, fallback string, inp
 	view := core.RPNarrativeView{Lines: lines, EventIDs: make([]string, 0, len(input.Facts)), Warnings: []string{}}
 	for _, fact := range input.Facts {
 		view.EventIDs = append(view.EventIDs, fact.EventID)
+	}
+	var err error
+	view.CompositionVersion = compositionVersion
+	view.FactGroups, err = decodeRPNarrativeComposition(compositionVersion, groupsJSON, factIDsJSON, lines)
+	if err != nil {
+		return core.RPNarrativeView{}, err
+	}
+	if err := validateRPNarrativeComposition(view); err != nil {
+		return core.RPNarrativeView{}, err
+	}
+	if compositionVersion == narrative.CompositionVersion {
+		view.Warnings = append(view.Warnings, narrative.CompositionCapabilityWarning)
 	}
 	if fallback != "" {
 		var record struct {
@@ -475,7 +489,12 @@ func savedRPOfficialNarrative(ctx context.Context, encoded, fallback string, inp
 		if source >= len(input.Facts) {
 			source = len(input.Facts) - 1
 		}
-		if err := emit(core.RPNarrativeChunk{Index: i, EventID: input.Facts[source].EventID, Line: line}); err != nil {
+		chunk := core.RPNarrativeChunk{Index: i, EventID: input.Facts[source].EventID, Line: line}
+		if compositionVersion != "" {
+			chunk.EventIDs = append([]string(nil), view.FactGroups[i]...)
+			chunk.EventID = ""
+		}
+		if err := emit(chunk); err != nil {
 			return core.RPNarrativeView{}, err
 		}
 	}
@@ -483,6 +502,21 @@ func savedRPOfficialNarrative(ctx context.Context, encoded, fallback string, inp
 }
 
 func (s *Store) saveRPOfficialNarrative(ctx context.Context, turnRunID, providerMode string, view core.RPNarrativeView) error {
+	if err := validateRPNarrativeComposition(view); err != nil {
+		return err
+	}
+	groups := view.FactGroups
+	if groups == nil {
+		groups = [][]string{}
+	}
+	groupsJSON, err := json.Marshal(groups)
+	if err != nil {
+		return core.WrapError(core.CodeStorageFailure, "encode canonical narrative composition", err)
+	}
+	factIDsJSON, err := json.Marshal(view.EventIDs)
+	if err != nil {
+		return core.WrapError(core.CodeStorageFailure, "encode canonical narrative fact sources", err)
+	}
 	mode := providerMode
 	switch mode {
 	case "deterministic", "style_planner", "full_prose":
@@ -498,8 +532,8 @@ func (s *Store) saveRPOfficialNarrative(ctx context.Context, turnRunID, provider
 		fallbackAssignment = "NULL"
 	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
-	query := `UPDATE rp_turn_runs SET narrative_json=?,narrative_presentation_mode=?,narrative_presented_at_utc=?,updated_at_utc=?,narrative_fallback=` + fallbackAssignment + ` WHERE turn_run_id=? AND status='settled' AND narrative_presented_at_utc IS NULL`
-	if _, err := s.db.ExecContext(ctx, query, string(encoded), mode, now, now, turnRunID); err != nil {
+	query := `UPDATE rp_turn_runs SET narrative_json=?,narrative_presentation_mode=?,narrative_presented_at_utc=?,updated_at_utc=?,narrative_composition_version=?,narrative_fact_groups_json=?,narrative_fact_event_ids_json=?,narrative_fallback=` + fallbackAssignment + ` WHERE turn_run_id=? AND status='settled' AND narrative_presented_at_utc IS NULL`
+	if _, err := s.db.ExecContext(ctx, query, string(encoded), mode, now, now, view.CompositionVersion, string(groupsJSON), string(factIDsJSON), turnRunID); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "save official RP narrative", err)
 	}
 	return nil
@@ -513,6 +547,8 @@ func sanitizeRPNarrativeFallback(reason string) string {
 		switch {
 		case strings.Contains(reason, "timeout"), strings.Contains(reason, "cancellation"):
 			return "prose_timeout"
+		case strings.Contains(reason, "invalid composition plan"), strings.Contains(reason, "composition fact coverage mismatch"), strings.Contains(reason, "invalid composition template"):
+			return "prose_validation_failure"
 		case strings.Contains(reason, "speech"), strings.Contains(reason, "dialogue"), strings.Contains(reason, "forbidden"), strings.Contains(reason, "prose empty"), strings.Contains(reason, "agency"), strings.Contains(reason, "expression in prose"), strings.Contains(reason, "money claim"), strings.Contains(reason, "time change"), strings.Contains(reason, "object in prose"), strings.Contains(reason, "person in prose"), strings.Contains(reason, "name in prose"), strings.Contains(reason, "NPC action"), strings.Contains(reason, "relationship"), strings.Contains(reason, "quotation"):
 			return "prose_validation_failure"
 		default:

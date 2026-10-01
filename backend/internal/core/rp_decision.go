@@ -85,6 +85,9 @@ type RPDecisionSpeechExcerpt struct {
 // It proves what was said, not the truth of any claim or that a promise was kept.
 type RPDecisionExchange struct {
 	Dialogue []RPDecisionDialogue `json:"dialogue"`
+	// RecentContext means this complete authorized exchange restores missing
+	// siblings of a still-recent utterance. Selection keeps it as one unit.
+	RecentContext bool `json:"recent_context,omitempty"`
 }
 
 // RPDecisionPrivateMemory is the actor's own earlier approved decision sketch.
@@ -112,6 +115,7 @@ type RPDecisionSchedule struct {
 // No account identifiers, other people's finances, creator data or raw DB rows.
 type RPDecisionInput struct {
 	ContextVersion         string                         `json:"context_version"`
+	Presentation           *RPDecisionPresentation        `json:"presentation,omitempty"`
 	ContextSelection       *RPContextSelection            `json:"context_selection,omitempty"`
 	Readiness              RPContextReadiness             `json:"readiness"`
 	PersonaSourceEventID   string                         `json:"persona_source_event_id,omitempty"`
@@ -157,6 +161,15 @@ type RPDecisionInput struct {
 	ReachablePlaceIDs      []string                       `json:"reachable_place_ids"`
 	OwnActions             []RPOwnAction                  `json:"own_actions,omitempty"`
 	SceneActivities        []RPSceneActivity              `json:"scene_activities,omitempty"`
+}
+
+// RPDecisionPresentation describes the NPC-only projection, never new canon.
+// The source head and policy identify the actual input offered to a provider;
+// masking is limited to typed entity references, not immutable text or sources.
+type RPDecisionPresentation struct {
+	PolicyVersion      string `json:"policy_version"`
+	SourceHeadSequence int64  `json:"source_head_sequence"`
+	IdentityMode       string `json:"identity_mode"`
 }
 
 type RPOwnAction struct {

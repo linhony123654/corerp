@@ -92,7 +92,8 @@ const (
 	RPLifePostingsIndexSchemaVersion         = "corerp-rp-life-postings-index-074-2026-09-28"
 	RPAccountEconomicSourcesVersion          = "corerp-rp-account-economic-sources-075-2026-09-28"
 	RPConversationFocusSchemaVersion         = "corerp-rp-conversation-focus-076-2026-09-30"
-	SchemaVersion                            = RPConversationFocusSchemaVersion
+	RPNarrativeCompositionSchemaVersion      = "corerp-rp-narrative-composition-077-2026-10-01"
+	SchemaVersion                            = RPNarrativeCompositionSchemaVersion
 	legacyStudioLifeSeedingSchemaVersion     = "corerp-studio-life-seeding-042-2026-09-26"
 	legacyRPActivityContinuitySchemaVersion  = "corerp-rp-activity-continuity-043-2026-09-26"
 	legacyRPNarrativeFallbackSchemaVersion   = "corerp-rp-narrative-fallback-044-2026-09-26"
@@ -268,6 +269,7 @@ var schemaMigrations = []struct {
 	{RPLifePostingsIndexSchemaVersion, "074_rp_life_postings_index.sql"},
 	{RPAccountEconomicSourcesVersion, "075_rp_account_economic_sources.sql"},
 	{RPConversationFocusSchemaVersion, "076_rp_conversation_focus.sql"},
+	{RPNarrativeCompositionSchemaVersion, "077_rp_narrative_composition.sql"},
 }
 
 func (s *Store) migrate(ctx context.Context) error {

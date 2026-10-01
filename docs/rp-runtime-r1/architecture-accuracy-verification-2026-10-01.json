@@ -1,0 +1,184 @@
+{
+  "kind": "corerp.r1-architecture-accuracy-verification.v1",
+  "recorded_at_utc": "2026-10-01T07:37:12.774815+00:00",
+  "base_commit": "739a3ad94f34dd1d7a0a4cf1ec450ea02514415e",
+  "branch": "rp-preview-integration-20260929",
+  "source_scope": "All changed backend Go/SQL paths; source aggregate is not a runtime binary identity.",
+  "source_sha256": {
+    "backend/internal/core/rp_context_selection.go": "ddf9a478f1681cf2ab2eca97d913609286a389974402d27fece08ab013bdb3b2",
+    "backend/internal/core/rp_context_selection_test.go": "6d6e522f69071965a52d2074d9afb4511aa9564055cdce12176d9654a63b362b",
+    "backend/internal/core/rp_decision.go": "1e180f26636a7089df006d96b58b6c39427224ab3efbc6e0e2894f7e46aa75ca",
+    "backend/internal/core/rp_style.go": "6975cbcd8cd33982979bb0c75c0c90729c099e3c6c648bbba9fccf0722befda4",
+    "backend/internal/narrative/composition.go": "b8a2bd38b76c5a71927c7a7b7d3fb6909dfd6f03d2551f23827f97a58a69863e",
+    "backend/internal/narrative/composition_test.go": "b5e4cf311ad48ab1b3bb62cf37b22c2689d8a30f27bb620d4aa326b8ed462d33",
+    "backend/internal/narrative/observable_boundary_test.go": "e93aa0f521c7b50f7d44f509e373ca541499fdedd55d6c955c90574a18709708",
+    "backend/internal/narrative/prose.go": "74691622b31d54c3238ab4d8dbe86f5da792101eba8922ae7767772214f287e4",
+    "backend/internal/narrative/prose_test.go": "321a40f9917c6507df3331a6dd70b729a5ddda81b1713151f227b79d332bdc9d",
+    "backend/internal/narrative/reasoning_test.go": "d2429840032f7b76b7e6d19d0aeb171470b44fc3e299a469074df2b05ce69428",
+    "backend/internal/storage/migrations/077_rp_narrative_composition.sql": "62ad0bff0222b1252cde722e123951ea26f1524bfe4096a6dd66ec8f924b84ad",
+    "backend/internal/storage/rp_decision_provider_view.go": "54e5492d3df9beb84e5b342712a7f113958791067317968d497c5366da41a8e6",
+    "backend/internal/storage/rp_decision_provider_view_test.go": "ed60f5a7541c6cd8f521b3d4c0b6b6981f15faaa320222d3d0c92c0b4efd7143",
+    "backend/internal/storage/rp_narrative_composition_test.go": "7e6cc02425329357d35dee8884dc295f407367448af57741150e1abbf1462b3a",
+    "backend/internal/storage/rp_narrative_fallback_reason_test.go": "03df52716574d7ce8aad495a4b8263428dab23600daa60f267992fba0464c7ac",
+    "backend/internal/storage/rp_narrative_render.go": "2b903bd07a97231075f08f34401897be6eabdb2d6bdebaebb2cee108abd6be10",
+    "backend/internal/storage/rp_narrative_render_test.go": "45b15c7cf2099283d02faef3d03644c696c262618b826f84b8793c33b0d821ca",
+    "backend/internal/storage/rp_relevant_dialogue.go": "210b7d17bfdc798fef014360f7ba21ee11a9e38f3849183f4973bb9d227d2c4b",
+    "backend/internal/storage/rp_relevant_dialogue_test.go": "8700a8aa3d9243e9f233aef03229103b73ac462fb3ea3dc99145d4ca386f2c45",
+    "backend/internal/storage/rp_session.go": "aeed9f3c78cb9c84cd43e01e2b0c8e47df2412e44ad18f2dce21fdcd65e0e6a4",
+    "backend/internal/storage/rp_style.go": "0add42cfe529763e85afdbd3bc6cf31e440cd765d92d97b11571e1925cadbc58",
+    "backend/internal/storage/rp_turn.go": "af122134ae4713000df2af2794923c43dd1b14906372009826ea644997be1fef",
+    "backend/internal/storage/store.go": "d72110ac6b9ff184c6f07351c7617b45a100deb49f3437782f7c473585e21b07",
+    "backend/internal/transport/httpapi/rp_narrative_reasoning_test.go": "941afb8715ff7d887cc60acaf2b8de63cacd69b4a758a121512861e9fa3a7f2a",
+    "backend/internal/transport/httpapi/rp_narrative_stream.go": "061e35db2052ed76d68d6081dd5aa18650cd256b8804b531e1725a0d9ac32234",
+    "backend/internal/transport/httpapi/rp_prose_stream_source_test.go": "97dc286e7c1464c359386d08a2c2a4430f8d96b3acd30aa966eefa07b31a9985"
+  },
+  "source_aggregate_sha256": "089db57f090b3af37296a2170bf3aad8e87675824021993bc4863529499fec52",
+  "contracts": {
+    "identity_policy": "corerp.rp-identity-view.v2",
+    "context_selection_policy": "corerp.context-selection.v2",
+    "fresh_narrative_composition": "corerp.fact-composition.v1",
+    "schema": "corerp-rp-narrative-composition-077-2026-10-01"
+  },
+  "checks_workdir": "backend",
+  "executed_checks": [
+    {
+      "owner": "parent",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test -p=1 -ldflags='-s -w' ./internal/core ./internal/decision ./internal/narrative -count=1",
+      "result": "PASS",
+      "output": [
+        "core 0.115s",
+        "decision 0.596s",
+        "narrative 1.591s"
+      ]
+    },
+    {
+      "owner": "parent",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test -p=1 -gcflags='corerp.local/backend/internal/storage=-dwarf=false' -ldflags='-s -w' ./internal/storage -run '^Test(RPContextSelection|RPDecisionProvider|RPRelevantDialogue|RPNarrative(Composition|Render|UnsafeDraft|Budget)|RPOfficialNarrativePersists|RPLLMProviderUsesFiltered)' -count=1",
+      "result": "PASS",
+      "seconds": 25.938,
+      "note": "Preceded final warning/source metadata corrections; affected final follow-up listed independently."
+    },
+    {
+      "owner": "parent",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test -p=1 -ldflags='-s -w' ./internal/transport/httpapi -run '^(TestRPNarrativeOverridePropagatesReasoningControls|TestRPFullProseStreamCitesBoundedFactsAndReceipts)$' -count=1",
+      "result": "PASS",
+      "seconds": 1.123,
+      "note": "Final fresh/cached chunks, independent committed sources, version/groups/capability disclosure, no cached provider call, reasoning/default and auth/fallback assertions."
+    },
+    {
+      "owner": "parent",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test -p=1 -gcflags='corerp.local/backend/internal/storage=-dwarf=false' -ldflags='-s -w' ./internal/storage -run '^TestEmbeddedMigrationsMatchContracts$' -count=1",
+      "result": "PASS",
+      "seconds": 0.022
+    },
+    {
+      "owner": "parent",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go vet -p=1 ./internal/core ./internal/decision ./internal/narrative ./internal/storage ./internal/transport/httpapi",
+      "result": "PASS"
+    },
+    {
+      "owner": "parent",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go vet -p=1 ./internal/storage ./internal/transport/httpapi",
+      "result": "PASS",
+      "note": "After final replay warning and saved chunk corrections."
+    },
+    {
+      "owner": "character-state",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test ./internal/storage -run '^TestRPRelevantDialogue' -count=1",
+      "result": "PASS",
+      "seconds": 5.408,
+      "source": "audits/2026-10-01-character-state.md"
+    },
+    {
+      "owner": "context-memory",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test ./internal/storage -run '^(TestRPDecisionProviderViewPreservesClaimsAndProvenance|TestRPDecisionProviderProjectionMapsOnlyExactEntityReferences|TestRPDecisionProviderProjectionCoversReachablePersonSchema|TestRPContextSelectionProviderMaskRechecksBudgetAndBasis)$' -count=1",
+      "result": "PASS",
+      "seconds": 2.127,
+      "source": "audits/2026-10-01-context-memory.md"
+    },
+    {
+      "owner": "commit-recovery",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test -p=1 -gcflags='corerp.local/backend/internal/storage=-dwarf=false' -ldflags='-s -w' ./internal/storage -run 'TestRPNarrative(Composition|Render|UnsafeDraft)|TestRPOfficialNarrativePersistsAcrossSelectedVariantAndRestart|TestRPProviderReceiptRejectsUntrustedFallback|TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects' -count=1",
+      "result": "PASS",
+      "seconds": 15.763,
+      "source": "audits/2026-10-01-commit-recovery.md"
+    },
+    {
+      "owner": "commit-recovery",
+      "command": "TMPDIR=/tmp GOTMPDIR=/tmp GOCACHE=/dev/shm/corerp-r1-private-bounds-gocache-20260930 /usr/local/go/bin/go test -p=1 -gcflags='corerp.local/backend/internal/storage=-dwarf=false' -ldflags='-s -w' ./internal/storage -run 'TestRPNarrativeComposition|TestRPTurnRecoversEveryDurableStageWithoutDuplicatingEffects' -count=1",
+      "result": "PASS",
+      "seconds": 12.97,
+      "source": "audits/2026-10-01-commit-recovery.md",
+      "note": "Final warning reconstruction/legacy absence and saved chunk alignment."
+    },
+    {
+      "owner": "parent",
+      "command": "git diff --check",
+      "result": "PASS"
+    }
+  ],
+  "independent_review": {
+    "source": "audits/2026-10-01-integration.md",
+    "type": "static source review, not reviewer-executed tests",
+    "model": "current model inherited; no explicit override",
+    "initial_findings_preserved": true,
+    "corrections": "refusal, supported framing, independent receipt validation, lexical/byte split-context restoration, schema inventory, replay warning; final source follow-up recorded in report"
+  },
+  "frozen_artifacts": {
+    "real-rongqing-world-spec.json": {
+      "sha256": "e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+      "unchanged": true
+    },
+    "real-rongqing-packages.json": {
+      "sha256": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+      "unchanged": true
+    },
+    "before-samples.json": {
+      "sha256": "9e4ddf8a948be6d80f7fa46365fe4320c3d7577437e6dd4f839eee06d1c52c2a",
+      "unchanged": true
+    },
+    "after-samples.json": {
+      "sha256": "924f55ba7b77ed2358d514b6c5161a3232b280174e9d8f926685af80fd3a9709",
+      "unchanged": true
+    }
+  },
+  "real_rp_provider_http_calls_this_increment": 0,
+  "historical_results": {
+    "original_32": "FAIL at round29 deadline; remaining/postchecks NOT REACHED",
+    "frozen_golden": "17 NOT_READY / 0 NPC-provider calls; no human acceptance",
+    "source_world": "11 named roles including one player and ten NPCs; ten NPC persona missing, relations/address undeclared"
+  },
+  "not_run_this_increment": [
+    "full backend suite",
+    "unchanged real 32-round and postchecks",
+    "frozen Golden provider rerun",
+    "provider compatibility for new composition",
+    "human RP experience review",
+    "frontend build/browser/release identity"
+  ],
+  "resource_failures_retained": "Worker reports retain compile/link no-space errors and retrieval fixture storage commit failures; latter resource cause was inferred, not decoded. Tests pass with /tmp temp directories; shared cache/evidence were not cleared.",
+  "live_backend_readonly_check": {
+    "pid": 722907,
+    "binary": "/home/ubuntu/.local/share/corerp-preview/corerp-server",
+    "sha256": "fea2067aa393dd6608b5502f13a7ee3884d5ba5336203d167de315a99a4cbc23",
+    "same_as_previously_recorded": true,
+    "deployed_this_increment": false,
+    "served_frontend_version": "NOT_VERIFIED"
+  },
+  "capability_limit": "Fresh full_prose is explicitly versioned limited server-owned fact composition; free lexical rewriting/character diction/literary quality not established. Legacy saved prose unchanged and unversioned.",
+  "r1_status": "NOT_DONE",
+  "world_integrity_exit": "NOT_PASSED for current source",
+  "rp_experience_exit": "NOT_PASSED",
+  "remaining_risks": [
+    "bounded lexical older retrieval and incomplete upstream omission diagnostics",
+    "SQL group count scales with authorized history; no benchmark",
+    "last3 private history is not generalized intent lifecycle",
+    "authorized citations do not prove arbitrary semantic entailment",
+    "new provider protocol compatibility not live-tested",
+    "limited expressive narration and missing real creator canon/human review"
+  ],
+  "release": {
+    "source_publication": "separate git/GitHub receipt after review; previously authorized audit branch",
+    "preview_or_production_deployment": "NOT_PERFORMED"
+  }
+}

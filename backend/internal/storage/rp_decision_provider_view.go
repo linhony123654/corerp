@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"sort"
-	"strings"
 
 	"corerp.local/backend/internal/core"
 )
@@ -15,11 +13,14 @@ import (
 // Validate against this actual view before rechecking the authoritative input.
 func (s *Store) rpDecisionProviderView(ctx context.Context, input core.RPDecisionInput) (core.RPDecisionInput, error) {
 	var empty core.RPDecisionInput
-	conn, err := s.db.Conn(ctx)
+	// Use the existing short transaction helper so head, familiarity and alias
+	// secret cannot change independently. No transaction spans a provider call.
+	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
 		return empty, core.WrapError(core.CodeStorageFailure, "open NPC provider identity view", err)
 	}
-	defer conn.Close()
+	defer tx.Rollback(ctx)
+	conn := tx.conn
 	var head int64
 	if err := conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, input.InstanceID, input.BranchID).Scan(&head); err != nil {
 		return empty, core.WrapError(core.CodeStorageFailure, "read NPC provider view head", err)
@@ -27,10 +28,30 @@ func (s *Store) rpDecisionProviderView(ctx context.Context, input core.RPDecisio
 	if head != input.HeadSequence {
 		return empty, core.NewError(core.CodeBranchConflict, "NPC provider view is stale")
 	}
+	if err := requireInternalRPDecisionOwner(ctx, conn, input.InstanceID, input.BranchID, input.NPCEntityID); err != nil {
+		return empty, err
+	}
+	input.Presentation = &core.RPDecisionPresentation{
+		PolicyVersion: "corerp.rp-identity-view.v2", SourceHeadSequence: input.HeadSequence,
+		IdentityMode: "observer_relative",
+	}
 	encoded, err := json.Marshal(input)
 	if err != nil {
 		return empty, core.WrapError(core.CodeStorageFailure, "encode NPC provider view", err)
 	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var document any
+	if err := decoder.Decode(&document); err != nil {
+		return empty, core.WrapError(core.CodeStorageFailure, "decode NPC provider view", err)
+	}
+	// Only declared entity references participate in familiarity projection.
+	// Text containing an ID is a claim, not an authoritative identity reference.
+	references := make(map[string]bool)
+	walkRPDecisionEntityReferences(document, "", func(id string) string {
+		references[id] = true
+		return id
+	})
 	rows, err := conn.QueryContext(ctx, `
 		SELECT a.agent_id FROM agent_profiles a
 		LEFT JOIN rp_identity_familiarity f ON f.observer_agent_id=? AND f.subject_agent_id=a.agent_id
@@ -47,7 +68,7 @@ func (s *Store) rpDecisionProviderView(ctx context.Context, input core.RPDecisio
 			rows.Close()
 			return empty, core.WrapError(core.CodeStorageFailure, "scan NPC unfamiliar person", err)
 		}
-		if bytes.Contains(encoded, []byte(id)) {
+		if references[id] {
 			unfamiliar = append(unfamiliar, id)
 		}
 	}
@@ -57,6 +78,7 @@ func (s *Store) rpDecisionProviderView(ctx context.Context, input core.RPDecisio
 	}
 	rows.Close()
 	if len(unfamiliar) == 0 {
+		tx.Rollback(ctx)
 		return core.SelectRPDecisionContext(input, core.DefaultRPDecisionContextBudgetBytes)
 	}
 	aliases := make(map[string]string, len(unfamiliar))
@@ -67,13 +89,8 @@ func (s *Store) rpDecisionProviderView(ctx context.Context, input core.RPDecisio
 		}
 		aliases[id] = alias
 	}
-	sort.Slice(unfamiliar, func(i, j int) bool { return len(unfamiliar[i]) > len(unfamiliar[j]) })
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.UseNumber()
-	var document any
-	if err := decoder.Decode(&document); err != nil {
-		return empty, core.WrapError(core.CodeStorageFailure, "decode NPC provider view", err)
-	}
+	// Release the snapshot before packet finalization and any provider invocation.
+	tx.Rollback(ctx)
 	root := document.(map[string]any)
 	if people, ok := root["visible_entities"].([]any); ok {
 		for _, item := range people {
@@ -83,7 +100,12 @@ func (s *Store) rpDecisionProviderView(ctx context.Context, input core.RPDecisio
 			}
 		}
 	}
-	document = maskRPDecisionIDs(document, "", unfamiliar, aliases)
+	document = walkRPDecisionEntityReferences(document, "", func(id string) string {
+		if alias, found := aliases[id]; found {
+			return alias
+		}
+		return id
+	})
 	encoded, err = json.Marshal(document)
 	if err != nil || json.Unmarshal(encoded, &empty) != nil {
 		return core.RPDecisionInput{}, core.NewError(core.CodeProjectionDiverged, "NPC provider view cannot be encoded")
@@ -91,26 +113,35 @@ func (s *Store) rpDecisionProviderView(ctx context.Context, input core.RPDecisio
 	return core.SelectRPDecisionContext(empty, core.DefaultRPDecisionContextBudgetBytes)
 }
 
-func maskRPDecisionIDs(value any, key string, unfamiliar []string, aliases map[string]string) any {
+// These keys are the entity-reference fields in RPDecisionInput and its nested
+// typed views. Provenance, places, contracts, handles and subjective phrases
+// are deliberately absent; future entity fields must opt into this projection.
+func rpDecisionEntityReference(key string) bool {
+	switch key {
+	case "entity_id", "npc_entity_id", "interlocutor_entity_id", "subject_entity_id",
+		"speaker_entity_id", "actor_entity_id", "target_entity_id", "actor_id",
+		"store_actor_id", "counterparty_entity_id", "friend_id":
+		return true
+	default:
+		return false
+	}
+}
+
+func walkRPDecisionEntityReferences(value any, key string, project func(string) string) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		for name, child := range typed {
-			typed[name] = maskRPDecisionIDs(child, name, unfamiliar, aliases)
+			typed[name] = walkRPDecisionEntityReferences(child, name, project)
 		}
 		return typed
 	case []any:
 		for i, child := range typed {
-			typed[i] = maskRPDecisionIDs(child, key, unfamiliar, aliases)
+			typed[i] = walkRPDecisionEntityReferences(child, key, project)
 		}
 		return typed
 	case string:
-		// Accepted and observed utterances remain verbatim. A speaker may claim
-		// any name or ID, but that claim must not grant canonical identity.
-		if key == "text" || key == "player_speech_text" || key == "persona" {
-			return typed
-		}
-		for _, id := range unfamiliar {
-			typed = strings.ReplaceAll(typed, id, aliases[id])
+		if rpDecisionEntityReference(key) {
+			return project(typed)
 		}
 		return typed
 	default:

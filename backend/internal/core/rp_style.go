@@ -224,6 +224,10 @@ type RPNarrativeView struct {
 	EventIDs []string `json:"event_ids"`
 	Warnings []string `json:"warnings"`
 	RenderID string   `json:"render_id,omitempty"`
+	// Legacy saved prose omits these fields. A versioned composition binds
+	// each line to server-expanded public fact nodes, not free model prose.
+	CompositionVersion string     `json:"composition_version,omitempty"`
+	FactGroups         [][]string `json:"fact_groups,omitempty"`
 	// FallbackReason is the sanitized, queryable reason presentation fell
 	// back to the deterministic renderer (e.g. prose validation failure or
 	// a world-declared full_prose without a prose provider). Empty = the

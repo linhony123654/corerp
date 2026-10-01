@@ -91,10 +91,10 @@ func TestChatProseProviderCarriesAndRepairsObservableRecipient(t *testing.T) {
 		}
 		draft := "你问：「今晚有空吗？」Cai 回答：「有啊，坐这儿吧。」Cai向Mei点头。"
 		if calls.Add(1) == 2 {
-			if len(body.Messages) != 4 || !strings.Contains(body.Messages[3].Content, "target") {
+			if len(body.Messages) != 4 || !strings.Contains(body.Messages[3].Content, "fact_ref") || !strings.Contains(body.Messages[3].Content, "禁止所有额外字段") {
 				t.Error("repair feedback lost the recipient constraint")
 			}
-			draft = "你问：「今晚有空吗？」Cai 回答：「有啊，坐这儿吧。」Cai向你点头。"
+			draft = factCompositionFixture("f0", "f1", "f2", "f3")
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": draft}}}})
 	}))
@@ -104,8 +104,11 @@ func TestChatProseProviderCarriesAndRepairsObservableRecipient(t *testing.T) {
 		t.Fatal(err)
 	}
 	view, err := p.Render(context.Background(), in)
-	if err != nil || view.FallbackReason != "" || calls.Load() != 2 || !strings.Contains(strings.Join(view.Lines, ""), "Cai向你点头") {
+	if err != nil || view.FallbackReason != "" || calls.Load() != 2 || !strings.Contains(strings.Join(view.Lines, ""), "Cai 向你点了点头") {
 		t.Fatalf("approved recipient repair failed: %+v / %v / calls=%d", view, err, calls.Load())
+	}
+	if len(view.EventIDs) != len(in.Facts) || strings.Contains(strings.Join(view.Lines, ""), "Cai 向Mei") {
+		t.Fatalf("repair lost facts or changed observed recipient: %+v", view)
 	}
 	if proseValidationCategory(failure("uncommitted expression target in prose")) != "expression_target_not_committed" {
 		t.Fatal("recipient violation lost its safe diagnostic category")

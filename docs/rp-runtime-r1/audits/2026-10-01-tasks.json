@@ -1,0 +1,46 @@
+{
+  "kind": "corerp.r1-parallel-architecture-tasks.v1",
+  "base_commit": "739a3ad94f34dd1d7a0a4cf1ec450ea02514415e",
+  "user_authorized": true,
+  "model_policy": "Omitted model argument; create_thread inherits current model by tool contract. No explicit model override.",
+  "tasks": [
+    {
+      "role": "character-state",
+      "thread_id": "01a0f645-be1f-75e3-a250-877dd6c46f82",
+      "scope": "private continuity audit; relevant dialogue implementation",
+      "report": "2026-10-01-character-state.md",
+      "status": "FROZEN_IMPLEMENTATION_AND_FOCUSED_CHECKS"
+    },
+    {
+      "role": "context-memory",
+      "thread_id": "01a0f645-c12e-7cc2-9994-db4baa0f926f",
+      "scope": "context audit; typed identity/snapshot implementation",
+      "report": "2026-10-01-context-memory.md",
+      "status": "FROZEN_IMPLEMENTATION_AND_FOCUSED_CHECKS"
+    },
+    {
+      "role": "commit-recovery",
+      "thread_id": "01a0f645-c344-7633-a315-47a312645df6",
+      "scope": "commit/recovery audit; composition metadata persistence",
+      "report": "2026-10-01-commit-recovery.md",
+      "status": "FROZEN_IMPLEMENTATION_AND_FOCUSED_CHECKS"
+    },
+    {
+      "role": "narration",
+      "thread_id": "01a0f645-c55e-7961-a2e5-70a1c963b25d",
+      "scope": "public boundary audit; fact composition implementation",
+      "report": "2026-10-01-narration.md",
+      "status": "FROZEN_IMPLEMENTATION_AND_FOCUSED_CHECKS"
+    },
+    {
+      "role": "integration",
+      "thread_id": "01a0f645-c761-7a72-ab9c-f93132d84228",
+      "scope": "independent architecture audit and working change review",
+      "report": "2026-10-01-integration.md",
+      "status": "FROZEN_STATIC_REVIEW"
+    }
+  ],
+  "parent_ownership": "architecture, shared core DTOs, integration, final validation and source publication",
+  "provider_tests_this_increment": 0,
+  "r1_status": "NOT_DONE"
+}
