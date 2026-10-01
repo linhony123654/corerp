@@ -1,0 +1,462 @@
+{
+  "kind": "corerp.r1-actions-interruption-preview-release.v1",
+  "status": "PASS: exact code published, same preview activated, actual default Step wave/restart/exact retry and deployed browser saved v3 display verified",
+  "source_commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+  "runtime_sha256": "e7120c7bffd3f93d1ad65a4d317699fcc9ddad6f0e362b95b27bee7a330b964f",
+  "production_source_sha256": "cfa31234af283adbd14c41bcf141a48a67b5bd4741bf8afa1662df6c724e9f6e",
+  "schema_version": "081",
+  "public_url": "https://code.linhony.xyz:4188/",
+  "review_url": "https://code.linhony.xyz:4188/rp-review/r1/",
+  "publication": {
+    "kind": "corerp.exact-git-publication.v1",
+    "branch": "rp-preview-integration-20260929",
+    "commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+    "expected_parent": "27b151d456ae3a9ef063bcb694e5d2b38db31344",
+    "expected_tree": "22a6027024af5fddad5a68d884989bf6f6f56ef1",
+    "transport": "Git database API; exact local objects",
+    "status": "PASS",
+    "tree_verified": true,
+    "changed_files": 81,
+    "commit_verified": true,
+    "remote_commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+    "url": "https://github.com/linhony123654/corerp/commit/a74f3e013966f7066fff8952dffaf37deed6104c"
+  },
+  "activation": {
+    "kind": "corerp.r1-actions-tone-interruption-preview-activation.v1",
+    "status": "PASS: existing preview activated with exact runtime/frontend; old world and receipts unchanged",
+    "source_commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+    "runtime_sha256": "e7120c7bffd3f93d1ad65a4d317699fcc9ddad6f0e362b95b27bee7a330b964f",
+    "production_source_sha256": "cfa31234af283adbd14c41bcf141a48a67b5bd4741bf8afa1662df6c724e9f6e",
+    "backup_dir": "/home/ubuntu/.local/share/corerp-preview/backups/20261002-actions-tone-interruption-081-a74f3e01",
+    "old_static_dir": "/var/www/corerp-preview.prev-20261002-a74f3e01",
+    "human_experience": "PENDING",
+    "semantic_speech_accuracy": "NOT PASSED",
+    "scope": "authorized existing isolated preview; existing nonverbal actions, audible speech delivery and interrupted action recovery; R1 NOT DONE",
+    "database_before": {
+      "tables": {
+        "events": {
+          "rows": 207,
+          "sha256": "e2dab9bcbac271fbd686ad06c297ff6b82ad0aef76ab2b91e6a272b519874425"
+        },
+        "event_batches": {
+          "rows": 201,
+          "sha256": "a5d5d42528f7424c3003de8b2eac412cfa34ff5f6a5f2799829ca4bf19590e55"
+        },
+        "commands": {
+          "rows": 201,
+          "sha256": "b61ec2767e3483eb54187f9c065c50a2553aa378e56698d791b15eeadcd35c40"
+        },
+        "command_attempts": {
+          "rows": 201,
+          "sha256": "2d18b0e71fc0aa51b04c81b37c4fc6bcfb7fe816ce4ea8fe09aef6585795d409"
+        },
+        "rp_provider_calls": {
+          "rows": 19,
+          "sha256": "cdccf5da9e15e85728ffe32b38a2aa53f3c1b184f96458e22ab247cfa77f6537"
+        },
+        "rp_turn_runs": {
+          "rows": 68,
+          "sha256": "eee67f16b4aeea97e6beb8e57884955f52a1b21d9b094860e733b3b12aa71aff"
+        },
+        "rp_utterances": {
+          "rows": 139,
+          "sha256": "56b43e733c7a41bbbb9f6992ff11eb0163d6c08b78060f4f386b4af4d2353aad"
+        },
+        "rp_npc_decisions": {
+          "rows": 74,
+          "sha256": "7fb97fafdcad6a043a7a79c4f2d4d3334114383b649252d255890be12906b6c7"
+        },
+        "observation_records": {
+          "rows": 175,
+          "sha256": "22a710f0cd70385f5a41f172612eb95781fe8226673747933673d8d8d26b57e7"
+        },
+        "agent_knowledge": {
+          "rows": 169,
+          "sha256": "47a551b8b0a38a35a2e002f28bbfa5cd42c78e4aeeaaf9f1eac0a3a00a356fd4"
+        },
+        "rp_turn_listener_activations": {
+          "rows": 22,
+          "sha256": "3be895b9a903d0ff4a4675e9ae8a49a79506f7bfcea74dd480afd725ce6091ff"
+        },
+        "rp_turn_listener_skips": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "rp_narrative_renders": {
+          "rows": 2,
+          "sha256": "f67bc699a163b3005aab0d48337c9b231d699332809a0d11634ff2323a4a75c1"
+        },
+        "rp_narrative_selections": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      },
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          37
+        ]
+      ],
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "database_after_migration": {
+      "tables": {
+        "events": {
+          "rows": 207,
+          "sha256": "e2dab9bcbac271fbd686ad06c297ff6b82ad0aef76ab2b91e6a272b519874425"
+        },
+        "event_batches": {
+          "rows": 201,
+          "sha256": "a5d5d42528f7424c3003de8b2eac412cfa34ff5f6a5f2799829ca4bf19590e55"
+        },
+        "commands": {
+          "rows": 201,
+          "sha256": "b61ec2767e3483eb54187f9c065c50a2553aa378e56698d791b15eeadcd35c40"
+        },
+        "command_attempts": {
+          "rows": 201,
+          "sha256": "2d18b0e71fc0aa51b04c81b37c4fc6bcfb7fe816ce4ea8fe09aef6585795d409"
+        },
+        "rp_provider_calls": {
+          "rows": 19,
+          "sha256": "cdccf5da9e15e85728ffe32b38a2aa53f3c1b184f96458e22ab247cfa77f6537"
+        },
+        "rp_turn_runs": {
+          "rows": 68,
+          "sha256": "eee67f16b4aeea97e6beb8e57884955f52a1b21d9b094860e733b3b12aa71aff"
+        },
+        "rp_utterances": {
+          "rows": 139,
+          "sha256": "56b43e733c7a41bbbb9f6992ff11eb0163d6c08b78060f4f386b4af4d2353aad"
+        },
+        "rp_npc_decisions": {
+          "rows": 74,
+          "sha256": "7fb97fafdcad6a043a7a79c4f2d4d3334114383b649252d255890be12906b6c7"
+        },
+        "observation_records": {
+          "rows": 175,
+          "sha256": "22a710f0cd70385f5a41f172612eb95781fe8226673747933673d8d8d26b57e7"
+        },
+        "agent_knowledge": {
+          "rows": 169,
+          "sha256": "47a551b8b0a38a35a2e002f28bbfa5cd42c78e4aeeaaf9f1eac0a3a00a356fd4"
+        },
+        "rp_turn_listener_activations": {
+          "rows": 22,
+          "sha256": "3be895b9a903d0ff4a4675e9ae8a49a79506f7bfcea74dd480afd725ce6091ff"
+        },
+        "rp_turn_listener_skips": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "rp_narrative_renders": {
+          "rows": 2,
+          "sha256": "f67bc699a163b3005aab0d48337c9b231d699332809a0d11634ff2323a4a75c1"
+        },
+        "rp_narrative_selections": {
+          "rows": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      },
+      "branches": [
+        [
+          "inst_m1",
+          "br_main",
+          1
+        ],
+        [
+          "inst_m2_t09",
+          "br_main",
+          75
+        ],
+        [
+          "world_honglou_60615b11",
+          "br_main",
+          94
+        ],
+        [
+          "world_rp_runtime_r1_20261001",
+          "br_main",
+          37
+        ]
+      ],
+      "integrity": "ok",
+      "fk_errors": 0
+    },
+    "latest_migrations": [
+      "corerp-rp-action-interruption-081-2026-10-02",
+      "corerp-rp-action-triggers-080-2026-10-01",
+      "corerp-rp-session-opened-window-079-2026-10-01"
+    ],
+    "public_url": "https://code.linhony.xyz:4188/",
+    "review_url": "https://code.linhony.xyz:4188/rp-review/r1/",
+    "actual_pid": 1741682,
+    "database_backup_consistent": true,
+    "old_history_assets_preserved": true,
+    "model_calls_during_activation": 0,
+    "availability": "readyz and public routes200"
+  },
+  "human_experience": "PENDING",
+  "semantic_speech_accuracy": "NOT PASSED",
+  "r1_status": "NOT DONE",
+  "recorded_at_utc": "2026-10-01T17:13:58.320818+00:00",
+  "world_smoke": {
+    "kind": "corerp.r1-actions-tone-interruption-preview-smoke.v1",
+    "status": "PASS: actual default Step wave reaction, committed sourced finite narrative, restart and exact retry; human experience pending",
+    "source_commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+    "runtime_sha256": "e7120c7bffd3f93d1ad65a4d317699fcc9ddad6f0e362b95b27bee7a330b964f",
+    "public_url": "https://code.linhony.xyz:4188/",
+    "instance_id": "world_rp_runtime_r1_20261001",
+    "default_model": "step-5-preview",
+    "human_experience": "PENDING",
+    "semantic_speech_accuracy": "NOT PASSED",
+    "scope": "one actual directed wave on the existing authorized preview; not Golden or original32",
+    "before": {
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 37
+        }
+      ],
+      "events": 207,
+      "provider_calls": 19,
+      "utterances": 139,
+      "decisions": 74
+    },
+    "generation_seconds": 8.712,
+    "composition_version": "corerp.fact-composition.v3",
+    "public_speech_delivery": [
+      {
+        "event_id": "event_rp_npc_2f0c8f020286d5e9b56f204fb3ab2331393719f5c268d6bfe3995d0e9ae430bc",
+        "speech_tone": "gentle",
+        "speech_text": "宝玉，手挥得倒欢——老祖宗早看见你了。过来吧，走近些说话，这儿座儿一直给你留着，你想说什么便慢慢说，我不催你。"
+      }
+    ],
+    "turn_run_id": "rpturn_ca623f0592dfa541ebab726003373023d572a2b38ec14ec7287cd81577e236e1",
+    "player_action_event_id": "event_rp_nonverbal_c270d2c375bacd34d4ba51f9ab2dc6596bdd07a1810ee213ead9f881592e663f",
+    "narrative_lines": [
+      "在荣庆堂，你向贾母挥了挥手。",
+      "「宝玉，手挥得倒欢——老祖宗早看见你了。过来吧，走近些说话，这儿座儿一直给你留着，你想说什么便慢慢说，我不催你。」贾母温和地答，笑了笑。"
+    ],
+    "fact_groups": [
+      [
+        "event_rp_nonverbal_c270d2c375bacd34d4ba51f9ab2dc6596bdd07a1810ee213ead9f881592e663f"
+      ],
+      [
+        "event_rp_npc_2f0c8f020286d5e9b56f204fb3ab2331393719f5c268d6bfe3995d0e9ae430bc",
+        "event_rp_npc_expression_2f0c8f020286d5e9b56f204fb3ab2331393719f5c268d6bfe3995d0e9ae430bc"
+      ]
+    ],
+    "receipts": [
+      {
+        "phase": "decision",
+        "provider_kind": "chat_completions",
+        "model_id": "step-5-preview",
+        "result": "success",
+        "attempt_count": 1,
+        "fallback_kind": ""
+      },
+      {
+        "phase": "narrative",
+        "provider_kind": "deterministic",
+        "model_id": "",
+        "result": "success",
+        "attempt_count": 0,
+        "fallback_kind": ""
+      }
+    ],
+    "player_utterances_for_action": 0,
+    "after_action": {
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 40
+        }
+      ],
+      "events": 210,
+      "provider_calls": 21,
+      "utterances": 140,
+      "decisions": 75
+    },
+    "other_world_heads_preserved": true,
+    "restart": "PASS: exact public history and no extra effects/calls",
+    "after": {
+      "branches": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 40
+        }
+      ],
+      "events": 210,
+      "provider_calls": 21,
+      "utterances": 140,
+      "decisions": 75
+    },
+    "actual_successful_npc_model_calls": 1,
+    "r1_status": "NOT DONE"
+  },
+  "browser_history": {
+    "kind": "corerp.r1-preview-history-browser.v1",
+    "status": "PASS: deployed mobile browser renders exact saved v3 lines and reload; zero new events/turns/model receipts",
+    "source_commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+    "runtime_sha256": "e7120c7bffd3f93d1ad65a4d317699fcc9ddad6f0e362b95b27bee7a330b964f",
+    "composition_version": "corerp.fact-composition.v3",
+    "scope": "existing live v3 saved history display; no submitted player actions or model calls",
+    "public_url": "https://code.linhony.xyz:4188/",
+    "before": {
+      "counts": [
+        {
+          "events": 210,
+          "calls": 21,
+          "utterances": 140,
+          "decisions": 75,
+          "turns": 69
+        }
+      ],
+      "heads": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 40
+        }
+      ]
+    },
+    "initial_harness_failure": {
+      "status": "FAIL: assumed world title instead of actual place heading",
+      "evidence": "browser-history-initial-title-timeout.json",
+      "sha256": "004806e6424dae13a56d84b5c4d1d47d691103f067d6b08a186d1984f303ed48",
+      "new_events_or_models": 0
+    },
+    "after": {
+      "counts": [
+        {
+          "events": 210,
+          "calls": 21,
+          "utterances": 140,
+          "decisions": 75,
+          "turns": 69
+        }
+      ],
+      "heads": [
+        {
+          "instance_id": "inst_m1",
+          "branch_id": "br_main",
+          "head_sequence": 1
+        },
+        {
+          "instance_id": "inst_m2_t09",
+          "branch_id": "br_main",
+          "head_sequence": 75
+        },
+        {
+          "instance_id": "world_honglou_60615b11",
+          "branch_id": "br_main",
+          "head_sequence": 94
+        },
+        {
+          "instance_id": "world_rp_runtime_r1_20261001",
+          "branch_id": "br_main",
+          "head_sequence": 40
+        }
+      ]
+    },
+    "narrative_lines": [
+      "在荣庆堂，你向贾母挥了挥手。",
+      "「宝玉，手挥得倒欢——老祖宗早看见你了。过来吧，走近些说话，这儿座儿一直给你留着，你想说什么便慢慢说，我不催你。」贾母温和地答，笑了笑。"
+    ],
+    "allowed_posted_routes": [
+      "/api/v1/rp/sessions/resume",
+      "/api/v1/rp/observe",
+      "/api/v1/rp/sessions/resume",
+      "/api/v1/rp/observe"
+    ],
+    "blocked_routes": [],
+    "page_errors": [],
+    "screenshot_sha256": "da08d1ee4f4c1117e79afd92762a03c08ba202b4de60c8af19c986db7b454e76",
+    "recorded_at_utc": "2026-10-01T17:02:48.200Z"
+  },
+  "original32": {
+    "status": "FAIL; separate from successful live delivery",
+    "evidence": "actions-interruption-original32-2026-10-02.json"
+  }
+}

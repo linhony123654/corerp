@@ -1,5 +1,7 @@
 # Nonverbal action interrupted by controller assignment
 
+Historical static finding retained below. Subsequently reproduced with a real provider barrier and fixed in schema081 explicit historical settlement. Current implementation, original RED→GREEN evidence, final17 checks and delivery are in [the current report](../actions-interruption-report-2026-10-02.md) and [verification](../actions-interruption-verification-2026-10-02.json); the original static text does not claim the current defect remains unresolved.
+
 Status: unresolved recovery risk; static audit only. The reproduction below has **not been executed**. No model calls, database mutations, or runtime code changes were made for this audit. Existing passing checks do not establish recovery for this interleaving.
 
 The integration coordinator reported runtime freeze `85d43576`, schema `080`, final source `2070e375442`, and a real 22-case Golden run in progress when this document was requested. Those identifiers and the ongoing run are coordinator context, not independently verified audit results. This document does not change the frozen runtime or claim the next recovery slice is complete.

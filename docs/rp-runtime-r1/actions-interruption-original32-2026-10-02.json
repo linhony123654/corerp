@@ -1,0 +1,84 @@
+{
+  "kind": "corerp.r1-original32-terminal.v1",
+  "status": "FAIL: turn21 optional full_prose fell back;20 checked,21 accepted and settled,63 successful NPC decisions; no resampling",
+  "source_commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+  "original_private_terminal_sha256": "ad27a68d50779da6fc4dce3dafabc20a1aced259834c663e94e48ea15733f92b",
+  "proof": {
+    "status": "FAIL: original full32 exact full-prose gate at turn21",
+    "terminal_exit_code": 1,
+    "terminal_time_utc": "2026-10-01T17:10:09.314348+00:00",
+    "fixture_checked_turns": 20,
+    "accepted_fixture_turns": 21,
+    "original_retained_decisions": 3,
+    "new_schema081_decisions": 60,
+    "successful_decision_receipts": 63,
+    "failed_receipt": {
+      "call_id": "rpp_1f5262dd871f5ee2f7fa27e1a5e57444",
+      "turn_run_id": "rpturn_51592442b5164b3237a6cf4badc2f6bc94e3536d84ac2a0afacf87a3fbd5c625",
+      "phase": "narrative",
+      "provider_kind": "full_prose",
+      "model_id": "step-5-preview",
+      "result": "failed",
+      "attempt_count": 2,
+      "fallback_kind": "prose_unavailable",
+      "render_source": "template",
+      "started_at_utc": "2026-10-01T17:07:40.222389663Z",
+      "finished_at_utc": "2026-10-01T17:09:01.332255105Z"
+    },
+    "counts": {
+      "events": 152,
+      "rp_utterances": 84,
+      "rp_provider_calls": 105,
+      "rp_turn_runs": 21
+    },
+    "unfinished_turns": 0,
+    "fixture_world_event_count": 142,
+    "fixture_head": 142,
+    "lineage": {
+      "source_sha256": "cfa31234af283adbd14c41bcf141a48a67b5bd4741bf8afa1662df6c724e9f6e",
+      "runtime_sha256": "e7120c7bffd3f93d1ad65a4d317699fcc9ddad6f0e362b95b27bee7a330b964f",
+      "script_sha256": "0ce17bd0676ae24c52d453921af74fef50b8d9ebc5248fcdae9b989a91f50bda",
+      "flags": [
+        "--binary-dir",
+        "/tmp/corerp-r1-actions-tone-interruption-release-20261002",
+        "--rongqing",
+        "--prose",
+        "--profile",
+        "--resume-artifact",
+        "/tmp/corerp-rp3-npc-TAuLyO"
+      ],
+      "model": "step-5-preview",
+      "timeout_seconds": 120,
+      "attempts": 2,
+      "decision_max_tokens": 4096,
+      "decision_format": "tool_call",
+      "reasoning_effort": "low",
+      "exit_code": 1
+    },
+    "frontend_sha256": {
+      "src/components/PlayWorkspace.vue": "754330cc94662ba2d67b6927a5e051953e49238f68fe536d1cc3383210276c1d",
+      "src/lib/narrativeStream.ts": "f0fa36d9765f4bee59b92fd4d170e4f5b3eba9f220ba7d409f7e09a82a7a60da"
+    },
+    "original_ui_failure": "/tmp/corerp-r1-full32-run-ujy3ug9r/terminal.log",
+    "presubmission_abort": "/tmp/corerp-r1-full32-continuation-c0mcn1hw/pre-submission-abort.json",
+    "replay_provenance": {
+      "original_artifact": "/tmp/corerp-rp3-npc-TAuLyO",
+      "first_turn": "rpturn_730ac73ba7e3c413a58d422aa1bf2622cab41c127f0605e172b8f792c2a93fcb",
+      "first_decision_receipts_unchanged": true,
+      "first_effects_unchanged": true,
+      "recovery_method": "harness network interception of original accepted request, not original browser bookmark",
+      "original_decisions": 3,
+      "remaining_exact_fixture_turns": 31
+    },
+    "postchecks": "NOT REACHED: turns22..32 and mixed/continue/provider-failure/regeneration/restart",
+    "resampling": false,
+    "database_sha256": "8c8b2b76b170e08013a478ab0ddf642bc86491df587dfba7eb5aa1fe57b13b83"
+  },
+  "diagnosis": {
+    "recorded": "Two actual narrative HTTP attempts; final saved prose_unavailable/template fallback. No unfinished turn or lost accepted facts.",
+    "unknown": "Exact HTTP/transport/response-protocol error was sanitized into prose_unavailable; no raw response or per-attempt reason survives in this artifact. It does not prove quota exhaustion or a kernel defect.",
+    "code": "backend/internal/storage/rp_style.go:638 maps unavailable variants into a common safe code; backend/internal/narrative/prose.go:496 holds fixed error kinds before sanitization.",
+    "policy": "Preserve original UI failure, pre-submission abort and this failure separately. Never mark32 PASS, lower the full-prose assertion, regenerate accepted NPC decisions or silently start a new world."
+  },
+  "recorded_at_utc": "2026-10-01T17:13:58.320818+00:00"
+}

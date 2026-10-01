@@ -458,8 +458,8 @@
     "runtime": "e7120c7bffd3f93d1ad65a4d317699fcc9ddad6f0e362b95b27bee7a330b964f"
   },
   "helper_scope": "unchanged fixture helpers intentionally pinned to shipped e3 as prior comparable captures; runtime new schema081",
-  "recorded_at_utc": "2026-10-01T16:49:18.747610+00:00",
-  "status": "FUNCTIONAL INCREMENT VERIFIED; publication/deployment pending; original32 same-key continuation pending",
+  "recorded_at_utc": "2026-10-01T17:13:58.320818+00:00",
+  "status": "FUNCTIONAL INCREMENT VERIFIED AND DEPLOYED; original32 FAIL at turn21 optional full_prose; RP experience NOT PASSED",
   "r1_status": "NOT DONE",
   "semantic_speech_accuracy": "NOT PASSED",
   "human_experience": "PENDING",
@@ -667,7 +667,8 @@
     },
     "captured080_source": "/tmp/corerp-product-golden-after-dX5D95/world.db",
     "captured_final_copy": "/tmp/corerp-r1-interruption-work-20261002/captured080-final-copy.db",
-    "captured_conservation": "1 session,22 canonical turns; twice with restart; world/command/batch/NPC/O/K/provider/turn child and original turn-column snapshots exact; no decision or provider samples"
+    "captured_conservation": "1 session,22 canonical turns; twice with restart; world/command/batch/NPC/O/K/provider/turn child and original turn-column snapshots exact; no decision or provider samples",
+    "scope_note": "Historical worker validation before main integration; all ten final owned file hashes below confirm actual main integration without rewriting the original receipt."
   },
   "independent_review": "Five concrete gaps closed; ten owned file SHA matched; decision continuation fence unchanged; no new blocking finding",
   "full_http": {
@@ -740,14 +741,21 @@
   "original32": {
     "initial_status": "FAIL preserved: successful originalfirstturn v3 rejectedclient; independentparserRED; laterdoc reload secondaryharnessconfound",
     "initial_artifact": "/tmp/corerp-rp3-npc-TAuLyO",
-    "continuation": "RUNNING: exact firstaccepted key/3NPC receipts retained on copy;31remaining originalinputs/current081; no freshworld or resampling",
+    "continuation": "FAIL: turn21 prose_unavailable after2attempts;20 checked;21 accepted and settled;63 actual NPC decision receipts successful",
     "stage": "/tmp/corerp-r1-full32-continuation-f5ep_uxl",
-    "status": "NOT PASSED YET",
+    "status": "FAIL",
     "bootstrap_recovery": {
       "stage": "/tmp/corerp-r1-full32-continuation-c0mcn1hw",
       "status": "ABORTED pre-submission; preserved32events/5receipts/1turn exact,0newmodels; arrivalbutton selector repaired in resume route only",
       "evidence": "/tmp/corerp-r1-full32-continuation-c0mcn1hw/pre-submission-abort.json"
-    }
+    },
+    "checked_turns": 20,
+    "progress": "TERMINAL exit1; turns22..32 and original postchecks NOT REACHED",
+    "observed_at_utc": "2026-10-01T17:13:58.320818+00:00",
+    "accepted_turns": 21,
+    "successful_npc_decisions": 63,
+    "terminal_evidence": "actions-interruption-original32-2026-10-02.json",
+    "resampling": false
   },
   "preview_upgrade": {
     "status": "PASS",
@@ -761,12 +769,57 @@
     "Parallel same-key provider cost may duplicate; committed world effects remain unique.",
     "Real human RP evaluation and current32exit remain open."
   ],
-  "publication": "PENDING",
-  "deployment": "PENDING",
+  "publication": {
+    "status": "PASS",
+    "commit": "a74f3e013966f7066fff8952dffaf37deed6104c",
+    "evidence": "actions-interruption-preview-release-2026-10-02.json"
+  },
+  "deployment": {
+    "status": "PASS",
+    "runtime": "e7120c7bffd3f93d1ad65a4d317699fcc9ddad6f0e362b95b27bee7a330b964f",
+    "schema": "081",
+    "review_url": "https://code.linhony.xyz:4188/rp-review/r1/",
+    "evidence": "actions-interruption-preview-release-2026-10-02.json",
+    "smoke": "PASS: actual default Step wave, finite v3, exact saved history, restart and same-key retry zero added effects/model receipts",
+    "browser": "PASS: deployed mobile browser exact saved v3 and reload; zero new events/model receipts/page errors"
+  },
   "vet": {
     "status": "PASS",
     "scope": "current storage/HTTP; core/decision/narrative prior current check unchanged",
     "log": "/tmp/corerp-r1-actions-tone-interruption-vet-20261002.log",
     "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "integration_confirmation": {
+    "status": "PASS: ten final worker-owned files match integrated main bytes",
+    "files_sha256": {
+      "backend/internal/storage/store.go": "9709225765e98e376d3a2701fbac8ec7cc2f94cecbc3f8838025420df082d349",
+      "backend/internal/storage/rp_action_interruption.go": "2c4f15cc88eaf70c8339750c4cad69f35d5dbb5cc993d645f545e3594e9ad126",
+      "backend/internal/storage/rp_action_interruption_captured_test.go": "9ea3d6fe402a2a03fe7bb5d95de47bb012581d3db1018c61f0de12df4e9d604e",
+      "backend/internal/storage/rp_action_interruption_test.go": "a730cd4280cda80ed067d8b6062b15f3f79d6ff7c0075212fda760a37e9a2ee7",
+      "backend/internal/storage/rp_nonverbal_turn.go": "f795dd1c227dc7c87f35d624ce40812e484a09affac313643c129e5b6c9f6de0",
+      "backend/internal/storage/rp_turn.go": "1924ccea983283f3fc07ea2e85b850c3651433e339813688fa77472b50e25a4b",
+      "backend/internal/storage/rp_turn_view.go": "cb1479c0026926c91c6931e29452d4400b2c09ed979cb3e4cd0fbdcbc87858c9",
+      "backend/internal/storage/rp_interaction.go": "4872d5c4c6c6fa01831e9c056790b7559bfc0cb87de087888cb2a4e21d1fc034",
+      "backend/internal/storage/migrations/081_rp_action_interruption.sql": "278229e78392adee32b528f0675b0e1af82fd010cf14b1245e4f7d18309e0403",
+      "backend/internal/transport/httpapi/rp_action_interruption_test.go": "0145b494646a022d01772186d72d735592070a90324273d49e1e2d27e106f6c8"
+    },
+    "code_commit": "a74f3e013966f7066fff8952dffaf37deed6104c"
+  },
+  "semantic_boundary_audit": {
+    "status": "READ-ONLY COMPLETE; not semantic PASS",
+    "existing_physical_or_legal_evidence_lost": false,
+    "finding": "Existing packet preserves supplied scene objects and legal proposals; meanings distinguish said words, unknown spatial state and permission. A legal reference does not prove the entailment of arbitrary speech.",
+    "seat_wording": "May be affectionate welcome/rhetoric. Literal reserved-seat/history reading has no supplied source; no reservation or sitting state was committed.",
+    "references": [
+      "backend/internal/storage/rp_decision.go:125",
+      "backend/internal/core/rp_context_selection.go:45",
+      "backend/internal/decision/decision_character.go:55",
+      "backend/internal/decision/chat.go:184",
+      "backend/internal/core/rp_proposal.go:30",
+      "backend/internal/core/rp_proposal.go:62",
+      "backend/internal/storage/rp_decision_commit.go:249"
+    ],
+    "decision": "No additional posture/unknown schema, seat canon, person-specific regex or hard semantic evaluator justified by this case. Human PENDING, speech experience NOT PASSED.",
+    "new_models_or_tests": 0
   }
 }
