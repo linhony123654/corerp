@@ -11,9 +11,14 @@
 真实采集发生在隔离库；采集时线上隔离预览仍是 feea/schema079。不要用“已构建”替代“已发布”，也不要把后来部署的结果倒写成采集当时的状态。当前部署身份以预览 `/release.json` 和独立发布回执为准。
 
 
-本轮交付已完成：代码提交 `300597c26eeaef4089402a7a02aca253086fdb8d` 精确发布到该分支，同一预览已升级080并运行7e814 runtime和对应前端。旧201Events/15provider receipts/66旧回合的原列与所有heads在迁移时不变。线上默认Step实际点头回应13.821s首试成功，speech与smile提交后可读，重启/原key重试零新增effects/calls。当前R1世界head34，其他旧worldheads不变。
+本轮交付已完成：代码提交 `300597c26eeaef4089402a7a02aca253086fdb8d` 精确发布到该分支，同一预览已升级080并运行7e814 runtime和对应前端。旧201Events/15provider receipts/66旧回合的原列与所有heads在迁移时不变。线上默认Step实际点头回应13.821s首试成功，speech与smile提交后可读，重启/原key重试零新增effects/calls。该次direct烟测后R1世界head34，其他旧worldheads不变。
 
 该线上回复仍说“站惯了”“这座儿总给你留着”，没有相应姿态/座位canon或owner来源；旧NPC说法也不是其真实状态来源。它进一步证明动作链通过不等于自由对白准确度通过。逐字输出与独立交付回执见[action-trigger-preview-release](action-trigger-preview-release-2026-10-01.json)，[在线动作审阅](https://code.linhony.xyz:4188/rp-review/actions/)仍将人评标PENDING。后续文档提交与这个代码提交分开，不伪造新的runtime构建。
+
+
+补充实际 Play AUTO 接口验证：输入“我向贾母点头示意。”，Step 一次解释为 ACTION/nonverbal，随后一次 NPC 决策，合计22.783s，两次首试成功。玩家没有被伪造成 speech，目标反应和公开v2保存，原请求重试零新增effects/calls。解释回执保存在原`rp_interaction_interpretations`，NPC回执在`rp_provider_calls`；harness首次误查同一表而FAIL，原件保留，复核两套原账后只恢复同一已接受plan/key，没有再次抽样。见[AUTO真实证据](action-trigger-auto-real-2026-10-01.json)。这证明默认AUTO入口，未声称浏览器点击或另一个model-profile override也已实测。
+
+只读审计没有发现把`said`/历史private直接映射为`current_snapshot`的代码：它们分别在accepted_utterances/past_private；snapshot有place/activity/visible IDs/object state，没有pose、seat occupancy或室内距离。明确缺口是`respond.Text`仍为自由字符串，hard gate验证来源可读与owner，并不证明每个句子的蕴含。补physical unknown只能是软帮助；若需要某类物理断言的硬保证，它必须对应可验证typed source/服务端有限表达，不能靠claim-ID数量、关键词拒绝或再问一轮模型冒充保证。
 
 ## 为什么底层跑通了，功能仍不准确
 
@@ -22,7 +27,7 @@
 | 事件原子提交、typed owner、重启恢复 | 点头能入账，但服务不创建 NPC 反应回合；玩家看到一句动作描述就结束 | 定向点头接入原 durable turn，共享 NPC 提交与结算循环 |
 | 冻结的视觉 witness 与知识记录 | NPC packet 漏掉已有观察中的 action、target、gesture 和发生时间 | 从该角色的已冻结观察投影原字段，不从 raw Event 补不可见目标 |
 | 关系与身份披露规则 | `known_relationship_introduction` 误拒绝熟人间合法询名 | 移除这项不可靠语义硬拒绝，保留真实介绍、身份学习和权限校验 |
-| 丰富的唯一决策 packet | 大块平铺资料不区分当前事实、已说的话、计划和历史私有想法；来源目录很大 | 单份分区 character presentation 与无损来源元数据压缩；真实试验未证明对白改善 |
+| 丰富的唯一决策 packet | 大块平铺资料难以凸显当前事实、已说的话、计划和历史私有想法；来源目录很大 | 单份分区 character presentation 与无损来源元数据压缩；真实试验未证明对白改善 |
 | 来源引用和合法 speech | 引用了来源，不代表“站着”“座位留着”等每个对白命题都成立 | 明确保留为未解决准确度风险，没有伪称已修好 |
 | 安全 Narrator | 可以安全渲染，不自动等于文学叙述已经有味道 | 本轮沿用有限 v2 表达，只接上动作回合，不扩大事实生成权 |
 

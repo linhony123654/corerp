@@ -721,5 +721,19 @@
     "generation_seconds": 13.821,
     "restart_and_same_key_retry": "PASS: no extra effects or calls",
     "semantic_counterexample": "Still asserts unprovided standing habit and seat availability; not a speech accuracy pass."
+  },
+  "actual_auto_entry": {
+    "artifact": "action-trigger-auto-real-2026-10-01.json",
+    "status": "PASS: actual Step AUTO interpretation→directed action→NPC response→canonical history; same original plan/key retry no extra effects/calls",
+    "player_input": "我向贾母点头示意。",
+    "generation_seconds": 22.783,
+    "actual_step_interpretation_calls": 1,
+    "actual_step_npc_decision_calls": 1,
+    "first_attempt_success_both": true,
+    "typed_nonverbal_outcomes": 1,
+    "synthetic_player_utterances": 0,
+    "same_request_key_retry_no_new_effects_or_calls": true,
+    "initial_harness_failure_retained": "FAIL retained: interpreter receipts live in rp_interaction_interpretations, not rp_provider_calls. Checked both durable ledgers, resumed same original session/plan/action key without new generation.",
+    "scope": "actual Play AUTO API with operator default provider, not browser clicks or selected-profile override proof"
   }
 }

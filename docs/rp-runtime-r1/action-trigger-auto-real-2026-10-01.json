@@ -1,0 +1,131 @@
+{
+  "kind": "corerp.r1-action-trigger-preview-auto-smoke.v1",
+  "status": "PASS: actual Step AUTO interpretation→directed action→NPC response→canonical history; same original plan/key retry no extra effects/calls",
+  "source_commit": "300597c26eeaef4089402a7a02aca253086fdb8d",
+  "runtime_sha256": "7e8145d421fa0a8ab265af8037234652a80bc1f0b9c1165127a96791b81864ec",
+  "scope": "actual natural-language AUTO entry to interpretation, action, NPC response and public history on the existing preview; not Golden/32",
+  "human_experience": "PENDING",
+  "semantic_speech_accuracy": "NOT PASSED",
+  "player_input": "我向贾母点头示意。",
+  "before": {
+    "branches": [
+      {
+        "instance_id": "inst_m1",
+        "branch_id": "br_main",
+        "head_sequence": 1
+      },
+      {
+        "instance_id": "inst_m2_t09",
+        "branch_id": "br_main",
+        "head_sequence": 75
+      },
+      {
+        "instance_id": "world_honglou_60615b11",
+        "branch_id": "br_main",
+        "head_sequence": 94
+      },
+      {
+        "instance_id": "world_rp_runtime_r1_20261001",
+        "branch_id": "br_main",
+        "head_sequence": 34
+      }
+    ],
+    "events": 204,
+    "provider_calls": 17,
+    "utterances": 138,
+    "decisions": 73
+  },
+  "generation_seconds": 22.783,
+  "result": {
+    "interaction_id": "rpinteraction_02030627a8c9715b2f971b10447bfcf669870839f9dd9fe74a65411b05a9c3e5",
+    "plan_kind": "ACTION",
+    "status": "settled",
+    "next_step": 1,
+    "outcomes": [
+      {
+        "kind": "nonverbal",
+        "event_id": "event_rp_nonverbal_cc6692c74eaef5cc311ab6f6722920246ea62c0493b38747291b48ef78b2fc07",
+        "event_sequence": 35,
+        "settled_sequence": 37,
+        "turn_run_id": "rpturn_cc1deac27376b7fbd133c32794ff1cf3939806c563cefb7da90e7038ce8933bf",
+        "world_time": "2026-09-22T00:00:00Z"
+      }
+    ],
+    "interpretation_source": "model",
+    "interpretation_attempts": 1,
+    "replayed": false
+  },
+  "receipts": [
+    {
+      "phase": "decision",
+      "provider_kind": "chat_completions",
+      "model_id": "step-5-preview",
+      "result": "success",
+      "attempt_count": 1,
+      "fallback_kind": ""
+    },
+    {
+      "phase": "narrative",
+      "provider_kind": "deterministic",
+      "model_id": "",
+      "result": "success",
+      "attempt_count": 0,
+      "fallback_kind": ""
+    }
+  ],
+  "narrative_lines": [
+    "在荣庆堂，你向贾母点了点头。",
+    "「宝玉，又点头了——咱们这是要一路点下去么？有话便慢慢说，老祖宗听着呢，不催你。今日你既说来陪我说闲话，那咱们就说闲的，天南地北，随你。」贾母答，笑了笑。"
+  ],
+  "fact_groups": [
+    [
+      "event_rp_nonverbal_cc6692c74eaef5cc311ab6f6722920246ea62c0493b38747291b48ef78b2fc07"
+    ],
+    [
+      "event_rp_npc_88bdb60a4f741b4ba71aebd1c31770df75ba0c13fcd8b4aff10f5529b258db70",
+      "event_rp_npc_expression_88bdb60a4f741b4ba71aebd1c31770df75ba0c13fcd8b4aff10f5529b258db70"
+    ]
+  ],
+  "interpretation_receipts": [
+    {
+      "source": "model",
+      "provider_kind": "chat_completions",
+      "model_id": "step-5-preview",
+      "result": "success",
+      "attempt_count": 1
+    }
+  ],
+  "player_utterances_for_action": 0,
+  "actual_successful_model_calls": 2,
+  "retry": "PASS",
+  "after": {
+    "branches": [
+      {
+        "instance_id": "inst_m1",
+        "branch_id": "br_main",
+        "head_sequence": 1
+      },
+      {
+        "instance_id": "inst_m2_t09",
+        "branch_id": "br_main",
+        "head_sequence": 75
+      },
+      {
+        "instance_id": "world_honglou_60615b11",
+        "branch_id": "br_main",
+        "head_sequence": 94
+      },
+      {
+        "instance_id": "world_rp_runtime_r1_20261001",
+        "branch_id": "br_main",
+        "head_sequence": 37
+      }
+    ],
+    "events": 207,
+    "provider_calls": 19,
+    "utterances": 139,
+    "decisions": 74
+  },
+  "r1_status": "NOT DONE",
+  "initial_harness_failure": "FAIL retained: interpreter receipts live in rp_interaction_interpretations, not rp_provider_calls. Checked both durable ledgers, resumed same original session/plan/action key without new generation."
+}
