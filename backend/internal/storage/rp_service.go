@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"corerp.local/backend/internal/core"
+	"errors"
 )
 
 // RPService binds one immutable operator-selected provider to the application
@@ -76,9 +77,6 @@ func (s *RPService) NonverbalRPWith(ctx context.Context, request core.RPNonverba
 	if err := request.Validate(); err != nil {
 		return RPNonverbalResult{}, err
 	}
-	if request.Action != "nod" || request.TargetEntityID == "" {
-		return s.Store.NonverbalRP(ctx, request)
-	}
 	// Pre-upgrade raw-action receipts retain their exact retry outcome. Do
 	// not add retroactive reactions to an action that already completed alone.
 	session, err := loadRPSessionRecord(ctx, s.Store.db, request.PrincipalID, request.SessionID)
@@ -96,6 +94,9 @@ func (s *RPService) NonverbalRPWith(ctx context.Context, request core.RPNonverba
 		provider = s.provider
 	}
 	turn, err := s.Store.RunRPNonverbalTurn(ctx, request, provider)
+	if errors.Is(err, errRPNonverbalRawReceipt) {
+		return s.Store.NonverbalRP(ctx, request)
+	}
 	if err != nil {
 		return RPNonverbalResult{}, err
 	}

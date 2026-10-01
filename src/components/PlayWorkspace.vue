@@ -35,7 +35,7 @@ type Observation = LocalMap & {
   scene_objects: SceneObject[]
   recent_turns: Turn[]
 }
-type Pending = { path: string; body: Record<string, unknown>; narrative_turn_id?: string; interaction_status?: string }
+type Pending = { path: string; body: Record<string, unknown>; narrative_turn_id?: string; interaction_status?: string; turn_interrupted?: boolean }
 type InteractionResult = { status: string; plan_kind: string; clarification?: string; pause_reason?: string; interpretation_source: 'model' | 'offline_rules' | 'legacy_rules'; interpretation_attempts: number; outcomes: { kind: string; turn_run_id?: string; world_time?: string }[] }
 type Binding = { instance_id: string; branch_id: string; entity_id: string }
 type AvailableBinding = Binding & { display_name: string }
@@ -292,7 +292,7 @@ async function finishPending(useSavedNarrative = false) {
   let interactionKind = ''
   let interactionAction = ''
   if (!pending.narrative_turn_id) {
-    const result = await api<{ status?: string; turn_run_id?: string } & Partial<InteractionResult>>(pending.path, pending.body)
+    const result = await api<{ status?: string; turn_run_id?: string; turn?: { status: string; turn_run_id: string; interruption?: { code: 'world_changed' } } } & Partial<InteractionResult>>(pending.path, pending.body)
     if (result.status === 'budget_exhausted') {
       notice.value = '时间正在推进，点击“继续未完成的行动”即可接着等待。'
       await refresh(); return
@@ -324,6 +324,12 @@ async function finishPending(useSavedNarrative = false) {
       pending.narrative_turn_id = result.turn_run_id
       // This durable transition prevents a stream retry from rerunning actions.
       save()
+    }
+    if (pending.path === 'actions/nonverbal' && result.turn) {
+      if (result.turn.status !== 'settled' || !result.turn.turn_run_id) throw new Error('回合尚未确认结束，请继续原行动。')
+      pending.narrative_turn_id = result.turn.turn_run_id
+      pending.turn_interrupted = result.turn.interruption?.code === 'world_changed'
+      save() // Stream recovery reuses the committed action turn.
     }
   }
   if (pending.narrative_turn_id && !useSavedNarrative) {
@@ -372,12 +378,13 @@ async function finishPending(useSavedNarrative = false) {
   }
   if (completedPresentation?.warnings.length) notice.value = '叙述器提示：' + completedPresentation.warnings.join('；')
   if (interpretationSource === 'offline_rules') notice.value = [notice.value, '本轮使用有限离线规则，并非模型语义理解。'].filter(Boolean).join(' · ')
+  if (pending.path === 'actions/nonverbal' && pending.turn_interrupted) notice.value = '已发生的行动已保留；世界更新中止了后续回应，本轮已结束。' + (completedPresentation?.warnings.length ? ' 叙述器提示：' + completedPresentation.warnings.join('；') : '')
   travel.value = false
   await scrollToEnd()
 }
 // Only provider-invoking paths accept a model override; purely deterministic
 // endpoints (move, scene objects, journeys) reject unknown fields under strict decoding.
-const MODEL_PATHS = new Set(['interactions/run', 'interactions/resume', 'turns/run', 'turns/resume', 'actions/wait'])
+const MODEL_PATHS = new Set(['interactions/run', 'interactions/resume', 'turns/run', 'turns/resume', 'actions/wait', 'actions/nonverbal'])
 async function act(path: string, values: Record<string, unknown>) {
   if (!observation.value || locked.value) return
   const model = MODEL_PATHS.has(path) ? profileModelOverride(activeProfile.value) : undefined

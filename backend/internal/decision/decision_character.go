@@ -181,7 +181,7 @@ func buildDecisionContext(input core.RPDecisionInput, schema map[string]any) (de
 	if err != nil {
 		return decisionContext{}, err
 	}
-	packet := decisionContext{Version: "corerp.decision.v3", CharacterLayoutVersion: decisionCharacterLayoutVersion, EvidenceSupportVersion: decisionEvidenceSupportWireVersion, Character: character, GroundingSources: wireSources, ProposalSchema: schema}
+	packet := decisionContext{Version: "corerp.decision.v4", CharacterLayoutVersion: decisionCharacterLayoutVersion, EvidenceSupportVersion: decisionEvidenceSupportWireVersion, Character: character, GroundingSources: wireSources, ProposalSchema: schema}
 	// First preserve explicit single ranges and use only per-source defaults.
 	// If that complete packet overflows, encode exactly the same metadata with
 	// dictionaries. No selection, evidence range or character value is changed.

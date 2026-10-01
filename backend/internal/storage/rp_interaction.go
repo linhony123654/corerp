@@ -13,12 +13,13 @@ import (
 )
 
 type RPInteractionOutcome struct {
-	Kind            string `json:"kind"`
-	EventID         string `json:"event_id"`
-	EventSequence   int64  `json:"event_sequence"`
-	SettledSequence int64  `json:"settled_sequence"`
-	TurnRunID       string `json:"turn_run_id,omitempty"`
-	WorldTime       string `json:"world_time,omitempty"`
+	Interruption    *RPActionInterruption `json:"interruption,omitempty"`
+	Kind            string                `json:"kind"`
+	EventID         string                `json:"event_id"`
+	EventSequence   int64                 `json:"event_sequence"`
+	SettledSequence int64                 `json:"settled_sequence"`
+	TurnRunID       string                `json:"turn_run_id,omitempty"`
+	WorldTime       string                `json:"world_time,omitempty"`
 }
 
 type RPInteractionResult struct {
@@ -189,6 +190,9 @@ func (s *RPService) RunRPInteractionWith(ctx context.Context, request core.RPInt
 		run, err = s.commitRPInteractionStep(ctx, run, outcome)
 		if err != nil {
 			return run.result(replayed), err
+		}
+		if run.Status == "paused" {
+			return run.result(replayed), nil
 		}
 	}
 	return run.result(replayed), nil
@@ -713,6 +717,7 @@ func (s *RPService) executeRPInteractionStep(ctx context.Context, run rpInteract
 		out.EventID, out.EventSequence, out.SettledSequence, out.WorldTime = result.EventID, result.EventSequence, result.EventSequence, result.WorldTime
 		if result.Turn != nil {
 			out.SettledSequence, out.TurnRunID = result.Turn.SettledSequence, result.Turn.TurnRunID
+			out.Interruption = result.Turn.Interruption
 		}
 		return out, false, err
 	default:
@@ -826,11 +831,15 @@ func (s *RPService) commitRPInteractionStep(ctx context.Context, run rpInteracti
 	if current.NextStep == len(current.Plan.Steps) {
 		current.Status = "settled"
 	}
+	if outcome.Interruption != nil {
+		current.Status = "paused"
+		current.PauseReason = "世界状态已变化；已提交的行动已保留。请结束原计划并重新选择下一步。"
+	}
 	encoded, err := core.CanonicalJSON(current.Outcomes)
 	if err != nil {
 		return run, err
 	}
-	_, err = tx.conn.ExecContext(ctx, `UPDATE rp_interactions SET next_step=?,pending_kind='',pending_request_json='{}',outcomes_json=?,status=?,updated_at_utc=? WHERE interaction_id=? AND next_step=?`, current.NextStep, string(encoded), current.Status, s.Store.now().UTC().Format(time.RFC3339Nano), run.ID, run.NextStep)
+	_, err = tx.conn.ExecContext(ctx, `UPDATE rp_interactions SET next_step=?,pending_kind='',pending_request_json='{}',outcomes_json=?,status=?,pause_reason=?,updated_at_utc=? WHERE interaction_id=? AND next_step=?`, current.NextStep, string(encoded), current.Status, current.PauseReason, s.Store.now().UTC().Format(time.RFC3339Nano), run.ID, run.NextStep)
 	if err != nil {
 		return run, err
 	}

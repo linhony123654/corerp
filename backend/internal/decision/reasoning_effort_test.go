@@ -35,7 +35,7 @@ func TestChatReasoningEffortIsExplicitForDecisionAndInterpretation(t *testing.T)
 					t.Error("per-operation completion budget was not transmitted")
 				}
 				if calls == 1 {
-					modelResponse(w, `{"action":"silence","text":"","destination_place_id":"","activity_code":"","introduce_self":false}`, "stop")
+					modelResponse(w, wireDecision(`{"action":"silence","expression_code":"none"}`), "stop")
 				} else {
 					modelResponse(w, interactionFixtureResponse("DIALOGUE", "none", "", 0, 0, "想你了。", ""), "stop")
 				}

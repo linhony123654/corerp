@@ -245,7 +245,7 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 		density = "concise"
 	}
 	payload := map[string]any{
-		"composition_version": core.RPFactCompositionVersionV2, "source_head": in.SourceHead, "eligible_beats": core.RPCompositionChoices(in), "output_schema": core.RPCompositionSchema(in), "pov": in.Style.POV, "tense": in.Style.Tense, "verbosity": in.Style.Verbosity,
+		"composition_version": core.RPCompositionVersion(in), "source_head": in.SourceHead, "eligible_beats": core.RPCompositionChoices(in), "output_schema": core.RPCompositionSchema(in), "pov": in.Style.POV, "tense": in.Style.Tense, "verbosity": in.Style.Verbosity,
 		"density": density, "dialogue_ratio": in.Style.DialogueRatio, "description_density": in.Style.DescriptionDensity,
 		"instructions": in.Style.ProseInstructions, "forbidden": in.Style.ForbiddenPatterns, "facts": facts,
 	}
@@ -295,7 +295,7 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 				err, retry, delay = verr, true, 0
 				debugProseValidation(verr)
 				previousDraft = draft
-				revisionInstruction = "上次输出不是有效的闭合排版计划。只返回 " + core.RPFactCompositionVersionV2 + " JSON；每个 fact_ref 按原序恰好一次，仅选择 eligible_beats 的 fact_refs/form，禁止所有额外字段及正文。"
+				revisionInstruction = "上次输出不是有效的闭合排版计划。只返回 " + core.RPCompositionVersion(in) + " JSON；每个 fact_ref 按原序恰好一次，仅选择 eligible_beats 的 fact_refs/form，禁止所有额外字段及正文。"
 			}
 		}
 		last = err

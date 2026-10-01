@@ -11,21 +11,36 @@ import (
 )
 
 // RunRPNonverbalTurn binds a real player action to the same durable reaction
-// workflow as dialogue. This first slice supports a directed nod only. It
-// neither synthesizes player speech nor interprets the nod as agreement.
-func (s *Store) RunRPNonverbalTurn(ctx context.Context, request core.RPNonverbalRequest, provider core.RPDecisionProvider) (RPTurnResult, error) {
+// workflow as dialogue, without synthesizing speech, time or consent.
+func (s *Store) RunRPNonverbalTurn(ctx context.Context, request core.RPNonverbalRequest, provider core.RPDecisionProvider) (result RPTurnResult, resultErr error) {
 	if err := request.Validate(); err != nil {
 		return RPTurnResult{}, err
-	}
-	if request.Action != "nod" || request.TargetEntityID == "" {
-		return RPTurnResult{}, core.NewError(core.CodeInvalidArgument, "reaction turns currently require a targeted nod")
 	}
 	run, existing, err := s.ensureRPNonverbalTurnRun(ctx, request, provider)
 	if err != nil {
 		return RPTurnResult{}, err
 	}
+	// A concurrent retry may settle the validated immutable run while this
+	// invocation is between stages. Return only its actual saved winner.
+	defer func() {
+		if resultErr != nil {
+			if core.HasCode(resultErr, core.CodeBranchConflict) {
+				if saved, handled, err := s.settleRPActionInterruption(ctx, request, run.ID); handled || err != nil {
+					result, resultErr = saved, err
+				}
+			}
+			if latest, err := s.loadRPTurnRun(ctx, run.ID); err == nil && latest.Status == "settled" {
+				if saved, err := s.loadRPTurnResult(ctx, latest, true); err == nil {
+					result, resultErr = saved, nil
+				}
+			}
+		}
+	}()
 	if run.Status == "settled" {
 		return s.loadRPTurnResult(ctx, run, true)
+	}
+	if saved, handled, err := s.settleRPActionInterruption(ctx, request, run.ID); handled || err != nil {
+		return saved, err
 	}
 	if provider == nil {
 		return RPTurnResult{}, core.NewError(core.CodeInvalidArgument, "unfinished RP action turn requires a decision provider")
@@ -80,6 +95,9 @@ func (s *Store) ensureRPNonverbalTurnRun(ctx context.Context, request core.RPNon
 		}
 		if count != 0 {
 			return false, nil
+		}
+		if err := checkRPNonverbalRawReceipt(ctx, conn, session, request.IdempotencyKey); err != nil {
+			return false, err
 		}
 		if provider == nil {
 			return false, core.NewError(core.CodeInvalidArgument, "new RP action turn requires a decision provider")
@@ -138,6 +156,9 @@ func (s *Store) ensureRPNonverbalTurnRun(ctx context.Context, request core.RPNon
 	if !errors.Is(err, sql.ErrNoRows) {
 		return rpTurnRun{}, false, core.WrapError(core.CodeStorageFailure, "read RP action turn intent", err)
 	}
+	if err := checkRPNonverbalRawReceipt(ctx, tx.conn, session, request.IdempotencyKey); err != nil {
+		return rpTurnRun{}, false, err
+	}
 	if err := requireCurrentRPSession(ctx, tx.conn, session); err != nil {
 		return rpTurnRun{}, false, err
 	}
@@ -172,6 +193,21 @@ func (s *Store) ensureRPNonverbalTurnRun(ctx context.Context, request core.RPNon
 		return rpTurnRun{}, false, err
 	}
 	return run, false, nil
+}
+
+var errRPNonverbalRawReceipt = errors.New("nonverbal command already has its original raw receipt")
+
+// Called in the intent transaction as well as before its optional sweep.
+// This closes the service read/intent race without upgrading an old receipt.
+func checkRPNonverbalRawReceipt(ctx context.Context, conn *sql.Conn, session RPSession, key string) error {
+	var count int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM commands WHERE instance_id=? AND branch_id=? AND command_type='RPNonverbalAction' AND idempotency_key=?`, session.InstanceID, session.BranchID, "rp_nonverbal:"+session.SessionID+":"+key).Scan(&count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return errRPNonverbalRawReceipt
+	}
+	return nil
 }
 
 func validateRPNonverbalTurnStart(ctx context.Context, conn *sql.Conn, session RPSession, expected int64) error {
@@ -228,17 +264,15 @@ func (s *Store) markRPNonverbalTurnPlayerCommitted(ctx context.Context, request 
 		return classifyMissing(err, "committed RP action turn source")
 	}
 	var fact core.RPNonverbalFact
-	if json.Unmarshal([]byte(raw), &fact) != nil || actor != session.ControlledEntityID || fact.ActorEntityID != actor || fact.SessionID != session.SessionID || fact.Action != "nod" || fact.TargetEntityID == "" || sequence != action.EventSequence {
+	if json.Unmarshal([]byte(raw), &fact) != nil || actor != session.ControlledEntityID || fact.ActorEntityID != actor || fact.SessionID != session.SessionID || fact.Action != request.Action || fact.GestureCode != request.GestureCode || (fact.TargetEntityID == "") != (request.TargetEntityID == "") || sequence != action.EventSequence {
 		return core.NewError(core.CodeProjectionDiverged, "RP action turn source differs from its pinned owner")
 	}
-	eligible := make([]string, 0, 1)
-	for _, witness := range fact.Witnesses {
-		if witness.ObserverEntityID == fact.TargetEntityID && witness.TargetVisible {
-			eligible = append(eligible, witness.ObserverEntityID)
-		}
+	if err := validateRPActionTurnContinuation(ctx, tx.conn, session, action.EventID); err != nil {
+		return err
 	}
-	if len(eligible) > 1 {
-		return core.NewError(core.CodeProjectionDiverged, "RP action target has duplicate witness evidence")
+	eligible, err := rpNonverbalEligibleWitnesses(fact)
+	if err != nil {
+		return err
 	}
 	listenersJSON, err := core.CanonicalJSON(eligible)
 	if err != nil {

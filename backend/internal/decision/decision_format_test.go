@@ -45,7 +45,7 @@ func TestDecisionJSONModeCarriesClosedSchemaAndUnchangedCharacterContext(t *test
 		if properties["observable"].(map[string]any)["anyOf"] == nil {
 			t.Fatal("JSON Mode omitted the mutually exclusive observable variants")
 		}
-		modelResponse(w, wireDecision(`{"action":"respond","text":"今天不方便。","introduce_self":false,"expression_code":"none"}`), "stop")
+		modelResponse(w, wireDecision(`{"action":"respond","text":"今天不方便。","speech_tone":"none","introduce_self":false,"expression_code":"none"}`), "stop")
 	}))
 	defer server.Close()
 	provider, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", Model: "fixture", DecisionFormat: "json_object", EndpointPolicy: endpointpolicy.TestLocalhostPolicy()})
@@ -60,7 +60,7 @@ func TestDecisionJSONModeCarriesClosedSchemaAndUnchangedCharacterContext(t *test
 
 func TestDecisionJSONModeStillRejectsExtraEffectsBadSourcesAndIllegalActions(t *testing.T) {
 	for _, tc := range []struct{ name, raw string }{
-		{"extra effect", wireDecision(`{"action":"respond","text":"好。","introduce_self":false,"expression_code":"none","destination_place_id":"home"}`)},
+		{"extra effect", wireDecision(`{"action":"respond","text":"好。","speech_tone":"none","introduce_self":false,"expression_code":"none","destination_place_id":"home"}`)},
 		{"unheard source", strings.Replace(wireDecision(`{"action":"wait","expression_code":"none"}`), "event-player", "event-unheard", 1)},
 		{"unreachable destination", wireDecision(`{"action":"leave","destination_place_id":"private-vault"}`)},
 		{"duplicate action", wireDecision(`{"action":"wait","action":"silence","expression_code":"none"}`)},
@@ -133,7 +133,7 @@ func TestDecisionJSONModeRepairsInvalidRootOnceWithoutChangingContextOrFormat(t 
 					t.Fatal("shape repair lacks bounded feedback")
 				}
 				if calls == 2 && repaired {
-					modelResponse(w, wireDecision(`{"action":"respond","text":"今天不方便。","introduce_self":false,"expression_code":"none"}`), "stop")
+					modelResponse(w, wireDecision(`{"action":"respond","text":"今天不方便。","speech_tone":"none","introduce_self":false,"expression_code":"none"}`), "stop")
 				} else {
 					modelResponse(w, `{"text":"unapproved"}`, "stop")
 				}

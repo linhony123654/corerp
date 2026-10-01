@@ -55,6 +55,7 @@ type Service interface {
 	PlaceRPActorInZone(context.Context, storage.RPActorZoneRequest) (storage.RPActorZoneRecord, error)
 	SocialRP(context.Context, core.RPSocialRequest) (storage.RPSocialResult, error)
 	NonverbalRP(context.Context, core.RPNonverbalRequest) (storage.RPNonverbalResult, error)
+	NonverbalRPWith(context.Context, core.RPNonverbalRequest, core.RPDecisionProvider) (storage.RPNonverbalResult, error)
 	ObjectRP(context.Context, core.RPObjectRequest) (storage.RPObjectResult, error)
 	DefineRPObjectAnchor(context.Context, storage.RPObjectAnchorRequest) (storage.RPObjectAnchorRecord, error)
 	DefineRPObjectSource(context.Context, storage.RPObjectSourceRequest) (storage.RPObjectSourceRecord, error)

@@ -87,9 +87,12 @@ func validateRPNarrativeFact(ctx context.Context, conn *sql.Conn, instance, bran
 		return err
 	}
 	speech := fact.Action == "speak" || fact.Action == "respond" || fact.Action == "refuse"
+	if !core.ValidRPSpeechTone(fact.SpeechTone) || !speech && fact.SpeechTone != "" {
+		return narrativeDiverged("narrative delivery is not an approved speech observable")
+	}
 	if speech {
 		var event rpSpeechEvent
-		if source.Kind != "RPSpeechAccepted" || json.Unmarshal([]byte(source.Payload), &event) != nil || event.SpeakerEntityID != source.Actor || event.Text != fact.Text {
+		if source.Kind != "RPSpeechAccepted" || json.Unmarshal([]byte(source.Payload), &event) != nil || event.SpeakerEntityID != source.Actor || event.Text != fact.Text || event.SpeechTone != fact.SpeechTone || !core.ValidRPSpeechTone(event.SpeechTone) {
 			return narrativeDiverged("narrative speech differs from accepted words")
 		}
 		if fact.Action == "refuse" && source.DecisionAction != "refuse" || source.DecisionAction == "refuse" && fact.Action != "refuse" {
@@ -103,7 +106,7 @@ func validateRPNarrativeFact(ctx context.Context, conn *sql.Conn, instance, bran
 			var raw string
 			err := conn.QueryRowContext(ctx, `SELECT claim_payload FROM observation_records WHERE source_event_id=? AND observer_agent_id=? AND subject_agent_id=? AND claim_key='speech:'||?`, source.ID, observer, source.Actor, source.ID).Scan(&raw)
 			var claim rpSpeechClaim
-			if err != nil || !heard || json.Unmarshal([]byte(raw), &claim) != nil || claim.ClaimType != "speaker_said" || claim.SpeakerEntityID != source.Actor || claim.Text != fact.Text {
+			if err != nil || !heard || json.Unmarshal([]byte(raw), &claim) != nil || claim.ClaimType != "speaker_said" || claim.SpeakerEntityID != source.Actor || claim.Text != fact.Text || claim.SpeechTone != fact.SpeechTone {
 				return narrativeDiverged("narrative speech lacks frozen hearing evidence")
 			}
 		}
@@ -261,18 +264,24 @@ func annotateRPNarrativeCompanions(ctx context.Context, conn *sql.Conn, instance
 }
 
 func validateRPNarrativeArtifactOnConn(ctx context.Context, conn *sql.Conn, instance, branch, observer, turnID string, canonical bool, artifactJSON string, view core.RPNarrativeView) (core.RPNarrativeView, error) {
-	if view.CompositionVersion != core.RPFactCompositionVersionV2 {
+	if !rpFiniteNarrativeComposition(view.CompositionVersion) {
+		if view.CompositionVersion != "" && view.CompositionVersion != core.RPFactCompositionVersionV1 {
+			return view, narrativeDiverged("unsupported narrative artifact version")
+		}
 		return view, nil
 	}
 	var artifact core.RPNarrativeArtifact
 	decoder := json.NewDecoder(strings.NewReader(artifactJSON))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&artifact) != nil || artifact.Input.ControlledEntityID != observer || artifact.Input.SourceHead <= 0 {
-		return view, narrativeDiverged("v2 narrative lacks a frozen public artifact")
+		return view, narrativeDiverged("finite narrative lacks a frozen public artifact")
+	}
+	if core.RPCompositionVersion(artifact.Input) != view.CompositionVersion {
+		return view, narrativeDiverged("narrative receipt version differs from its frozen input")
 	}
 	var envelope map[string]json.RawMessage
 	if json.Unmarshal([]byte(artifactJSON), &envelope) != nil {
-		return view, narrativeDiverged("v2 narrative artifact is invalid")
+		return view, narrativeDiverged("finite narrative artifact is invalid")
 	}
 	parsedPlan, err := core.DecodeRPCompositionPlan(envelope["plan"], artifact.Input)
 	if err != nil || !reflect.DeepEqual(parsedPlan, artifact.Plan) {
@@ -373,19 +382,25 @@ func validateRPNarrativeArtifactOnConn(ctx context.Context, conn *sql.Conn, inst
 }
 
 func encodeRPNarrativeArtifact(view core.RPNarrativeView) (string, error) {
-	if view.CompositionVersion != core.RPFactCompositionVersionV2 {
+	if !rpFiniteNarrativeComposition(view.CompositionVersion) {
+		if view.CompositionVersion != "" && view.CompositionVersion != core.RPFactCompositionVersionV1 {
+			return "", narrativeDiverged("unsupported narrative artifact version")
+		}
 		return "{}", nil
 	}
 	if view.Artifact == nil {
-		return "", narrativeDiverged("v2 narrative has no presentation artifact")
+		return "", narrativeDiverged("finite narrative has no presentation artifact")
+	}
+	if core.RPCompositionVersion(view.Artifact.Input) != view.CompositionVersion {
+		return "", narrativeDiverged("narrative version differs from its frozen input")
 	}
 	hash, err := core.HashJSON(view.Artifact.Input)
 	if err != nil || hash != view.Artifact.InputSHA256 {
-		return "", narrativeDiverged("v2 narrative artifact hash differs")
+		return "", narrativeDiverged("finite narrative artifact hash differs")
 	}
 	expanded, err := core.RenderRPComposition(context.Background(), view.Artifact.Input, view.Artifact.Plan, nil)
-	if err != nil || !reflect.DeepEqual(expanded.Lines, view.Lines) || !reflect.DeepEqual(expanded.EventIDs, view.EventIDs) || !reflect.DeepEqual(expanded.FactGroups, view.FactGroups) {
-		return "", narrativeDiverged("v2 narrative is not its finite plan expansion")
+	if err != nil || expanded.CompositionVersion != view.CompositionVersion || !reflect.DeepEqual(expanded.Lines, view.Lines) || !reflect.DeepEqual(expanded.EventIDs, view.EventIDs) || !reflect.DeepEqual(expanded.FactGroups, view.FactGroups) {
+		return "", narrativeDiverged("finite narrative is not its plan expansion")
 	}
 	encoded, err := core.CanonicalJSON(view.Artifact)
 	return string(encoded), err

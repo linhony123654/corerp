@@ -1,5 +1,5 @@
 export type NarrativeCompositionMetadata = {
-  composition_version?: 'corerp.fact-composition.v1' | 'corerp.fact-composition.v2'
+  composition_version?: 'corerp.fact-composition.v1' | 'corerp.fact-composition.v2' | 'corerp.fact-composition.v3'
   fact_groups?: string[][]
 }
 export type NarrativeView = NarrativeCompositionMetadata & { lines: string[]; event_ids: string[]; warnings: string[]; fallback_reason?: string; render_id?: string }
@@ -17,12 +17,12 @@ export function validateNarrativeComposition(view: { lines: string[]; event_ids?
   if (view.composition_version === undefined && view.fact_groups === undefined) return
   if (view.composition_version === 'corerp.fact-composition.v2' && Array.isArray(view.lines) && view.lines.length === 0
     && Array.isArray(view.event_ids) && view.event_ids.length === 0 && Array.isArray(view.fact_groups) && view.fact_groups.length === 0) return
-  if (!['corerp.fact-composition.v1', 'corerp.fact-composition.v2'].includes(view.composition_version || '')
+  if (!['corerp.fact-composition.v1', 'corerp.fact-composition.v2', 'corerp.fact-composition.v3'].includes(view.composition_version || '')
     || !Array.isArray(view.lines) || !view.lines.length || view.lines.length > 1024 || view.lines.some(line => typeof line !== 'string')
     || !Array.isArray(view.fact_groups) || view.fact_groups.length !== view.lines.length || !view.fact_groups.every(validRefs)) throw new Error('叙述版本或逐段来源无效，原文已保留。')
   const ordered = view.fact_groups.flat()
   // Older saved v1 history did not expose the independent list. Keep it
-  // readable with structural validation; v2 must supply independent coverage.
+  // readable with structural validation; v2/v3 must supply independent coverage.
   const eventIDs = view.event_ids === undefined ? (view.composition_version === 'corerp.fact-composition.v1' ? ordered : undefined) : view.event_ids
   if (!validRefs(eventIDs) || new Set(ordered).size !== ordered.length || ordered.length !== eventIDs.length
     || ordered.some((id, i) => id !== eventIDs[i])) throw new Error('叙述来源重复、缺失或顺序不符，原文已保留。')

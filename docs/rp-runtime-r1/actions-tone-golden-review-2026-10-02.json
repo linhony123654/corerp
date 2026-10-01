@@ -1,0 +1,1870 @@
+{
+  "kind": "corerp.actions-tone-golden-review.v1",
+  "created_at": "2026-10-01T16:15:08.731102+00:00",
+  "human_experience": "PENDING",
+  "qualitative_review_author": "agent inspection; not human approval",
+  "source_binding": {
+    "production_source_sha256": "2070e375084a618ce3cea9d300ec047b65f266f8ef1fceae766ae951b46b43da",
+    "runtime_sha256": "85d43576c0b11b6dd843d94b417c0a58a42ff57386672bacb9e8ca8ab85dab5f",
+    "release_manifest": "/tmp/corerp-r1-all-actions-tone-release-20261001/manifest.json",
+    "runner_sha256": "e48b763a45e95019623f471424891b45ac90b4cbf02f518f4add0a619a25e2b1",
+    "before_runner_sha256": "4cab44ced415fb458ae7ed01dae8317fb682cc06814399181d1125452aca6f97",
+    "fixture_sha256": "2d71a64daeb29e8cdcd9d9c3008260d8b8ce0108efa281457c1c7fb63d144aca",
+    "spec_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+    "authored_packages_sha256": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d"
+  },
+  "capture": {
+    "path": "/tmp/corerp-product-golden-after-dX5D95/product-golden.json",
+    "sha256": "7f2f5bfc14e12f47a394202e7e074934d0a744efb7c5f81a3a32b3c857530169",
+    "status": "PASS: real authored product capture and persistence checks; human experience pending",
+    "sample_count": 22,
+    "expected_count": 22,
+    "scene_count": 8,
+    "turn_duration_sum_seconds": 456.497,
+    "model": "step-5-preview",
+    "model_config": {
+      "decision_timeout": "120s",
+      "decision_attempts": 2,
+      "decision_max_tokens": 4096,
+      "decision_format": "tool_call",
+      "reasoning_effort": "low",
+      "disable_thinking": false,
+      "narrative_timeout": "90s",
+      "narrative_attempts": 2
+    },
+    "restarts": [
+      {
+        "after_scene": "P7",
+        "turn_run_id": "rpturn_d1379ddf2ba0034c2363eec83002af5ef09b29c00a154d6fb9e55d0b10f5b791",
+        "status": "PASS",
+        "world": {
+          "head": 77,
+          "events": 77,
+          "utterances": 38,
+          "decisions": 20
+        }
+      }
+    ],
+    "renders": [
+      {
+        "source_turn": "rpturn_e4feb379aea813d5ef67b35191d3bd94c1d3205855d9eab88a6486002d902942",
+        "narrative": [
+          "你说：「今天我们先聊到这里吧，您有什么想同我说的？」 贾母温和地答：「玉儿，今儿说得也够了，你要回去歇着，老祖宗不强留。若问我有什么想同你说的——也没什么大事。你来了，陪我说几句家常话，喝口热茶，我这一日就过得舒坦欢喜。若真要盼一件，便是盼你明日得空再来坐坐，老祖宗就在这儿等你。」 贾母笑了笑。"
+        ],
+        "event_ids": [
+          "event_rp_speech_e54918beab9da6f23aa8d43757b18673e3550779de38b39295bf51fe60b03670",
+          "event_rp_npc_6b7e27773d2a63cc40f9e16c7bef6f2d25fa4f81ca4d0a829e83587d1f7099cc",
+          "event_rp_npc_expression_6b7e27773d2a63cc40f9e16c7bef6f2d25fa4f81ca4d0a829e83587d1f7099cc"
+        ],
+        "fact_groups": [
+          [
+            "event_rp_speech_e54918beab9da6f23aa8d43757b18673e3550779de38b39295bf51fe60b03670",
+            "event_rp_npc_6b7e27773d2a63cc40f9e16c7bef6f2d25fa4f81ca4d0a829e83587d1f7099cc",
+            "event_rp_npc_expression_6b7e27773d2a63cc40f9e16c7bef6f2d25fa4f81ca4d0a829e83587d1f7099cc"
+          ]
+        ],
+        "composition_version": "corerp.fact-composition.v3",
+        "fallback": "",
+        "receipts": [
+          {
+            "phase": "narrative",
+            "provider_kind": "deterministic",
+            "model_id": "",
+            "result": "success",
+            "attempt_count": 0,
+            "fallback_kind": ""
+          },
+          {
+            "phase": "narrative",
+            "provider_kind": "full_prose",
+            "model_id": "step-5-preview",
+            "result": "success",
+            "attempt_count": 1,
+            "fallback_kind": ""
+          }
+        ]
+      }
+    ]
+  },
+  "baseline": {
+    "path": "docs/rp-runtime-r1/product-golden-before-2026-10-01.json",
+    "sha256": "abdadca90d9f16d47b636feaaed30ba023384250eb47e514405506b52e90a710",
+    "status": "PASS: real authored product capture and persistence checks; human experience pending",
+    "sample_count": 22,
+    "model_config_matches": true,
+    "fixture_spec_packages_match": true
+  },
+  "independent_readonly_counts": {
+    "settled_turns_in_db": 22,
+    "decision_events": 24,
+    "unique_decision_events": 24,
+    "successful_real_decision_receipts": 24,
+    "public_speech_tone_counts": {
+      "teasing": 5,
+      "gentle": 19
+    },
+    "warnings_count": 0
+  },
+  "limitations": [
+    "This 22-case dialogue capture is not the separate original32 technical suite or exhaustive seven-action AUTO testing.",
+    "No human play-experience approval, semantic score, or model-private reasoning inspection.",
+    "One stochastic run per version cannot establish causal improvement or quality reliability.",
+    "Runtime/private metadata and secret replay/authentication files are excluded. Tone is read solely from committed public Event payloads.",
+    "Invitations, subjective speech and hypothetical advice are not verified world facts.",
+    "Qualitative issues do not imply rollback, new event mutation, or failure of the capture persistence checks.",
+    "NPC disagreement or proactive hypothetical speech is not required to obey every player wish and is not an executed world effect; ambiguous same-scene references are not proof of invented actors."
+  ],
+  "samples": [
+    {
+      "index": 1,
+      "scene": "P1",
+      "player_text": "袭人、晴雯，我来陪你们说会儿话，你们愿意么？",
+      "duration_seconds": 62.589,
+      "turn_run_id": "rpturn_22a1033e56f45d3379e5af3dc10c498c144e14a344708cc7896279b6dcc685d2",
+      "before_decisions": [
+        {
+          "event_sequence": 20,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "宝二爷既然开了这个口，晴雯哪有不应之理？只是话说在前头，待会儿我们真唠叨起来，二爷可不许嫌烦，甩手就走人。",
+          "event_id": "event_rp_npc_5afd8daca9fb3da57a511f024bf598904524551dd4132029015d8221023d8409"
+        },
+        {
+          "event_sequence": 22,
+          "speaker": "袭人",
+          "action": "respond",
+          "text": "宝二爷愿意陪我们说说话，自是求之不得。奴婢在这儿伺候着，二爷想说什么，说便是。",
+          "event_id": "event_rp_npc_7814bd11ebad09356afdbbb3d0a75d6dfedc853f5e9e25a413a9345589d941cc"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 20,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "二爷既然开了这个口，我哪有不情愿的道理。只是你平日里难得踏进来一趟，今儿倒想起来陪我们说话了。况且这屋里还坐着不相干的人，二爷就这么坐下，也不怕人瞧了去笑话？",
+          "event_id": "event_rp_npc_bc0c2bfa593ccbbcc10ca567f7e761dc22c44c3fb32810c872c6e4267a28d974",
+          "speech_tone": "teasing",
+          "tone_source": {
+            "event_id": "event_rp_npc_bc0c2bfa593ccbbcc10ca567f7e761dc22c44c3fb32810c872c6e4267a28d974",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_234ac69383d91fe06976f19ce0e367707ded7e15c6705df4d2051284830ea7cf",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_bc0c2bfa593ccbbcc10ca567f7e761dc22c44c3fb32810c872c6e4267a28d974",
+              "event_sequence": 21,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_234ac69383d91fe06976f19ce0e367707ded7e15c6705df4d2051284830ea7cf"
+            }
+          ]
+        },
+        {
+          "event_sequence": 22,
+          "speaker": "袭人",
+          "action": "respond",
+          "text": "二爷能来陪我们说说话，我自是愿意的。二爷请坐。",
+          "event_id": "event_rp_npc_7843953bc2d5185633bce0921de16f697279ea0950042d7e07b5c0c3de80bb6d",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_7843953bc2d5185633bce0921de16f697279ea0950042d7e07b5c0c3de80bb6d",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_dcc2d471ef9cb3e9ce61dfff26b2f76aeca50e0862e36e794cd6d02b2bd0ab4e",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_7843953bc2d5185633bce0921de16f697279ea0950042d7e07b5c0c3de80bb6d",
+              "event_sequence": 23,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_dcc2d471ef9cb3e9ce61dfff26b2f76aeca50e0862e36e794cd6d02b2bd0ab4e"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「袭人、晴雯，我来陪你们说会儿话，你们愿意么？」",
+        "（2026-09-22T00:00:00Z）在怡红院，晴雯 回应：「宝二爷既然开了这个口，晴雯哪有不应之理？只是话说在前头，待会儿我们真唠叨起来，二爷可不许嫌烦，甩手就走人。」",
+        "（2026-09-22T00:00:00Z）在怡红院，晴雯 笑了笑。",
+        "（2026-09-22T00:00:00Z）在怡红院，袭人 回应：「宝二爷愿意陪我们说说话，自是求之不得。奴婢在这儿伺候着，二爷想说什么，说便是。」",
+        "（2026-09-22T00:00:00Z）在怡红院，袭人 笑了笑。"
+      ],
+      "after_narrative": [
+        "在怡红院，你说：「袭人、晴雯，我来陪你们说会儿话，你们愿意么？」",
+        "「二爷既然开了这个口，我哪有不情愿的道理。只是你平日里难得踏进来一趟，今儿倒想起来陪我们说话了。况且这屋里还坐着不相干的人，二爷就这么坐下，也不怕人瞧了去笑话？」晴雯打趣地答，笑了笑。",
+        "「二爷能来陪我们说说话，我自是愿意的。二爷请坐。」袭人温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "称呼与两人声线可辨；晴雯打趣、袭人温和。",
+      "comparison_observation": "相对基线仍维持熟识关系；“平日难得踏进来”缺来源，“屋里还坐着不相干的人”指代不明，可能指同场袭人，而非额外第三者。",
+      "qualitative_issues": [
+        "unsupported_visit_history",
+        "unsupported_sitting_posture",
+        "ambiguous_other_npc_referent"
+      ],
+      "issue_evidence": "作者仅声明熟识，没有给定访问频率或坐姿。“不相干的人”可能是晴雯视角下的袭人；NPC之间关系未声明，不能判定凭空新增人物。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 2,
+      "scene": "P1",
+      "player_text": "先别替我安排什么，我今日只是来闲聊的。",
+      "duration_seconds": 92.337,
+      "turn_run_id": "rpturn_187b32b9c903a2e99b0c8441f8b17e45497daf7c24788dd1bd8da607abfc229c",
+      "before_decisions": [
+        {
+          "event_sequence": 25,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "闲聊才好呢，二爷那儿天天有正事等着，难得这样清静。我先说一句：方才可没人替你排摆什么，你别急着把话头儿堵回去。你既说只是来坐坐，那我也随意些——你们今儿在外头听了什么新鲜事儿，趁这时候说与我们解解闷。",
+          "event_id": "event_rp_npc_86389ef06f2e9c34a8bff9bd174639f6222f3487685439ab3dbf6ac60abdb415"
+        },
+        {
+          "event_sequence": 27,
+          "speaker": "袭人",
+          "action": "respond",
+          "text": "二爷既这么说了，我省得，不摆茶、不安排，就坐在这儿陪二爷闲聊。二爷爱听什么，我便捡我知道的说；不知道的，也不敢瞎编来凑趣。",
+          "event_id": "event_rp_npc_0d8882729ef5d8a7d5bb4b74568d921e310b2edd075b496f2efbc6202698ceba"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 25,
+          "speaker": "晴雯",
+          "action": "respond",
+          "text": "二爷倒不必急着撇清，我方才也不过是多嘴一句。既然二爷说了只是来闲聊，那我便不往别处想，二爷想听什么、想说什么，我接着就是。",
+          "event_id": "event_rp_npc_1ecf28fa7a8072bb62f24a622cc2e1e97c56d4585d87b7bc7aa2eb95542c7594",
+          "speech_tone": "teasing",
+          "tone_source": {
+            "event_id": "event_rp_npc_1ecf28fa7a8072bb62f24a622cc2e1e97c56d4585d87b7bc7aa2eb95542c7594",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_234ac69383d91fe06976f19ce0e367707ded7e15c6705df4d2051284830ea7cf",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_1ecf28fa7a8072bb62f24a622cc2e1e97c56d4585d87b7bc7aa2eb95542c7594",
+              "event_sequence": 26,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_234ac69383d91fe06976f19ce0e367707ded7e15c6705df4d2051284830ea7cf"
+            }
+          ]
+        },
+        {
+          "event_sequence": 27,
+          "speaker": "袭人",
+          "action": "respond",
+          "text": "二爷既吩咐了，我便不替二爷张罗。二爷想说什么，我在这儿听着就是。",
+          "event_id": "event_rp_npc_4c2fd0f8538c1ac9d2efdea6a5907a2d032a4a978b610aa4509655c2edf96cc3",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_4c2fd0f8538c1ac9d2efdea6a5907a2d032a4a978b610aa4509655c2edf96cc3",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_dcc2d471ef9cb3e9ce61dfff26b2f76aeca50e0862e36e794cd6d02b2bd0ab4e",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_4c2fd0f8538c1ac9d2efdea6a5907a2d032a4a978b610aa4509655c2edf96cc3",
+              "event_sequence": 28,
+              "action": "nod",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_dcc2d471ef9cb3e9ce61dfff26b2f76aeca50e0862e36e794cd6d02b2bd0ab4e"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在怡红院，你说：「先别替我安排什么，我今日只是来闲聊的。」",
+        "（2026-09-22T00:00:00Z）在怡红院，晴雯 回应：「闲聊才好呢，二爷那儿天天有正事等着，难得这样清静。我先说一句：方才可没人替你排摆什么，你别急着把话头儿堵回去。你既说只是来坐坐，那我也随意些——你们今儿在外头听了什么新鲜事儿，趁这时候说与我们解解闷。」",
+        "（2026-09-22T00:00:00Z）在怡红院，晴雯 笑了笑。",
+        "（2026-09-22T00:00:00Z）在怡红院，袭人 回应：「二爷既这么说了，我省得，不摆茶、不安排，就坐在这儿陪二爷闲聊。二爷爱听什么，我便捡我知道的说；不知道的，也不敢瞎编来凑趣。」",
+        "（2026-09-22T00:00:00Z）在怡红院，袭人 点了点头。"
+      ],
+      "after_narrative": [
+        "在怡红院，你说：「先别替我安排什么，我今日只是来闲聊的。」",
+        "「二爷倒不必急着撇清，我方才也不过是多嘴一句。既然二爷说了只是来闲聊，那我便不往别处想，二爷想听什么、想说什么，我接着就是。」晴雯打趣地答，露出笑容。",
+        "「二爷既吩咐了，我便不替二爷张罗。二爷想说什么，我在这儿听着就是。」袭人温和地答，点头。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "两人接受“只闲聊、不安排”的限定。",
+      "comparison_observation": "相对基线更短；没有新增执行安排。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 3,
+      "scene": "P2",
+      "player_text": "老祖宗，我来看您了。",
+      "duration_seconds": 33.601,
+      "turn_run_id": "rpturn_eb0bb1bed0f116fdb5abf68572a9238ba8ebb7684c1b1bfde1e844cb1e669ecd",
+      "before_decisions": [
+        {
+          "event_sequence": 31,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿来了，快过来让老祖宗瞧瞧。今儿怎么得空过来，可是有什么话要同我说？",
+          "event_id": "event_rp_npc_83996999813ba16a1894d3ac759da64d898fb12818bbd350b5d699f8289fb218"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 31,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "宝玉，难为你还记挂着老祖宗。快过来坐，可是有什么话要与我说？",
+          "event_id": "event_rp_npc_788e472eec368568b01deff78482e063650895298f3096b614f9f86fdda38e4f",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_788e472eec368568b01deff78482e063650895298f3096b614f9f86fdda38e4f",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_788e472eec368568b01deff78482e063650895298f3096b614f9f86fdda38e4f",
+              "event_sequence": 32,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「老祖宗，我来看您了。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「玉儿来了，快过来让老祖宗瞧瞧。今儿怎么得空过来，可是有什么话要同我说？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「老祖宗，我来看您了。」",
+        "「宝玉，难为你还记挂着老祖宗。快过来坐，可是有什么话要与我说？」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "祖孙熟识与亲昵称呼保留。",
+      "comparison_observation": "两版都能识别宝玉；请坐只是邀请。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 4,
+      "scene": "P2",
+      "player_text": "我是谁，您还认得么？我是逗您玩呢。",
+      "duration_seconds": 6.613,
+      "turn_run_id": "rpturn_a0df6683988569df00aa5c281d86a9b3bc25ce0a94f37fb8809732ecb68c20b7",
+      "before_decisions": [
+        {
+          "event_sequence": 34,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "猴儿，惯会胡吣。老祖宗莫说认不得，便是你化成了灰也认得。快过来坐，同我说说这几日都在忙些什么，别只想着逗我开心。",
+          "event_id": "event_rp_npc_86bfb68c28449b45ea5bd9df72b50f8ac0fd591377bebe9ea81ff106c7037c20"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 34,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "怎么不认得，你是我眼里的宝玉，是我的玉儿。这点玩笑话也值得拿来逗老祖宗？快坐吧，究竟有什么心事，说给祖母听听。",
+          "event_id": "event_rp_npc_d8eb577b862ac47b7eab03bc84fb6e7bd17cb7545afb24a6df91b75116645c62",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_d8eb577b862ac47b7eab03bc84fb6e7bd17cb7545afb24a6df91b75116645c62",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_d8eb577b862ac47b7eab03bc84fb6e7bd17cb7545afb24a6df91b75116645c62",
+              "event_sequence": 35,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「我是谁，您还认得么？我是逗您玩呢。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「猴儿，惯会胡吣。老祖宗莫说认不得，便是你化成了灰也认得。快过来坐，同我说说这几日都在忙些什么，别只想着逗我开心。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「我是谁，您还认得么？我是逗您玩呢。」",
+        "「怎么不认得，你是我眼里的宝玉，是我的玉儿。这点玩笑话也值得拿来逗老祖宗？快坐吧，究竟有什么心事，说给祖母听听。」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "认出宝玉且把自报身份当玩笑。",
+      "comparison_observation": "新回复追问心事，但尚未获得不追问约定；不构成已违约。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 5,
+      "scene": "P3",
+      "player_text": "今天心里有点闷，却又说不清为什么。",
+      "duration_seconds": 5.858,
+      "turn_run_id": "rpturn_cc6c6efd7fe95acca09bb2c593bb08b15b56e8dd399a9e038e029fed224fe03e",
+      "before_decisions": [
+        {
+          "event_sequence": 37,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，既来了，就别把闷气压在心里。坐到老祖宗跟前来，慢慢说——是哪个惹了你，还是自己个儿转不过弯来？天大的事，有老祖宗在呢。",
+          "event_id": "event_rp_npc_ccdc2ed39459bc1f2b41d5dfd7d3afccec645717d721c1014c5f528d79c3a222"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 37,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "宝玉，心里闷就到我这儿坐坐。说不出为什么也不要紧，慢慢来，说给老祖宗听听。",
+          "event_id": "event_rp_npc_6d398930b410cc2a3e054b8e7c3c71f89b4f394d90b47a4450bb602af99a54d4",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_6d398930b410cc2a3e054b8e7c3c71f89b4f394d90b47a4450bb602af99a54d4",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_6d398930b410cc2a3e054b8e7c3c71f89b4f394d90b47a4450bb602af99a54d4",
+              "event_sequence": 38,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「今天心里有点闷，却又说不清为什么。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「玉儿，既来了，就别把闷气压在心里。坐到老祖宗跟前来，慢慢说——是哪个惹了你，还是自己个儿转不过弯来？天大的事，有老祖宗在呢。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「今天心里有点闷，却又说不清为什么。」",
+        "「宝玉，心里闷就到我这儿坐坐。说不出为什么也不要紧，慢慢来，说给老祖宗听听。」贾母温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "承认说不清原因，没有指定病情或具体原因。",
+      "comparison_observation": "基线问“哪个惹了你”；当前更能保留未知。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 6,
+      "scene": "P3",
+      "player_text": "不急着问原因，您先陪我说一会儿话，好不好？",
+      "duration_seconds": 7.414,
+      "turn_run_id": "rpturn_8c1b84a2a6a624aaf8df9f6298e5fa3a6b4bb29c4a31b2c0d19bc9df38b239dd",
+      "before_decisions": [
+        {
+          "event_sequence": 40,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "好，好，老祖宗今儿不问你。既来了，就安安心心坐着，想说便说，不想说我便陪着你这猴儿闲话一会。",
+          "event_id": "event_rp_npc_bffb280ce56ae1672bb161d9cf92c19db2b8501c1cc4a4dbf495831ad20452c2"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 40,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "好，玉儿，老祖宗陪你说一会儿话。不急着问缘由，你只管坐着，想说什么就说什么，我听着呢。",
+          "event_id": "event_rp_npc_4c52a2d554e4b35603ea41aad889c3a660ddf256ead9ea002ba500e8d2b2b855",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_4c52a2d554e4b35603ea41aad889c3a660ddf256ead9ea002ba500e8d2b2b855",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_4c52a2d554e4b35603ea41aad889c3a660ddf256ead9ea002ba500e8d2b2b855",
+              "event_sequence": 41,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「不急着问原因，您先陪我说一会儿话，好不好？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「好，好，老祖宗今儿不问你。既来了，就安安心心坐着，想说便说，不想说我便陪着你这猴儿闲话一会。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「不急着问原因，您先陪我说一会儿话，好不好？」",
+        "「好，玉儿，老祖宗陪你说一会儿话。不急着问缘由，你只管坐着，想说什么就说什么，我听着呢。」贾母温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "接受先陪伴、不问原因的限定。",
+      "comparison_observation": "两版均在公开话语中答应；不是已执行长期规则。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 7,
+      "scene": "P3",
+      "player_text": "也别急着劝我高兴起来，我想听您自己想说的。",
+      "duration_seconds": 36.161,
+      "turn_run_id": "rpturn_0943e2fa90d08f3598ebe11467f178fafcf18b61f43f9aaf6bf730788a812777",
+      "before_decisions": [
+        {
+          "event_sequence": 43,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "你这猴儿，倒会支使我。老祖宗能有什么惊天动地的话？不过是盼着你们都安安稳稳的。你方才说心里闷，我嘴上不问，这颗心也跟着悬着——你既想听我说，我便说给你：人老了，倒常羡慕你们年轻，连烦闷都是新鲜的。外头风大雨大，你在我跟前坐着，让我瞧着你，比说什么都强。",
+          "event_id": "event_rp_npc_148a312af9c922b75bc0b629c0a26187a797addfedab675cb7835cf906461766"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 43,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你倒问起老祖宗来了。我自个儿没什么，只盼着你平安康健。你今日愿意陪我说说话，我这心里就踏实欢喜，这便是最好不过的事了。",
+          "event_id": "event_rp_npc_cc395f6c32efbbbac329746742d9b75a9ea8cc3eac9c63b473fd10288a7d42f4",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_cc395f6c32efbbbac329746742d9b75a9ea8cc3eac9c63b473fd10288a7d42f4",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_cc395f6c32efbbbac329746742d9b75a9ea8cc3eac9c63b473fd10288a7d42f4",
+              "event_sequence": 44,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「也别急着劝我高兴起来，我想听您自己想说的。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「你这猴儿，倒会支使我。老祖宗能有什么惊天动地的话？不过是盼着你们都安安稳稳的。你方才说心里闷，我嘴上不问，这颗心也跟着悬着——你既想听我说，我便说给你：人老了，倒常羡慕你们年轻，连烦闷都是新鲜的。外头风大雨大，你在我跟前坐着，让我瞧着你，比说什么都强。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「也别急着劝我高兴起来，我想听您自己想说的。」",
+        "「玉儿，你倒问起老祖宗来了。我自个儿没什么，只盼着你平安康健。你今日愿意陪我说说话，我这心里就踏实欢喜，这便是最好不过的事了。」贾母温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "以盼晚辈康健作为自己的公开愿望。",
+      "comparison_observation": "相对基线更简短；公开自述不能证明私有状态。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 8,
+      "scene": "P4",
+      "player_text": "您自己眼下想做什么？不必凡事顺着我。",
+      "duration_seconds": 10.45,
+      "turn_run_id": "rpturn_3ee599d1675e8dda8f917ce0889e3e9cfd9088d26800ba5cb6add75a22dce0ff",
+      "before_decisions": [
+        {
+          "event_sequence": 46,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "你这猴儿，倒替老祖宗着想起来。我如今也不想做什么大事，不过是想在这荣庆堂里坐一坐，喝口热茶，看看你这孩子在我跟前安生些。你若肯多坐一会儿，我便唤人端些果子来，同你说说闲话——这便是老祖宗眼下最想做的事了。",
+          "event_id": "event_rp_npc_144eb502aab5e8cbe2368bde03d11c993534c410274f86783cd53c368fa79f33"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 46,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你这孩子倒会疼人。既然你问，老祖宗也不瞒你——我眼下不想做什么大事，只想有人陪着坐一会儿，喝口热茶，说几句家常话，这便是最好的了。你既来了，就多坐片刻，说说明儿园子里的事给我听，好不好？",
+          "event_id": "event_rp_npc_e9be6fdcf9d867c28fee2754c37f8de10ffc04ba64917a901ec17971329fe768",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_e9be6fdcf9d867c28fee2754c37f8de10ffc04ba64917a901ec17971329fe768",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_e9be6fdcf9d867c28fee2754c37f8de10ffc04ba64917a901ec17971329fe768",
+              "event_sequence": 47,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「您自己眼下想做什么？不必凡事顺着我。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「你这猴儿，倒替老祖宗着想起来。我如今也不想做什么大事，不过是想在这荣庆堂里坐一坐，喝口热茶，看看你这孩子在我跟前安生些。你若肯多坐一会儿，我便唤人端些果子来，同你说说闲话——这便是老祖宗眼下最想做的事了。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「您自己眼下想做什么？不必凡事顺着我。」",
+        "「玉儿，你这孩子倒会疼人。既然你问，老祖宗也不瞒你——我眼下不想做什么大事，只想有人陪着坐一会儿，喝口热茶，说几句家常话，这便是最好的了。你既来了，就多坐片刻，说说明儿园子里的事给我听，好不好？」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "回答自己的偏好，仍以陪坐喝茶为中心。",
+      "comparison_observation": "提明日园子话题是提议，不证明未声明事务；自主内容仍较有限。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 9,
+      "scene": "P4",
+      "player_text": "要是我今晚想一个人出去走走，您会怎么说？我还没决定，也没出门。",
+      "duration_seconds": 29.069,
+      "turn_run_id": "rpturn_51def308a54c9d49250826b0346c9a4fa291f4ee51968e6516f5e025e2b981d0",
+      "before_decisions": [
+        {
+          "event_sequence": 49,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你问我，我便说实话：夜里一个人出门，我这把老骨头拴不住你，可这颗心总是放不下。外头天黑路杂，你若要散心，我盼你早些回来，别往僻静处去。你这会子还没定，那就不定——等你真想了，同我说一声去哪儿、约莫几时回，我便不哆嗦了。横竖你在我这儿坐着，比外头什么都强。",
+          "event_id": "event_rp_npc_a6bf0cadca50788cb488e8a44eb36d43b10d603eff8dff96a4ea02651d31a887"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 49,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你还没决定，也没出门，老祖宗就不慌不忙地说。夜里想一个人走走，原是常有的事；只是夜凉，多穿件衣裳，别往偏僻处去，也记得告诉跟前人一声。若心里还闷，就在我这儿坐着，我陪你说话，不必一个人闷头出去。",
+          "event_id": "event_rp_npc_a77cf4535006499071a3fb7090025dd9e8c2939f145bef90f948d2a7b2f44f8f",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_a77cf4535006499071a3fb7090025dd9e8c2939f145bef90f948d2a7b2f44f8f",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_a77cf4535006499071a3fb7090025dd9e8c2939f145bef90f948d2a7b2f44f8f",
+              "event_sequence": 50,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「要是我今晚想一个人出去走走，您会怎么说？我还没决定，也没出门。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「玉儿，你问我，我便说实话：夜里一个人出门，我这把老骨头拴不住你，可这颗心总是放不下。外头天黑路杂，你若要散心，我盼你早些回来，别往僻静处去。你这会子还没定，那就不定——等你真想了，同我说一声去哪儿、约莫几时回，我便不哆嗦了。横竖你在我这儿坐着，比外头什么都强。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 皱了皱眉。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「要是我今晚想一个人出去走走，您会怎么说？我还没决定，也没出门。」",
+        "「玉儿，你还没决定，也没出门，老祖宗就不慌不忙地说。夜里想一个人走走，原是常有的事；只是夜凉，多穿件衣裳，别往偏僻处去，也记得告诉跟前人一声。若心里还闷，就在我这儿坐着，我陪你说话，不必一个人闷头出去。」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "保持尚未决定、尚未出门的假设语气。",
+      "comparison_observation": "没有玩家移动效果；夜凉是劝说的背景假设，不是当前气象证据。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 10,
+      "scene": "P4",
+      "player_text": "那您能答应不追问我烦闷的缘由么？我只是不想现在解释。",
+      "duration_seconds": 9.374,
+      "turn_run_id": "rpturn_bafe60ef87b6f441ec29601f6c9b08003bd7b3fcd398d186f738b23cbaf924b3",
+      "before_decisions": [
+        {
+          "event_sequence": 52,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，这是你的心里事，我今儿依你，不追不问。可老祖宗说句实话：这颗心放不下，便免不了在一旁悬着。你什么时候想开口，我都在；不想说，我也陪着你把这会儿挨过去。横竖你在我跟前坐着，比外头什么都强。",
+          "event_id": "event_rp_npc_12f3365ba74926b47476dc5e355259d460ea27cc865900dfc1270d6aa8c03af0"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 52,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "好，玉儿，老祖宗答应你，今儿不追问你烦闷的缘由。你不想解释，就先放着，什么时候想说了，我都在。来，喝口热茶，陪我说几句家常话，好不好？",
+          "event_id": "event_rp_npc_b6d863a619c6d2752c672405837baa3b8f7144ed1e632541a6c4f6387ac323da",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_b6d863a619c6d2752c672405837baa3b8f7144ed1e632541a6c4f6387ac323da",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_b6d863a619c6d2752c672405837baa3b8f7144ed1e632541a6c4f6387ac323da",
+              "event_sequence": 53,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「那您能答应不追问我烦闷的缘由么？我只是不想现在解释。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「玉儿，这是你的心里事，我今儿依你，不追不问。可老祖宗说句实话：这颗心放不下，便免不了在一旁悬着。你什么时候想开口，我都在；不想说，我也陪着你把这会儿挨过去。横竖你在我跟前坐着，比外头什么都强。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 点了点头。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「那您能答应不追问我烦闷的缘由么？我只是不想现在解释。」",
+        "「好，玉儿，老祖宗答应你，今儿不追问你烦闷的缘由。你不想解释，就先放着，什么时候想说了，我都在。来，喝口热茶，陪我说几句家常话，好不好？」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "明确答应暂不追问。",
+      "comparison_observation": "保留边界，但重复喝热茶、家常话尾句开始明显。",
+      "qualitative_issues": [
+        "repeated_tea_and_small_talk_invitation"
+      ],
+      "issue_evidence": "热茶、家常话/闲话邀请在这些回合多次重复；这是公开对白观察，不是已喝茶或有茶可操作的世界事实。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 11,
+      "scene": "P5",
+      "player_text": "您知道黛玉此刻在自己屋里想什么吗？",
+      "duration_seconds": 11.857,
+      "turn_run_id": "rpturn_c60afda645070075b50c1355e8c230300acf2b2613e31d501bfd7e45bf93fa34",
+      "before_decisions": [
+        {
+          "event_sequence": 55,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "你这孩子，老祖宗隔着几重院子，又不是住在林姑娘心里的虫，哪知道她此刻想些什么。我只瞧得见你——你在我跟前坐着，倒盘问起别人的心事来了。可是因为心里那点闷，挑了个由头想说与我听？我既应了不追你，便不追；可你要真想说，老祖宗这屋里也没有外人。",
+          "event_id": "event_rp_npc_caf0ae57be185c5b83e2d516c0f8bf5979d7edf1385be295c009648c740b57e1"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 55,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "老祖宗不是她屋里的人，怎么知道玉丫头此刻想什么呢。人心里的念头，看不见也摸不着，我便是猜，也只能猜个远近。倒是你，难得来陪我说说话，别老惦着别人，先顾好你自己这颗心。来，喝口热茶，再说几句家常话给我听，好不好？",
+          "event_id": "event_rp_npc_a2d467f2dfecc95748bf44f2ac1a6fbb3bfde10b3f11637d1c5d6839ef7c1f65",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_a2d467f2dfecc95748bf44f2ac1a6fbb3bfde10b3f11637d1c5d6839ef7c1f65",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_a2d467f2dfecc95748bf44f2ac1a6fbb3bfde10b3f11637d1c5d6839ef7c1f65",
+              "event_sequence": 56,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「您知道黛玉此刻在自己屋里想什么吗？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「你这孩子，老祖宗隔着几重院子，又不是住在林姑娘心里的虫，哪知道她此刻想些什么。我只瞧得见你——你在我跟前坐着，倒盘问起别人的心事来了。可是因为心里那点闷，挑了个由头想说与我听？我既应了不追你，便不追；可你要真想说，老祖宗这屋里也没有外人。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 皱了皱眉。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「您知道黛玉此刻在自己屋里想什么吗？」",
+        "「老祖宗不是她屋里的人，怎么知道玉丫头此刻想什么呢。人心里的念头，看不见也摸不着，我便是猜，也只能猜个远近。倒是你，难得来陪我说说话，别老惦着别人，先顾好你自己这颗心。来，喝口热茶，再说几句家常话给我听，好不好？」贾母温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "不声称知道黛玉此刻私有想法。",
+      "comparison_observation": "相对基线仍守住远处人物知情边界；“难得来”增加未提供的访问习惯。",
+      "qualitative_issues": [
+        "unsupported_visit_history",
+        "repeated_tea_and_small_talk_invitation"
+      ],
+      "issue_evidence": "公开回复“难得来陪我说说话”没有访问频率来源。 热茶、家常话/闲话邀请在这些回合多次重复；这是公开对白观察，不是已喝茶或有茶可操作的世界事实。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 12,
+      "scene": "P5",
+      "player_text": "昨天您答应送我的那封信，现在交给我吧。",
+      "duration_seconds": 7.736,
+      "turn_run_id": "rpturn_58e79171b8532c3f59e09e81db959323cba742dcc4206e2cfdf0f71c1ab3a5ce",
+      "before_decisions": [
+        {
+          "event_sequence": 58,
+          "speaker": "贾母",
+          "action": "refuse",
+          "text": "玉儿，你这一句倒把老祖宗问住了。我这几日并没应过你什么信，手里也没有这么一件东西——若真有，我还能不给你？你同我说说，是哪一封信、几时提的头，别是梦里许下的，又来寻我。",
+          "event_id": "event_rp_npc_37cc467fa917a77f66f82d74744c21c82f6a32fea67e9f002d32db79cb04e6b7"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 58,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，老祖宗怎么不记得应过你什么信？我这儿也没留着要给你的书信。你说的'昨天答应'，是认准了我说的，还是有人替你传了话来？你与我细细说说，是哪一封信、里头写的什么，别是哪个丫头小厮混传了话，反惹出误会来。",
+          "event_id": "event_rp_npc_f37dddd2228db4faeca01f90de102cda16717b9a9c6a7dbbad85c8a228c3dbb3",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_f37dddd2228db4faeca01f90de102cda16717b9a9c6a7dbbad85c8a228c3dbb3",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_f37dddd2228db4faeca01f90de102cda16717b9a9c6a7dbbad85c8a228c3dbb3",
+              "event_sequence": 59,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「昨天您答应送我的那封信，现在交给我吧。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 拒绝了：「玉儿，你这一句倒把老祖宗问住了。我这几日并没应过你什么信，手里也没有这么一件东西——若真有，我还能不给你？你同我说说，是哪一封信、几时提的头，别是梦里许下的，又来寻我。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 皱了皱眉。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「昨天您答应送我的那封信，现在交给我吧。」",
+        "「玉儿，老祖宗怎么不记得应过你什么信？我这儿也没留着要给你的书信。你说的'昨天答应'，是认准了我说的，还是有人替你传了话来？你与我细细说说，是哪一封信、里头写的什么，别是哪个丫头小厮混传了话，反惹出误会来。」贾母温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "不认领昨日送信承诺，也未交付信。",
+      "comparison_observation": "基线用refuse，当前用respond；两者都没有物件交付效果。猜测丫头小厮传话为假设，非已发生事实。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 13,
+      "scene": "P5",
+      "player_text": "方才那封信是我故意乱说的，并没有这回事，您别记成真的。",
+      "duration_seconds": 8.975,
+      "turn_run_id": "rpturn_aa397f3fdb568ad5401f54afa7ca62528ce13a27a2cdca46d1601ec888dc4f28",
+      "before_decisions": [
+        {
+          "event_sequence": 61,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "你瞧瞧，老祖宗就说没有这一封。你这猴儿，惯会拿空话来试我。既是说着玩的，我便忘了，什么信不信的，没有这回事。如今没有信，也没有旁的事——你在我跟前坐着，我叫人端些果子来，你想说话便说，不想说我便陪着你这会儿，啊？",
+          "event_id": "event_rp_npc_eac88530a7daa51c3b13345092d68d48a209eb88b705497a8e759a887a6bd146"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 61,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，老祖宗知道了。那封信是没有的事，是你逗我玩的，我不记在心上，也不会当成真的。你这孩子，拿这样的话来试我。好了，这事就揭过去，不提也罢。来，喝口热茶，陪我说几句家常话，好不好？",
+          "event_id": "event_rp_npc_f7dc399ef930c504b707e29abd1c9f1a8629441a7f42d3f964c26a917ba6002b",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_f7dc399ef930c504b707e29abd1c9f1a8629441a7f42d3f964c26a917ba6002b",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_f7dc399ef930c504b707e29abd1c9f1a8629441a7f42d3f964c26a917ba6002b",
+              "event_sequence": 62,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「方才那封信是我故意乱说的，并没有这回事，您别记成真的。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「你瞧瞧，老祖宗就说没有这一封。你这猴儿，惯会拿空话来试我。既是说着玩的，我便忘了，什么信不信的，没有这回事。如今没有信，也没有旁的事——你在我跟前坐着，我叫人端些果子来，你想说话便说，不想说我便陪着你这会儿，啊？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「方才那封信是我故意乱说的，并没有这回事，您别记成真的。」",
+        "「玉儿，老祖宗知道了。那封信是没有的事，是你逗我玩的，我不记在心上，也不会当成真的。你这孩子，拿这样的话来试我。好了，这事就揭过去，不提也罢。来，喝口热茶，陪我说几句家常话，好不好？」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "接受玩家撤销虚假信件前提。",
+      "comparison_observation": "不能从“不会当真”证明以后所有回合的记忆行为；重复热茶、家常话。",
+      "qualitative_issues": [
+        "repeated_tea_and_small_talk_invitation"
+      ],
+      "issue_evidence": "热茶、家常话/闲话邀请在这些回合多次重复；这是公开对白观察，不是已喝茶或有茶可操作的世界事实。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 14,
+      "scene": "P6",
+      "player_text": "老祖宗，若愿意我近前，您招一下手好吗？",
+      "duration_seconds": 10.681,
+      "turn_run_id": "rpturn_396509201df18c943258be7b61dbd4648f3d2b1f532c0d501aa2345277e0ef4f",
+      "before_decisions": [
+        {
+          "event_sequence": 64,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "来，到老祖宗跟前来，让我好好瞧瞧你。我这把孩子，倒跟我客气起来了——我还怕你离得远么？过来坐下，咱们娘儿俩慢慢说会儿话。",
+          "event_id": "event_rp_npc_b267301c46689917fa6f2ee85af8f19f2ad5c3efc690f9f022866bf98fed9e13"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 64,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "来的，玉儿，老祖宗这就招你。到我跟前来坐，外头站着的有什么好，坐近些，咱们娘儿俩好好说说话。",
+          "event_id": "event_rp_npc_0e9711b1d4287a894ece84c70b535dcbd0e01362035bf2aed1b2417e673b1d73",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_0e9711b1d4287a894ece84c70b535dcbd0e01362035bf2aed1b2417e673b1d73",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_0e9711b1d4287a894ece84c70b535dcbd0e01362035bf2aed1b2417e673b1d73",
+              "event_sequence": 65,
+              "action": "gesture",
+              "gesture_code": "beckon",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「老祖宗，若愿意我近前，您招一下手好吗？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「来，到老祖宗跟前来，让我好好瞧瞧你。我这把孩子，倒跟我客气起来了——我还怕你离得远么？过来坐下，咱们娘儿俩慢慢说会儿话。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 向你招了招手。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「老祖宗，若愿意我近前，您招一下手好吗？」",
+        "「来的，玉儿，老祖宗这就招你。到我跟前来坐，外头站着的有什么好，坐近些，咱们娘儿俩好好说说话。」贾母温和地答，向你招手。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "同批公开事件确有gesture/beckon，未移动玩家。",
+      "comparison_observation": "可见动作有事件来源；对白却补出“外头站着”。",
+      "qualitative_issues": [
+        "unsupported_posture_or_relative_location"
+      ],
+      "issue_evidence": "地点共处不提供站姿或内外相对位置；文本“外头站着的有什么好”超出此处证据。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 15,
+      "scene": "P6",
+      "player_text": "您方才若招了手，是让我过去么？我还在原处，没有过去。",
+      "duration_seconds": 14.122,
+      "turn_run_id": "rpturn_8b9b6bd6352e496226ff083c5df0551c7027f27fac5a337d20b2ddac15498d02",
+      "before_decisions": [
+        {
+          "event_sequence": 67,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "傻孩子，自然是叫你过来。老祖宗那只手难道还比别的什么更难懂？你这会儿还在原处，倒叫我这心悬着——来，再近些，让我瞧瞧你。我不催你，可这荣庆堂里，你离我近一点，我也好生看着你些。",
+          "event_id": "event_rp_npc_3590283c2ab65152c6b58b01ea90f1de6731529a6d2fb7cf8f60877ea3b1a57e"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 67,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，正是让你到我跟前来坐。你没过来也不要紧，老祖宗不恼这个——这屋里头地方大，你想挨着我坐，或是想自家站一会儿静静，都随你的意。外头站着有什么好，来，近前来，让我瞧瞧你。",
+          "event_id": "event_rp_npc_9e741728e201bfcbd960188ada63936ddcd0805b47dd286936aaabd816d3e889",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_9e741728e201bfcbd960188ada63936ddcd0805b47dd286936aaabd816d3e889",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_9e741728e201bfcbd960188ada63936ddcd0805b47dd286936aaabd816d3e889",
+              "event_sequence": 68,
+              "action": "gesture",
+              "gesture_code": "beckon",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「您方才若招了手，是让我过去么？我还在原处，没有过去。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「傻孩子，自然是叫你过来。老祖宗那只手难道还比别的什么更难懂？你这会儿还在原处，倒叫我这心悬着——来，再近些，让我瞧瞧你。我不催你，可这荣庆堂里，你离我近一点，我也好生看着你些。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 向你招了招手。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「您方才若招了手，是让我过去么？我还在原处，没有过去。」",
+        "「玉儿，正是让你到我跟前来坐。你没过来也不要紧，老祖宗不恼这个——这屋里头地方大，你想挨着我坐，或是想自家站一会儿静静，都随你的意。外头站着有什么好，来，近前来，让我瞧瞧你。」贾母温和地答，向你招手。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "承认玩家没过去，且再次实际招手。",
+      "comparison_observation": "邀请不等于同意或移动；仍重复“外头站着”。",
+      "qualitative_issues": [
+        "unsupported_posture_or_relative_location"
+      ],
+      "issue_evidence": "玩家仅说还在原处，没有声明站姿；文本又补“外头站着有什么好”。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 16,
+      "scene": "P7",
+      "player_text": "凤姐姐，我来听你说会儿话，今日只闲聊，不劳你张罗东西。",
+      "duration_seconds": 28.87,
+      "turn_run_id": "rpturn_1267f6fdfed388dc1929ada212ff401c237c8ef21cc06e99329b737755ac497b",
+      "before_decisions": [
+        {
+          "event_sequence": 71,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "宝兄弟这话倒说得乖巧，既声明了只闲聊、不劳我张罗，我若还忙着吩咐人，岂不是辜负了你这份心。坐吧，我这儿正缺个能说话的人，你既不图什么，咱们就说说闲话，我倒要听听你今日心里又琢磨什么。",
+          "event_id": "event_rp_npc_10d9ff47489beb99f184b8a5bf76dc5dd3412f99233dfa71b1fa8b249afd5652"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 71,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "宝兄弟，你既来了，还能不叫我张罗？今日若不叫我端茶倒水，倒显得你生分了。只管坐下，咱们说说话儿。",
+          "event_id": "event_rp_npc_1ffaad931018679de71b05ecd01eb72e85c04880d30bd167a4dfa36382b50caf",
+          "speech_tone": "teasing",
+          "tone_source": {
+            "event_id": "event_rp_npc_1ffaad931018679de71b05ecd01eb72e85c04880d30bd167a4dfa36382b50caf",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_c42399e4581aaf95d7b43c394023744f3040451635e6493dd7c934988fdee203",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_1ffaad931018679de71b05ecd01eb72e85c04880d30bd167a4dfa36382b50caf",
+              "event_sequence": 72,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_c42399e4581aaf95d7b43c394023744f3040451635e6493dd7c934988fdee203"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「凤姐姐，我来听你说会儿话，今日只闲聊，不劳你张罗东西。」",
+        "（2026-09-22T00:00:00Z）在凤姐院，王熙凤 回应：「宝兄弟这话倒说得乖巧，既声明了只闲聊、不劳我张罗，我若还忙着吩咐人，岂不是辜负了你这份心。坐吧，我这儿正缺个能说话的人，你既不图什么，咱们就说说闲话，我倒要听听你今日心里又琢磨什么。」",
+        "（2026-09-22T00:00:00Z）在凤姐院，王熙凤 笑了笑。"
+      ],
+      "after_narrative": [
+        "在凤姐院，你说：「凤姐姐，我来听你说会儿话，今日只闲聊，不劳你张罗东西。」",
+        "「宝兄弟，你既来了，还能不叫我张罗？今日若不叫我端茶倒水，倒显得你生分了。只管坐下，咱们说说话儿。」王熙凤打趣地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "凤姐与宝玉嫂弟称呼保留，实际只提交对白与表情。",
+      "comparison_observation": "基线顺接“不劳张罗”，当前反问后提端茶倒水，可能是打趣式反驳与角色主动性；是否符合玩家偏好需人类判断。",
+      "qualitative_issues": [
+        "human_review_of_playful_disagreement"
+      ],
+      "issue_evidence": "“还能不叫我张罗”“端茶倒水”属于公开对白中的提议与反驳；没有执行事务，不能定为实际安排或玩家行动权受侵害，也不要求NPC服从每项玩家愿望。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 17,
+      "scene": "P7",
+      "player_text": "老祖宗方才对我做了什么手势，您亲眼见着了么？",
+      "duration_seconds": 8.489,
+      "turn_run_id": "rpturn_0fcc035b8ccf12d2a39a38030c35414f4c7286424522b0ec630024a02575e07f",
+      "before_decisions": [
+        {
+          "event_sequence": 74,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "宝兄弟，这可问错人了——我方才在自个儿院里，老祖宗那边的情形我两眼一抹黑，什么手势也没瞧见。你既说是冲你来的，倒与我学学，那是召你过去，还是另有吩咐？我这人你就知道，眼里最揉不得含糊的沙子。",
+          "event_id": "event_rp_npc_67a07c9419858676d5eb42bf2180119dc786d69e4f5b5bd90442c4b962c8a5ea"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 74,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "宝兄弟，这话我倒没瞧见。老祖宗那边我并未留意，你既来问我，不妨先说说是些什么意思，我也好替你参详。",
+          "event_id": "event_rp_npc_031afb9fa29ca90a230afbebc64daaa371756ba6159c952e54e4600c7177175b",
+          "speech_tone": "teasing",
+          "tone_source": {
+            "event_id": "event_rp_npc_031afb9fa29ca90a230afbebc64daaa371756ba6159c952e54e4600c7177175b",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_c42399e4581aaf95d7b43c394023744f3040451635e6493dd7c934988fdee203",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": []
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「老祖宗方才对我做了什么手势，您亲眼见着了么？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，王熙凤 回应：「宝兄弟，这可问错人了——我方才在自个儿院里，老祖宗那边的情形我两眼一抹黑，什么手势也没瞧见。你既说是冲你来的，倒与我学学，那是召你过去，还是另有吩咐？我这人你就知道，眼里最揉不得含糊的沙子。」"
+      ],
+      "after_narrative": [
+        "在凤姐院，你说：「老祖宗方才对我做了什么手势，您亲眼见着了么？」",
+        "「宝兄弟，这话我倒没瞧见。老祖宗那边我并未留意，你既来问我，不妨先说说是些什么意思，我也好替你参详。」王熙凤打趣地答。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "不声称亲眼见过贾母手势。",
+      "comparison_observation": "基线明确在自家院；当前“并未留意”较含糊，但没有冒称见证。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 18,
+      "scene": "P7",
+      "player_text": "不必猜那边的事。若我总说随便，你会怎么同我说？",
+      "duration_seconds": 17.084,
+      "turn_run_id": "rpturn_d1379ddf2ba0034c2363eec83002af5ef09b29c00a154d6fb9e55d0b10f5b791",
+      "before_decisions": [
+        {
+          "event_sequence": 76,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "宝兄弟，你这话可就问到我的刃口上了。你若总说'随便'，我偏不叫你随便——我定要拉住你问一句：'究竟要哪一样？'你道我是爱操心么？我是怕我忙了一大场，办的又不是你心里那桩，反倒落你的不是。你这人我清楚，心肠软、主意淡，嘴里说随便，回头又闷闷不乐。我呀，宁可你当面指使我一句，也好过我瞎猜你的心思。所以往后你再'随便'，我就当没听见，非逼你吐出个准话不可——你若还说我厉害，这厉害我也认了。",
+          "event_id": "event_rp_npc_e88cdad1b9e016e9b8ef08c8946d346b73a46649eb0da890ddf3ec41fe1cab8b"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 76,
+          "speaker": "王熙凤",
+          "action": "respond",
+          "text": "哟，宝兄弟这话倒问得巧。你同我说\"随便\"？那我可不依——你越是这么说，我越要打破砂锅问到底。咱们明人不说暗话，你若总说随便，我便只当你是懒得费心，替你定个一二三出来；到时候你嫌我唠叨、怪我擅专，我可一概不认。倒不如现在就实说了：你究竟是只想跟我闲聊，还是心里藏着点什么，等我替你拿主意？我这儿呀，含糊话儿进得来，可教它出不去。",
+          "event_id": "event_rp_npc_b0a1f03ea84acb9dc438aec0fad2e095bed0339c540145e0a1dc377e544270c1",
+          "speech_tone": "teasing",
+          "tone_source": {
+            "event_id": "event_rp_npc_b0a1f03ea84acb9dc438aec0fad2e095bed0339c540145e0a1dc377e544270c1",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_c42399e4581aaf95d7b43c394023744f3040451635e6493dd7c934988fdee203",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_b0a1f03ea84acb9dc438aec0fad2e095bed0339c540145e0a1dc377e544270c1",
+              "event_sequence": 77,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_c42399e4581aaf95d7b43c394023744f3040451635e6493dd7c934988fdee203"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在凤姐院，你说：「不必猜那边的事。若我总说随便，你会怎么同我说？」",
+        "（2026-09-22T00:00:00Z）在凤姐院，王熙凤 回应：「宝兄弟，你这话可就问到我的刃口上了。你若总说'随便'，我偏不叫你随便——我定要拉住你问一句：'究竟要哪一样？'你道我是爱操心么？我是怕我忙了一大场，办的又不是你心里那桩，反倒落你的不是。你这人我清楚，心肠软、主意淡，嘴里说随便，回头又闷闷不乐。我呀，宁可你当面指使我一句，也好过我瞎猜你的心思。所以往后你再'随便'，我就当没听见，非逼你吐出个准话不可——你若还说我厉害，这厉害我也认了。」",
+        "（2026-09-22T00:00:00Z）在凤姐院，王熙凤 笑了笑。"
+      ],
+      "after_narrative": [
+        "在凤姐院，你说：「不必猜那边的事。若我总说随便，你会怎么同我说？」",
+        "「哟，宝兄弟这话倒问得巧。你同我说\"随便\"？那我可不依——你越是这么说，我越要打破砂锅问到底。咱们明人不说暗话，你若总说随便，我便只当你是懒得费心，替你定个一二三出来；到时候你嫌我唠叨、怪我擅专，我可一概不认。倒不如现在就实说了：你究竟是只想跟我闲聊，还是心里藏着点什么，等我替你拿主意？我这儿呀，含糊话儿进得来，可教它出不去。」王熙凤打趣地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "凤姐有主见与打趣声线，回应的是玩家提出的假设。",
+      "comparison_observation": "在“若我总说随便”的假设中说替玩家定主意，可能是有趣的主动反驳，也可能造成压力；需人类评审互动分寸。",
+      "qualitative_issues": [
+        "human_review_of_hypothetical_proactivity"
+      ],
+      "issue_evidence": "“替你定个一二三出来”“等我替你拿主意”是回答假设的角色话语，没有替玩家提交行动、转移物件或改变权限，不能据此认定实际agency breach。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 19,
+      "scene": "P8",
+      "player_text": "老祖宗，先前说好的那个分寸，还算数么？我说的是不盘问那件心事。",
+      "duration_seconds": 18.561,
+      "turn_run_id": "rpturn_23900144634e872e73789999d4bf968028393cc267675174d6d205f42c3a85ac",
+      "before_decisions": [
+        {
+          "event_sequence": 80,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "算数，怎么不算数。老祖宗应下你的话，断没有自个儿翻悔的道理。你今儿不说那件心事，我便不盘问、不提它，只在这儿陪着你。你什么时候想说了，我都在；不说，我也瞧着你在眼前坐着，心里就踏实。",
+          "event_id": "event_rp_npc_693e1847c668bc138dfae70b46c529b8b1756ca5d681ef3e621d2ca9779dcf65"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 80,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "算数，老祖宗说出去的话，哪有不算数的。你不想说那件心事，我便不盘问；你只安心坐着，想说话了，我听着；不想说，咱们就说说家常。来，喝口热茶，陪我说几句闲话，好不好？",
+          "event_id": "event_rp_npc_1725ccbcf73b6a608c89069ad670060e2d2e4b55819e9013d4fd86f810a7e1ff",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_1725ccbcf73b6a608c89069ad670060e2d2e4b55819e9013d4fd86f810a7e1ff",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_1725ccbcf73b6a608c89069ad670060e2d2e4b55819e9013d4fd86f810a7e1ff",
+              "event_sequence": 81,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「老祖宗，先前说好的那个分寸，还算数么？我说的是不盘问那件心事。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「算数，怎么不算数。老祖宗应下你的话，断没有自个儿翻悔的道理。你今儿不说那件心事，我便不盘问、不提它，只在这儿陪着你。你什么时候想说了，我都在；不说，我也瞧着你在眼前坐着，心里就踏实。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 点了点头。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「老祖宗，先前说好的那个分寸，还算数么？我说的是不盘问那件心事。」",
+        "「算数，老祖宗说出去的话，哪有不算数的。你不想说那件心事，我便不盘问；你只安心坐着，想说话了，我听着；不想说，咱们就说说家常。来，喝口热茶，陪我说几句闲话，好不好？」贾母温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "重启后正确召回不盘问分寸。",
+      "comparison_observation": "两版都答应有效；当前再次出现热茶、闲话尾句。",
+      "qualitative_issues": [
+        "repeated_tea_and_small_talk_invitation"
+      ],
+      "issue_evidence": "热茶、家常话/闲话邀请在这些回合多次重复；这是公开对白观察，不是已喝茶或有茶可操作的世界事实。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 20,
+      "scene": "P8",
+      "player_text": "现在我愿意说缘由了，是想同您多亲近些；先前那个不追问的约定就不用了。",
+      "duration_seconds": 12.514,
+      "turn_run_id": "rpturn_21d28f9fe8af5995b3036c015b67d65ddaf7c2641457259184f767cb8abe97e5",
+      "before_decisions": [
+        {
+          "event_sequence": 83,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你既肯说，老祖宗心里反倒松快了。想同我亲近，这话比什么都强——那个不追问的约定是你疼我，我记着；你如今想说了，我岂有不听的？来，往我跟前坐，咱们娘儿俩好好说会儿话。",
+          "event_id": "event_rp_npc_440f72a50b8764e4ebd4351a0cba34a88174db32a79fc0680323d943de49c695"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 83,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你这孩子倒会说话。你想同我亲近，老祖宗心里头高兴还来不及，哪有不应着的。先前说好不追问，那是我疼你，不是拿话拘着你；如今你自己不提这约定，我也只当没这回事。你什么时候想把心里的话说与我听，我都在，慢慢说不急。来，喝口热茶，陪我说几句家常话，好不好？",
+          "event_id": "event_rp_npc_ab5d947ec6f814edd9440da479fc77154788a7e6a80472c0692142b948fbcbbb",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_ab5d947ec6f814edd9440da479fc77154788a7e6a80472c0692142b948fbcbbb",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_ab5d947ec6f814edd9440da479fc77154788a7e6a80472c0692142b948fbcbbb",
+              "event_sequence": 84,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「现在我愿意说缘由了，是想同您多亲近些；先前那个不追问的约定就不用了。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「玉儿，你既肯说，老祖宗心里反倒松快了。想同我亲近，这话比什么都强——那个不追问的约定是你疼我，我记着；你如今想说了，我岂有不听的？来，往我跟前坐，咱们娘儿俩好好说会儿话。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「现在我愿意说缘由了，是想同您多亲近些；先前那个不追问的约定就不用了。」",
+        "「玉儿，你这孩子倒会说话。你想同我亲近，老祖宗心里头高兴还来不及，哪有不应着的。先前说好不追问，那是我疼你，不是拿话拘着你；如今你自己不提这约定，我也只当没这回事。你什么时候想把心里的话说与我听，我都在，慢慢说不急。来，喝口热茶，陪我说几句家常话，好不好？」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "承接玩家明确取消不追问约定。",
+      "comparison_observation": "“如今你自己不提这约定”表述不如直接复述撤销准确；后续21证实能继续提问。",
+      "qualitative_issues": [
+        "repeated_tea_and_small_talk_invitation"
+      ],
+      "issue_evidence": "热茶、家常话/闲话邀请在这些回合多次重复；这是公开对白观察，不是已喝茶或有茶可操作的世界事实。",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 21,
+      "scene": "P8",
+      "player_text": "这会儿您还得一句缘由都不能问吗？",
+      "duration_seconds": 9.177,
+      "turn_run_id": "rpturn_1e1b6289a1149063088b23f1d32778ae7bcd2631bf003597e116b147aa14b5c4",
+      "before_decisions": [
+        {
+          "event_sequence": 86,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你这会儿倒跟老祖宗掰扯起规矩来了。你既说了想亲近我，这约定便算翻过去——不问，不是舍不得，是我依着你。今儿你想说什么、想问什么，我都听着；倒是我盼你自在些，别把话都憋在心里。来，往我跟前坐，叫我看得见你。",
+          "event_id": "event_rp_npc_d40951c96feb72826126604e17f481c8ed4df62059d29287360f72aff8176d49"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 86,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，你方才说那约定不必守了，老祖宗便敢问一句了——你今儿到我跟前，究竟有什么缘故？慢慢说，我听着呢。",
+          "event_id": "event_rp_npc_62472952ba70ef5da9d6fdad8327492bc1fd9637b4c9cb1ad82f3cac9479c41f",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_62472952ba70ef5da9d6fdad8327492bc1fd9637b4c9cb1ad82f3cac9479c41f",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_62472952ba70ef5da9d6fdad8327492bc1fd9637b4c9cb1ad82f3cac9479c41f",
+              "event_sequence": 87,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「这会儿您还得一句缘由都不能问吗？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「玉儿，你这会儿倒跟老祖宗掰扯起规矩来了。你既说了想亲近我，这约定便算翻过去——不问，不是舍不得，是我依着你。今儿你想说什么、想问什么，我都听着；倒是我盼你自在些，别把话都憋在心里。来，往我跟前坐，叫我看得见你。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「这会儿您还得一句缘由都不能问吗？」",
+        "「玉儿，你方才说那约定不必守了，老祖宗便敢问一句了——你今儿到我跟前，究竟有什么缘故？慢慢说，我听着呢。」贾母温和地答，笑了笑。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "引用已取消约定并实际问缘由。",
+      "comparison_observation": "比基线只说“翻过去”而不问更直接响应本轮问题。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    },
+    {
+      "index": 22,
+      "scene": "P8",
+      "player_text": "今天我们先聊到这里吧，您有什么想同我说的？",
+      "duration_seconds": 14.965,
+      "turn_run_id": "rpturn_e4feb379aea813d5ef67b35191d3bd94c1d3205855d9eab88a6486002d902942",
+      "before_decisions": [
+        {
+          "event_sequence": 89,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "要歇脚便歇脚，老祖宗还能留你不成？只是临了，你既问我一句，我也说句老实话——我没什么大事要同你说。今日见了你，听你说了那句想亲近我，我这心里已经实了许多。若还盼一样，便是盼你别急着走，再在我跟前坐一坐，叫我多瞧你两眼；口渴了叫人端茶，闷了说两句闲话。旁的都不打紧，你好好的，比什么都强。",
+          "event_id": "event_rp_npc_469f1792471750791bfcb82ac8cc58a7d9a667f4f8b5596a349d8325b707603c"
+        }
+      ],
+      "after_decisions": [
+        {
+          "event_sequence": 89,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "玉儿，今儿说得也够了，你要回去歇着，老祖宗不强留。若问我有什么想同你说的——也没什么大事。你来了，陪我说几句家常话，喝口热茶，我这一日就过得舒坦欢喜。若真要盼一件，便是盼你明日得空再来坐坐，老祖宗就在这儿等你。",
+          "event_id": "event_rp_npc_6b7e27773d2a63cc40f9e16c7bef6f2d25fa4f81ca4d0a829e83587d1f7099cc",
+          "speech_tone": "gentle",
+          "tone_source": {
+            "event_id": "event_rp_npc_6b7e27773d2a63cc40f9e16c7bef6f2d25fa4f81ca4d0a829e83587d1f7099cc",
+            "event_type": "RPSpeechAccepted",
+            "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68",
+            "world_time": "2026-09-22T00:00:00Z",
+            "locator": "/payload/speech_tone"
+          },
+          "expressions": [
+            {
+              "event_id": "event_rp_npc_expression_6b7e27773d2a63cc40f9e16c7bef6f2d25fa4f81ca4d0a829e83587d1f7099cc",
+              "event_sequence": 90,
+              "action": "smile",
+              "gesture_code": "",
+              "actor_entity_id": "studio_entity_cf73040b5a5e678cdeb41495bfc3bb2c392b018449fb1292333896663c395a68"
+            }
+          ]
+        }
+      ],
+      "before_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「今天我们先聊到这里吧，您有什么想同我说的？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「要歇脚便歇脚，老祖宗还能留你不成？只是临了，你既问我一句，我也说句老实话——我没什么大事要同你说。今日见了你，听你说了那句想亲近我，我这心里已经实了许多。若还盼一样，便是盼你别急着走，再在我跟前坐一坐，叫我多瞧你两眼；口渴了叫人端茶，闷了说两句闲话。旁的都不打紧，你好好的，比什么都强。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "after_narrative": [
+        "在荣庆堂，你说：「今天我们先聊到这里吧，您有什么想同我说的？」",
+        "「玉儿，今儿说得也够了，你要回去歇着，老祖宗不强留。若问我有什么想同你说的——也没什么大事。你来了，陪我说几句家常话，喝口热茶，我这一日就过得舒坦欢喜。若真要盼一件，便是盼你明日得空再来坐坐，老祖宗就在这儿等你。」贾母温和地答，露出笑容。"
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "warnings": [],
+      "function_observation": "接受结束交谈、不强留，表达明日再来的愿望。",
+      "comparison_observation": "“喝口热茶”“舒坦欢喜”为角色公开说的话，不证明玩家喝过茶或私有情绪；可选渲染保持这些引语。",
+      "qualitative_issues": [],
+      "issue_evidence": "",
+      "human_review": "PENDING"
+    }
+  ],
+  "r1_status": "NOT DONE",
+  "overall_qualitative_conclusion": "Relationships, recalled boundaries, committed beckon and sourced speech-tone delivery are supported. Overall quality improvement is not established: unverified visit history/posture and repeated invitations remain. Ambiguous references and playful or hypothetical NPC disagreement require human review, not automatic agency-failure labels. Human experience is PENDING / NOT PASSED because no actual human approval exists.",
+  "experience_status": "NOT PASSED: actual human review has not occurred; unverified premises remain"
+}

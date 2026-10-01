@@ -56,7 +56,7 @@ func TestDecisionBoundRefsAndSameContractReachEveryTransport(t *testing.T) {
 					if !reflect.DeepEqual(refs, []any{"src_1"}) {
 						t.Fatal("model must still copy a long opaque Event ID")
 					}
-					args := strings.Replace(wireDecision(`{"action":"respond","text":"我听见了。","introduce_self":false,"expression_code":"none"}`), "event-player", "src_1", 1)
+					args := strings.Replace(wireDecision(`{"action":"respond","text":"我听见了。","speech_tone":"none","introduce_self":false,"expression_code":"none"}`), "event-player", "src_1", 1)
 					if channel == "function" {
 						_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "tool_calls", "message": map[string]any{"content": "unapproved private narration", "tool_calls": []any{proposalTool(args)}}}}})
 					} else {

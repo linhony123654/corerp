@@ -40,11 +40,11 @@ func TestReasoningOptionsReachAllDecisionPaths(t *testing.T) {
 					return
 				}
 				switch format.JSONSchema.Name {
-				case "corerp_decision_v3":
+				case "corerp_decision_v4":
 					if string(body["max_completion_tokens"]) != "4096" {
 						t.Error("lost decision budget")
 					}
-					modelResponse(w, `{"action":"silence","text":"","destination_place_id":"","activity_code":"","introduce_self":false}`, "stop")
+					modelResponse(w, wireDecision(`{"action":"silence","expression_code":"none"}`), "stop")
 				case "corerp_interaction_v4":
 					if string(body["max_completion_tokens"]) != "3072" {
 						t.Error("lost interpretation budget")

@@ -151,7 +151,10 @@ type RPNarrativeFact struct {
 	ActorName        string `json:"actor_name"`
 	Action           string `json:"action"`
 	Text             string `json:"text,omitempty"`
-	ActivityCode     string `json:"activity_code,omitempty"`
+	// This delivery must match the speaker's committed utterance and, for
+	// other speakers, the observer's frozen hearing. Empty remains unknown.
+	SpeechTone   string `json:"speech_tone,omitempty"`
+	ActivityCode string `json:"activity_code,omitempty"`
 	// ActivityLabel is the world-declared prose label for the activity
 	// (studio narrative package); empty means the code is shown as-is.
 	ActivityLabel  string `json:"activity_label,omitempty"`
@@ -312,7 +315,7 @@ func (LiteralRPNarrativeProvider) RenderStream(ctx context.Context, in RPNarrati
 		case "refuse":
 			framing = name + " 拒绝了"
 		case "expression":
-			verbs := map[string]string{"smile": "笑了笑", "nod": "点了点头", "shake_head": "摇了摇头", "turn_away": "转过身", "frown": "皱了皱眉", "beckon": "招了招手"}
+			verbs := map[string]string{"smile": "笑了笑", "nod": "点了点头", "shake_head": "摇了摇头", "turn_away": "转过身", "frown": "皱了皱眉", "beckon": "招了招手", "look_at": "看了看", "wave": "挥了挥手", "shrug": "耸了耸肩", "raise_hand": "举起手"}
 			verb := verbs[fact.ExpressionCode]
 			if verb == "" {
 				return RPNarrativeView{}, NewError(CodeProjectionDiverged, "unknown committed NPC expression")

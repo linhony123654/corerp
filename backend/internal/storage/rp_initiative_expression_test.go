@@ -23,7 +23,7 @@ func TestRPInitiativeExpressionIsAtomicWitnessedPrivateAndReplayable(t *testing.
 	request := core.RPInitiativeRequest{PrincipalID: player.PrincipalID, SessionID: player.SessionID, NPCEntityID: M2RPNPCID, TriggerEventID: wait.EventID}
 	const secret = "先让对方近前，私下想听完再作打算"
 	provider := rpDecisionProviderFunc(func(context.Context, core.RPDecisionInput) (core.RPDecisionProposal, error) {
-		return core.RPDecisionProposal{Action: "respond", Text: "过来吧，我听着。", ExpressionCode: "beckon", Private: &core.RPDecisionPrivate{Intent: secret}}, nil
+		return core.RPDecisionProposal{Action: "respond", Text: "过来吧，我听着。", SpeechTone: "gentle", ExpressionCode: "beckon", Private: &core.RPDecisionPrivate{Intent: secret}}, nil
 	})
 	s.beforeCommit = func() error { return core.NewError(core.CodeInjectedFailure, "initiative expression rollback") }
 	if _, err := s.RunRPInitiative(ctx, request, provider); !core.HasCode(err, core.CodeInjectedFailure) {
@@ -34,6 +34,15 @@ func TestRPInitiativeExpressionIsAtomicWitnessedPrivateAndReplayable(t *testing.
 	result, err := s.RunRPInitiative(ctx, request, provider)
 	if err != nil || result.Status != "validated" {
 		t.Fatal(result, err)
+	}
+	connForTone, err := s.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordedTone, toneErr := readRPRecordedSpeechTone(ctx, connForTone, result.EventID, session.ControlledEntityID)
+	_ = connForTone.Close()
+	if toneErr != nil || recordedTone != "gentle" {
+		t.Fatal("initiative speech lost its accepted observable delivery", recordedTone, toneErr)
 	}
 	var expressionID, raw string
 	if err := s.db.QueryRowContext(ctx, `SELECT e.event_id,e.payload FROM events e JOIN events main ON main.batch_id=e.batch_id WHERE main.event_id=? AND e.event_type='RPNonverbalAction'`, result.EventID).Scan(&expressionID, &raw); err != nil {

@@ -71,7 +71,7 @@ func TestNPCSpeechFormattingAndRepetitionShareOnePrecommitRewrite(t *testing.T) 
 					}
 					text = tc.second
 				}
-				encoded, _ := json.Marshal(map[string]any{"action": "respond", "text": text, "destination_place_id": "", "activity_code": "", "introduce_self": false})
+				encoded, _ := json.Marshal(map[string]any{"private": map[string]any{"intent": "", "emotion": "", "relationship_stance": "", "basis_event_ids": []string{}}, "observable": map[string]any{"action": "respond", "text": text, "speech_tone": "none", "introduce_self": false, "expression_code": "none"}})
 				modelResponse(w, string(encoded), "stop")
 			}))
 			defer server.Close()

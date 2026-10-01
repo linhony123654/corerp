@@ -13,19 +13,20 @@ import (
 )
 
 type RPTurnResult struct {
-	NarrativeStyle     core.RPStyleProfile `json:"narrative_style"`
-	NarrativeWarnings  []string            `json:"narrative_warnings"`
-	TurnRunID          string              `json:"turn_run_id"`
-	PlayerTurnID       string              `json:"player_turn_id"`
-	PlayerEventID      string              `json:"player_event_id"`
-	NPCEventIDs        []string            `json:"npc_event_ids"`
-	NarrativeLines     []string            `json:"narrative_lines"`
-	CompositionVersion string              `json:"composition_version,omitempty"`
-	FactGroups         [][]string          `json:"fact_groups,omitempty"`
-	ProviderCalls      []RPProviderCall    `json:"provider_calls"`
-	SettledSequence    int64               `json:"settled_sequence"`
-	Status             string              `json:"status"`
-	Replayed           bool                `json:"replayed"`
+	Interruption       *RPActionInterruption `json:"interruption,omitempty"`
+	NarrativeStyle     core.RPStyleProfile   `json:"narrative_style"`
+	NarrativeWarnings  []string              `json:"narrative_warnings"`
+	TurnRunID          string                `json:"turn_run_id"`
+	PlayerTurnID       string                `json:"player_turn_id"`
+	PlayerEventID      string                `json:"player_event_id"`
+	NPCEventIDs        []string              `json:"npc_event_ids"`
+	NarrativeLines     []string              `json:"narrative_lines"`
+	CompositionVersion string                `json:"composition_version,omitempty"`
+	FactGroups         [][]string            `json:"fact_groups,omitempty"`
+	ProviderCalls      []RPProviderCall      `json:"provider_calls"`
+	SettledSequence    int64                 `json:"settled_sequence"`
+	Status             string                `json:"status"`
+	Replayed           bool                  `json:"replayed"`
 }
 
 type RPTurnResumeRequest struct {
@@ -522,8 +523,8 @@ func (s *Store) markRPTurnNPCsCommitted(ctx context.Context, runID, sessionID, p
 }
 
 func (s *Store) markRPTurnNarrativeReady(ctx context.Context, runID string, view core.RPNarrativeView) error {
-	if view.CompositionVersion != core.RPFactCompositionVersionV2 || view.Artifact == nil {
-		return narrativeDiverged("primary narrative requires a complete v2 artifact")
+	if !rpFiniteNarrativeComposition(view.CompositionVersion) || view.Artifact == nil {
+		return narrativeDiverged("primary narrative requires a complete supported finite artifact")
 	}
 	if err := validateRPNarrativeComposition(view); err != nil {
 		return err
@@ -646,6 +647,11 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 	if err := json.Unmarshal([]byte(run.NarrativeJSON), &result.NarrativeLines); err != nil {
 		return RPTurnResult{}, core.WrapError(core.CodeProjectionDiverged, "decode RP narrative view", err)
 	}
+	interruption, interruptionErr := s.readRPActionInterruption(ctx, run)
+	result.Interruption = interruption
+	if interruptionErr != nil {
+		return RPTurnResult{}, interruptionErr
+	}
 	result.CompositionVersion = run.CompositionVersion
 	groups, err := decodeRPNarrativeComposition(run.CompositionVersion, run.FactGroupsJSON, run.FactEventIDsJSON, result.NarrativeLines)
 	if err != nil {
@@ -653,7 +659,7 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 	}
 	result.FactGroups = groups
 	var storedView core.RPNarrativeView
-	if run.CompositionVersion == core.RPFactCompositionVersionV2 {
+	if rpFiniteNarrativeComposition(run.CompositionVersion) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return RPTurnResult{}, err
@@ -687,7 +693,7 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 		}
 		result.NarrativeWarnings = append(result.NarrativeWarnings, narrative.CompositionCapabilityWarning)
 	}
-	if run.CompositionVersion == core.RPFactCompositionVersionV2 {
+	if rpFiniteNarrativeComposition(run.CompositionVersion) {
 		result.NarrativeWarnings = storedView.Warnings
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.event_id FROM rp_npc_decisions d JOIN events e ON e.event_id = d.event_id WHERE d.session_id = ? AND d.parent_turn_id = ? ORDER BY e.event_sequence`, run.SessionID, run.PlayerTurnID)

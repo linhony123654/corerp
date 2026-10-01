@@ -1,6 +1,20 @@
 # RP Runtime R1 architecture contract
 
-## Current functional contract — schema080, 2026-10-01
+## Current integration — schema081, 2026-10-02
+
+The all-action and sourced-delivery contract below is integrated with explicit interrupted historical settlement. The original decision continuation fence is unchanged. An interrupted action keeps its exact accepted owner receipt and all approved pre-fence effects; no fake silence or private controller detail is rendered. Raw-commit crashes, missing owner/public projections and later chapter changes have focused checks. The public result exposes only `interruption.code=world_changed`, and an accepted interaction pauses before dependent steps. The Play parser now accepts exact finite v3 source coverage as well as v1/v2. See [current report](actions-interruption-report-2026-10-02.md) and [verification](actions-interruption-verification-2026-10-02.json) for tested and released identities. R1 and human experience exits remain open.
+
+## Decision and delivery contract — captured schema080, decision v4 and composition v3
+
+The current local increment unifies every already legal nonverbal action with the existing reaction workflow. It introduces no new action type, owner or world state. Direct gestures, AUTO validation and narrative codes share the same core catalog; speech and action source wrappers share one conversation-focus policy. Directed actions activate only their frozen target; untargeted actions choose among actual witnesses using the existing bounded mode/focus policy and retain an empty action target. Externally controlled actors remain excluded. Historical raw-only action receipts never acquire new reactions on retry.
+
+Direct Play action requests now carry the selected model override through the existing endpoint policy before any owner effect, and use the same NPC waiting budget as other model paths. Private provider credentials are not speech or world facts.
+
+Decision v4 adds an explicit actor-chosen audible `speech_tone` to speaking proposals (`none`, `gentle`, `firm`, `teasing`, `hesitant`, `flat`; `none` means unrecorded delivery). This is distinct from private emotion. The original speech owner commits delivery into its existing Event and frozen hearing claims atomically; the existing context builder retains it in personally heard exchanges and recorded own speech. No later raw Event or private intent can fill a missing hearing. Narrative composition v3 uses finite attribution phrases only when the public input contains recorded delivery; no-tone historical v2 remains exact, and empty/v1 legacy receipts remain readable. Source validation rejects changed or unobserved delivery even if an attacker recomputes the artifact hash and display fields.
+
+This increment is being validated, not yet deployed. The prior released checkpoint below remains authoritative for the live preview. Free NPC wording still has no general semantic entailment guarantee; the same frozen Golden and the original32 exit plus actual human review remain required.
+
+### Prior released checkpoint — schema080
 
 The current production source retains the world kernel and adds a real action-trigger reaction route. The [functional report](rp-function-accuracy-2026-10-01.md), [verification](rp-function-verification-2026-10-01.json) and [real targeted-nod comparison](targeted-nod-real-2026-10-01.json) bind the439-file source digest to runtime7e814. [Authorized preview delivery](action-trigger-preview-release-2026-10-01.json) now verifies code300597c/runtime7e814/schema080 and the corresponding frontend. At isolated capture time it still ran feea/079. The actual live default Step call confirms the reaction route and restart conservation, but repeats unsupported standing/seat premises. R1 remains NOT DONE: semantic accuracy not passed and human experience pending.
 

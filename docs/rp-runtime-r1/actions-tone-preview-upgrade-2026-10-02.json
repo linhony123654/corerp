@@ -1,0 +1,141 @@
+{
+  "kind": "corerp.r1-action-trigger-preview-upgrade.v1",
+  "status": "PASS: current schema080 snapshot old/new exact history and restart conservation",
+  "runtime_sha256": "85d43576c0b11b6dd843d94b417c0a58a42ff57386672bacb9e8ca8ab85dab5f",
+  "production_source_sha256": "2070e375084a618ce3cea9d300ec047b65f266f8ef1fceae766ae951b46b43da",
+  "actual_model_calls": 0,
+  "scope": "existing preview database clone only; no live world writes",
+  "before": {
+    "tables": {
+      "events": {
+        "rows": 207,
+        "sha256": "e2dab9bcbac271fbd686ad06c297ff6b82ad0aef76ab2b91e6a272b519874425"
+      },
+      "event_batches": {
+        "rows": 201,
+        "sha256": "a5d5d42528f7424c3003de8b2eac412cfa34ff5f6a5f2799829ca4bf19590e55"
+      },
+      "commands": {
+        "rows": 201,
+        "sha256": "b61ec2767e3483eb54187f9c065c50a2553aa378e56698d791b15eeadcd35c40"
+      },
+      "rp_provider_calls": {
+        "rows": 19,
+        "sha256": "cdccf5da9e15e85728ffe32b38a2aa53f3c1b184f96458e22ab247cfa77f6537"
+      },
+      "rp_turn_runs": {
+        "rows": 68,
+        "sha256": "eee67f16b4aeea97e6beb8e57884955f52a1b21d9b094860e733b3b12aa71aff"
+      },
+      "rp_narrative_renders": {
+        "rows": 2,
+        "sha256": "f67bc699a163b3005aab0d48337c9b231d699332809a0d11634ff2323a4a75c1"
+      },
+      "rp_narrative_selections": {
+        "rows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      }
+    },
+    "branches": [
+      [
+        "inst_m1",
+        "br_main",
+        1
+      ],
+      [
+        "inst_m2_t09",
+        "br_main",
+        75
+      ],
+      [
+        "world_honglou_60615b11",
+        "br_main",
+        94
+      ],
+      [
+        "world_rp_runtime_r1_20261001",
+        "br_main",
+        37
+      ]
+    ],
+    "integrity": "ok",
+    "fk_errors": 0
+  },
+  "old_runtime_sha256": "7e8145d421fa0a8ab265af8037234652a80bc1f0b9c1165127a96791b81864ec",
+  "stage": "/tmp/corerp-r1-tone-preview-check-oxj6xbou",
+  "snapshot_db_sha256": "6eef87581a8250678eddc19b00b0824ce59c769d31b937cf2dc5199aa1c909f3",
+  "observed_history_count": 7,
+  "after": {
+    "tables": {
+      "events": {
+        "rows": 207,
+        "sha256": "e2dab9bcbac271fbd686ad06c297ff6b82ad0aef76ab2b91e6a272b519874425"
+      },
+      "event_batches": {
+        "rows": 201,
+        "sha256": "a5d5d42528f7424c3003de8b2eac412cfa34ff5f6a5f2799829ca4bf19590e55"
+      },
+      "commands": {
+        "rows": 201,
+        "sha256": "b61ec2767e3483eb54187f9c065c50a2553aa378e56698d791b15eeadcd35c40"
+      },
+      "rp_provider_calls": {
+        "rows": 19,
+        "sha256": "cdccf5da9e15e85728ffe32b38a2aa53f3c1b184f96458e22ab247cfa77f6537"
+      },
+      "rp_turn_runs": {
+        "rows": 68,
+        "sha256": "eee67f16b4aeea97e6beb8e57884955f52a1b21d9b094860e733b3b12aa71aff"
+      },
+      "rp_narrative_renders": {
+        "rows": 2,
+        "sha256": "f67bc699a163b3005aab0d48337c9b231d699332809a0d11634ff2323a4a75c1"
+      },
+      "rp_narrative_selections": {
+        "rows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      }
+    },
+    "branches": [
+      [
+        "inst_m1",
+        "br_main",
+        1
+      ],
+      [
+        "inst_m2_t09",
+        "br_main",
+        75
+      ],
+      [
+        "world_honglou_60615b11",
+        "br_main",
+        94
+      ],
+      [
+        "world_rp_runtime_r1_20261001",
+        "br_main",
+        37
+      ]
+    ],
+    "integrity": "ok",
+    "fk_errors": 0
+  },
+  "trigger_counts": [
+    [
+      "nonverbal",
+      2
+    ],
+    [
+      "speech",
+      66
+    ]
+  ],
+  "latest_migrations": [
+    "corerp-rp-action-triggers-080-2026-10-01",
+    "corerp-rp-session-opened-window-079-2026-10-01",
+    "corerp-rp-narrative-artifacts-078-2026-10-01"
+  ],
+  "public_history_turns": 7,
+  "restart": "PASS"
+}

@@ -44,7 +44,7 @@ func TestRPModelOverrideRoutesTurnToPlayerEndpoint(t *testing.T) {
 		gotAuth.Store(r.Header.Get("Authorization"))
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{
 			"finish_reason": "stop",
-			"message":       map[string]any{"content": `{"private":{"intent":"回应来访者","emotion":"平和","relationship_stance":"礼貌","basis_event_ids":[]},"observable":{"action":"respond","text":"这是覆盖模型的原话。","introduce_self":false,"expression_code":"none"}}`},
+			"message":       map[string]any{"content": `{"private":{"intent":"回应来访者","emotion":"平和","relationship_stance":"礼貌","basis_event_ids":[]},"observable":{"action":"respond","text":"这是覆盖模型的原话。","speech_tone":"none","introduce_self":false,"expression_code":"none"}}`},
 		}}})
 	}))
 	defer model.Close()

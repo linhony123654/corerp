@@ -31,6 +31,7 @@ type rpInitiativeEvent struct {
 	PlaceID          string                  `json:"place_id,omitempty"`
 	Text             string                  `json:"text,omitempty"`
 	SpeechAct        string                  `json:"speech_act,omitempty"`
+	SpeechTone       string                  `json:"speech_tone,omitempty"`
 	ListenerIDs      []string                `json:"listener_ids,omitempty"`
 	IntroduceSelf    bool                    `json:"introduce_self,omitempty"`
 	NPCEntityID      string                  `json:"npc_entity_id"`
@@ -49,7 +50,7 @@ type rpInitiativeEvent struct {
 }
 
 func (e rpInitiativeEvent) speech() rpSpeechEvent {
-	return rpSpeechEvent{SessionID: e.SessionID, TurnID: e.TurnID, UtteranceID: e.UtteranceID, SpeakerEntityID: e.SpeakerEntityID, PlaceID: e.PlaceID, Text: e.Text, SpeechAct: e.SpeechAct, ListenerIDs: e.ListenerIDs}
+	return rpSpeechEvent{SessionID: e.SessionID, TurnID: e.TurnID, UtteranceID: e.UtteranceID, SpeakerEntityID: e.SpeakerEntityID, PlaceID: e.PlaceID, Text: e.Text, SpeechAct: e.SpeechAct, SpeechTone: e.SpeechTone, ListenerIDs: e.ListenerIDs}
 }
 
 func initiativeKey(r core.RPInitiativeRequest) (string, error) {
@@ -278,6 +279,7 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 		}
 		event.TurnID, event.UtteranceID = childTurnID, "utterance_rp_initiative_"+suffix
 		event.SpeakerEntityID, event.PlaceID, event.Text, event.SpeechAct, event.ListenerIDs = r.NPCEntityID, input.PlaceID, proposal.Text, "statement", listeners
+		event.SpeechTone = proposal.SpeechTone
 		event.IntroduceSelf = proposal.IntroduceSelf && core.ExplicitSelfIntroduction(proposal.Text, input.NPCName)
 	} else if proposal.Action == "leave" {
 		eventType = "RPNPCMoved"
@@ -361,7 +363,7 @@ func (s *Store) commitRPInitiative(ctx context.Context, r core.RPInitiativeReque
 		if err := execAgentOne(ctx, tx.conn, "initiative utterance", `INSERT INTO rp_utterances(utterance_id,event_id,session_id,turn_id,speaker_entity_id,place_id,world_time,speech_text,speech_act,listener_count) VALUES (?,?,?,?,?,?,?,?,'statement',?)`, event.UtteranceID, eventID, r.SessionID, event.TurnID, r.NPCEntityID, input.PlaceID, input.WorldTime, proposal.Text, len(event.ListenerIDs)); err != nil {
 			return empty, err
 		}
-		if err := insertRPSpeechHearings(ctx, tx.conn, eventID, sequence, r.NPCEntityID, input.PlaceID, input.WorldTime, event.UtteranceID, proposal.Text, "statement", event.ListenerIDs); err != nil {
+		if err := insertRPSpeechHearingsWithTone(ctx, tx.conn, eventID, sequence, r.NPCEntityID, input.PlaceID, input.WorldTime, event.UtteranceID, proposal.Text, "statement", proposal.SpeechTone, event.ListenerIDs); err != nil {
 			return empty, err
 		}
 		if event.IntroduceSelf {

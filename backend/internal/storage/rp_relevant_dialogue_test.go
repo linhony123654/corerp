@@ -254,7 +254,7 @@ func TestRPRelevantDialoguePeerCandidatesPrecedeGlobalLimit(t *testing.T) {
 	insert := func(sequence int, speaker, turn, branch string, heard bool) {
 		t.Helper()
 		id := fmt.Sprintf("event-%d", sequence)
-		payload, _ := json.Marshal(map[string]string{"parent_turn_id": turn})
+		payload, _ := json.Marshal(rpSpeechEvent{ParentTurnID: turn, SpeakerEntityID: speaker, UtteranceID: "utterance-" + id, Text: "words-" + id, SpeechAct: "statement", ListenerIDs: []string{"npc"}})
 		if _, err := tx.ExecContext(ctx, `INSERT INTO events VALUES (?,'world',?,?, '2026-10-01T00:00:00Z',?)`, id, branch, sequence, string(payload)); err != nil {
 			t.Fatal(err)
 		}
@@ -262,7 +262,8 @@ func TestRPRelevantDialoguePeerCandidatesPrecedeGlobalLimit(t *testing.T) {
 			t.Fatal(err)
 		}
 		if heard {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO observation_records VALUES (?,'npc',?,?,'{"claim_type":"speaker_said"}')`, id, speaker, "speech:"+id); err != nil {
+			claim, _ := json.Marshal(rpSpeechClaim{ClaimType: "speaker_said", SpeakerEntityID: speaker, UtteranceID: "utterance-" + id, Text: "words-" + id, SpeechAct: "statement"})
+			if _, err := tx.ExecContext(ctx, `INSERT INTO observation_records VALUES (?,'npc',?,?,?)`, id, speaker, "speech:"+id, string(claim)); err != nil {
 				t.Fatal(err)
 			}
 		}

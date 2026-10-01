@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 )
 
+const RPFactCompositionVersionV3 = "corerp.fact-composition.v3"
 const RPFactCompositionVersionV2 = "corerp.fact-composition.v2"
 const RPFactCompositionVersionV1 = "corerp.fact-composition.v1"
 
@@ -39,9 +40,9 @@ type RPNarrativeArtifact struct {
 // Only unsupported arbitrary lexical/mental instructions are disclosed; v2's
 // source-entailing diction and grouping no longer need the v1 capability wall.
 const RPCompositionInstructionWarning = "已应用可支持的事实叙述与排版；自定义要求仅用于这些选择，未改写原话或补写心理、语气及未确认的情节。"
-const RPCompositionInstruction = `只输出 corerp.fact-composition.v2 JSON。结构为 {"version":"corerp.fact-composition.v2","register":"plain","paragraphs":[{"context":"none","beats":[{"fact_refs":["f0"],"form":"subject_first","lexical":"plain"}]}]}。
+const RPCompositionInstruction = `只输出 schema 指定版本的有限组合 JSON：无已记录语气时为 corerp.fact-composition.v2，有已记录语气时为 corerp.fact-composition.v3。下例的 version 必须替换为 schema 指定版本。结构为 {"version":"corerp.fact-composition.v2","register":"plain","paragraphs":[{"context":"none","beats":[{"fact_refs":["f0"],"form":"subject_first","lexical":"plain"}]}]}。
 按原始顺序覆盖所有事实，每个 fact_ref 恰好一次。只能选择 eligible_beats 给出的 fact_refs/form；register 默认 plain，只有明确的全局古典风格要求才可选择 classical，lexical 为 plain/varied，context 为 none/scene。scene 只能引入该段已给出的地点，同地点不重复开场。
-引用后的姓名、对象、原话、动作由服务器展开；不得增加字段或任何正文。quote_first 调整引语位置，subject_first 主语在前，speech_gesture_quote_first/speech_gesture_subject_first 只合并已经证明的相邻对白和表情，不表示同时发生；action_quote 连接同主体相邻到达和对白。不得写笑着说、轻声、慈爱、等待多久或心理。公开表达线索只选择已支持的叙述措辞/节奏，不改变对白、不生成新事实。`
+引用后的姓名、对象、原话、动作由服务器展开；不得增加字段或任何正文。quote_first 调整引语位置，subject_first 主语在前，speech_gesture_quote_first/speech_gesture_subject_first 只合并已经证明的相邻对白和表情，不表示同时发生；action_quote 连接同主体相邻到达和对白。服务器仅依据 speech_tone 展开已记录的可听语气；不得自行添加或推断语气，不得从私密情绪、心理或公开表达线索推导语气。不得写笑着说、轻声、慈爱、等待多久或心理。公开表达线索只选择已支持的叙述措辞/节奏，不改变对白、不生成新事实。`
 
 // LiteralRPNarrativeProvider retains the explicit old row renderer for v1
 // compilation and audit/legacy compatibility. Play defaults use v2 below.
@@ -51,6 +52,16 @@ func rpCompositionError(message string) error { return NewError(CodeInvalidArgum
 func rpFactRef(i int) string                  { return "f" + strconv.Itoa(i) }
 func rpSpeech(f RPNarrativeFact) bool {
 	return f.Action == "speak" || f.Action == "respond" || f.Action == "refuse"
+}
+
+// RPCompositionVersion selects v3 only when a frozen public utterance records delivery.
+func RPCompositionVersion(in RPNarrativeInput) string {
+	for _, f := range in.Facts {
+		if f.SpeechTone != "" {
+			return RPFactCompositionVersionV3
+		}
+	}
+	return RPFactCompositionVersionV2
 }
 
 func validateRPCompositionInput(in RPNarrativeInput) error {
@@ -66,6 +77,9 @@ func validateRPCompositionInput(in RPNarrativeInput) error {
 			return NewError(CodeProjectionDiverged, "composition requires unique public sources")
 		}
 		seen[f.EventID] = true
+		if !ValidRPSpeechTone(f.SpeechTone) || (f.SpeechTone != "" && !rpSpeech(f)) {
+			return NewError(CodeProjectionDiverged, "invalid public speech delivery")
+		}
 		for _, text := range []string{f.ActorName, f.TargetActorName, f.Text, f.PlaceName, f.ActivityLabel, f.ObjectName, f.ObjectState} {
 			if !utf8.ValidString(text) {
 				return NewError(CodeProjectionDiverged, "invalid public fact text")
@@ -145,7 +159,7 @@ func BuildDefaultRPComposition(in RPNarrativeInput) (RPCompositionPlan, error) {
 	if err := validateRPCompositionInput(in); err != nil {
 		return RPCompositionPlan{}, err
 	}
-	plan := RPCompositionPlan{Version: RPFactCompositionVersionV2, Register: "plain", Paragraphs: []RPCompositionParagraph{}}
+	plan := RPCompositionPlan{Version: RPCompositionVersion(in), Register: "plain", Paragraphs: []RPCompositionParagraph{}}
 	if rpExplicitClassical(in.Style.ProseInstructions) {
 		plan.Register = "classical"
 	}
@@ -197,7 +211,7 @@ func BuildDefaultRPComposition(in RPNarrativeInput) (RPCompositionPlan, error) {
 }
 
 func validateRPCompositionPlan(in RPNarrativeInput, plan RPCompositionPlan) error {
-	if plan.Paragraphs == nil || plan.Version != RPFactCompositionVersionV2 || (plan.Register != "plain" && plan.Register != "classical") || (len(plan.Paragraphs) == 0 && len(in.Facts) != 0) || len(plan.Paragraphs) > len(in.Facts) {
+	if plan.Paragraphs == nil || plan.Version != RPCompositionVersion(in) || (plan.Register != "plain" && plan.Register != "classical") || (len(plan.Paragraphs) == 0 && len(in.Facts) != 0) || len(plan.Paragraphs) > len(in.Facts) {
 		return rpCompositionError("invalid composition plan")
 	}
 	if plan.Register == "classical" && !rpExplicitClassical(in.Style.ProseInstructions) {
@@ -279,6 +293,10 @@ func rpActorRegister(in RPNarrativeInput, fact RPNarrativeFact, register string)
 }
 
 func rpSpeechVerb(f RPNarrativeFact, register, lexical string) string {
+	prefix := map[string]string{"gentle": "温和地", "firm": "坚定地", "teasing": "打趣地", "hesitant": "语调迟疑地", "flat": "语调平淡地"}[f.SpeechTone]
+	return prefix + rpUntonedSpeechVerb(f, register, lexical)
+}
+func rpUntonedSpeechVerb(f RPNarrativeFact, register, lexical string) string {
 	switch f.Action {
 	case "refuse":
 		return "拒绝道"
@@ -297,13 +315,16 @@ func rpSpeechVerb(f RPNarrativeFact, register, lexical string) string {
 	return "说"
 }
 func rpGesture(in RPNarrativeInput, f RPNarrativeFact, lexical string) string {
-	plain := map[string]string{"smile": "笑了笑", "nod": "点了点头", "shake_head": "摇了摇头", "frown": "皱起眉头", "turn_away": "转过身", "beckon": "招了招手"}
-	varied := map[string]string{"smile": "露出笑容", "nod": "点头", "shake_head": "摇头", "frown": "皱眉", "turn_away": "转身", "beckon": "招手"}
+	plain := map[string]string{"smile": "笑了笑", "nod": "点了点头", "shake_head": "摇了摇头", "frown": "皱起眉头", "turn_away": "转过身", "beckon": "招了招手", "look_at": "看了看", "wave": "挥了挥手", "shrug": "耸了耸肩", "raise_hand": "举起手"}
+	varied := map[string]string{"smile": "露出笑容", "nod": "点头", "shake_head": "摇头", "frown": "皱眉", "turn_away": "转身", "beckon": "招手", "look_at": "看向", "wave": "挥手", "shrug": "耸肩", "raise_hand": "举手"}
 	verb := plain[f.ExpressionCode]
 	if lexical == "varied" {
 		verb = varied[f.ExpressionCode]
 	}
 	if f.TargetActorID != "" {
+		if f.ExpressionCode == "look_at" {
+			return verb + rpTarget(in, f)
+		}
 		preposition := "向"
 		if f.ExpressionCode == "turn_away" {
 			preposition = "背向"
@@ -374,7 +395,7 @@ func RenderRPComposition(ctx context.Context, in RPNarrativeInput, plan RPCompos
 	if err := validateRPCompositionPlan(in, plan); err != nil {
 		return empty, err
 	}
-	view := RPNarrativeView{Lines: []string{}, EventIDs: []string{}, Warnings: []string{}, CompositionVersion: RPFactCompositionVersionV2, FactGroups: [][]string{}}
+	view := RPNarrativeView{Lines: []string{}, EventIDs: []string{}, Warnings: []string{}, CompositionVersion: RPCompositionVersion(in), FactGroups: [][]string{}}
 	for _, f := range in.Facts {
 		view.EventIDs = append(view.EventIDs, f.EventID)
 	}
@@ -545,5 +566,5 @@ func RPCompositionSchema(in RPNarrativeInput) map[string]any {
 		}})
 	}
 	paragraph := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"context", "beats"}, "properties": map[string]any{"context": map[string]any{"type": "string", "enum": []string{"none", "scene"}}, "beats": map[string]any{"type": "array", "minItems": 1, "maxItems": len(in.Facts), "items": map[string]any{"oneOf": variants}}}}
-	return map[string]any{"type": "object", "additionalProperties": false, "required": []string{"version", "register", "paragraphs"}, "properties": map[string]any{"version": map[string]any{"type": "string", "const": RPFactCompositionVersionV2}, "register": map[string]any{"type": "string", "enum": registers}, "paragraphs": map[string]any{"type": "array", "minItems": 0, "maxItems": len(in.Facts), "items": paragraph}}}
+	return map[string]any{"type": "object", "additionalProperties": false, "required": []string{"version", "register", "paragraphs"}, "properties": map[string]any{"version": map[string]any{"type": "string", "const": RPCompositionVersion(in)}, "register": map[string]any{"type": "string", "enum": registers}, "paragraphs": map[string]any{"type": "array", "minItems": 0, "maxItems": len(in.Facts), "items": paragraph}}}
 }

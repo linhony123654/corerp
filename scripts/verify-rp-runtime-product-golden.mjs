@@ -62,6 +62,10 @@ const env = {...process.env,
   CORERP_NARRATIVE_TIMEOUT: config.narrative_timeout, CORERP_NARRATIVE_ATTEMPTS: String(config.narrative_attempts),
   CORERP_NARRATIVE_REASONING_EFFORT: config.reasoning_effort, CORERP_NARRATIVE_DISABLE_THINKING: String(config.disable_thinking),
   CORERP_PROVIDER_ALLOWLIST: '', CORERP_PROVIDER_LOCAL_ALLOWLIST: '', CORERP_DEBUG_LLM: ''};
+// Preserve synthetic authentication for recovery of this exact accepted run.
+// Provider credentials and the caller's general process environment are not
+// copied into reports or this file; all public comparison inputs stay frozen.
+await writeFile(join(temp, 'private-replay-auth.json'), JSON.stringify({creatorToken, playerToken, cursorSecret: env.CORERP_CURSOR_SECRET}) + '\n', {mode: 0o600});
 const report = {kind: 'corerp.product-golden-capture.v1', label, model: fixture.model, model_config: config,
   runner_sha256: sha(await readFile(import.meta.filename)), fixture_sha256: sha(fixtureBytes),
   spec_sha256: sha(specBytes), packages_sha256: sha(packagesBytes), runtime_sha256: sha(await readFile(join(binaries, 'runtime'))),

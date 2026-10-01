@@ -44,6 +44,15 @@ func readRPNarrativeInputOnConn(ctx context.Context, conn *sql.Conn, sessionID, 
 
 func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, playerTurnID, playerEventID string, head int64) (core.RPNarrativeInput, error) {
 	var input core.RPNarrativeInput
+	if head > 0 {
+		var outside int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM rp_npc_decisions d JOIN events e ON e.event_id=d.event_id JOIN event_batches b ON b.batch_id=e.batch_id WHERE d.session_id=? AND d.parent_turn_id=? AND b.last_sequence>?`, sessionID, playerTurnID, head).Scan(&outside); err != nil {
+			return input, err
+		}
+		if outside != 0 {
+			return input, narrativeDiverged("turn includes NPC batches beyond historical narrative boundary")
+		}
+	}
 	player := core.RPNarrativeFact{EventID: playerEventID, Action: "speak"}
 	var utterancePlaceID string
 	var triggerKind string
@@ -63,7 +72,7 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 			return input, classifyMissing(err, "committed player action for RP narrative")
 		}
 		var fact core.RPNonverbalFact
-		if playerTurnID != playerEventID || json.Unmarshal([]byte(raw), &fact) != nil || fact.ActorEntityID != controlled || player.ActorID != controlled || fact.SessionID != sessionID || fact.Action != "nod" || fact.TargetEntityID == "" || fact.PlaceID != utterancePlaceID {
+		if playerTurnID != playerEventID || json.Unmarshal([]byte(raw), &fact) != nil || fact.ActorEntityID != controlled || player.ActorID != controlled || fact.SessionID != sessionID || core.RPNonverbalExpressionCode(fact.Action, fact.GestureCode) == "" || fact.Action == "look_at" && fact.TargetEntityID == "" || fact.PlaceID != utterancePlaceID {
 			return input, narrativeDiverged("RP narrative action trigger differs from its owner")
 		}
 		if head > 0 {
@@ -72,7 +81,7 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 		if _, err := loadRPNarrativeSource(ctx, conn, instance, branch, playerEventID, sourceHead); err != nil {
 			return input, err
 		}
-		player.Action, player.ExpressionCode, player.TargetActorID = "expression", fact.Action, fact.TargetEntityID
+		player.Action, player.ExpressionCode, player.TargetActorID = "expression", core.RPNonverbalExpressionCode(fact.Action, fact.GestureCode), fact.TargetEntityID
 	} else if triggerKind != "RPSpeechAccepted" {
 		return input, narrativeDiverged("RP narrative trigger is not accepted speech or an approved player action")
 	} else if err := conn.QueryRowContext(ctx, `SELECT u.speech_text,u.speaker_entity_id,n.display_name,u.world_time,p.display_name,u.place_id
@@ -232,6 +241,16 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 	}
 	if err := conn.QueryRowContext(ctx, `SELECT instance_id,branch_id,`+chapterColumn+`,`+openedColumn+` FROM rp_sessions WHERE session_id=?`, sessionID).Scan(&instance, &branch, &chapterStart, &openedSequence); err != nil {
 		return input, err
+	}
+	if chapterAvailable {
+		var declaredLatest, historicalChapter int64
+		if err := conn.QueryRowContext(ctx, `SELECT COALESCE(MAX(chapter_start_sequence),0),COALESCE(MAX(CASE WHEN chapter_start_sequence<? THEN chapter_start_sequence END),0) FROM rp_session_chapter_resets WHERE session_id=?`, playerEventSeq, sessionID).Scan(&declaredLatest, &historicalChapter); err != nil {
+			return input, err
+		}
+		if chapterStart != declaredLatest {
+			return input, narrativeDiverged("chapter projection lacks its durable reset receipt")
+		}
+		chapterStart = historicalChapter
 	}
 	if err := conn.QueryRowContext(ctx, `SELECT b.head_sequence FROM rp_sessions s JOIN branches b ON b.instance_id=s.instance_id AND b.branch_id=s.branch_id WHERE s.session_id=?`, sessionID).Scan(&input.SourceHead); err != nil {
 		return input, err
@@ -433,6 +452,12 @@ func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, 
 	addedPresentation := map[string]bool{}
 	for i := range input.Facts {
 		fact := &input.Facts[i]
+		if fact.Action == "speak" || fact.Action == "respond" || fact.Action == "refuse" {
+			fact.SpeechTone, err = readRPRecordedSpeechTone(ctx, conn, fact.EventID, player.ActorID)
+			if err != nil {
+				return input, err
+			}
+		}
 		// A visible target is still not necessarily an identified person. Apply
 		// the same public identity policy as the acting character, including when
 		// that character itself is anonymous.

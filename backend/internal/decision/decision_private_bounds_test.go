@@ -37,7 +37,7 @@ func TestDecisionPrivateSingleLineContractAndBoundedRepair(t *testing.T) {
 				_ = json.Unmarshal([]byte(wirePrivateFixture), &private)
 				private[tc.field] = tc.value
 				badPrivate, _ := json.Marshal(private)
-				good := wireDecision(`{"action":"respond","text":"我在。","introduce_self":false,"expression_code":"none"}`)
+				good := wireDecision(`{"action":"respond","text":"我在。","speech_tone":"none","introduce_self":false,"expression_code":"none"}`)
 				bad := strings.Replace(good, wirePrivateFixture, string(badPrivate), 1)
 				count := 0
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

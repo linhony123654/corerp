@@ -10,7 +10,10 @@ func (s *Server) handleRPNonverbal(response http.ResponseWriter, request *http.R
 	if !requireMethod(response, requestID, request, http.MethodPost) {
 		return
 	}
-	var input core.RPNonverbalRequest
+	var input struct {
+		core.RPNonverbalRequest
+		Model *core.RPModelOverride `json:"model,omitempty"`
+	}
 	if err := decodeJSON(response, request, s.maxBodyBytes, &input); err != nil {
 		writeDecodeError(response, requestID, err)
 		return
@@ -19,7 +22,12 @@ func (s *Server) handleRPNonverbal(response http.ResponseWriter, request *http.R
 		writeError(response, requestID, err)
 		return
 	}
-	result, err := s.service.NonverbalRP(request.Context(), input)
+	provider, err := resolveRPDecisionOverride(input.Model, s.endpointPolicy)
+	if err != nil {
+		writeError(response, requestID, err)
+		return
+	}
+	result, err := s.service.NonverbalRPWith(request.Context(), input.RPNonverbalRequest, provider)
 	if err != nil {
 		writeError(response, requestID, err)
 		return

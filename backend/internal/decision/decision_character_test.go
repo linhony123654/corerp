@@ -134,7 +134,7 @@ func TestDecisionCharacterPartitionsEvidenceWithoutChangingValuesOrInput(t *test
 		t.Fatal(err)
 	}
 	assertDecisionCharacter(t, got.Character, in)
-	if got.CharacterLayoutVersion != decisionCharacterLayoutVersion || got.Version != "corerp.decision.v3" {
+	if got.CharacterLayoutVersion != decisionCharacterLayoutVersion || got.Version != "corerp.decision.v4" {
 		t.Fatal("layout or reply version changed")
 	}
 	if presentedValue(t, got.Character.CurrentTurn, "player_speech_text") != "我还在原处。" {

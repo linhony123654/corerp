@@ -46,6 +46,12 @@ func readRPConversationFocus(ctx context.Context, conn *sql.Conn, runID string) 
 	if err != nil {
 		return empty, classifyMissing(err, "accepted speech for conversation focus")
 	}
+	return readRPConversationFocusAt(ctx, conn, instance, branch, observer, place, nowText, cutoff, chapter)
+}
+
+// Apply the public exchange policy to an already validated source snapshot.
+func readRPConversationFocusAt(ctx context.Context, conn *sql.Conn, instance, branch, observer, place, nowText string, cutoff, chapter int64) (rpConversationFocus, error) {
+	var empty rpConversationFocus
 	now, err := time.Parse(time.RFC3339, nowText)
 	if err != nil {
 		return empty, core.NewError(core.CodeProjectionDiverged, "invalid conversation focus time")

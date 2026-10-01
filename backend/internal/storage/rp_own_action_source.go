@@ -33,10 +33,11 @@ func readRPSourcedOwnActions(ctx context.Context, conn *sql.Conn, instance, bran
 		switch kind {
 		case "RPSpeechAccepted":
 			var fact rpSpeechEvent
-			if err := json.Unmarshal([]byte(raw), &fact); err != nil || fact.SpeakerEntityID != actor || fact.PlaceID == "" {
+			if err := json.Unmarshal([]byte(raw), &fact); err != nil || fact.SpeakerEntityID != actor || fact.PlaceID == "" || !core.ValidRPSpeechTone(fact.SpeechTone) {
 				return nil, core.NewError(core.CodeProjectionDiverged, "invalid sourced NPC speech")
 			}
 			action.Action, action.Text, action.PlaceID = "speech", fact.Text, fact.PlaceID
+			action.SpeechTone = fact.SpeechTone
 		case "RPNPCMoved":
 			var fact struct {
 				ToPlaceID string `json:"to_place_id"`

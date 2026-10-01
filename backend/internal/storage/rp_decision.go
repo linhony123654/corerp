@@ -239,8 +239,10 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 	// Include only accepted words the NPC spoke or has hearing evidence for.
 	// A branch-scoped Event sequence fixes the order across player and NPC turns.
 	rows, err = conn.QueryContext(ctx, `
-		SELECT u.speaker_entity_id,u.speech_text,u.event_id,u.world_time
+		SELECT u.speaker_entity_id,u.speech_text,u.event_id,u.world_time,e.payload,COALESCE(hearing.claim_payload,'')
 		FROM rp_utterances u JOIN events e ON e.event_id=u.event_id
+		LEFT JOIN observation_records hearing ON hearing.source_event_id=e.event_id
+		  AND hearing.observer_agent_id=? AND hearing.subject_agent_id=u.speaker_entity_id AND hearing.claim_key='speech:'||u.event_id
 		WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence<=?
 		  AND (u.speaker_entity_id=? OR EXISTS (
 		    SELECT 1 FROM observation_records o
@@ -248,15 +250,21 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 		      AND o.subject_agent_id=u.speaker_entity_id
 		      AND o.claim_key='speech:' || u.event_id
 		      AND json_extract(o.claim_payload,'$.claim_type')='speaker_said'))
-		ORDER BY e.event_sequence DESC LIMIT 16`, input.InstanceID, input.BranchID, input.HeadSequence, input.NPCEntityID, input.NPCEntityID)
+		ORDER BY e.event_sequence DESC LIMIT 16`, input.NPCEntityID, input.InstanceID, input.BranchID, input.HeadSequence, input.NPCEntityID, input.NPCEntityID)
 	if err != nil {
 		return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "read NPC accepted dialogue", err)
 	}
 	for rows.Next() {
 		var utterance core.RPDecisionDialogue
-		if err := rows.Scan(&utterance.SpeakerEntityID, &utterance.Text, &utterance.EventID, &utterance.WorldTime); err != nil {
+		var sourceJSON, hearingJSON string
+		if err := rows.Scan(&utterance.SpeakerEntityID, &utterance.Text, &utterance.EventID, &utterance.WorldTime, &sourceJSON, &hearingJSON); err != nil {
 			rows.Close()
 			return core.RPDecisionInput{}, core.WrapError(core.CodeStorageFailure, "scan NPC accepted dialogue", err)
+		}
+		utterance.SpeechTone, err = recordedRPSpeechTone(sourceJSON, hearingJSON, utterance.SpeakerEntityID, input.NPCEntityID)
+		if err != nil {
+			rows.Close()
+			return core.RPDecisionInput{}, err
 		}
 		input.RecentDialogue = append(input.RecentDialogue, utterance)
 	}
@@ -342,6 +350,7 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 		var payload struct {
 			ClaimType   string `json:"claim_type"`
 			Text        string `json:"text"`
+			SpeechTone  string `json:"speech_tone"`
 			Description string `json:"description"`
 		}
 		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
@@ -354,6 +363,14 @@ func readRPOwnDecisionContext(ctx context.Context, conn *sql.Conn, input core.RP
 			claim.PlaceID = placeID
 		case "speaker_said":
 			claim.Text = payload.Text
+			claim.SpeechTone, err = rpKnowledgeSpeechTone(eventType, sourceJSON, observedJSON, eventActor, input.NPCEntityID)
+			if err != nil || claim.SpeechTone != payload.SpeechTone {
+				rows.Close()
+				if err != nil {
+					return core.RPDecisionInput{}, err
+				}
+				return core.RPDecisionInput{}, narrativeDiverged("NPC known speech delivery differs from its frozen hearing")
+			}
 		case "nonverbal_action":
 			// The observer's frozen claim, not the raw Event target, owns
 			// disclosure. Later visibility cannot fill an absent old target.

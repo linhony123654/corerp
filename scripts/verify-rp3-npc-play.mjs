@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { openSync } from 'node:fs';
-import { access, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
@@ -44,8 +44,14 @@ const profileTuning = {
   interactionMaxTokens: Number(process.env.CORERP_LLM_INTERACTION_MAX_TOKENS || 0),
   decisionFormat: process.env.CORERP_LLM_DECISION_FORMAT || '',
 };
+const resumeFlag = process.argv.indexOf('--resume-artifact');
+const resumeArtifact = resumeFlag < 0 ? '' : resolve(process.argv[resumeFlag + 1] || '');
+if (resumeArtifact) assert.match(resumeArtifact, /^\/tmp\/corerp-rp3-npc-[^/]+$/, 'resume requires a preserved disposable artifact');
+assert.ok(!resumeArtifact || (rongqing && prose && useProfile && binaryDir && !pilot && !one), 'resume retains the full32 profile route');
+const resumeEnv = resumeArtifact ? JSON.parse(await readFile(join(resumeArtifact, 'private-runtime-env.json'), 'utf8')) : null;
 const temp = await mkdtemp(join(tmpdir(), 'corerp-rp3-npc-'));
 const db = join(temp, 'world.db');
+if (resumeArtifact) execFileSync('sqlite3', ['-readonly', join(resumeArtifact, 'world.db'), `.backup '${db}'`]);
 const world = rongqing ? 'rp9-rongqing-world' : 'rp3-npc-world', branch = 'br_main';
 const worldTitle = rongqing ? '荣庆堂' : '街区活动室';
 const playerKey = rongqing ? 'baoyu' : 'player';
@@ -119,7 +125,32 @@ const people = rongqing ? [
   { key: 'qiao', name: '乔', place: 'hall', player: false, persona: '常来活动室修理旧收音机，目前手上的一台还没调好。习惯先找具体故障，不会把旁人的猜测当事实。与来访者尚未正式认识。' },
   { key: 'ning', name: '宁', place: 'hall', player: false, persona: '在活动室练习朗读，准备下周的公开演出，怕忘词但想把练习完成。与来访者尚未正式认识，不知道对方私下经历。' },
 ];
-const creatorToken = randomBytes(24).toString('hex'), playerToken = randomBytes(24).toString('hex');
+const preservedAuth = resumeEnv ? JSON.parse(resumeEnv.CORERP_AUTH_TOKENS_JSON) : {};
+const creatorToken = resumeEnv ? Object.keys(preservedAuth).find(key => preservedAuth[key] === 'principal_creator') : randomBytes(24).toString('hex');
+const playerToken = resumeEnv ? Object.keys(preservedAuth).find(key => preservedAuth[key] === 'principal_m2_rp_player') : randomBytes(24).toString('hex');
+assert.ok(creatorToken && playerToken);
+const resumeTurn = resumeArtifact ? JSON.parse(run('sqlite3', ['-readonly', '-json', db, "SELECT * FROM rp_turn_runs ORDER BY rowid LIMIT 1"]))[0] : null;
+const replayReceipts = resumeTurn ? sql(`SELECT json_group_array(json_object('id',call_id,'result',result,'attempts',attempt_count,'started',started_at_utc,'finished',finished_at_utc)) FROM rp_provider_calls WHERE turn_run_id='${resumeTurn.turn_run_id}' AND phase='decision'`) : '';
+const replayEffects = resumeTurn ? sql(`SELECT json_group_array(json_object('id',event_id,'sequence',event_sequence,'type',event_type,'payload',payload)) FROM events WHERE instance_id='${world}' AND branch_id='${branch}' ORDER BY event_sequence`) : '';
+if (resumeTurn) {
+  assert.equal(resumeTurn.status, 'settled');
+  assert.equal(Number(sql('SELECT COUNT(*) FROM rp_turn_runs')),1,'resume supports only the first accepted turn, not later partial runs');
+  assert.equal(resumeTurn.trigger_kind,'speech');
+  assert.equal(JSON.parse(resumeTurn.request_json).text,rongqingCases[0]);
+  assert.equal(JSON.parse(resumeTurn.request_json).session_id,resumeTurn.session_id);
+  const binding = JSON.parse(run('sqlite3',['-readonly','-json',db,`SELECT instance_id,branch_id,controlled_entity_id,principal_id FROM rp_sessions WHERE session_id='${resumeTurn.session_id}'`]))[0];
+  assert.deepEqual(binding,{instance_id:world,branch_id:branch,controlled_entity_id:worldID('entity',playerKey),principal_id:'principal_m2_rp_player'});
+  const originalCalls = JSON.parse(replayReceipts);
+  assert.equal(originalCalls.length,3);
+  assert.ok(originalCalls.every(call=>call.result==='success' && call.attempts>0));
+  for (const field of ['CORERP_LLM_ENDPOINT','CORERP_LLM_MODEL','CORERP_LLM_TIMEOUT','CORERP_LLM_ATTEMPTS','CORERP_LLM_DECISION_MAX_TOKENS','CORERP_LLM_DECISION_FORMAT','CORERP_LLM_REASONING_EFFORT']) assert.equal(process.env[field],resumeEnv[field],`resume profile differs: ${field}`);
+  assert.equal(resumeEnv.CORERP_LLM_MODEL,'step-5-preview');
+  assert.equal(resumeEnv.CORERP_LLM_TIMEOUT,'120s');
+  assert.equal(resumeEnv.CORERP_LLM_ATTEMPTS,'2');
+  assert.equal(resumeEnv.CORERP_LLM_DECISION_MAX_TOKENS,'4096');
+  assert.equal(resumeEnv.CORERP_LLM_DECISION_FORMAT,'tool_call');
+  assert.equal(resumeEnv.CORERP_LLM_REASONING_EFFORT,'low');
+}
 let runtime, vite, browser;
 async function stop(child) {
   if (child && child.exitCode === null && child.signalCode === null) { const ended = once(child, 'exit'); child.kill('SIGTERM'); await ended; }
@@ -141,15 +172,18 @@ try {
       await symlink(join(binaryDir, name), join(temp, name));
     } else run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, name), `./cmd/${program}`], join(root, 'backend'));
   }
+  if (!resumeArtifact) {
   run(join(temp, 'm1'), ['-db', db, '-action', 'inspect']);
   const setup = JSON.parse(run(join(temp, 'setup'), ['-db', db, '-action', 'rp-travel-prepare']));
   run(join(temp, 'admin'), ['-db', db, '-operator', 'principal_operator', '-instance', 'inst_m2_t09', '-branch', branch, '-target', 'principal_creator', '-purpose', 'create_world', '-status', 'active', '-expected-head', String(setup.event_sequence), '-key', 'rp3-npc-world-grant']);
-  const env = { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [creatorToken]: 'principal_creator', [playerToken]: 'principal_m2_rp_player' }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex'), CORERP_DECISION_PROVIDER: 'chat_completions', CORERP_LLM_ENDPOINT: process.env.CORERP_LLM_ENDPOINT, CORERP_LLM_MODEL: process.env.CORERP_LLM_MODEL, CORERP_LLM_API_KEY: process.env.CORERP_LLM_API_KEY, CORERP_LLM_TIMEOUT: process.env.CORERP_LLM_TIMEOUT || '60s', CORERP_LLM_ATTEMPTS: '2', CORERP_PROVIDER_ALLOWLIST: '', CORERP_PROVIDER_LOCAL_ALLOWLIST: '', CORERP_NARRATIVE_PROVIDER: prose ? 'full_prose' : 'deterministic', CORERP_NARRATIVE_ENDPOINT: prose ? process.env.CORERP_LLM_ENDPOINT : '', CORERP_NARRATIVE_MODEL: prose ? process.env.CORERP_LLM_MODEL : '', CORERP_NARRATIVE_API_KEY: prose ? process.env.CORERP_LLM_API_KEY : '', CORERP_NARRATIVE_TIMEOUT: prose ? '90s' : '', CORERP_NARRATIVE_ATTEMPTS: prose ? '2' : '' };
+  }
+  const env = resumeEnv || { ...process.env, CORERP_AUTH_TOKENS_JSON: JSON.stringify({ [creatorToken]: 'principal_creator', [playerToken]: 'principal_m2_rp_player' }), CORERP_CURSOR_SECRET: randomBytes(32).toString('hex'), CORERP_DECISION_PROVIDER: 'chat_completions', CORERP_LLM_ENDPOINT: process.env.CORERP_LLM_ENDPOINT, CORERP_LLM_MODEL: process.env.CORERP_LLM_MODEL, CORERP_LLM_API_KEY: process.env.CORERP_LLM_API_KEY, CORERP_LLM_TIMEOUT: process.env.CORERP_LLM_TIMEOUT || '60s', CORERP_LLM_ATTEMPTS: '2', CORERP_PROVIDER_ALLOWLIST: '', CORERP_PROVIDER_LOCAL_ALLOWLIST: '', CORERP_NARRATIVE_PROVIDER: prose ? 'full_prose' : 'deterministic', CORERP_NARRATIVE_ENDPOINT: prose ? process.env.CORERP_LLM_ENDPOINT : '', CORERP_NARRATIVE_MODEL: prose ? process.env.CORERP_LLM_MODEL : '', CORERP_NARRATIVE_API_KEY: prose ? process.env.CORERP_LLM_API_KEY : '', CORERP_NARRATIVE_TIMEOUT: prose ? '90s' : '', CORERP_NARRATIVE_ATTEMPTS: prose ? '2' : '' };
   const runtimeLog = openSync(join(temp, 'runtime-stderr.log'), 'a');
   runtime = spawn(join(temp, 'runtime'), ['-db', db, '-listen', '127.0.0.1:4428'], { env, stdio: ['ignore', 'ignore', runtimeLog] }); await ready();
-  const created = await post('studio/worlds/create', creatorToken, { authority_instance_id: 'inst_m2_t09', authority_branch_id: branch, instance_id: world, idempotency_key: 'rp3-world', player_principal_id: 'principal_m2_rp_player', system_package: bundle('system'), narrative_package: bundle('narrative'), spec: { version: 'corerp.studio-world.v1', name: worldTitle, start_world_time: '2026-09-22T00:00:00Z', population: 4, opening_money_minor: 30, opening_stock_minor: 2, places: [{ key: 'hall', name: worldTitle, kind: 'public' }, { key: 'lane', name: rongqing ? '庭院小径' : '街区小巷', kind: 'public' }], links: [{ from: 'hall', to: 'lane', minutes: 5 }], people, acquaintances: rongqing ? [['baoyu', 'daiyu'], ['baoyu', 'baochai'], ['baoyu', 'xiren']] : [['player', 'mei']] } }, 201);
+  let created, cupSetup;
+  if (!resumeArtifact) {
+  created = await post('studio/worlds/create', creatorToken, { authority_instance_id: 'inst_m2_t09', authority_branch_id: branch, instance_id: world, idempotency_key: 'rp3-world', player_principal_id: 'principal_m2_rp_player', system_package: bundle('system'), narrative_package: bundle('narrative'), spec: { version: 'corerp.studio-world.v1', name: worldTitle, start_world_time: '2026-09-22T00:00:00Z', population: 4, opening_money_minor: 30, opening_stock_minor: 2, places: [{ key: 'hall', name: worldTitle, kind: 'public' }, { key: 'lane', name: rongqing ? '庭院小径' : '街区小巷', kind: 'public' }], links: [{ from: 'hall', to: 'lane', minutes: 5 }], people, acquaintances: rongqing ? [['baoyu', 'daiyu'], ['baoyu', 'baochai'], ['baoyu', 'xiren']] : [['player', 'mei']] } }, 201);
   assert.equal(created.entity_id, worldID('entity', playerKey));
-  let cupSetup;
   if (rongqing) {
     const binding = key => ({ instance_id: world, branch_id: branch, expected_head: head(), idempotency_key: key });
     const stock = await post('rp/objects/stock/define', creatorToken, { binding: binding('rp9-cup-stock'), sku_code: 'cup', display_name: '杯子', owner_entity_id: created.entity_id });
@@ -164,7 +198,12 @@ try {
     await post('rp/actions/object', playerToken, { session_id: setupSession.session_id, expected_cursor: setupView.observation_cursor, idempotency_key: 'rp9-cup-place', action: 'place', object_id: cup.object_id, anchor_id: table.fact.anchor_id });
     cupSetup = { objectID: cup.object_id, nearAnchorID: near.fact.anchor_id };
   }
-  vite = await createViteServer({ root, server: { host: '127.0.0.1', port: 4429, strictPort: true, proxy: { '/api': runtimeOrigin } } }); await vite.listen();
+  } else {
+    created = {entity_id:worldID('entity',playerKey)};
+    cupSetup = {objectID:sql(`SELECT object_id FROM rp_objects WHERE instance_id='${world}' AND display_name='杯子'`),nearAnchorID:sql(`SELECT anchor_id FROM rp_object_anchors WHERE instance_id='${world}' AND anchor_code='daiyu-side'`)};
+    assert.ok(cupSetup.objectID && cupSetup.nearAnchorID);
+  }
+  vite = await createViteServer({ root, server: { host: '127.0.0.1', port: 4429, strictPort: true, watch: { ignored: ['**/docs/**', '**/.planning/**', '**/shots/**'] }, proxy: { '/api': runtimeOrigin } } }); await vite.listen();
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
   if (useProfile) await context.addInitScript(({ endpoint, model, key, tuning, fullProse }) => {
@@ -174,7 +213,20 @@ try {
     ]));
     localStorage.setItem('corerp.active_api_profile_id.v1', 'r8-live');
   }, { endpoint: process.env.CORERP_LLM_ENDPOINT, model: process.env.CORERP_LLM_MODEL, key: process.env.CORERP_LLM_API_KEY, tuning: profileTuning, fullProse: prose });
-  await context.route('**/*', route => new URL(route.request().url()).origin === playOrigin ? route.continue() : route.abort());
+  if (resumeTurn) await context.addInitScript(({session,binding}) => {
+    localStorage.setItem('corerp.play.v1',JSON.stringify({session,openKey:'preserved-full32-session',pending:null,binding}));
+  }, {session:resumeTurn.session_id,binding:{instance_id:world,branch_id:branch,entity_id:created.entity_id}});
+  let firstReplay = !!resumeTurn;
+  await context.route('**/*', route => {
+    if (new URL(route.request().url()).origin !== playOrigin) return route.abort();
+    if (firstReplay && route.request().url().endsWith('/rp/turns/run')) {
+      firstReplay = false;
+      const selected = route.request().postDataJSON();
+      const {principal_id,...accepted} = JSON.parse(resumeTurn.request_json);
+      return route.continue({postData:JSON.stringify({...accepted,model:selected.model})});
+    }
+    return route.continue();
+  });
   const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
   const playRequests = [];
   if (useProfile) page.on('request', request => {
@@ -186,8 +238,8 @@ try {
   page.setDefaultTimeout(240_000);
   await page.goto(playOrigin);
   await page.getByLabel('玩家访问凭证').fill(playerToken);
-  await page.getByRole('button', { name: '进入世界' }).click();
-  await page.getByRole('button', { name: rongqing ? /宝玉/ : /来访者/ }).click();
+  await page.getByRole('button', { name: resumeArtifact ? '继续这段生活' : '进入世界' }).click();
+  if (!resumeArtifact) await page.getByRole('button', { name: rongqing ? /宝玉/ : /来访者/ }).click();
   await page.getByRole('heading', { name: worldTitle }).waitFor();
   if (product) {
     await page.getByRole('button', { name: `模型：${process.env.CORERP_LLM_MODEL}` }).click();
@@ -205,6 +257,7 @@ try {
   let playSessionID = '';
   let persisted;
   for (const [index, speech] of (rongqing ? (pilot ? rongqingCases.slice(0, 3) : rongqingCases) : one ? cases.slice(0, 1) : pilot ? cases.slice(0, 3) : cases).entries()) {
+    if (resumeTurn && index === 0) assert.equal(JSON.parse(resumeTurn.request_json).text,speech,'resume first speech differs from exact fixture');
     const pending = page.waitForResponse(response => response.url().endsWith('/rp/turns/run'), { timeout: modelResponseTimeoutMs });
     await page.getByLabel('你想说的话').fill(speech);
     await page.getByRole('button', { name: '说出' }).click();
@@ -212,6 +265,12 @@ try {
     assert.equal(response.status(), 200, `turn ${index + 1}: ${envelope.error?.code || response.status()}`);
     await page.waitForFunction(() => !JSON.parse(localStorage.getItem('corerp.play.v1')).pending, null, { timeout: modelResponseTimeoutMs });
     const turn = envelope.data;
+    if (resumeTurn && index === 0) {
+      assert.equal(turn.turn_run_id,resumeTurn.turn_run_id,'first replay changed accepted turn');
+      assert.equal(sql(`SELECT json_group_array(json_object('id',call_id,'result',result,'attempts',attempt_count,'started',started_at_utc,'finished',finished_at_utc)) FROM rp_provider_calls WHERE turn_run_id='${resumeTurn.turn_run_id}' AND phase='decision'`),replayReceipts,'first replay changed original decision receipts');
+      assert.equal(sql(`SELECT json_group_array(json_object('id',event_id,'sequence',event_sequence,'type',event_type,'payload',payload)) FROM events WHERE instance_id='${world}' AND branch_id='${branch}' ORDER BY event_sequence`),replayEffects,'first replay changed original effects');
+      await writeFile(join(temp,'resume-provenance.json'),JSON.stringify({original_artifact:resumeArtifact,first_turn:resumeTurn.turn_run_id,first_decision_receipts_unchanged:true,first_effects_unchanged:true,recovery_method:"harness network interception of original accepted request, not original browser bookmark",original_decisions:3,remaining_exact_fixture_turns:31}),{mode:0o600});
+    }
     assert.equal(turn.status, 'settled', `turn ${index + 1} not settled`);
     assert.match(turn.turn_run_id, /^rpturn_/, `turn ${index + 1} lacks durable turn run ID`);
     const runSessionID = sql(`SELECT session_id FROM rp_turn_runs WHERE turn_run_id='${turn.turn_run_id}'`);
@@ -465,7 +524,7 @@ try {
   assert.equal(sql(`SELECT COUNT(*) FROM events WHERE instance_id='${world}' AND branch_id='${branch}'`), eventCount, 'restart changed world');
   assert.equal(Number(sql(`SELECT COUNT(*) FROM rp_utterances WHERE session_id='${playSessionID}'`)), utteranceCount, 'restart changed accepted speech');
   assert.deepEqual(errors, [], 'browser page errors');
-  console.log(JSON.stringify({ rp3NpcPlay: product ? 'PRODUCT_LIVE' : pilot || one ? 'PILOT_LIVE' : 'FULL_LIVE_SAMPLE_CAPTURED', turns: samples.length, model: process.env.CORERP_LLM_MODEL, artifacts: temp }));
+  console.log(JSON.stringify({ rp3NpcPlay: resumeArtifact ? 'FULL32_SAME_KEY_CONTINUATION' : product ? 'PRODUCT_LIVE' : pilot || one ? 'PILOT_LIVE' : 'FULL_LIVE_SAMPLE_CAPTURED', turns: samples.length, model: process.env.CORERP_LLM_MODEL, artifacts: temp }));
 } finally {
   await browser?.close(); await vite?.close(); await stop(runtime);
 }

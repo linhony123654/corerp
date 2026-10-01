@@ -2,6 +2,26 @@ package core
 
 import "strings"
 
+// RPNonverbalExpressionCode names only an already supported observable. It
+// does not authorize a target, fabricate a witness, or interpret the gesture.
+func RPNonverbalExpressionCode(action, gesture string) string {
+	if action == "gesture" {
+		switch gesture {
+		case "wave", "shrug", "raise_hand", "beckon":
+			return gesture
+		}
+		return ""
+	}
+	if gesture != "" {
+		return ""
+	}
+	switch action {
+	case "look_at", "smile", "nod", "shake_head", "turn_away", "frown":
+		return action
+	}
+	return ""
+}
+
 // RPNonverbalRequest is a bounded physical expression, not an interpretation
 // of the target's feelings, consent, relationship or response.
 type RPNonverbalRequest struct {
@@ -18,26 +38,14 @@ func (r RPNonverbalRequest) Validate() error {
 	if strings.TrimSpace(r.PrincipalID) == "" || strings.TrimSpace(r.SessionID) == "" || len(r.SessionID) > 256 || r.ExpectedCursor < 1 || strings.TrimSpace(r.IdempotencyKey) == "" || len(r.IdempotencyKey) > 128 {
 		return NewError(CodeInvalidArgument, "invalid nonverbal action binding")
 	}
-	switch r.Action {
-	case "look_at":
-		if r.TargetEntityID == "" {
-			return NewError(CodeInvalidArgument, "look_at requires a visible target")
-		}
-	case "smile", "nod", "shake_head", "gesture", "turn_away", "frown":
-	default:
-		return NewError(CodeInvalidArgument, "unsupported nonverbal action")
+	if r.Action == "look_at" && r.TargetEntityID == "" {
+		return NewError(CodeInvalidArgument, "look_at requires a visible target")
 	}
 	if r.TargetEntityID != "" && (strings.TrimSpace(r.TargetEntityID) != r.TargetEntityID || len(r.TargetEntityID) > 256) {
 		return NewError(CodeInvalidArgument, "invalid nonverbal target")
 	}
-	if r.Action == "gesture" {
-		switch r.GestureCode {
-		case "wave", "shrug", "raise_hand", "beckon":
-		default:
-			return NewError(CodeInvalidArgument, "unsupported neutral gesture")
-		}
-	} else if r.GestureCode != "" {
-		return NewError(CodeInvalidArgument, "gesture code requires gesture action")
+	if RPNonverbalExpressionCode(r.Action, r.GestureCode) == "" {
+		return NewError(CodeInvalidArgument, "unsupported nonverbal action or gesture")
 	}
 	return nil
 }

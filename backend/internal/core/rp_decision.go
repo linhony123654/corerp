@@ -63,6 +63,7 @@ type RPDecisionKnowledge struct {
 	GestureCode    string `json:"gesture_code,omitempty"`
 	TargetEntityID string `json:"target_entity_id,omitempty"`
 	WorldTime      string `json:"world_time,omitempty"`
+	SpeechTone     string `json:"speech_tone,omitempty"`
 }
 
 // RPDecisionDialogue is an accepted utterance the NPC spoke or personally
@@ -74,6 +75,8 @@ type RPDecisionDialogue struct {
 	TextFromEvent   bool   `json:"text_from_event,omitempty"`
 	EventID         string `json:"event_id"`
 	WorldTime       string `json:"world_time"`
+	// Only recorded own delivery or personally heard frozen delivery is used.
+	SpeechTone string `json:"speech_tone,omitempty"`
 }
 
 // RPDecisionSpeechExcerpt keeps an older personally heard player statement
@@ -216,6 +219,7 @@ type RPOwnAction struct {
 	EventID       string `json:"event_id"`
 	Action        string `json:"action"`
 	Text          string `json:"text,omitempty"`
+	SpeechTone    string `json:"speech_tone,omitempty"`
 	TextFromEvent bool   `json:"text_from_event,omitempty"`
 	ActivityCode  string `json:"activity_code,omitempty"`
 	PlaceID       string `json:"place_id"`
@@ -255,6 +259,9 @@ type RPDecisionProposal struct {
 	// ExpressionCode is a bounded, proposed observable. The decision owner
 	// must commit a witnessed nonverbal Event before it is publicly narrated.
 	ExpressionCode string `json:"expression_code,omitempty"`
+	// SpeechTone is a proposed, publicly audible delivery of this utterance.
+	// It is validated and committed with the speech, never inferred from Private.
+	SpeechTone string `json:"speech_tone,omitempty"`
 }
 
 type RPDecisionPrivate struct {

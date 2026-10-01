@@ -61,7 +61,7 @@ func TestRPModelNativeFunctionProposalCommitsOnlyObservableAndReplays(t *testing
 				if ref == "" {
 					t.Error("actual player speech has no authorized source handle")
 				}
-				args := `{"private":{"intent":"` + private + `","emotion":"平和","relationship_stance":"礼貌","basis_event_ids":["` + ref + `"]},"observable":{"action":"respond","text":"` + words + `","introduce_self":false,"expression_code":"none"}}`
+				args := `{"private":{"intent":"` + private + `","emotion":"平和","relationship_stance":"礼貌","basis_event_ids":["` + ref + `"]},"observable":{"action":"respond","text":"` + words + `","speech_tone":"none","introduce_self":false,"expression_code":"none"}}`
 				finish := "tool_calls"
 				message := map[string]any{"content": "unapproved-new-world-action", "tool_calls": []any{map[string]any{"id": "fixture-call", "type": "function", "function": map[string]any{"name": "propose_rp_decision", "arguments": args}}}}
 				if channel == "complete_content" {

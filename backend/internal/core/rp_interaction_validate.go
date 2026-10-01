@@ -63,20 +63,10 @@ func ValidateRPInteractionProposal(input RPInteractionUnderstandingInput, plan R
 			if step.TargetPlaceID != "" || step.WaitHours != 0 || step.WaitMinutes != 0 || step.SpeechText != "" || step.ObjectAction != "" || step.ObjectID != "" || step.AnchorID != "" || step.OfferID != "" {
 				return NewError(CodeInvalidArgument, "nonverbal proposal includes an unrelated effect")
 			}
-			switch step.NonverbalAction {
-			case "look_at":
-				if step.TargetEntityID == "" || step.GestureCode != "" {
-					return NewError(CodeInvalidArgument, "looking requires a visible target")
-				}
-			case "smile", "nod", "shake_head", "turn_away":
-				if step.GestureCode != "" {
-					return NewError(CodeInvalidArgument, "nonverbal proposal has an unexpected gesture")
-				}
-			case "gesture":
-				if step.GestureCode != "wave" && step.GestureCode != "shrug" && step.GestureCode != "raise_hand" {
-					return NewError(CodeInvalidArgument, "unsupported neutral gesture")
-				}
-			default:
+			if step.NonverbalAction == "look_at" && step.TargetEntityID == "" {
+				return NewError(CodeInvalidArgument, "looking requires a visible target")
+			}
+			if RPNonverbalExpressionCode(step.NonverbalAction, step.GestureCode) == "" {
 				return NewError(CodeInvalidArgument, "unsupported nonverbal action")
 			}
 			if step.TargetEntityID != "" && !rpInteractionHasEntity(input, step.TargetEntityID) {

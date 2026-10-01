@@ -350,7 +350,7 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 	if err := tx.conn.QueryRowContext(ctx, `SELECT player_turn_id,player_event_id,narrative_json,narrative_presentation_mode,narrative_presented_at_utc,COALESCE(narrative_fallback,''),narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json,narrative_artifact_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, r.TurnRunID, r.SessionID).Scan(&playerTurnID, &playerEventID, &savedNarrative, &savedMode, &savedAt, &savedFallback, &savedCompositionVersion, &savedGroupsJSON, &savedFactIDsJSON, &savedArtifactJSON); err != nil {
 		return empty, classifyMissing(err, "settled own turn narrative")
 	}
-	if r.StyleOverride == nil && savedCompositionVersion == core.RPFactCompositionVersionV2 {
+	if r.StyleOverride == nil && rpFiniteNarrativeComposition(savedCompositionVersion) {
 		view, err := decodeRPNarrativeReceipt(savedCompositionVersion, savedNarrative, savedGroupsJSON, savedFactIDsJSON)
 		if err != nil {
 			return empty, err
@@ -603,7 +603,7 @@ func (s *Store) saveRPOfficialNarrative(ctx context.Context, turnRunID, provider
 		fallbackAssignment = "NULL"
 	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
-	query := `UPDATE rp_turn_runs SET narrative_json=?,narrative_presentation_mode=?,narrative_presented_at_utc=?,updated_at_utc=?,narrative_composition_version=?,narrative_fact_groups_json=?,narrative_fact_event_ids_json=?,narrative_artifact_json=?,narrative_fallback=` + fallbackAssignment + ` WHERE turn_run_id=? AND status='settled' AND narrative_presented_at_utc IS NULL AND (narrative_composition_version<>'corerp.fact-composition.v2' OR narrative_presentation_mode='base')`
+	query := `UPDATE rp_turn_runs SET narrative_json=?,narrative_presentation_mode=?,narrative_presented_at_utc=?,updated_at_utc=?,narrative_composition_version=?,narrative_fact_groups_json=?,narrative_fact_event_ids_json=?,narrative_artifact_json=?,narrative_fallback=` + fallbackAssignment + ` WHERE turn_run_id=? AND status='settled' AND narrative_presented_at_utc IS NULL AND (narrative_composition_version NOT IN ('corerp.fact-composition.v2','corerp.fact-composition.v3') OR narrative_presentation_mode='base')`
 	tx, err := beginImmediate(ctx, s.db)
 	if err != nil {
 		return err
@@ -623,9 +623,9 @@ func (s *Store) saveRPOfficialNarrative(ctx context.Context, turnRunID, provider
 	if err := tx.conn.QueryRowContext(ctx, `SELECT narrative_composition_version,narrative_artifact_json FROM rp_turn_runs WHERE turn_run_id=?`, turnRunID).Scan(&existingVersion, &existingArtifact); err != nil {
 		return err
 	}
-	if existingVersion == core.RPFactCompositionVersionV2 {
+	if rpFiniteNarrativeComposition(existingVersion) {
 		var prior core.RPNarrativeArtifact
-		if view.CompositionVersion != core.RPFactCompositionVersionV2 || json.Unmarshal([]byte(existingArtifact), &prior) != nil || view.Artifact == nil || prior.InputSHA256 != view.Artifact.InputSHA256 {
+		if view.CompositionVersion != existingVersion || json.Unmarshal([]byte(existingArtifact), &prior) != nil || view.Artifact == nil || prior.InputSHA256 != view.Artifact.InputSHA256 {
 			return narrativeDiverged("official refinement changes the frozen canonical input")
 		}
 	}

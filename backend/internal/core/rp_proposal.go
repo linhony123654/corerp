@@ -16,6 +16,12 @@ func ValidateRPDecisionProposal(input RPDecisionInput, proposal RPDecisionPropos
 // Stable, bounded validation evidence for diagnostics. The reason is produced
 // at validation time, not reconstructed later from changed world state or text.
 func ValidateRPDecisionProposalEvidence(input RPDecisionInput, proposal RPDecisionProposal) (string, error) {
+	if !ValidRPSpeechTone(proposal.SpeechTone) {
+		return "speech_tone_not_supported", NewError(CodeInvalidArgument, "NPC speech tone is not a supported observable")
+	}
+	if proposal.SpeechTone != "" && proposal.Action != "respond" && proposal.Action != "refuse" {
+		return "speech_tone_without_speech", NewError(CodeInvalidArgument, "NPC speech tone requires an actual speech proposal")
+	}
 	if proposal.Private != nil {
 		private := proposal.Private
 		if !boundedRPPrivateText(private.Intent, 160) || !boundedRPPrivateText(private.Emotion, 80) || !boundedRPPrivateText(private.RelationshipStance, 80) || len(private.BasisEventIDs) > 8 {

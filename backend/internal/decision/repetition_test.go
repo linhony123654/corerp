@@ -45,7 +45,7 @@ func TestNPCReplyRepetitionIsDiagnosticWithoutDelayingValidSpeech(t *testing.T) 
 				if json.NewDecoder(r.Body).Decode(&request) != nil || len(request.Messages) != 2 {
 					t.Error("unexpected initial decision request")
 				}
-				modelResponse(w, `{"private":{"intent":"回顾已经说过的话","emotion":"平静","relationship_stance":"保持当前立场","basis_event_ids":["accepted-prior"]},"observable":{"action":"`+tc.action+`","text":"`+answer+`","introduce_self":false,"expression_code":"none"}}`, "stop")
+				modelResponse(w, `{"private":{"intent":"回顾已经说过的话","emotion":"平静","relationship_stance":"保持当前立场","basis_event_ids":["accepted-prior"]},"observable":{"action":"`+tc.action+`","text":"`+answer+`","speech_tone":"none","introduce_self":false,"expression_code":"none"}}`, "stop")
 			}))
 			defer server.Close()
 			provider, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", Model: "fixture", Timeout: 300 * time.Millisecond, EndpointPolicy: endpointpolicy.TestLocalhostPolicy()})

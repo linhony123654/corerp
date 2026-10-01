@@ -32,6 +32,7 @@ type rpSpeechEvent struct {
 	PlaceID         string   `json:"place_id"`
 	Text            string   `json:"text"`
 	SpeechAct       string   `json:"speech_act"`
+	SpeechTone      string   `json:"speech_tone,omitempty"`
 	DeliveryChannel string   `json:"delivery_channel,omitempty"`
 	IntroduceSelf   bool     `json:"introduce_self,omitempty"`
 	ListenerIDs     []string `json:"listener_ids"`
@@ -43,6 +44,7 @@ type rpSpeechClaim struct {
 	UtteranceID     string `json:"utterance_id"`
 	Text            string `json:"text"`
 	SpeechAct       string `json:"speech_act"`
+	SpeechTone      string `json:"speech_tone,omitempty"`
 }
 
 // SpeakRP accepts one utterance as a world fact. Its co-located listeners and
@@ -267,7 +269,14 @@ func (s *Store) SpeakRP(ctx context.Context, request core.RPSpeechRequest) (RPSp
 }
 
 func insertRPSpeechHearings(ctx context.Context, conn *sql.Conn, eventID string, sequence int64, speakerID, placeID, worldTime, utteranceID, speechText, speechAct string, listeners []string) error {
-	claim := rpSpeechClaim{"speaker_said", speakerID, utteranceID, speechText, speechAct}
+	return insertRPSpeechHearingsWithTone(ctx, conn, eventID, sequence, speakerID, placeID, worldTime, utteranceID, speechText, speechAct, "", listeners)
+}
+
+func insertRPSpeechHearingsWithTone(ctx context.Context, conn *sql.Conn, eventID string, sequence int64, speakerID, placeID, worldTime, utteranceID, speechText, speechAct, speechTone string, listeners []string) error {
+	if !core.ValidRPSpeechTone(speechTone) {
+		return core.NewError(core.CodeInvalidArgument, "unsupported speech delivery")
+	}
+	claim := rpSpeechClaim{ClaimType: "speaker_said", SpeakerEntityID: speakerID, UtteranceID: utteranceID, Text: speechText, SpeechAct: speechAct, SpeechTone: speechTone}
 	claimJSON, err := core.CanonicalJSON(claim)
 	if err != nil {
 		return err

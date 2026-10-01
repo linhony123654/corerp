@@ -43,8 +43,11 @@ func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDe
 func readRPDialogueCandidates(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) ([]rpDialogueCandidate, error) {
 	rows, err := conn.QueryContext(ctx, `WITH authorized AS (
 		SELECT u.speaker_entity_id,u.speech_text,u.event_id,u.world_time,e.event_sequence,
-		       u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id) AS exchange_turn
+		       u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id) AS exchange_turn,
+		       e.payload AS speech_source,COALESCE(hearing.claim_payload,'') AS hearing_source
 		FROM rp_utterances u JOIN events e ON e.event_id=u.event_id
+		LEFT JOIN observation_records hearing ON hearing.source_event_id=e.event_id
+		  AND hearing.observer_agent_id=? AND hearing.subject_agent_id=u.speaker_entity_id AND hearing.claim_key='speech:'||u.event_id
 		WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence<=?
 		  AND (u.speaker_entity_id=? OR EXISTS (
 		    SELECT 1 FROM observation_records o
@@ -63,7 +66,7 @@ func readRPDialogueCandidates(ctx context.Context, conn *sql.Conn, input core.RP
 		SELECT * FROM grouped WHERE event_id NOT IN (SELECT event_id FROM peer_candidates)
 		ORDER BY event_sequence DESC LIMIT (?-(SELECT COUNT(*) FROM peer_candidates))
 	)
-	SELECT * FROM peer_candidates UNION ALL SELECT * FROM general_candidates ORDER BY event_sequence DESC`, input.InstanceID, input.BranchID, input.HeadSequence,
+	SELECT * FROM peer_candidates UNION ALL SELECT * FROM general_candidates ORDER BY event_sequence DESC`, input.NPCEntityID, input.InstanceID, input.BranchID, input.HeadSequence,
 		input.NPCEntityID, input.NPCEntityID, input.NPCEntityID, input.InterlocutorEntityID, input.InterlocutorEntityID, rpPeerDialogueCandidateLimit, rpDialogueCandidateLimit)
 	if err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "read NPC relevant dialogue candidates", err)
@@ -73,8 +76,13 @@ func readRPDialogueCandidates(ctx context.Context, conn *sql.Conn, input core.RP
 	for rows.Next() {
 		var candidate rpDialogueCandidate
 		d := &candidate.dialogue
-		if err := rows.Scan(&d.SpeakerEntityID, &d.Text, &d.EventID, &d.WorldTime, &candidate.sequence, &candidate.session, &candidate.turn, &candidate.groupSize, &candidate.peer); err != nil {
+		var sourceJSON, hearingJSON string
+		if err := rows.Scan(&d.SpeakerEntityID, &d.Text, &d.EventID, &d.WorldTime, &candidate.sequence, &candidate.session, &candidate.turn, &sourceJSON, &hearingJSON, &candidate.groupSize, &candidate.peer); err != nil {
 			return nil, core.WrapError(core.CodeStorageFailure, "scan NPC relevant dialogue", err)
+		}
+		d.SpeechTone, err = recordedRPSpeechTone(sourceJSON, hearingJSON, d.SpeakerEntityID, input.NPCEntityID)
+		if err != nil {
+			return nil, err
 		}
 		candidates = append(candidates, candidate)
 	}

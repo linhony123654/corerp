@@ -14,7 +14,7 @@ import (
 const decisionProposalFunction = "propose_rp_decision"
 
 // Native calls serialize a proposal; they never dispatch a function. Only the
-// one declared name and complete v3 arguments are accepted at this boundary.
+// one declared name and complete current-version arguments are accepted at this boundary.
 func decisionFunctionArguments(raw json.RawMessage) (string, error) {
 	fields, err := decisionObjectFields(string(raw))
 	if err != nil {
@@ -40,14 +40,25 @@ func decisionFunctionArguments(raw json.RawMessage) (string, error) {
 	return arguments, nil
 }
 
-func parseRequestedDecisionProposal(raw string, requireV3 bool) (core.RPDecisionProposal, error) {
-	if requireV3 {
+func parseRequestedDecisionProposal(raw string, requireV4 bool) (core.RPDecisionProposal, error) {
+	if requireV4 {
 		fields, err := decisionObjectFields(raw)
 		if err != nil {
 			return core.RPDecisionProposal{}, err
 		}
 		if len(fields) != 2 || fields["private"] == nil || fields["observable"] == nil {
 			return core.RPDecisionProposal{}, failure("invalid proposal schema")
+		}
+		observable, err := decisionObjectFields(string(fields["observable"]))
+		if err != nil {
+			return core.RPDecisionProposal{}, err
+		}
+		var action string
+		if json.Unmarshal(observable["action"], &action) != nil {
+			return core.RPDecisionProposal{}, failure("invalid proposal schema")
+		}
+		if (action == "respond" || action == "refuse") && observable["speech_tone"] == nil {
+			return core.RPDecisionProposal{}, &Error{Kind: "illegal proposal", Detail: "observable_schema_mismatch"}
 		}
 	}
 	return parseProposal(raw)
@@ -56,13 +67,15 @@ func parseRequestedDecisionProposal(raw string, requireV3 bool) (core.RPDecision
 // The wire describes a single proposed observable, not an action plus a bag
 // of possible effects. Internal core proposals and owner validation stay unchanged.
 var decisionObservableFields = map[string][]string{
-	"respond": {"action", "text", "introduce_self", "expression_code"},
-	"refuse":  {"action", "text", "introduce_self", "expression_code"},
+	"respond": {"action", "text", "speech_tone", "introduce_self", "expression_code"},
+	"refuse":  {"action", "text", "speech_tone", "introduce_self", "expression_code"},
 	"silence": {"action", "expression_code"},
 	"wait":    {"action", "expression_code"},
 	"leave":   {"action", "destination_place_id"},
 	"act":     {"action", "activity_code"},
 }
+
+var decisionSpeechTones = []string{"none", "gentle", "firm", "teasing", "hesitant", "flat"}
 
 func decisionResponseSchema(input core.RPDecisionInput) (map[string]any, error) {
 	destinations := decisionWireChoices(input.ReachablePlaceIDs)
@@ -73,6 +86,7 @@ func decisionResponseSchema(input core.RPDecisionInput) (map[string]any, error) 
 	}
 	values := map[string]any{
 		"text":                 map[string]any{"type": "string", "minLength": 1, "maxLength": 2000},
+		"speech_tone":          map[string]any{"type": "string", "enum": decisionSpeechTones},
 		"introduce_self":       map[string]any{"type": "boolean"},
 		"expression_code":      map[string]any{"type": "string", "enum": expressions},
 		"destination_place_id": map[string]any{"type": "string", "enum": destinations},
@@ -213,6 +227,11 @@ func parseDecisionObservable(raw string) (core.RPDecisionProposal, error) {
 	if !known {
 		return empty, failure("invalid proposal schema")
 	}
+	// Archived v3 speech has no delivery field. Live v4 requests check its
+	// presence before reaching this backwards-compatible artifact decoder.
+	if (action == "respond" || action == "refuse") && fields["speech_tone"] == nil {
+		expected = slices.Delete(slices.Clone(expected), 2, 3)
+	}
 	if len(fields) != len(expected) {
 		return empty, &Error{Kind: "illegal proposal", Detail: "observable_schema_mismatch"}
 	}
@@ -226,7 +245,7 @@ func parseDecisionObservable(raw string) (core.RPDecisionProposal, error) {
 		name string
 		out  *string
 	}{
-		{"text", &proposal.Text}, {"destination_place_id", &proposal.DestinationPlaceID},
+		{"text", &proposal.Text}, {"speech_tone", &proposal.SpeechTone}, {"destination_place_id", &proposal.DestinationPlaceID},
 		{"activity_code", &proposal.ActivityCode}, {"expression_code", &proposal.ExpressionCode},
 	} {
 		if raw, present := fields[field.name]; present && json.Unmarshal(raw, field.out) != nil {
@@ -235,6 +254,14 @@ func parseDecisionObservable(raw string) (core.RPDecisionProposal, error) {
 	}
 	if raw, present := fields["introduce_self"]; present && json.Unmarshal(raw, &proposal.IntroduceSelf) != nil {
 		return empty, failure("invalid proposal schema")
+	}
+	if _, present := fields["speech_tone"]; present {
+		if !slices.Contains(decisionSpeechTones, proposal.SpeechTone) {
+			return empty, failure("invalid proposal schema")
+		}
+		if proposal.SpeechTone == "none" {
+			proposal.SpeechTone = ""
+		}
 	}
 	if _, present := fields["expression_code"]; present {
 		switch proposal.ExpressionCode {

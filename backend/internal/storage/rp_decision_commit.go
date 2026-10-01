@@ -177,7 +177,7 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 		if err != nil {
 			return RPNPCDecisionCommitResult{}, err
 		}
-		payload = rpSpeechEvent{SessionID: session.SessionID, TurnID: childTurnID, ParentTurnID: request.TurnID, UtteranceID: utteranceID, SpeakerEntityID: request.NPCEntityID, PlaceID: input.PlaceID, Text: decision.Proposal.Text, SpeechAct: "statement", ListenerIDs: listeners, IntroduceSelf: acceptedIntroduction}
+		payload = rpSpeechEvent{SessionID: session.SessionID, TurnID: childTurnID, ParentTurnID: request.TurnID, UtteranceID: utteranceID, SpeakerEntityID: request.NPCEntityID, PlaceID: input.PlaceID, Text: decision.Proposal.Text, SpeechAct: "statement", SpeechTone: decision.Proposal.SpeechTone, ListenerIDs: listeners, IntroduceSelf: acceptedIntroduction}
 	} else if action == "leave" {
 		eventType = "RPNPCMoved"
 		payload = rpNPCActionEvent{SessionID: session.SessionID, ParentTurnID: request.TurnID, NPCEntityID: request.NPCEntityID, Action: action, FromPlaceID: input.PlaceID, ToPlaceID: decision.Proposal.DestinationPlaceID}
@@ -250,7 +250,7 @@ func (s *Store) CommitRPDecision(ctx context.Context, request core.RPDecisionReq
 		if err := execAgentOne(ctx, tx.conn, "NPC immutable utterance", `INSERT INTO rp_utterances(utterance_id, event_id, session_id, turn_id, speaker_entity_id, place_id, world_time, speech_text, speech_act, listener_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'statement', ?)`, utteranceID, eventID, session.SessionID, childTurnID, request.NPCEntityID, input.PlaceID, worldTime, decision.Proposal.Text, len(listeners)); err != nil {
 			return RPNPCDecisionCommitResult{}, err
 		}
-		if err := insertRPSpeechHearings(ctx, tx.conn, eventID, sequence, request.NPCEntityID, input.PlaceID, worldTime, utteranceID, decision.Proposal.Text, "statement", listeners); err != nil {
+		if err := insertRPSpeechHearingsWithTone(ctx, tx.conn, eventID, sequence, request.NPCEntityID, input.PlaceID, worldTime, utteranceID, decision.Proposal.Text, "statement", decision.Proposal.SpeechTone, listeners); err != nil {
 			return RPNPCDecisionCommitResult{}, err
 		}
 		if acceptedIntroduction {

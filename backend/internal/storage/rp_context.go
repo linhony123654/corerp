@@ -27,6 +27,7 @@ type RPContextFact struct {
 	LearnedWorldTime string `json:"learned_world_time"`
 	SourceEventID    string `json:"source_event_id"`
 	Text             string `json:"text,omitempty"`
+	SpeechTone       string `json:"speech_tone,omitempty"`
 	Action           string `json:"action,omitempty"`
 	Channel          string `json:"channel,omitempty"`
 	Reliability      string `json:"claimed_reliability,omitempty"`
@@ -104,8 +105,10 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 	if err := tx.conn.QueryRowContext(ctx, `SELECT c.current_world_time,b.head_sequence FROM world_clocks c JOIN branches b ON b.instance_id=c.instance_id AND b.branch_id=c.branch_id WHERE b.instance_id=? AND b.branch_id=?`, session.InstanceID, session.BranchID).Scan(&result.WorldTime, &result.ObservationCursor); err != nil {
 		return result, err
 	}
-	rows, err := tx.conn.QueryContext(ctx, `SELECT k.subject_agent_id,k.place_id,k.learned_world_time,k.source_event_id,k.claim_payload
+	rows, err := tx.conn.QueryContext(ctx, `SELECT k.subject_agent_id,k.place_id,k.learned_world_time,k.source_event_id,k.claim_payload,e.payload,COALESCE(o.claim_payload,''),e.event_type
 	 FROM agent_knowledge k JOIN events e ON e.event_id=k.source_event_id
+	 LEFT JOIN observation_records o ON o.observation_id=k.observation_id AND o.source_event_id=e.event_id
+	 AND o.observer_agent_id=k.observer_agent_id AND o.subject_agent_id=k.subject_agent_id AND o.claim_key=k.claim_key
 	 WHERE k.observer_agent_id=? AND e.instance_id=? AND e.branch_id=?
 	 AND e.world_time<=? AND k.learned_world_time<=? AND (?='' OR k.subject_agent_id=?)
 	 AND json_extract(k.claim_payload,'$.claim_type') IN ('agent_presence','speaker_said','interpersonal_action','message_received','nonverbal_action','object_interaction')
@@ -115,14 +118,15 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 	}
 	for rows.Next() {
 		var fact RPContextFact
-		var raw string
-		if err := rows.Scan(&fact.SubjectEntityID, &fact.PlaceID, &fact.LearnedWorldTime, &fact.SourceEventID, &raw); err != nil {
+		var raw, sourceJSON, observedJSON, sourceKind string
+		if err := rows.Scan(&fact.SubjectEntityID, &fact.PlaceID, &fact.LearnedWorldTime, &fact.SourceEventID, &raw, &sourceJSON, &observedJSON, &sourceKind); err != nil {
 			rows.Close()
 			return result, err
 		}
 		var claim struct {
 			Kind        string `json:"claim_type"`
 			Text        string `json:"text"`
+			SpeechTone  string `json:"speech_tone"`
 			Description string `json:"description"`
 			Action      string `json:"action"`
 			Target      string `json:"target_entity_id"`
@@ -140,6 +144,14 @@ func (s *Store) ReadRPContext(ctx context.Context, r RPContextReadRequest) (RPCl
 		switch claim.Kind {
 		case "speaker_said":
 			fact.Text = claim.Text
+			fact.SpeechTone, err = rpKnowledgeSpeechTone(sourceKind, sourceJSON, observedJSON, fact.SubjectEntityID, session.ControlledEntityID)
+			if err != nil || fact.SpeechTone != claim.SpeechTone {
+				rows.Close()
+				if err != nil {
+					return result, err
+				}
+				return result, narrativeDiverged("known speech delivery differs from its frozen hearing")
+			}
 		case "interpersonal_action", "nonverbal_action", "object_interaction":
 			fact.Text, fact.Action = claim.Description, claim.Action
 			fact.TargetEntityID = claim.Target

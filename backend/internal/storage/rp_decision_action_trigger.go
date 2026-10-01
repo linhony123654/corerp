@@ -121,7 +121,10 @@ func readRPDecisionActionTrigger(ctx context.Context, conn *sql.Conn, session RP
 	if err != nil {
 		return nil, err
 	}
-	if knowledgeHash != observationHash || !rpDecisionNonverbalWitnessMatchesSource(string(raw), observation, npc, session.ControlledEntityID, fact.PlaceID) || observed.Action == "" || observed.TargetEntityID != npc {
+	// A directed action may activate only its witnessed target. An action
+	// with no target remains untargeted even when focus selected this NPC.
+	directed := fact.TargetEntityID != ""
+	if knowledgeHash != observationHash || !rpDecisionNonverbalWitnessMatchesSource(string(raw), observation, npc, session.ControlledEntityID, fact.PlaceID) || observed.Action == "" || (directed && observed.TargetEntityID != npc) || (!directed && observed.TargetEntityID != "") {
 		return nil, core.NewError(core.CodeProjectionDiverged, "action trigger differs from its frozen witness")
 	}
 	return &core.RPDecisionObservedAction{SourceEventID: parent, ActorEntityID: session.ControlledEntityID, TargetEntityID: observed.TargetEntityID, Action: observed.Action, GestureCode: observed.GestureCode, PlaceID: fact.PlaceID, WorldTime: at}, nil

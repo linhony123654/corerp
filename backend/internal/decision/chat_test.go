@@ -53,7 +53,7 @@ func TestChatProviderStructuredProposalAndDataBoundary(t *testing.T) {
 			t.Error("open schema")
 		}
 		var got decisionContext
-		if json.Unmarshal([]byte(body.Messages[1].Content), &got) != nil || presentedValue(t, got.Character.CurrentTurn, "player_speech_text") != contextFixture().PlayerSpeechText || got.Version != "corerp.decision.v3" || presentedValue(t, got.Character.Provenance, "context_version") != core.RPContextVersion {
+		if json.Unmarshal([]byte(body.Messages[1].Content), &got) != nil || presentedValue(t, got.Character.CurrentTurn, "player_speech_text") != contextFixture().PlayerSpeechText || got.Version != "corerp.decision.v4" || presentedValue(t, got.Character.Provenance, "context_version") != core.RPContextVersion {
 			t.Error("context changed")
 		}
 		properties, _ := body.ResponseFormat.Schema.Definition["properties"].(map[string]any)
@@ -66,7 +66,7 @@ func TestChatProviderStructuredProposalAndDataBoundary(t *testing.T) {
 		if strings.Contains(body.Messages[1].Content, "test-private-key") {
 			t.Error("credential in prompt")
 		}
-		modelResponse(w, `{"private":{"intent":"守住边界","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":["event-player"]},"observable":{"action":"refuse","text":"今天不方便。","introduce_self":false,"expression_code":"none"}}`, "stop")
+		modelResponse(w, `{"private":{"intent":"守住边界","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":["event-player"]},"observable":{"action":"refuse","text":"今天不方便。","speech_tone":"none","introduce_self":false,"expression_code":"none"}}`, "stop")
 	}))
 	defer server.Close()
 	provider, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "configured-model", APIKey: "test-private-key", DecisionMaxTokens: 4096})
@@ -110,7 +110,7 @@ func TestChatProviderRepairsUngroundedPrivateBasisAtMostOnce(t *testing.T) {
 				if call == 2 && secondValid {
 					basis = `["event-player"]`
 				}
-				modelResponse(w, `{"action":"respond","text":"你好。","destination_place_id":"","activity_code":"","introduce_self":false,"expression_code":"none","private":{"intent":"应答","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":`+basis+`}}`, "stop")
+				modelResponse(w, `{"observable":{"action":"respond","text":"你好。","speech_tone":"none","introduce_self":false,"expression_code":"none"},"private":{"intent":"应答","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":`+basis+`}}`, "stop")
 			}))
 			defer server.Close()
 			provider, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "test"})
@@ -153,7 +153,11 @@ func TestChatProviderRepairsIncompatibleActionFieldsAtMostOnce(t *testing.T) {
 				if call == 2 && secondValid {
 					text = ""
 				}
-				modelResponse(w, `{"action":"silence","text":`+strconv.Quote(text)+`,"destination_place_id":"","activity_code":"","introduce_self":false,"expression_code":"none","private":{"intent":"静听","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":[]}}`, "stop")
+				observable := `{"action":"silence","expression_code":"none","text":` + strconv.Quote(text) + `}`
+				if call == 2 && secondValid {
+					observable = `{"action":"silence","expression_code":"none"}`
+				}
+				modelResponse(w, wireDecision(observable), "stop")
 			}))
 			defer server.Close()
 			provider, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "test"})
@@ -190,7 +194,7 @@ func TestChatProviderSendsDisableThinkingOnlyWhenConfigured(t *testing.T) {
 					t.Errorf("enable_thinking present=%t value=%v, want configured=%t", present, value, disable)
 				}
 				seen.Add(1)
-				modelResponse(w, `{"action":"respond","text":"你好。","destination_place_id":"","activity_code":"","introduce_self":false,"expression_code":"none","private":{"intent":"应答","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":[]}}`, "stop")
+				modelResponse(w, `{"observable":{"action":"respond","text":"你好。","speech_tone":"none","introduce_self":false,"expression_code":"none"},"private":{"intent":"应答","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":[]}}`, "stop")
 			}))
 			defer server.Close()
 			provider, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "test", DisableThinking: disable})
@@ -228,7 +232,7 @@ func TestChatProviderRepairsOverlongPrivateMetadataAtMostOnce(t *testing.T) {
 				if call == 2 && secondValid {
 					intent = "应答"
 				}
-				modelResponse(w, `{"action":"respond","text":"你好。","destination_place_id":"","activity_code":"","introduce_self":false,"expression_code":"none","private":{"intent":`+strconv.Quote(intent)+`,"emotion":"平静","relationship_stance":"礼貌","basis_event_ids":["event-player"]}}`, "stop")
+				modelResponse(w, `{"observable":{"action":"respond","text":"你好。","speech_tone":"none","introduce_self":false,"expression_code":"none"},"private":{"intent":`+strconv.Quote(intent)+`,"emotion":"平静","relationship_stance":"礼貌","basis_event_ids":["event-player"]}}`, "stop")
 			}))
 			defer server.Close()
 			provider, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "test"})
@@ -264,7 +268,7 @@ func TestChatProviderRetriesTruncatedCompletionWithBoundedBudget(t *testing.T) {
 				}
 				budgets = append(budgets, body.MaxCompletionTokens)
 				if len(budgets) == 2 && secondValid {
-					modelResponse(w, `{"action":"silence","text":"","destination_place_id":"","activity_code":"","introduce_self":false,"expression_code":"none","private":{"intent":"静听","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":[]}}`, "stop")
+					modelResponse(w, `{"observable":{"action":"silence","expression_code":"none"},"private":{"intent":"静听","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":[]}}`, "stop")
 				} else {
 					modelResponse(w, "", "length")
 				}
@@ -322,10 +326,10 @@ func TestChatProviderRejectsMalformedTruncatedAndIllegalResponses(t *testing.T) 
 		{"trailing", `{"action":"silence","text":"","destination_place_id":""} {}`, "stop", false},
 		{"unknown action", `{"action":"give_money","text":"","destination_place_id":"","activity_code":"","introduce_self":false}`, "stop", false},
 		{"illegal destination", `{"action":"leave","text":"","destination_place_id":"secret-vault","activity_code":"","introduce_self":false}`, "stop", false},
-		{"mixed effects", `{"action":"leave","text":"hi","destination_place_id":"home","activity_code":"","introduce_self":false}`, "stop", true},
-		{"empty speech", `{"action":"respond","text":" ","destination_place_id":"","activity_code":"","introduce_self":false}`, "stop", true},
-		{"private unknown field", `{"action":"respond","text":"好","destination_place_id":"","activity_code":"","introduce_self":false,"expression_code":"","private":{"intent":"应答","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":[],"secret":"x"}}`, "stop", false},
-		{"too long", fmt.Sprintf(`{"action":"respond","text":%q,"destination_place_id":"","activity_code":"","introduce_self":false}`, strings.Repeat("话", 2001)), "stop", true},
+		{"mixed effects", wireDecision(`{"action":"leave","text":"hi","destination_place_id":"home"}`), "stop", true},
+		{"empty speech", wireDecision(`{"action":"respond","text":" ","speech_tone":"none","introduce_self":false,"expression_code":"none"}`), "stop", true},
+		{"private unknown field", `{"observable":{"action":"respond","text":"好","speech_tone":"none","introduce_self":false,"expression_code":"none"},"private":{"intent":"应答","emotion":"平静","relationship_stance":"礼貌","basis_event_ids":[],"secret":"x"}}`, "stop", false},
+		{"too long", wireDecision(fmt.Sprintf(`{"action":"respond","text":%q,"speech_tone":"none","introduce_self":false,"expression_code":"none"}`, strings.Repeat("话", 2001))), "stop", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var calls atomic.Int32
@@ -353,7 +357,7 @@ func TestChatProviderBoundedRetryTimeoutAndRedaction(t *testing.T) {
 				_, _ = w.Write([]byte("echoed-private-key"))
 				return
 			}
-			modelResponse(w, `{"action":"wait","text":"","destination_place_id":"","activity_code":"","introduce_self":false}`, "stop")
+			modelResponse(w, wireDecision(`{"action":"wait","expression_code":"none"}`), "stop")
 		}))
 		defer server.Close()
 		provider, _ := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", EndpointPolicy: endpointpolicy.TestLocalhostPolicy(), Model: "test"})

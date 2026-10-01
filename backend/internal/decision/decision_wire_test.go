@@ -104,7 +104,7 @@ func TestDecisionWireV3StillUsesAuthoritativeGroundingAndActions(t *testing.T) {
 	}
 }
 
-func TestDecisionSchemaV3OffersOnlyApplicableSourcedFields(t *testing.T) {
+func TestDecisionSchemaV4OffersOnlyApplicableSourcedFields(t *testing.T) {
 	in := contextFixture()
 	in.LegalActions = append(in.LegalActions, "act")
 	in.LegalActivities = []string{"tend_counter"}
@@ -129,12 +129,12 @@ func TestDecisionSchemaV3OffersOnlyApplicableSourcedFields(t *testing.T) {
 	format := captured["response_format"].(map[string]any)["json_schema"].(map[string]any)
 	root := format["schema"].(map[string]any)
 	properties := root["properties"].(map[string]any)
-	if format["name"] != "corerp_decision_v3" || len(properties) != 2 || root["additionalProperties"] != false || !reflect.DeepEqual(root["required"], []any{"private", "observable"}) {
+	if format["name"] != "corerp_decision_v4" || len(properties) != 2 || root["additionalProperties"] != false || !reflect.DeepEqual(root["required"], []any{"private", "observable"}) {
 		t.Fatal("request did not separate private and observable at a closed root")
 	}
 	variants := properties["observable"].(map[string]any)["anyOf"].([]any)
 	want := map[string][]any{
-		"respond": {"action", "text", "introduce_self", "expression_code"}, "refuse": {"action", "text", "introduce_self", "expression_code"},
+		"respond": {"action", "text", "speech_tone", "introduce_self", "expression_code"}, "refuse": {"action", "text", "speech_tone", "introduce_self", "expression_code"},
 		"silence": {"action", "expression_code"}, "wait": {"action", "expression_code"},
 		"leave": {"action", "destination_place_id"}, "act": {"action", "activity_code"},
 	}
@@ -158,7 +158,7 @@ func TestDecisionSchemaV3OffersOnlyApplicableSourcedFields(t *testing.T) {
 	}
 }
 
-func TestDecisionSchemaV3OmitsUnusableAffordancesWithoutEmptyEnums(t *testing.T) {
+func TestDecisionSchemaV4OmitsUnusableAffordancesWithoutEmptyEnums(t *testing.T) {
 	in := contextFixture()
 	in.InterlocutorEntityID = "unseen-speaker"
 	in.ReachablePlaceIDs = nil
@@ -223,7 +223,7 @@ func TestDecisionPrivateNullFieldsAreNotConvertedToEmptyState(t *testing.T) {
 	}
 }
 
-func TestDecisionWireV3FieldConflictHasOnlyOneRepair(t *testing.T) {
+func TestDecisionWireV4FieldConflictHasOnlyOneRepair(t *testing.T) {
 	for _, repaired := range []bool{false, true} {
 		t.Run(fmt.Sprint(repaired), func(t *testing.T) {
 			var calls atomic.Int32

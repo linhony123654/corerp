@@ -44,7 +44,7 @@ func TestDecisionNativeToolUsesOnePrivateProposalAndUnchangedContext(t *testing.
 				if json.Unmarshal([]byte(messages[1].Content), &got) != nil || !decisionCharacterMatches(t, got.Character, contextFixture()) {
 					t.Fatal("native function changed the authorized context")
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": finish, "message": map[string]any{"content": "Unapproved narration: I moved to a new place.", "tool_calls": []any{proposalTool(wireDecision(`{"action":"respond","text":"我在。","introduce_self":false,"expression_code":"none"}`))}}}}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": finish, "message": map[string]any{"content": "Unapproved narration: I moved to a new place.", "tool_calls": []any{proposalTool(wireDecision(`{"action":"respond","text":"我在。","speech_tone":"none","introduce_self":false,"expression_code":"none"}`))}}}}})
 			}))
 			defer server.Close()
 			p, err := NewChatProvider(Config{Endpoint: server.URL + "/v1/chat/completions", Model: "fixture", DecisionFormat: "tool_call", EndpointPolicy: endpointpolicy.TestLocalhostPolicy()})
@@ -71,7 +71,7 @@ func TestDecisionNativeToolRejectsUnknownMultipleLegacyAndUngroundedCalls(t *tes
 		{"no call", nil, "stop"}, {"unknown function", []any{wrong}, "stop"}, {"multiple", []any{valid, valid}, "tool_calls"},
 		{"legacy lacks private", []any{proposalTool(`{"action":"respond","text":"unapproved","introduce_self":false,"destination_place_id":"","activity_code":""}`)}, "stop"},
 		{"bad source", []any{proposalTool(strings.Replace(wireDecision(`{"action":"wait","expression_code":"none"}`), "event-player", "event-unheard", 1))}, "stop"},
-		{"extra effect", []any{proposalTool(wireDecision(`{"action":"respond","text":"hi","introduce_self":false,"expression_code":"none","activity_code":"uncommitted"}`))}, "stop"},
+		{"extra effect", []any{proposalTool(wireDecision(`{"action":"respond","text":"hi","speech_tone":"none","introduce_self":false,"expression_code":"none","activity_code":"uncommitted"}`))}, "stop"},
 		{"truncated", []any{valid}, "length"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,13 +93,13 @@ func TestDecisionNativeToolRejectsUnknownMultipleLegacyAndUngroundedCalls(t *tes
 	}
 }
 
-func TestDecisionToolContentCompatibilityKeepsFullV3AndWorldValidation(t *testing.T) {
-	valid := wireDecision(`{"action":"respond","text":"我在。","introduce_self":false,"expression_code":"none"}`)
+func TestDecisionToolContentCompatibilityKeepsFullV4AndWorldValidation(t *testing.T) {
+	valid := wireDecision(`{"action":"respond","text":"我在。","speech_tone":"none","introduce_self":false,"expression_code":"none"}`)
 	for _, tc := range []struct {
 		name, content string
 		wantSuccess   bool
 	}{
-		{"complete v3 proposal", valid, true},
+		{"complete v4 proposal", valid, true},
 		{"ordinary roleplay", "我在这里，已经递给你一杯茶了。", false},
 		{"fenced proposal", "```json\n" + valid + "\n```", false},
 		{"partial object", valid[:len(valid)-1], false},
@@ -124,7 +124,7 @@ func TestDecisionToolContentCompatibilityKeepsFullV3AndWorldValidation(t *testin
 					t.Fatal("complete proposal from a compatible channel rejected", err)
 				}
 			} else if err == nil || proposal.Action != "" || calls > 2 {
-				t.Fatal("content bypassed v3/grounding/world validation", err)
+				t.Fatal("content bypassed v4/grounding/world validation", err)
 			}
 		})
 	}

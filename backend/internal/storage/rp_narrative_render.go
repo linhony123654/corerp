@@ -27,6 +27,10 @@ type RPNarrativeSelectResult struct {
 
 const rpNarrativeCompositionVersion = core.RPFactCompositionVersionV1
 
+func rpFiniteNarrativeComposition(version string) bool {
+	return version == core.RPFactCompositionVersionV2 || version == core.RPFactCompositionVersionV3
+}
+
 // Validate the receipt against facts, never against the broader presentation
 // provenance list (which may also contain authored style/cue sources).
 func validateRPNarrativeComposition(view core.RPNarrativeView) error {
@@ -36,7 +40,7 @@ func validateRPNarrativeComposition(view core.RPNarrativeView) error {
 		}
 		return nil // Saved legacy prose does not claim closed composition.
 	}
-	if (view.CompositionVersion != rpNarrativeCompositionVersion && view.CompositionVersion != core.RPFactCompositionVersionV2) || (len(view.FactGroups) == 0 && view.CompositionVersion != core.RPFactCompositionVersionV2) || len(view.FactGroups) != len(view.Lines) {
+	if (view.CompositionVersion != rpNarrativeCompositionVersion && !rpFiniteNarrativeComposition(view.CompositionVersion)) || (len(view.FactGroups) == 0 && !rpFiniteNarrativeComposition(view.CompositionVersion)) || len(view.FactGroups) != len(view.Lines) {
 		return core.NewError(core.CodeProjectionDiverged, "narrative composition version or groups are invalid")
 	}
 	next := 0
@@ -108,7 +112,7 @@ func (s *Store) saveSelectedRPNarrative(ctx context.Context, request RPNarrative
 	if err != nil {
 		return err
 	}
-	if view.CompositionVersion == core.RPFactCompositionVersionV2 {
+	if rpFiniteNarrativeComposition(view.CompositionVersion) {
 		hash, err := core.HashJSON(input)
 		if err != nil || hash != view.Artifact.InputSHA256 {
 			return narrativeDiverged("render artifact differs from authorized input")

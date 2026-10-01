@@ -187,7 +187,7 @@ Respond to the present meaning in the character's own voice, letting the sourced
 
 Selection is a bounded view, not all history. Missing evidence is uncertainty, not proof that something never happened. Resolve text_from_event only from the exact same event elsewhere in this packet; preserve attribution and time, and treat truncated excerpts as incomplete. Never invent missing words or reveal another actor's private state.
 
-Return only proposal_schema from this packet, including both private and observable. Private intent/emotion/relationship_stance are short phrases, not an essay or public narration. In basis_event_ids use distinct grounding_sources.ref handles, each at most once; the server binds these to source_event_id. Do not copy long IDs into your output; use [] if uncertain. Choose exactly one observable variant and omit unused fields. Speech is dialogue, not an uncommitted action or outcome. introduce_self is true only when the words disclose the speaker's identity. Expression none is valid; any other expression proposes an actual visible act, not decoration. act uses a declared legal activity; leave uses a reachable place. Only the world validation/commit chain can make a proposal publicly real.`
+Return only proposal_schema from this packet, including both private and observable. Private intent/emotion/relationship_stance are short phrases, not an essay or public narration. In basis_event_ids use distinct grounding_sources.ref handles, each at most once; the server binds these to source_event_id. Do not copy long IDs into your output; use [] if uncertain. Choose exactly one observable variant and omit unused fields. Speech is dialogue, not an uncommitted action or outcome. respond/refuse require speech_tone: none, gentle, firm, teasing, hesitant or flat. It is only the audible delivery of these words, not private emotion, consent or relationship; use none when unspecified. introduce_self is true only when the words disclose the speaker's identity. Expression none is valid; any other expression proposes an actual visible act, not decoration. act uses a declared legal activity; leave uses a reachable place. Only the world validation/commit chain can make a proposal publicly real.`
 
 func (p *ChatProvider) Propose(ctx context.Context, input core.RPDecisionInput) (core.RPDecisionProposal, error) {
 	var empty core.RPDecisionProposal
@@ -215,7 +215,7 @@ func (p *ChatProvider) Propose(ctx context.Context, input core.RPDecisionInput) 
 	}
 	instruction := decisionInstruction
 	format := map[string]any{"type": "json_schema", "json_schema": map[string]any{
-		"name": "corerp_decision_v3", "strict": true, "schema": schema,
+		"name": "corerp_decision_v4", "strict": true, "schema": schema,
 	}}
 	if p.config.DecisionFormat == "json_object" {
 		// JSON Mode guarantees JSON, not shape. The context carries the same
@@ -279,7 +279,7 @@ func (p *ChatProvider) Propose(ctx context.Context, input core.RPDecisionInput) 
 				case "invalid_private_decision":
 					feedback = "Your private decision metadata violated its bounds or single-line format. Regenerate the full schema object: keep private.intent within 160 characters, private.emotion and private.relationship_stance each within 80 characters, and basis_event_ids to at most 8 distinct grounding_sources.ref handles from this packet. Each text field must be one short phrase with no NUL, CR or LF characters; use an empty string if unspecified."
 				case "noop_contains_effects", "invalid_speech_fields", "movement_contains_speech", "act_contains_effects", "observable_schema_mismatch":
-					feedback = "The previous proposal violated the action-field contract. Regenerate the complete private + observable schema object. Include only the fields of the chosen observable variant: respond/refuse have spoken text, introduce_self and expression_code; silence/wait have only action and expression_code; act has only action and a legal activity_code; leave has only action and a reachable destination_place_id. Omit unused fields instead of adding empty defaults. Choose the action that matches your intended observable, and do not claim an uncommitted effect."
+					feedback = "The previous proposal violated the action-field contract. Regenerate the complete private + observable schema object. Include only the fields of the chosen observable variant: respond/refuse have spoken text, speech_tone, introduce_self and expression_code; silence/wait have only action and expression_code; act has only action and a legal activity_code; leave has only action and a reachable destination_place_id. Omit unused fields instead of adding empty defaults. Choose the action that matches your intended observable, and do not claim an uncommitted effect."
 				}
 				if feedback != "" {
 					repairedInvalid = true
@@ -404,13 +404,13 @@ func (p *ChatProvider) attempt(ctx context.Context, body []byte, input core.RPDe
 			if choice.FinishReason != "stop" {
 				return empty, false, 0, failure("incomplete or refused response")
 			}
-			// Some compatible gateways ignore tool_choice. A complete v3 JSON
+			// Some compatible gateways ignore tool_choice. A complete v4 JSON
 			// object in content is still only a proposal: no prose, fencing,
 			// partial field salvage, or legacy roots are accepted below.
 			debugDecisionFailure("content proposal compatibility", "content_len=", len(proposalText))
 		}
 	}
-	proposal, err := parseRequestedDecisionProposal(proposalText, p.config.DecisionFormat != "json_schema")
+	proposal, err := parseRequestedDecisionProposal(proposalText, true)
 	if err != nil {
 		debugDecisionFailure("proposal parse", "err=", err.Error(), "content_len=", len(proposalText))
 		debugDecisionProposalShape(proposalText)
