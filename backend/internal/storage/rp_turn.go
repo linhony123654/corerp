@@ -46,6 +46,7 @@ type rpTurnRun struct {
 	CompositionVersion string
 	FactGroupsJSON     string
 	FactEventIDsJSON   string
+	ArtifactJSON       string
 	SettledSequence    sql.NullInt64
 }
 
@@ -219,11 +220,7 @@ func (s *Store) RunRPTurn(ctx context.Context, request core.RPSpeechRequest, pro
 		if err := s.finishRPProviderCall(ctx, callID, "success", "", "template", 0); err != nil {
 			return RPTurnResult{}, err
 		}
-		observation, err := s.ObserveRPSession(ctx, core.RPSessionReadRequest{PrincipalID: request.PrincipalID, SessionID: request.SessionID})
-		if err != nil {
-			return RPTurnResult{}, err
-		}
-		if err := s.markRPTurnNarrativeReady(ctx, run.ID, view.Lines, observation.ObservationCursor); err != nil {
+		if err := s.markRPTurnNarrativeReady(ctx, run.ID, view); err != nil {
 			return RPTurnResult{}, err
 		}
 	}
@@ -268,7 +265,7 @@ func (s *Store) ensureRPTurnRun(ctx context.Context, request core.RPSpeechReques
 	var run rpTurnRun
 	var existingHash, existingJSON string
 	var playerTurnID, playerEventID sql.NullString
-	err = tx.conn.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence, request_hash, request_json,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &existingHash, &existingJSON, &run.CompositionVersion, &run.FactGroupsJSON, &run.FactEventIDsJSON)
+	err = tx.conn.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence, request_hash, request_json,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json,narrative_artifact_json FROM rp_turn_runs WHERE session_id = ? AND idempotency_key = ?`, session.SessionID, request.IdempotencyKey).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &existingHash, &existingJSON, &run.CompositionVersion, &run.FactGroupsJSON, &run.FactEventIDsJSON, &run.ArtifactJSON)
 	if err == nil {
 		run.PlayerTurnID = playerTurnID.String
 		run.PlayerEventID = playerEventID.String
@@ -489,15 +486,70 @@ func (s *Store) markRPTurnNPCsCommitted(ctx context.Context, runID, sessionID, p
 	return nil
 }
 
-func (s *Store) markRPTurnNarrativeReady(ctx context.Context, runID string, lines []string, sequence int64) error {
-	encoded, err := core.CanonicalJSON(lines)
+func (s *Store) markRPTurnNarrativeReady(ctx context.Context, runID string, view core.RPNarrativeView) error {
+	if view.CompositionVersion != core.RPFactCompositionVersionV2 || view.Artifact == nil {
+		return narrativeDiverged("primary narrative requires a complete v2 artifact")
+	}
+	if err := validateRPNarrativeComposition(view); err != nil {
+		return err
+	}
+	artifactJSON, err := encodeRPNarrativeArtifact(view)
 	if err != nil {
 		return err
 	}
-	if err := execAgentOne(ctx, s.db, "save RP narrative view", `UPDATE rp_turn_runs SET status = 'narrative_ready', narrative_json = ?, settled_sequence = ?, updated_at_utc = ? WHERE turn_run_id = ? AND status = 'npc_effects_committed'`, string(encoded), sequence, s.now().UTC().Format(time.RFC3339Nano), runID); err != nil {
+	linesJSON, err := core.CanonicalJSON(view.Lines)
+	if err != nil {
 		return err
 	}
-	return nil
+	groupsJSON, err := core.CanonicalJSON(view.FactGroups)
+	if err != nil {
+		return err
+	}
+	idsJSON, err := core.CanonicalJSON(view.EventIDs)
+	if err != nil {
+		return err
+	}
+	tx, err := beginImmediate(ctx, s.db)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var principal, sessionID, turnID string
+	if err := tx.conn.QueryRowContext(ctx, `SELECT s.principal_id,s.session_id,r.player_turn_id FROM rp_turn_runs r JOIN rp_sessions s ON s.session_id=r.session_id WHERE r.turn_run_id=? AND r.status='npc_effects_committed'`, runID).Scan(&principal, &sessionID, &turnID); err != nil {
+		return classifyMissing(err, "primary narrative turn stage")
+	}
+	session, err := loadRPSession(ctx, tx.conn, principal, sessionID)
+	if err != nil {
+		return err
+	}
+	if session.Status != "active" || session.TurnCursor != turnID {
+		return core.NewError(core.CodeBranchConflict, "primary narrative turn changed")
+	}
+	if err := authorizeRPControl(ctx, tx.conn, principal, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
+		return err
+	}
+	var head int64
+	if err := tx.conn.QueryRowContext(ctx, `SELECT head_sequence FROM branches WHERE instance_id=? AND branch_id=?`, session.InstanceID, session.BranchID).Scan(&head); err != nil {
+		return err
+	}
+	if head != view.Artifact.Input.SourceHead {
+		return core.NewError(core.CodeBranchConflict, "primary narrative snapshot changed before save")
+	}
+	if _, err := validateRPNarrativeArtifactOnConn(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, runID, true, artifactJSON, view); err != nil {
+		return err
+	}
+	if err := execAgentOne(ctx, tx.conn, "save complete RP narrative receipt", `UPDATE rp_turn_runs SET status='narrative_ready',narrative_json=?,narrative_composition_version=?,narrative_fact_groups_json=?,narrative_fact_event_ids_json=?,narrative_artifact_json=?,settled_sequence=?,updated_at_utc=? WHERE turn_run_id=? AND status='npc_effects_committed'`, string(linesJSON), view.CompositionVersion, string(groupsJSON), string(idsJSON), artifactJSON, head, s.now().UTC().Format(time.RFC3339Nano), runID); err != nil {
+		return err
+	}
+	if _, err := tx.conn.ExecContext(ctx, `UPDATE rp_sessions SET observation_cursor=? WHERE session_id=?`, head, sessionID); err != nil {
+		return err
+	}
+	if s.beforeCommit != nil {
+		if err := s.beforeCommit(); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) settleRPTurn(ctx context.Context, runID, sessionID, playerTurnID string) error {
@@ -532,7 +584,7 @@ func (s *Store) settleRPTurn(ctx context.Context, runID, sessionID, playerTurnID
 func (s *Store) loadRPTurnRun(ctx context.Context, runID string) (rpTurnRun, error) {
 	var run rpTurnRun
 	var playerTurnID, playerEventID sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE turn_run_id = ?`, runID).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &run.CompositionVersion, &run.FactGroupsJSON, &run.FactEventIDsJSON)
+	err := s.db.QueryRowContext(ctx, `SELECT turn_run_id, session_id, player_speech_key, status, player_turn_id, player_event_id, listener_ids_json, narrative_json, settled_sequence,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json,narrative_artifact_json FROM rp_turn_runs WHERE turn_run_id = ?`, runID).Scan(&run.ID, &run.SessionID, &run.SpeechKey, &run.Status, &playerTurnID, &playerEventID, &run.ListenerIDsJSON, &run.NarrativeJSON, &run.SettledSequence, &run.CompositionVersion, &run.FactGroupsJSON, &run.FactEventIDsJSON, &run.ArtifactJSON)
 	if err != nil {
 		return rpTurnRun{}, classifyMissing(err, "RP turn run")
 	}
@@ -554,21 +606,43 @@ func (s *Store) loadRPTurnResult(ctx context.Context, run rpTurnRun, replayed bo
 		return RPTurnResult{}, err
 	}
 	result.FactGroups = groups
+	var storedView core.RPNarrativeView
+	if run.CompositionVersion == core.RPFactCompositionVersionV2 {
+		tx, err := beginImmediate(ctx, s.db)
+		if err != nil {
+			return RPTurnResult{}, err
+		}
+		var instance, branch, observer string
+		err = tx.conn.QueryRowContext(ctx, `SELECT instance_id,branch_id,controlled_entity_id FROM rp_sessions WHERE session_id=?`, run.SessionID).Scan(&instance, &branch, &observer)
+		if err == nil {
+			storedView, err = validateRPNarrativeArtifactOnConn(ctx, tx.conn, instance, branch, observer, run.ID, true, run.ArtifactJSON, core.RPNarrativeView{Lines: result.NarrativeLines, EventIDs: mustRPNarrativeIDs(run.FactEventIDsJSON), FactGroups: groups, CompositionVersion: run.CompositionVersion})
+		}
+		tx.Rollback(ctx)
+		if err != nil {
+			return RPTurnResult{}, err
+		}
+	}
 	style, err := s.loadRPTurnStyle(ctx, run.ID)
 	if err != nil {
 		return RPTurnResult{}, err
 	}
 	result.NarrativeStyle = style.Profile
 	result.NarrativeWarnings = []string{}
-	if style.Profile.ProseInstructions != "" || len(style.Profile.ForbiddenPatterns) > 0 {
+	if run.CompositionVersion == "" && (style.Profile.ProseInstructions != "" || len(style.Profile.ForbiddenPatterns) > 0) {
 		view, err := s.renderRPTurnStyled(ctx, run.SessionID, run.PlayerTurnID, run.PlayerEventID, style.Profile)
 		if err != nil {
 			return RPTurnResult{}, err
 		}
 		result.NarrativeWarnings = view.Warnings
 	}
-	if run.CompositionVersion == narrative.CompositionVersion {
+	if run.CompositionVersion == core.RPFactCompositionVersionV1 {
+		if style.Profile.ProseInstructions != "" || len(style.Profile.ForbiddenPatterns) > 0 {
+			result.NarrativeWarnings = append(result.NarrativeWarnings, "deterministic renderer does not interpret free-form prose instructions")
+		}
 		result.NarrativeWarnings = append(result.NarrativeWarnings, narrative.CompositionCapabilityWarning)
+	}
+	if run.CompositionVersion == core.RPFactCompositionVersionV2 {
+		result.NarrativeWarnings = storedView.Warnings
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.event_id FROM rp_npc_decisions d JOIN events e ON e.event_id = d.event_id WHERE d.session_id = ? AND d.parent_turn_id = ? ORDER BY e.event_sequence`, run.SessionID, run.PlayerTurnID)
 	if err != nil {

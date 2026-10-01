@@ -321,6 +321,14 @@ func (s *Store) StreamRPNarrative(ctx context.Context, r RPNarrativeReadRequest,
 
 func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrativeReadRequest, emit func(core.RPNarrativeChunk) error, provider core.RPStreamingNarrativeProvider) (RPNarrativeReadResult, error) {
 	var empty RPNarrativeReadResult
+	providerMode := "custom"
+	if mode, ok := provider.(interface{ NarrativeMode() string }); ok {
+		switch mode.NarrativeMode() {
+		case "full_prose", "deterministic", "style_planner":
+			providerMode = mode.NarrativeMode()
+		}
+	}
+	var frozenInput *core.RPNarrativeInput
 	if r.TurnRunID == "" {
 		return empty, core.NewError(core.CodeInvalidArgument, "turn_run_id required")
 	}
@@ -337,10 +345,63 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 		return empty, err
 	}
 	var playerTurnID, playerEventID, savedNarrative, savedMode, savedFallback string
-	var savedCompositionVersion, savedGroupsJSON, savedFactIDsJSON string
+	var savedCompositionVersion, savedGroupsJSON, savedFactIDsJSON, savedArtifactJSON string
 	var savedAt sql.NullString
-	if err := tx.conn.QueryRowContext(ctx, `SELECT player_turn_id,player_event_id,narrative_json,narrative_presentation_mode,narrative_presented_at_utc,COALESCE(narrative_fallback,''),narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, r.TurnRunID, r.SessionID).Scan(&playerTurnID, &playerEventID, &savedNarrative, &savedMode, &savedAt, &savedFallback, &savedCompositionVersion, &savedGroupsJSON, &savedFactIDsJSON); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT player_turn_id,player_event_id,narrative_json,narrative_presentation_mode,narrative_presented_at_utc,COALESCE(narrative_fallback,''),narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json,narrative_artifact_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, r.TurnRunID, r.SessionID).Scan(&playerTurnID, &playerEventID, &savedNarrative, &savedMode, &savedAt, &savedFallback, &savedCompositionVersion, &savedGroupsJSON, &savedFactIDsJSON, &savedArtifactJSON); err != nil {
 		return empty, classifyMissing(err, "settled own turn narrative")
+	}
+	if r.StyleOverride == nil && savedCompositionVersion == core.RPFactCompositionVersionV2 {
+		view, err := decodeRPNarrativeReceipt(savedCompositionVersion, savedNarrative, savedGroupsJSON, savedFactIDsJSON)
+		if err != nil {
+			return empty, err
+		}
+		var fallbackRecord struct {
+			Reason string `json:"reason"`
+		}
+		if savedFallback != "" && json.Unmarshal([]byte(savedFallback), &fallbackRecord) == nil {
+			view.FallbackReason = fallbackRecord.Reason
+		}
+		view, err = validateRPNarrativeArtifactOnConn(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, r.TurnRunID, true, savedArtifactJSON, view)
+		if err != nil {
+			return empty, err
+		}
+		tx.Rollback(ctx)
+		style, err := s.loadRPTurnStyle(ctx, r.TurnRunID)
+		if err != nil {
+			return empty, err
+		}
+		style.Profile = view.Artifact.Input.Style
+		refine := view.Artifact.Input.Style.FullProse && savedMode == "base" && !savedAt.Valid && providerMode == "full_prose"
+		if refine {
+			frozen := view.Artifact.Input
+			frozenInput = &frozen
+		} else {
+			if view.Artifact.Input.Style.FullProse && savedMode == "base" && providerMode != "full_prose" {
+				view.FallbackReason = "world_declares_full_prose_without_prose_provider"
+				view.Warnings = append(view.Warnings, "世界声明了 full_prose，但当前叙事 provider 不是长文模式，已按标准叙述呈现。")
+				if fallbackRecord.Reason != view.FallbackReason {
+					metadata := rpProviderMetadata(provider, providerMode)
+					callID, err := s.beginRPProviderCall(ctx, rpProviderCallScope{SessionID: r.SessionID, TurnRunID: r.TurnRunID, SubjectID: playerEventID, Phase: "narrative"}, metadata)
+					if err != nil {
+						return empty, err
+					}
+					if err := s.recordRPNarrativeFallback(ctx, r.TurnRunID, view.FallbackReason, providerMode, view.Artifact.Input); err != nil {
+						return empty, err
+					}
+					if err := s.finishRPProviderCall(ctx, callID, "success", view.FallbackReason, "template", 0); err != nil {
+						return empty, err
+					}
+				}
+			}
+			if emit != nil {
+				for i, line := range view.Lines {
+					if err := emit(core.RPNarrativeChunk{Index: i, Line: line, EventIDs: append([]string(nil), view.FactGroups[i]...)}); err != nil {
+						return empty, err
+					}
+				}
+			}
+			return RPNarrativeReadResult{Style: style, View: view}, nil
+		}
 	}
 	tx.Rollback(ctx)
 	style, err := s.loadRPTurnStyle(ctx, r.TurnRunID)
@@ -353,11 +414,17 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 			return empty, err
 		}
 	}
-	input, err := s.readRPNarrativeInput(ctx, r.SessionID, playerTurnID, playerEventID)
-	if err != nil {
-		return empty, err
+	var input core.RPNarrativeInput
+	if frozenInput != nil {
+		input = *frozenInput
+		style.Profile = input.Style
+	} else {
+		input, err = s.readRPNarrativeInput(ctx, r.SessionID, playerTurnID, playerEventID)
+		if err != nil {
+			return empty, err
+		}
+		input.Style = style.Profile
 	}
-	input.Style = style.Profile
 	if err := input.ValidateReadBudget(); err != nil {
 		return empty, err
 	}
@@ -367,13 +434,6 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 			return empty, err
 		}
 		return RPNarrativeReadResult{Style: style, View: view}, nil
-	}
-	providerMode := "custom"
-	if mode, ok := provider.(interface{ NarrativeMode() string }); ok {
-		switch mode.NarrativeMode() {
-		case "full_prose", "deterministic", "style_planner":
-			providerMode = mode.NarrativeMode()
-		}
 	}
 	metadata := rpProviderMetadata(provider, providerMode)
 	callID, err := s.beginRPProviderCall(ctx, rpProviderCallScope{SessionID: r.SessionID, TurnRunID: r.TurnRunID, SubjectID: playerEventID, Phase: "narrative"}, metadata)
@@ -391,6 +451,9 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 			}
 			return nil
 		}
+	}
+	if frozenInput != nil {
+		wrappedEmit = nil
 	}
 	view, err := provider.RenderStream(core.WithRPProviderTrace(ctx, &trace), input, wrappedEmit)
 	if err != nil {
@@ -420,7 +483,7 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 		if recordErr := s.recordRPNarrativeFallback(ctx, r.TurnRunID, fallback, providerMode, input); recordErr != nil {
 			return empty, recordErr
 		}
-	} else {
+	} else if frozenInput == nil {
 		if err := s.saveSelectedRPNarrative(ctx, r, input, &view, metadata); err != nil {
 			_ = s.finishRPProviderCall(ctx, callID, "failed", "render_persist", "", trace.AttemptCount())
 			return empty, err
@@ -445,6 +508,10 @@ func (s *Store) streamRPNarrativeWithProvider(ctx context.Context, r RPNarrative
 			return empty, err
 		}
 	}
+	if frozenInput != nil {
+		// Both first-reader races emit the committed winner, after releasing DB state.
+		return s.streamRPNarrativeWithProvider(ctx, r, emit, provider)
+	}
 	return RPNarrativeReadResult{Style: style, View: view}, nil
 }
 
@@ -466,7 +533,7 @@ func savedRPOfficialNarrative(ctx context.Context, encoded, fallback, compositio
 	if err := validateRPNarrativeComposition(view); err != nil {
 		return core.RPNarrativeView{}, err
 	}
-	if compositionVersion == narrative.CompositionVersion {
+	if compositionVersion == core.RPFactCompositionVersionV1 {
 		view.Warnings = append(view.Warnings, narrative.CompositionCapabilityWarning)
 	}
 	if fallback != "" {
@@ -517,6 +584,10 @@ func (s *Store) saveRPOfficialNarrative(ctx context.Context, turnRunID, provider
 	if err != nil {
 		return core.WrapError(core.CodeStorageFailure, "encode canonical narrative fact sources", err)
 	}
+	artifactJSON, err := encodeRPNarrativeArtifact(view)
+	if err != nil {
+		return err
+	}
 	mode := providerMode
 	switch mode {
 	case "deterministic", "style_planner", "full_prose":
@@ -532,11 +603,36 @@ func (s *Store) saveRPOfficialNarrative(ctx context.Context, turnRunID, provider
 		fallbackAssignment = "NULL"
 	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
-	query := `UPDATE rp_turn_runs SET narrative_json=?,narrative_presentation_mode=?,narrative_presented_at_utc=?,updated_at_utc=?,narrative_composition_version=?,narrative_fact_groups_json=?,narrative_fact_event_ids_json=?,narrative_fallback=` + fallbackAssignment + ` WHERE turn_run_id=? AND status='settled' AND narrative_presented_at_utc IS NULL`
-	if _, err := s.db.ExecContext(ctx, query, string(encoded), mode, now, now, view.CompositionVersion, string(groupsJSON), string(factIDsJSON), turnRunID); err != nil {
+	query := `UPDATE rp_turn_runs SET narrative_json=?,narrative_presentation_mode=?,narrative_presented_at_utc=?,updated_at_utc=?,narrative_composition_version=?,narrative_fact_groups_json=?,narrative_fact_event_ids_json=?,narrative_artifact_json=?,narrative_fallback=` + fallbackAssignment + ` WHERE turn_run_id=? AND status='settled' AND narrative_presented_at_utc IS NULL AND (narrative_composition_version<>'corerp.fact-composition.v2' OR narrative_presentation_mode='base')`
+	tx, err := beginImmediate(ctx, s.db)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var instance, branch, observer, principal string
+	if err := tx.conn.QueryRowContext(ctx, `SELECT s.instance_id,s.branch_id,s.controlled_entity_id,s.principal_id FROM rp_turn_runs t JOIN rp_sessions s ON s.session_id=t.session_id WHERE t.turn_run_id=?`, turnRunID).Scan(&instance, &branch, &observer, &principal); err != nil {
+		return err
+	}
+	if err := authorizeRPControl(ctx, tx.conn, principal, instance, branch, observer); err != nil {
+		return err
+	}
+	if _, err := validateRPNarrativeArtifactOnConn(ctx, tx.conn, instance, branch, observer, turnRunID, true, artifactJSON, view); err != nil {
+		return err
+	}
+	var existingVersion, existingArtifact string
+	if err := tx.conn.QueryRowContext(ctx, `SELECT narrative_composition_version,narrative_artifact_json FROM rp_turn_runs WHERE turn_run_id=?`, turnRunID).Scan(&existingVersion, &existingArtifact); err != nil {
+		return err
+	}
+	if existingVersion == core.RPFactCompositionVersionV2 {
+		var prior core.RPNarrativeArtifact
+		if view.CompositionVersion != core.RPFactCompositionVersionV2 || json.Unmarshal([]byte(existingArtifact), &prior) != nil || view.Artifact == nil || prior.InputSHA256 != view.Artifact.InputSHA256 {
+			return narrativeDiverged("official refinement changes the frozen canonical input")
+		}
+	}
+	if _, err := tx.conn.ExecContext(ctx, query, string(encoded), mode, now, now, view.CompositionVersion, string(groupsJSON), string(factIDsJSON), artifactJSON, turnRunID); err != nil {
 		return core.WrapError(core.CodeStorageFailure, "save official RP narrative", err)
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func sanitizeRPNarrativeFallback(reason string) string {

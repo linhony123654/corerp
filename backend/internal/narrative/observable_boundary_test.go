@@ -104,10 +104,10 @@ func TestChatProseProviderCarriesAndRepairsObservableRecipient(t *testing.T) {
 		t.Fatal(err)
 	}
 	view, err := p.Render(context.Background(), in)
-	if err != nil || view.FallbackReason != "" || calls.Load() != 2 || !strings.Contains(strings.Join(view.Lines, ""), "Cai 向你点了点头") {
+	if err != nil || view.FallbackReason != "" || calls.Load() != 2 || !strings.Contains(strings.Join(view.Lines, ""), "Cai向你点了点头") {
 		t.Fatalf("approved recipient repair failed: %+v / %v / calls=%d", view, err, calls.Load())
 	}
-	if len(view.EventIDs) != len(in.Facts) || strings.Contains(strings.Join(view.Lines, ""), "Cai 向Mei") {
+	if len(view.EventIDs) != len(in.Facts) || strings.Contains(strings.Join(view.Lines, ""), "Cai向Mei") {
 		t.Fatalf("repair lost facts or changed observed recipient: %+v", view)
 	}
 	if proseValidationCategory(failure("uncommitted expression target in prose")) != "expression_target_not_committed" {

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -115,7 +116,13 @@ func TestRPRelevantDialogueRecallsOldExchangeWithHearingAndRestart(t *testing.T)
 	split := input
 	split.RecentDialogue = []core.RPDecisionDialogue{dialogue[1]}
 	retrieved, err := readRPRelevantDialogue(ctx, conn, split)
-	if err != nil || len(retrieved) != 1 || !retrieved[0].RecentContext || len(retrieved[0].Dialogue) != 2 || retrieved[0].Dialogue[0] != dialogue[0] || retrieved[0].Dialogue[1] != dialogue[1] {
+	var splitExchange *core.RPDecisionExchange
+	for i := range retrieved {
+		if len(retrieved[i].Dialogue) == 2 && retrieved[i].Dialogue[1].EventID == firstEvent {
+			splitExchange = &retrieved[i]
+		}
+	}
+	if err != nil || splitExchange == nil || !splitExchange.RecentContext || splitExchange.Dialogue[0] != dialogue[0] || splitExchange.Dialogue[1] != dialogue[1] {
 		t.Fatalf("SQL retrieval lost the split exchange: %+v %v", retrieved, err)
 	}
 	for _, scope := range []string{"other-branch", "other-instance", "before-question"} {
@@ -198,6 +205,178 @@ func TestRPRelevantDialogueRecallsOldExchangeWithHearingAndRestart(t *testing.T)
 		againHash, err := core.HashJSON(againView)
 		if err != nil || againHash != providerHash {
 			t.Fatal("same-head/restart provider repair selection changed", err)
+		}
+	}
+}
+
+func TestRPRelevantDialoguePeerSelectionOnParaphraseAndWait(t *testing.T) {
+	var candidates []rpDialogueCandidate
+	for i := 0; i < 3; i++ {
+		for j, speaker := range []string{"a", "npc"} {
+			candidates = append(candidates, rpDialogueCandidate{dialogue: core.RPDecisionDialogue{SpeakerEntityID: speaker, Text: "保密的借书约定。", EventID: fmt.Sprintf("peer-%d-%d", i, j)}, sequence: int64(i*2 + j + 1), session: "s", turn: fmt.Sprint(i), groupSize: 2, peer: true})
+		}
+	}
+	for _, query := range []string{"Then let's proceed.", ""} {
+		input := core.RPDecisionInput{PlayerSpeechText: query, NPCEntityID: "npc", InterlocutorEntityID: "a"}
+		got := selectRPRelevantDialogue(input, candidates)
+		if len(got) != 2 || !got[0].PeerContext || !got[1].PeerContext || got[0].Dialogue[0].EventID != "peer-1-0" || got[1].Dialogue[0].EventID != "peer-2-0" {
+			t.Fatalf("latest two peer exchanges lost on query %q: %+v", query, got)
+		}
+		input.SpeechEventID = "peer-2-0"
+		got = selectRPRelevantDialogue(input, candidates)
+		if len(got) != 2 || got[1].Dialogue[0].EventID != "peer-1-0" {
+			t.Fatalf("current peer group displaced older history: %+v", got)
+		}
+	}
+}
+
+func TestRPRelevantDialoguePeerCandidatesPrecedeGlobalLimit(t *testing.T) {
+	ctx := context.Background()
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "peer-candidates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, schema := range []string{
+		`CREATE TABLE events(event_id TEXT PRIMARY KEY, instance_id TEXT, branch_id TEXT, event_sequence INTEGER, world_time TEXT, payload TEXT)`,
+		`CREATE TABLE rp_utterances(event_id TEXT, speaker_entity_id TEXT, speech_text TEXT, world_time TEXT, session_id TEXT, turn_id TEXT)`,
+		`CREATE TABLE observation_records(source_event_id TEXT, observer_agent_id TEXT, subject_agent_id TEXT, claim_key TEXT, claim_payload TEXT)`,
+	} {
+		if _, err := db.ExecContext(ctx, schema); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	insert := func(sequence int, speaker, turn, branch string, heard bool) {
+		t.Helper()
+		id := fmt.Sprintf("event-%d", sequence)
+		payload, _ := json.Marshal(map[string]string{"parent_turn_id": turn})
+		if _, err := tx.ExecContext(ctx, `INSERT INTO events VALUES (?,'world',?,?, '2026-10-01T00:00:00Z',?)`, id, branch, sequence, string(payload)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO rp_utterances VALUES (?,?,?,'2026-10-01T00:00:00Z','session',?)`, id, speaker, "words-"+id, turn); err != nil {
+			t.Fatal(err)
+		}
+		if heard {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO observation_records VALUES (?,'npc',?,?,'{"claim_type":"speaker_said"}')`, id, speaker, "speech:"+id); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	insert(1, "a", "a-first", "main", true)
+	insert(2, "npc", "a-first", "main", false)
+	insert(3, "a", "a-second", "main", true)
+	insert(4, "npc", "a-second", "main", false)
+	for i := 5; i < 605; i++ {
+		insert(i, "npc", fmt.Sprint(i), "main", false)
+	}
+	// Same-peer words without hearing, beyond the head, or on another branch
+	// must not supply peer membership, even with an actor-owned reply.
+	insert(605, "a", "unheard", "main", false)
+	insert(606, "npc", "unheard", "main", false)
+	insert(607, "a", "future", "main", true)
+	insert(608, "npc", "future", "main", false)
+	insert(609, "a", "other-branch", "other", true)
+	insert(610, "npc", "other-branch", "other", false)
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	input := core.RPDecisionInput{InstanceID: "world", BranchID: "main", NPCEntityID: "npc", InterlocutorEntityID: "a", HeadSequence: 606, PlayerSpeechText: "Then let's proceed."}
+	candidates, err := readRPDialogueCandidates(ctx, conn, input)
+	if err != nil || len(candidates) != rpDialogueCandidateLimit {
+		t.Fatalf("candidate bound changed: %d %v", len(candidates), err)
+	}
+	for _, query := range []string{input.PlayerSpeechText, ""} {
+		input.PlayerSpeechText = query
+		got, err := readRPRelevantDialogue(ctx, conn, input)
+		if err != nil || len(got) != 2 || !got[0].PeerContext || !got[1].PeerContext || len(got[0].Dialogue) != 2 || len(got[1].Dialogue) != 2 || got[0].Dialogue[0].EventID != "event-1" || got[1].Dialogue[1].EventID != "event-4" {
+			t.Fatalf("peer exchanges lost behind >512 newer utterances: %+v %v", got, err)
+		}
+		before, _ := core.HashJSON(got)
+		again, err := readRPRelevantDialogue(ctx, conn, input)
+		after, _ := core.HashJSON(again)
+		if err != nil || before != after {
+			t.Fatal("peer selection was not deterministic", err)
+		}
+	}
+	peerDialogue, err := readRPRelevantDialogue(ctx, conn, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet := input
+	packet.RelevantDialogue = peerDialogue
+	packet.RecentDialogue = []core.RPDecisionDialogue{peerDialogue[1].Dialogue[1]}
+	selected, err := core.SelectRPDecisionContext(packet, core.DefaultRPDecisionContextBudgetBytes)
+	if err != nil || len(selected.RelevantDialogue) != 2 || !selected.RelevantDialogue[0].PeerContext || !selected.RelevantDialogue[1].PeerContext {
+		t.Fatalf("peer units lost in final selection: %+v %v", selected.RelevantDialogue, err)
+	}
+	base, err := core.SelectRPDecisionContext(input, core.DefaultRPDecisionContextBudgetBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Leave room for the additional omission counters, but not even one
+	// complete two-utterance group.
+	limited, err := core.SelectRPDecisionContext(packet, base.ContextSelection.EncodedBytes+96)
+	if err != nil || len(limited.RelevantDialogue) != 0 || len(limited.RecentDialogue) != 0 || limited.ContextSelection.Omitted.RelevantExchanges != 2 || limited.ContextSelection.EncodedBytes > limited.ContextSelection.BudgetBytes {
+		t.Fatalf("byte budget substituted a lone reply for omitted peer units: %+v %v", limited, err)
+	}
+	input.InterlocutorEntityID = "unheard-peer"
+	if got, err := readRPRelevantDialogue(ctx, conn, input); err != nil || len(got) != 0 {
+		t.Fatalf("another peer inherited A's dialogue: %+v %v", got, err)
+	}
+}
+
+func TestRPRelevantDialoguePeerRecallEntersActualWaitProviderView(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "peer-wait.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	session, player, initial := newRPWaitTestSession(t, ctx, s)
+	const question = "那本诗集可以借，但缺页的原因请别问。"
+	const reply = "好，借书的事照办，缺页的事不问。"
+	turn, err := s.RunRPTurn(ctx, core.RPSpeechRequest{PrincipalID: player.PrincipalID, SessionID: session.SessionID, Text: question, ExpectedCursor: initial.ObservationCursor, IdempotencyKey: "peer-before-wait"}, rpDecisionProviderFunc(func(context.Context, core.RPDecisionInput) (core.RPDecisionProposal, error) {
+		return core.RPDecisionProposal{Action: "respond", Text: reply, Private: &core.RPDecisionPrivate{Intent: "dated-peer-sketch", RelationshipStance: "尊重边界"}}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.Status != "settled" {
+		t.Fatalf("pre-wait dialogue did not settle: %+v", turn)
+	}
+	current, err := s.ObserveRPSession(ctx, player)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait, err := s.WaitRP(ctx, core.RPWaitRequest{PrincipalID: player.PrincipalID, SessionID: session.SessionID, ExpectedCursor: current.ObservationCursor, TargetWorldTime: "2026-09-22T03:00:00Z", Budget: 10, IdempotencyKey: "peer-recall-wait"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := s.BuildRPInitiativeInput(ctx, core.RPInitiativeRequest{PrincipalID: player.PrincipalID, SessionID: session.SessionID, NPCEntityID: M2RPNPCID, TriggerEventID: wait.EventID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := s.rpDecisionProviderView(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provider.PlayerSpeechText != "" || provider.SpeechEventID != "" || provider.Trigger == nil || provider.Trigger.Kind != "elapsed_time" || len(provider.RelevantDialogue) != 1 || !provider.RelevantDialogue[0].PeerContext || len(provider.RelevantDialogue[0].Dialogue) != 2 || len(provider.RecentPrivateDecisions) != 1 || provider.RecentPrivateDecisions[0].Private.Intent != "dated-peer-sketch" {
+		t.Fatalf("actual wait invented speech or lost directed recall: %+v", provider)
+	}
+	for i, d := range provider.RelevantDialogue[0].Dialogue {
+		words, ok := core.ResolveRPDecisionSpeech(provider, d.EventID, d.SpeakerEntityID)
+		if !ok || words != []string{question, reply}[i] {
+			t.Fatalf("wait provider lost exact attributed words: %+v %q", d, words)
 		}
 	}
 }

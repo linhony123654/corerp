@@ -13,6 +13,8 @@ import (
 )
 
 const rpDialogueCandidateLimit = 512
+const rpPeerDialogueCandidateLimit = 128
+const rpPeerExchangeLimit = 2
 const rpRelevantExchangeLimit = 4
 const rpRelevantDialogueRuneBudget = 6000
 
@@ -22,18 +24,26 @@ type rpDialogueCandidate struct {
 	session   string
 	turn      string
 	groupSize int
+	peer      bool
 }
 
 // Retrieval is a read projection over the same accepted/heard speech as the
 // recent window. No summary, model call, unobserved turn content or new canon.
 func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) ([]core.RPDecisionExchange, error) {
-	if strings.TrimSpace(input.PlayerSpeechText) == "" {
-		return nil, nil
+	candidates, err := readRPDialogueCandidates(ctx, conn, input)
+	if err != nil {
+		return nil, err
 	}
-	rows, err := conn.QueryContext(ctx, `
+	return selectRPRelevantDialogue(input, candidates), nil
+}
+
+// Reserve a bounded pool for this directed peer before global recency can
+// crowd it out. Counts and peer membership use only the same authorized rows;
+// unheard siblings never qualify a group or complete a truncated exchange.
+func readRPDialogueCandidates(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) ([]rpDialogueCandidate, error) {
+	rows, err := conn.QueryContext(ctx, `WITH authorized AS (
 		SELECT u.speaker_entity_id,u.speech_text,u.event_id,u.world_time,e.event_sequence,
-		       u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id),
-		       COUNT(*) OVER (PARTITION BY u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id))
+		       u.session_id,COALESCE(NULLIF(json_extract(e.payload,'$.parent_turn_id'),''),u.turn_id) AS exchange_turn
 		FROM rp_utterances u JOIN events e ON e.event_id=u.event_id
 		WHERE e.instance_id=? AND e.branch_id=? AND e.event_sequence<=?
 		  AND (u.speaker_entity_id=? OR EXISTS (
@@ -42,8 +52,19 @@ func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDe
 		      AND o.subject_agent_id=u.speaker_entity_id
 		      AND o.claim_key='speech:' || u.event_id
 		      AND json_extract(o.claim_payload,'$.claim_type')='speaker_said'))
-		ORDER BY e.event_sequence DESC LIMIT ?`, input.InstanceID, input.BranchID, input.HeadSequence,
-		input.NPCEntityID, input.NPCEntityID, rpDialogueCandidateLimit)
+	), grouped AS (
+		SELECT *,COUNT(*) OVER exchange_scope AS group_size,
+		       (MAX(speaker_entity_id=?) OVER exchange_scope
+		        AND MAX(speaker_entity_id=? AND ?<>'') OVER exchange_scope) AS peer
+		FROM authorized WINDOW exchange_scope AS (PARTITION BY session_id,exchange_turn)
+	), peer_candidates AS (
+		SELECT * FROM grouped WHERE peer ORDER BY event_sequence DESC LIMIT ?
+	), general_candidates AS (
+		SELECT * FROM grouped WHERE event_id NOT IN (SELECT event_id FROM peer_candidates)
+		ORDER BY event_sequence DESC LIMIT (?-(SELECT COUNT(*) FROM peer_candidates))
+	)
+	SELECT * FROM peer_candidates UNION ALL SELECT * FROM general_candidates ORDER BY event_sequence DESC`, input.InstanceID, input.BranchID, input.HeadSequence,
+		input.NPCEntityID, input.NPCEntityID, input.NPCEntityID, input.InterlocutorEntityID, input.InterlocutorEntityID, rpPeerDialogueCandidateLimit, rpDialogueCandidateLimit)
 	if err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "read NPC relevant dialogue candidates", err)
 	}
@@ -52,7 +73,7 @@ func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDe
 	for rows.Next() {
 		var candidate rpDialogueCandidate
 		d := &candidate.dialogue
-		if err := rows.Scan(&d.SpeakerEntityID, &d.Text, &d.EventID, &d.WorldTime, &candidate.sequence, &candidate.session, &candidate.turn, &candidate.groupSize); err != nil {
+		if err := rows.Scan(&d.SpeakerEntityID, &d.Text, &d.EventID, &d.WorldTime, &candidate.sequence, &candidate.session, &candidate.turn, &candidate.groupSize, &candidate.peer); err != nil {
 			return nil, core.WrapError(core.CodeStorageFailure, "scan NPC relevant dialogue", err)
 		}
 		candidates = append(candidates, candidate)
@@ -60,7 +81,7 @@ func readRPRelevantDialogue(ctx context.Context, conn *sql.Conn, input core.RPDe
 	if err := rows.Err(); err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "iterate NPC relevant dialogue", err)
 	}
-	return selectRPRelevantDialogue(input, candidates), nil
+	return candidates, nil
 }
 
 // Repair split recent exchanges first, then rank older exchanges by shared
@@ -74,6 +95,7 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 		missing  bool
 		recent   bool
 		current  bool
+		peer     bool
 		size     int
 		score    float64
 	}
@@ -90,6 +112,7 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 			groups[key] = g
 		}
 		g.dialogue = append(g.dialogue, c)
+		g.peer = g.peer || c.peer
 		if c.sequence > g.sequence {
 			g.sequence = c.sequence
 		}
@@ -122,12 +145,23 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 		}
 	}
 	var ranked []*group
+	var peerGroups []*group
+	for _, g := range groups {
+		if g.peer && !g.current && len(g.dialogue) == g.size {
+			peerGroups = append(peerGroups, g)
+		}
+	}
+	sort.Slice(peerGroups, func(i, j int) bool { return peerGroups[i].sequence > peerGroups[j].sequence })
+	retainedPeers := map[*group]bool{}
+	for _, g := range peerGroups[:min(len(peerGroups), rpPeerExchangeLimit)] {
+		retainedPeers[g] = true
+	}
 	for _, g := range groups {
 		// A recent reply must not hide its older question or qualification.
 		// Keep the authorized group together, including overlapping recent words.
 		// The SQL count excludes unheard/out-of-head siblings. Reject a group cut
 		// by the candidate window rather than presenting it as a full exchange.
-		if !g.missing || g.current || len(g.dialogue) < g.size {
+		if (!g.missing && !retainedPeers[g]) || g.current || len(g.dialogue) < g.size {
 			continue
 		}
 		for _, term := range terms {
@@ -139,15 +173,22 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 				g.score += math.Log(1 + float64(len(groups))/float64(frequency[term]))
 			}
 		}
-		if g.recent || g.score > 0 {
+		if g.recent || retainedPeers[g] || g.score > 0 {
 			ranked = append(ranked, g)
 		}
 	}
 	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].recent != ranked[j].recent {
-			return ranked[i].recent
+		repairI, repairJ := ranked[i].recent && ranked[i].missing, ranked[j].recent && ranked[j].missing
+		if repairI != repairJ {
+			return repairI
 		}
-		if ranked[i].recent {
+		if repairI {
+			return ranked[i].sequence > ranked[j].sequence
+		}
+		if retainedPeers[ranked[i]] != retainedPeers[ranked[j]] {
+			return retainedPeers[ranked[i]]
+		}
+		if retainedPeers[ranked[i]] {
 			return ranked[i].sequence > ranked[j].sequence
 		}
 		if ranked[i].score != ranked[j].score {
@@ -175,7 +216,7 @@ func selectRPRelevantDialogue(input core.RPDecisionInput, candidates []rpDialogu
 	var result []core.RPDecisionExchange
 	for _, g := range selected {
 		sort.Slice(g.dialogue, func(i, j int) bool { return g.dialogue[i].sequence < g.dialogue[j].sequence })
-		exchange := core.RPDecisionExchange{RecentContext: g.recent}
+		exchange := core.RPDecisionExchange{RecentContext: g.recent && g.missing, PeerContext: retainedPeers[g]}
 		for _, c := range g.dialogue {
 			exchange.Dialogue = append(exchange.Dialogue, c.dialogue)
 		}

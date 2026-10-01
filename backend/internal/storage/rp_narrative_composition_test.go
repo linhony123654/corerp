@@ -38,7 +38,7 @@ func TestRPNarrativeCompositionReceiptSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	input.Style = style.Profile
-	base, err := (core.DeterministicRPNarrativeProvider{}).Render(ctx, input)
+	base, err := (core.LiteralRPNarrativeProvider{}).Render(ctx, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +47,7 @@ func TestRPNarrativeCompositionReceiptSurvivesRestart(t *testing.T) {
 	for _, id := range base.EventIDs {
 		canonicalView.FactGroups = append(canonicalView.FactGroups, []string{id})
 	}
+	clearRPV2CanonicalFixture(t, ctx, s, turn.TurnRunID)
 	if err := s.saveRPOfficialNarrative(ctx, turn.TurnRunID, "full_prose", canonicalView); err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +218,9 @@ func TestRPNarrativeCompositionMigrationPreservesLegacySelectedProse(t *testing.
 	// Return a populated fixture to the pre-077 table shape; Open must apply
 	// the additive migration without rewriting immutable legacy render rows.
 	for _, statement := range []string{
+		`ALTER TABLE rp_narrative_renders DROP COLUMN artifact_json`,
+		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_artifact_json`,
+		`DELETE FROM schema_meta WHERE schema_version='corerp-rp-narrative-artifacts-078-2026-10-01'`,
 		`ALTER TABLE rp_narrative_renders DROP COLUMN fact_event_ids_json`,
 		`ALTER TABLE rp_narrative_renders DROP COLUMN fact_groups_json`,
 		`ALTER TABLE rp_narrative_renders DROP COLUMN composition_version`,
@@ -305,7 +309,7 @@ func TestRPNarrativeCompositionCorruptionRejectedAfterRestart(t *testing.T) {
 					t.Fatal(err)
 				}
 				input.Style = style.Profile
-				view, err := (core.DeterministicRPNarrativeProvider{}).Render(ctx, input)
+				view, err := (core.LiteralRPNarrativeProvider{}).Render(ctx, input)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -313,6 +317,7 @@ func TestRPNarrativeCompositionCorruptionRejectedAfterRestart(t *testing.T) {
 				for _, id := range view.EventIDs {
 					view.FactGroups = append(view.FactGroups, []string{id})
 				}
+				clearRPV2CanonicalFixture(t, ctx, s, turn.TurnRunID)
 				if err := s.saveRPOfficialNarrative(ctx, turn.TurnRunID, "full_prose", view); err != nil {
 					t.Fatal(err)
 				}
@@ -391,5 +396,13 @@ func TestRPNarrativeCompositionCorruptionRejectedAfterRestart(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Construct a historical pre-v2 fixture without changing runtime downgrade rules.
+func clearRPV2CanonicalFixture(t *testing.T, ctx context.Context, s *Store, id string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(ctx, `UPDATE rp_turn_runs SET narrative_composition_version='',narrative_fact_groups_json='[]',narrative_fact_event_ids_json='[]',narrative_artifact_json='{}' WHERE turn_run_id=?`, id); err != nil {
+		t.Fatal(err)
 	}
 }

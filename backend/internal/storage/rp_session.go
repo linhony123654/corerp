@@ -75,6 +75,7 @@ type RPVisiblePlace struct {
 }
 
 type RPHistoryTurn struct {
+	EventIDs           []string         `json:"event_ids,omitempty"`
 	TurnRunID          string           `json:"turn_run_id"`
 	NarrativeLines     []string         `json:"narrative_lines"`
 	RenderID           string           `json:"render_id,omitempty"`
@@ -537,19 +538,26 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 		if originSessionID == "" {
 			continue
 		}
-		var canonicalVersion, canonicalGroups, canonicalFactIDs string
-		if err := tx.conn.QueryRowContext(ctx, `SELECT narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=?`, view.RecentTurns[i].TurnRunID, originSessionID).Scan(&canonicalVersion, &canonicalGroups, &canonicalFactIDs); err != nil {
+		var canonicalVersion, canonicalGroups, canonicalFactIDs, canonicalArtifact string
+		if err := tx.conn.QueryRowContext(ctx, `SELECT narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json,narrative_artifact_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=?`, view.RecentTurns[i].TurnRunID, originSessionID).Scan(&canonicalVersion, &canonicalGroups, &canonicalFactIDs, &canonicalArtifact); err != nil {
 			return RPObservation{}, core.WrapError(core.CodeStorageFailure, "read canonical narrative composition", err)
 		}
 		view.RecentTurns[i].FactGroups, err = decodeRPNarrativeComposition(canonicalVersion, canonicalGroups, canonicalFactIDs, view.RecentTurns[i].NarrativeLines)
 		if err != nil {
 			return RPObservation{}, err
 		}
+		canonicalView := core.RPNarrativeView{CompositionVersion: canonicalVersion, Lines: view.RecentTurns[i].NarrativeLines, FactGroups: view.RecentTurns[i].FactGroups, EventIDs: mustRPNarrativeIDs(canonicalFactIDs)}
+		if _, err := validateRPNarrativeArtifactOnConn(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, view.RecentTurns[i].TurnRunID, true, canonicalArtifact, canonicalView); err != nil {
+			return RPObservation{}, err
+		}
+		if canonicalVersion != "" {
+			view.RecentTurns[i].EventIDs = canonicalView.EventIDs
+		}
 		view.RecentTurns[i].CompositionVersion = canonicalVersion
 		if renderSelectionsAvailable {
 			var selectedID, selectedJSON string
-			var version, groupsJSON, factIDsJSON string
-			err = tx.conn.QueryRowContext(ctx, `SELECT r.render_id,r.lines_json,r.composition_version,r.fact_groups_json,r.fact_event_ids_json FROM rp_narrative_selections s JOIN rp_narrative_renders r ON r.render_id=s.render_id AND r.turn_run_id=s.turn_run_id WHERE s.turn_run_id=?`, view.RecentTurns[i].TurnRunID).Scan(&selectedID, &selectedJSON, &version, &groupsJSON, &factIDsJSON)
+			var version, groupsJSON, factIDsJSON, artifactJSON string
+			err = tx.conn.QueryRowContext(ctx, `SELECT r.render_id,r.lines_json,r.composition_version,r.fact_groups_json,r.fact_event_ids_json,r.artifact_json FROM rp_narrative_selections s JOIN rp_narrative_renders r ON r.render_id=s.render_id AND r.turn_run_id=s.turn_run_id WHERE s.turn_run_id=?`, view.RecentTurns[i].TurnRunID).Scan(&selectedID, &selectedJSON, &version, &groupsJSON, &factIDsJSON, &artifactJSON)
 			if err == nil {
 				if err := json.Unmarshal([]byte(selectedJSON), &view.RecentTurns[i].NarrativeLines); err != nil {
 					return RPObservation{}, core.WrapError(core.CodeProjectionDiverged, "decode selected narrative history", err)
@@ -558,6 +566,14 @@ func (s *Store) ObserveRPSession(ctx context.Context, request core.RPSessionRead
 				view.RecentTurns[i].FactGroups, err = decodeRPNarrativeComposition(version, groupsJSON, factIDsJSON, view.RecentTurns[i].NarrativeLines)
 				if err != nil {
 					return RPObservation{}, err
+				}
+				selectedView := core.RPNarrativeView{CompositionVersion: version, Lines: view.RecentTurns[i].NarrativeLines, FactGroups: view.RecentTurns[i].FactGroups, EventIDs: mustRPNarrativeIDs(factIDsJSON)}
+				if _, err := validateRPNarrativeArtifactOnConn(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, view.RecentTurns[i].TurnRunID, false, artifactJSON, selectedView); err != nil {
+					return RPObservation{}, err
+				}
+				view.RecentTurns[i].EventIDs = nil
+				if version != "" {
+					view.RecentTurns[i].EventIDs = selectedView.EventIDs
 				}
 				view.RecentTurns[i].CompositionVersion = version
 			} else if !errors.Is(err, sql.ErrNoRows) {

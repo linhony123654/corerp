@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import type { StyleRead } from '../lib/narrativeStyle'
-import type { NarrativeStreamResult } from '../lib/narrativeStream'
+import { validateNarrativeComposition, type NarrativeStreamResult, type NarrativeView } from '../lib/narrativeStream'
 
 const props = defineProps<{ session: string; turn: string; selectedRender?: string; disabled: boolean; api: <T>(path: string, body: Record<string, unknown>) => Promise<T>; stream: (body: Record<string, unknown>, preview: (lines: string[]) => void, signal: AbortSignal) => Promise<NarrativeStreamResult> }>()
 const emit = defineEmits<{ variant: [lines: string[] | null] }>()
@@ -38,7 +38,8 @@ async function restore() {
   if (busy.value || props.disabled) return
   busy.value = true; error.value = ''
   try {
-    const selected = await props.api<{ lines: string[] }>('narrative/select', { session_id: props.session, turn_run_id: props.turn, render_id: '' })
+    const selected = await props.api<NarrativeView>('narrative/select', { session_id: props.session, turn_run_id: props.turn, render_id: '' })
+    validateNarrativeComposition(selected)
     if (active) { emit('variant', selected.lines); changed.value = false; warnings.value = []; request = null }
   } catch (cause) { if (active) error.value = cause instanceof Error ? cause.message : '恢复原叙述失败。' }
   finally { if (active) busy.value = false }

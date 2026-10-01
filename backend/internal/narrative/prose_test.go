@@ -18,12 +18,25 @@ const validSourcedProse = "你问：「今晚有空吗？」\nCai 应声：「�
 
 // Fresh success fixtures speak the closed wire protocol. Raw prose constants
 // remain for legacy guards and negative/fallback cases only.
-func factCompositionFixture(refs ...string) string {
+func legacyFactCompositionFixture(refs ...string) string {
 	groups := make([]map[string]any, 0, len(refs))
 	for _, ref := range refs {
 		groups = append(groups, map[string]any{"layout": "inline", "atoms": []any{map[string]string{"fact_ref": ref, "template": "plain"}}})
 	}
 	raw, _ := json.Marshal(map[string]any{"version": CompositionVersion, "groups": groups})
+	return string(raw)
+}
+
+func factCompositionFixture(refs ...string) string {
+	paragraphs := make([]map[string]any, 0, len(refs))
+	for _, ref := range refs {
+		form := "action"
+		if ref == "f0" || ref == "f1" {
+			form = "subject_first"
+		}
+		paragraphs = append(paragraphs, map[string]any{"context": "none", "beats": []any{map[string]any{"fact_refs": []string{ref}, "form": form, "lexical": "plain"}}})
+	}
+	raw, _ := json.Marshal(map[string]any{"version": core.RPFactCompositionVersionV2, "register": "plain", "paragraphs": paragraphs})
 	return string(raw)
 }
 
@@ -86,7 +99,7 @@ func TestChatProseProviderRendersSourcedParagraphs(t *testing.T) {
 	if len(view.EventIDs) != 2 || view.EventIDs[0] != "e1" || view.EventIDs[1] != "e2" {
 		t.Fatalf("prose view lost fact attribution: %+v", view.EventIDs)
 	}
-	if view.CompositionVersion != CompositionVersion || len(view.FactGroups) != 2 {
+	if view.CompositionVersion != core.RPFactCompositionVersionV2 || len(view.FactGroups) != 2 {
 		t.Fatalf("render lacks closed composition receipt: %+v", view)
 	}
 	for i, chunk := range streamed {
@@ -231,7 +244,7 @@ func TestChatProseProviderRepairsDroppedSpeechWithExplicitFeedback(t *testing.T)
 		t.Fatal(err)
 	}
 	view, err := provider.Render(context.Background(), proseFixture())
-	if err != nil || len(view.Warnings) != 1 || view.Warnings[0] != compositionCapabilityWarning || view.FallbackReason != "" || len(view.Lines) != 2 || calls.Load() != 2 {
+	if err != nil || len(view.Warnings) != 0 || view.FallbackReason != "" || len(view.Lines) != 2 || calls.Load() != 2 {
 		t.Fatalf("draft with dropped speech was not repaired: %+v %v calls=%d", view, err, calls.Load())
 	}
 }
@@ -564,7 +577,7 @@ func TestChatProseProviderRepairsAmbiguousExpressionWithActorFeedback(t *testing
 		t.Fatalf("ambiguous expression was not repaired: %+v %v calls=%d", view, err, calls.Load())
 	}
 	joined := strings.Join(view.Lines, "\n")
-	if !strings.Contains(joined, "Cai 点了点头") || !strings.Contains(joined, "Mei 保持沉默") || strings.Contains(joined, "Mei 点了点头") || len(view.EventIDs) != 4 {
+	if !strings.Contains(joined, "Cai点了点头") || !strings.Contains(joined, "Mei没有作答") || strings.Contains(joined, "Mei点了点头") || len(view.EventIDs) != 4 {
 		t.Fatalf("repair changed gesture actor or lost public facts: %+v", view)
 	}
 }

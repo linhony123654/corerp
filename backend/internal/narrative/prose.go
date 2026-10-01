@@ -181,13 +181,6 @@ func (p *ChatProseProvider) RenderStream(ctx context.Context, in core.RPNarrativ
 		// sanitized reason travels with the view so the caller can persist
 		// it — a fallback must always be queryable, never silent.
 		fallback := in
-		// Detailed deterministic rendering prefixes every fact with the exact
-		// world timestamp. That is useful for an audit view but especially
-		// mechanical as a prose fallback, so keep POV/tense while dropping only
-		// the repeated timestamp presentation.
-		if fallback.Style.Verbosity == "detailed" {
-			fallback.Style.Verbosity = "normal"
-		}
 		view, derr := (core.DeterministicRPNarrativeProvider{}).RenderStream(ctx, fallback, emit)
 		if derr != nil {
 			return core.RPNarrativeView{}, derr
@@ -196,21 +189,10 @@ func (p *ChatProseProvider) RenderStream(ctx context.Context, in core.RPNarrativ
 		view.Warnings = append(view.Warnings, "小说式呈现暂不可用或正文未通过事实校验，已回退为标准叙述。")
 		return view, nil
 	}
-	view := core.RPNarrativeView{Lines: []string{}, EventIDs: []string{}, Warnings: []string{}}
-	// View references retain exact committed-fact order. The render store
-	// records any authored public-style sources separately from turn facts.
-	for _, fact := range in.Facts {
-		view.EventIDs = append(view.EventIDs, fact.EventID)
-	}
-	view.CompositionVersion = CompositionVersion
-	view.FactGroups = composition.Sources
-	view.Warnings = append(view.Warnings, composition.Warnings...)
-	// Plan groups, not raw newline splitting, define emission boundaries.
-	// Newlines and spaces inside accepted speech remain byte-for-byte intact.
-	for index, paragraph := range composition.Lines {
-		view.Lines = append(view.Lines, paragraph)
+	view := *composition
+	for index, paragraph := range view.Lines {
 		if emit != nil {
-			if err := emit(core.RPNarrativeChunk{Index: index, EventIDs: composition.Sources[index], Line: paragraph}); err != nil {
+			if err := emit(core.RPNarrativeChunk{Index: index, EventIDs: append([]string(nil), view.FactGroups[index]...), Line: paragraph}); err != nil {
 				return core.RPNarrativeView{}, err
 			}
 		}
@@ -218,7 +200,7 @@ func (p *ChatProseProvider) RenderStream(ctx context.Context, in core.RPNarrativ
 	return view, nil
 }
 
-func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput) (*compositionResult, error) {
+func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput) (*core.RPNarrativeView, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.config.Timeout)
 	defer cancel()
 	facts := make([]proseFact, 0, len(in.Facts))
@@ -232,7 +214,10 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 				target = "你"
 			}
 		}
-		templates := compositionTemplates(fact)
+		templates := []string{"action"}
+		if compositionSpeech(fact) {
+			templates = []string{"subject_first", "quote_first"}
+		}
 		facts = append(facts, proseFact{
 			FactRef: compositionFactRef(index), AllowedTemplates: templates,
 			Actor: fact.ActorName, Action: actionLabel(fact, in.ActivityLabels), Target: target, Text: fact.Text, Object: fact.ObjectName, State: fact.ObjectState,
@@ -260,7 +245,7 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 		density = "concise"
 	}
 	payload := map[string]any{
-		"composition_version": compositionVersion, "capability_limit": compositionCapabilityWarning, "output_schema": compositionSchema(in), "pov": in.Style.POV, "tense": in.Style.Tense, "verbosity": in.Style.Verbosity,
+		"composition_version": core.RPFactCompositionVersionV2, "source_head": in.SourceHead, "eligible_beats": core.RPCompositionChoices(in), "output_schema": core.RPCompositionSchema(in), "pov": in.Style.POV, "tense": in.Style.Tense, "verbosity": in.Style.Verbosity,
 		"density": density, "dialogue_ratio": in.Style.DialogueRatio, "description_density": in.Style.DescriptionDensity,
 		"instructions": in.Style.ProseInstructions, "forbidden": in.Style.ForbiddenPatterns, "facts": facts,
 	}
@@ -274,7 +259,7 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 	var last error
 	var previousDraft, revisionInstruction string
 	for attempt := 0; attempt < p.config.Attempts; attempt++ {
-		messages := []map[string]string{{"role": "system", "content": compositionInstruction}, {"role": "user", "content": string(encoded)}}
+		messages := []map[string]string{{"role": "system", "content": core.RPCompositionInstruction}, {"role": "user", "content": string(encoded)}}
 		if previousDraft != "" {
 			messages = append(messages, map[string]string{"role": "assistant", "content": previousDraft}, map[string]string{"role": "user", "content": revisionInstruction})
 		}
@@ -287,10 +272,19 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 		if err != nil {
 			return nil, failure("request encoding failed")
 		}
+		// Bound the actual request, including schema, instructions and a repair
+		// draft, without truncating any public fact or accepted utterance.
+		requestBudget := in.Style.ContextBudgetBytes
+		if requestBudget == 0 {
+			requestBudget = core.DefaultRPNarrativeContextBudgetBytes
+		}
+		if len(body) > requestBudget {
+			return nil, failure("prose empty or exceeds budget")
+		}
 		text, retry, delay, err := p.attempt(ctx, body)
 		if err == nil {
 			draft := text
-			composition, compositionErr := renderComposition(ctx, draft, in)
+			composition, compositionErr := renderFreshRPComposition(ctx, draft, in)
 			err = compositionErr
 			verr := err
 			if verr == nil {
@@ -301,7 +295,7 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 				err, retry, delay = verr, true, 0
 				debugProseValidation(verr)
 				previousDraft = draft
-				revisionInstruction = "上次输出不是有效的闭合排版计划。只返回 " + compositionVersion + " JSON；每个 fact_ref 按原序恰好一次，使用 allowed_templates，禁止所有额外字段及正文。"
+				revisionInstruction = "上次输出不是有效的闭合排版计划。只返回 " + core.RPFactCompositionVersionV2 + " JSON；每个 fact_ref 按原序恰好一次，仅选择 eligible_beats 的 fact_refs/form，禁止所有额外字段及正文。"
 			}
 		}
 		last = err

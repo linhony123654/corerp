@@ -12,9 +12,9 @@ import (
 // audit-only proposal. Scope, owner, committed attempt, head and proposal hash
 // are checked against its actual Event. No private world/projection is added.
 func readRPOwnPrivateDecisionMemory(ctx context.Context, conn *sql.Conn, input core.RPDecisionInput) ([]core.RPDecisionPrivateMemory, error) {
-	rows, err := conn.QueryContext(ctx, `
+	rows, err := conn.QueryContext(ctx, `WITH eligible AS (
 		SELECT d.decision_id,e.event_id,e.event_sequence,e.world_time,
-		       s.controlled_entity_id,d.proposal_json,d.proposal_hash
+		       s.controlled_entity_id AS interlocutor_entity_id,d.proposal_json,d.proposal_hash
 		FROM rp_npc_decisions d JOIN events e ON e.event_id=d.event_id
 		JOIN rp_sessions s ON s.session_id=d.session_id
 		JOIN event_batches b ON b.batch_id=e.batch_id
@@ -26,7 +26,13 @@ func readRPOwnPrivateDecisionMemory(ctx context.Context, conn *sql.Conn, input c
 		  AND c.command_type IN ('RPNPCDecision','RPNPCInitiative')
 		  AND a.proposal_hash=d.proposal_hash
 		  AND json_type(d.proposal_json,'$.private')='object'
-	ORDER BY e.event_sequence DESC LIMIT 3`, input.InstanceID, input.BranchID, input.HeadSequence, input.HeadSequence, input.NPCEntityID, input.TurnID)
+	), recent AS (
+		SELECT * FROM eligible ORDER BY event_sequence DESC LIMIT 3
+	), peer AS (
+		SELECT * FROM eligible WHERE interlocutor_entity_id=? AND ?<>''
+		ORDER BY event_sequence DESC LIMIT 1
+	)
+	SELECT * FROM recent UNION SELECT * FROM peer ORDER BY event_sequence DESC`, input.InstanceID, input.BranchID, input.HeadSequence, input.HeadSequence, input.NPCEntityID, input.TurnID, input.InterlocutorEntityID, input.InterlocutorEntityID)
 	if err != nil {
 		return nil, core.WrapError(core.CodeStorageFailure, "read own applied private decisions", err)
 	}

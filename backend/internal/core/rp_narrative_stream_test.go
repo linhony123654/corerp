@@ -8,7 +8,7 @@ import (
 )
 
 func TestRPNarrativeStreamOrderingCancellationAndIncompleteFacts(t *testing.T) {
-	p := DeterministicRPNarrativeProvider{}
+	p := LiteralRPNarrativeProvider{}
 	in := RPNarrativeInput{Style: DefaultRPStyle(), Facts: []RPNarrativeFact{
 		{EventID: "one", ActorName: "Lin", Action: "speak", Text: "你好\n继续。"},
 		{EventID: "two", ActorName: "Cai", Action: "respond", Text: "你好。"},

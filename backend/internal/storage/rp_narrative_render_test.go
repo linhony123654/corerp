@@ -128,6 +128,8 @@ func TestRPNarrativeRenderMigrationUpgradesPopulated052(t *testing.T) {
 	for _, statement := range []string{
 		`DROP TABLE rp_narrative_selections`,
 		`DROP TABLE rp_narrative_renders`,
+		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_artifact_json`,
+		`DELETE FROM schema_meta WHERE schema_version='corerp-rp-narrative-artifacts-078-2026-10-01'`,
 		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_fact_event_ids_json`,
 		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_fact_groups_json`,
 		`ALTER TABLE rp_turn_runs DROP COLUMN narrative_composition_version`,

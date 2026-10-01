@@ -144,12 +144,14 @@ func (s RPStyleProfile) Validate() error {
 }
 
 type RPNarrativeFact struct {
-	EventID      string `json:"event_id"`
-	ActorID      string `json:"actor_id"`
-	ActorName    string `json:"actor_name"`
-	Action       string `json:"action"`
-	Text         string `json:"text,omitempty"`
-	ActivityCode string `json:"activity_code,omitempty"`
+	// Only a witnessed expression may name its proven speech parent.
+	CompanionEventID string `json:"companion_event_id,omitempty"`
+	EventID          string `json:"event_id"`
+	ActorID          string `json:"actor_id"`
+	ActorName        string `json:"actor_name"`
+	Action           string `json:"action"`
+	Text             string `json:"text,omitempty"`
+	ActivityCode     string `json:"activity_code,omitempty"`
 	// ActivityLabel is the world-declared prose label for the activity
 	// (studio narrative package); empty means the code is shown as-is.
 	ActivityLabel  string `json:"activity_label,omitempty"`
@@ -174,6 +176,7 @@ type RPPublicPresentation struct {
 }
 
 type RPNarrativeInput struct {
+	SourceHead          int64                  `json:"source_head,omitempty"`
 	ControlledEntityID  string                 `json:"controlled_entity_id"`
 	Style               RPStyleProfile         `json:"style"`
 	Facts               []RPNarrativeFact      `json:"committed_facts"`
@@ -220,10 +223,11 @@ func (in RPNarrativeInput) ValidateReadBudget() error {
 }
 
 type RPNarrativeView struct {
-	Lines    []string `json:"lines"`
-	EventIDs []string `json:"event_ids"`
-	Warnings []string `json:"warnings"`
-	RenderID string   `json:"render_id,omitempty"`
+	Artifact *RPNarrativeArtifact `json:"-"`
+	Lines    []string             `json:"lines"`
+	EventIDs []string             `json:"event_ids"`
+	Warnings []string             `json:"warnings"`
+	RenderID string               `json:"render_id,omitempty"`
 	// Legacy saved prose omits these fields. A versioned composition binds
 	// each line to server-expanded public fact nodes, not free model prose.
 	CompositionVersion string     `json:"composition_version,omitempty"`
@@ -260,13 +264,13 @@ func (DeterministicRPNarrativeProvider) ProviderMetadata() RPProviderMetadata {
 
 // Literal rendering changes presentation only. Even a requested zero dialogue
 // ratio or forbidden phrase cannot erase/rewrite accepted speech or an action.
-func (p DeterministicRPNarrativeProvider) Render(ctx context.Context, in RPNarrativeInput) (RPNarrativeView, error) {
+func (p LiteralRPNarrativeProvider) Render(ctx context.Context, in RPNarrativeInput) (RPNarrativeView, error) {
 	return p.RenderStream(ctx, in, nil)
 }
 
 // RenderStream emits each attributed line when rendered, without synthetic
 // delays. The caller must not treat a partial stream as a completed variant.
-func (DeterministicRPNarrativeProvider) RenderStream(ctx context.Context, in RPNarrativeInput, emit func(RPNarrativeChunk) error) (RPNarrativeView, error) {
+func (LiteralRPNarrativeProvider) RenderStream(ctx context.Context, in RPNarrativeInput, emit func(RPNarrativeChunk) error) (RPNarrativeView, error) {
 	view := RPNarrativeView{Lines: []string{}, EventIDs: []string{}, Warnings: []string{}}
 	if err := in.Style.Validate(); err != nil {
 		return view, err

@@ -109,9 +109,9 @@ onBeforeUnmount(() => { active = false; dialog.value?.close() })
         <label>自定义文风<textarea v-model="profile.prose_instructions" maxlength="2000" rows="3" aria-describedby="style-capability" placeholder="记录你希望的叙述方式"></textarea></label>
       </fieldset>
       <p v-if="narrativeMode === 'style_planner'" id="style-capability" class="hint">当前使用模型文风解释器：自定义指令会在上述设置基础上调整视角、时态、详略、对话排版和已知场景呈现；未指定的设置保留。不支持任意文学扩写、改写台词或补写心理。超出能力会提示；模型只接收文风偏好，不接收人物事实或对白。成功生成的版本会保存为当前展示，刷新后仍可见。这与人物决策是否使用 AI 无关。</p>
-      <p v-else-if="narrativeMode === 'full_prose'" id="style-capability" class="hint">当前使用长文叙事器：正文由模型把已确认的事实（环境、动作、对白、场景变化）连续组织成小说段落；台词逐字保留，校验不通过会自动回退到标准事实叙述，回退原因可在回合记录中查到。模型只接收已确认事实，不能新增事件或对白。</p>
+      <p v-else-if="narrativeMode === 'full_prose'" id="style-capability" class="hint">当前支持模型组织叙事：重新生成时，用当前模型配置选择已确认事实的段落节奏与可用措辞，台词逐字保留，不补写动作或心理。普通世界首次呈现不额外调用模型；作者明确开启的世界可在首次呈现时组织一次。已保存的正文直接读取；校验失败则保留自然事实叙述，原因可在回合记录中查看。</p>
       <p v-else-if="narrativeMode === 'custom'" id="style-capability" class="hint">当前使用独立叙述执行器，但它未声明自定义文风能力；保存偏好不代表所有要求都会执行。请以实际输出与执行器提示为准。</p>
-      <p v-else id="style-capability" class="hint">当前使用本地事实叙述器：支持视角、详略及有限的场景表达；比例是偏好，不会删掉真实对白。自由文风指令可保存，但暂不会被执行。这与人物是否使用 AI 无关。</p>
+      <p v-else id="style-capability" class="hint">当前使用自然事实叙述：支持视角、详略及有限的场景表达，首次呈现不额外调用模型；比例是偏好，不会删掉真实对白。自由文风指令可保存，超出支持范围会提示。这与人物是否使用 AI 无关。</p>
       <p class="hint">保存将把表单中的偏好设为当前会话设置；地点专属风格如存在，仍优先适用。未确认的保存请求会留在此浏览器中以便恢复，不含访问凭证。</p>
       <footer><button class="save-style" :disabled="busy || conflict">{{ pending ? '继续保存原设置' : '保存叙事设置' }}</button><span>已发生的事不会回滚</span></footer>
     </form>

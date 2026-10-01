@@ -213,7 +213,7 @@ func renderComposition(ctx context.Context, draft string, in core.RPNarrativeInp
 					single.Style.NarrativeDensity = "standard"
 				}
 			}
-			view, err := (core.DeterministicRPNarrativeProvider{}).Render(ctx, single)
+			view, err := (core.LiteralRPNarrativeProvider{}).Render(ctx, single)
 			if err != nil {
 				return nil, err
 			}

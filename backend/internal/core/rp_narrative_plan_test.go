@@ -36,15 +36,15 @@ func TestRPNarrativePlanExecutesWithoutFactOrProtectedStyleChanges(t *testing.T)
 	})}
 	var chunks []RPNarrativeChunk
 	view, err := p.RenderStream(context.Background(), in, func(c RPNarrativeChunk) error { chunks = append(chunks, c); return nil })
-	if err != nil || calls != 1 || len(chunks) != 3 || !strings.Contains(view.Lines[0], "在咖啡馆，当时，我说：\n「请保留我的原话。」") {
+	if err != nil || calls != 1 || len(chunks) != 3 || !strings.Contains(view.Lines[0], "在咖啡馆") || !strings.Contains(view.Lines[0], "当时") || !strings.Contains(view.Lines[0], "我说：\n「请保留我的原话。」") {
 		t.Fatalf("custom plan did not affect actual prose: %+v %v", view, err)
 	}
 	for i, f := range in.Facts {
-		if view.EventIDs[i] != f.EventID || chunks[i].EventID != f.EventID || !strings.Contains(view.Lines[i], f.Text) {
+		if view.EventIDs[i] != f.EventID || len(chunks[i].EventIDs) != 1 || chunks[i].EventIDs[0] != f.EventID || !strings.Contains(view.Lines[i], f.Text) {
 			t.Fatal("source attribution or literal text changed")
 		}
 	}
-	if !strings.Contains(view.Lines[1], "拒绝了") || !strings.Contains(view.Lines[2], "离开了") {
+	if !strings.Contains(view.Lines[1], "拒绝") || !strings.Contains(view.Lines[2], "离开了") {
 		t.Fatal("style changed action")
 	}
 	after, _ := CanonicalJSON(in)

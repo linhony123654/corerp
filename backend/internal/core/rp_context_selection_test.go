@@ -12,6 +12,48 @@ func rpSelectionFixture() RPDecisionInput {
 	return RPDecisionInput{ContextVersion: RPContextVersion, NPCEntityID: "npc", InterlocutorEntityID: "player", InstanceID: "world", BranchID: "main", HeadSequence: 77, WorldTime: "2026-09-22T00:02:00Z", PlaceID: "hall", Persona: "作者声明的温和长辈，习惯认真听完再回答。", PersonaSourceEventID: "identity", Readiness: RPContextReadiness{Persona: "READY", RelationshipToInterlocutor: "READY", AddressToInterlocutor: "READY"}, Relationships: []RPCharacterRelationship{{SubjectEntityID: "player", Role: "student", AddressTo: []string{"小林"}, SourceEventID: "identity"}, {SubjectEntityID: "other", Role: "colleague", SourceEventID: "identity"}}, LegalActions: []string{"respond", "silence", "wait"}, ReachablePlaceIDs: []string{"lane"}, PlayerSpeechText: "那本蓝皮诗集，你当时怎么答应我的？", SpeechEventID: "current", PlayerSpeechWorldTime: "2026-09-22T00:02:00Z"}
 }
 
+func TestRPContextSelectionKeepsPeerExchangeAndDatedSketchUnderPressure(t *testing.T) {
+	in := rpSelectionFixture()
+	in.PlayerSpeechText = "先前说好的那个分寸，还算数么？"
+	question := RPDecisionDialogue{SpeakerEntityID: "player", Text: "我不想解释缘由，先陪我说一会儿话。", EventID: "peer-request", WorldTime: "2026-09-21T00:00:00Z"}
+	reply := RPDecisionDialogue{SpeakerEntityID: "npc", Text: "好，不追问缘由。", EventID: "peer-response", WorldTime: "2026-09-21T00:01:00Z"}
+	in.RecentDialogue = []RPDecisionDialogue{reply}
+	in.RelevantDialogue = []RPDecisionExchange{{PeerContext: true, Dialogue: []RPDecisionDialogue{question, reply}}}
+	in.RecentPrivateDecisions = []RPDecisionPrivateMemory{{DecisionID: "peer-private", SourceEventID: reply.EventID, InterlocutorEntityID: "player", WorldTime: reply.WorldTime, Private: RPDecisionPrivate{Intent: "当时答应不追问，未发生其他行动。"}}}
+	baseline, err := SelectRPDecisionContext(in, DefaultRPDecisionContextBudgetBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := baseline.ContextSelection.EncodedBytes + 100
+	for i := 0; i < 12; i++ {
+		in.RecentDialogue = append(in.RecentDialogue, RPDecisionDialogue{SpeakerEntityID: "other", EventID: fmt.Sprintf("other-%d", i), Text: strings.Repeat("旁人的新话题。", 150), WorldTime: in.WorldTime})
+	}
+	in.RecentPrivateDecisions = append(in.RecentPrivateDecisions, RPDecisionPrivateMemory{DecisionID: "other-private", SourceEventID: "other-result", InterlocutorEntityID: "other", WorldTime: in.WorldTime, Private: RPDecisionPrivate{Intent: strings.Repeat("与另一个人的交谈愿望。", 200)}})
+	got, err := SelectRPDecisionContext(in, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.RelevantDialogue) != 1 || !got.RelevantDialogue[0].PeerContext || len(got.RecentPrivateDecisions) != 1 || got.RecentPrivateDecisions[0].DecisionID != "peer-private" {
+		t.Fatalf("current peer context lost to unrelated recent traffic: %+v", got)
+	}
+	for _, d := range []RPDecisionDialogue{question, reply} {
+		if words, ok := ResolveRPDecisionSpeech(got, d.EventID, d.SpeakerEntityID); !ok || words != d.Text {
+			t.Fatal("retained peer group lost its exact authorized speech")
+		}
+	}
+	for _, d := range got.RecentDialogue {
+		if d.EventID == reply.EventID {
+			t.Fatal("one retained peer member was also exposed as a standalone recent exchange")
+		}
+	}
+	again, err := SelectRPDecisionContext(got, budget)
+	a, _ := HashJSON(got)
+	b, _ := HashJSON(again)
+	if err != nil || a != b {
+		t.Fatal("peer selection changed across repeated provider projection", err)
+	}
+}
+
 func TestRPContextSelectionRestoresRecentExchangeAtomically(t *testing.T) {
 	in := rpSelectionFixture()
 	question := RPDecisionDialogue{SpeakerEntityID: "player", Text: "蓝皮诗集的事，只能向我说，不要告诉其他人。", EventID: "qualified-question", WorldTime: in.WorldTime}

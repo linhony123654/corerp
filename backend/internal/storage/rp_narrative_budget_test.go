@@ -29,6 +29,13 @@ func TestRPNarrativeBudgetCannotBlockSettlementOrDiscardFacts(t *testing.T) {
 	}
 	r := RPNarrativeReadRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, TurnRunID: turn.TurnRunID}
 	emitted := 0
+	saved, err := s.StreamRPNarrative(ctx, r, func(core.RPNarrativeChunk) error { emitted++; return nil })
+	if err != nil || emitted == 0 || saved.View.CompositionVersion != core.RPFactCompositionVersionV2 {
+		t.Fatal("small budget blocked saved canonical", err)
+	}
+	// Only an explicitly requested fresh render is bounded by the read budget.
+	emitted = 0
+	r.StyleOverride = &core.RPStylePatch{ContextBudgetBytes: &low}
 	_, err = s.StreamRPNarrative(ctx, r, func(core.RPNarrativeChunk) error { emitted++; return nil })
 	if !core.HasCode(err, core.CodeInvalidArgument) || emitted != 0 {
 		t.Fatalf("budget must reject before first emitted fact: %d %v", emitted, err)

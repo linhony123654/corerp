@@ -49,7 +49,7 @@ func TestRPNarrativeProviderIndependentAuthorizedAndOutsideTransaction(t *testin
 			return core.RPNarrativeView{}, errors.New("test narrative service unavailable")
 		}
 		in.Style.POV = "first_person"
-		return (core.DeterministicRPNarrativeProvider{}).RenderStream(ctx, in, emit)
+		return (core.LiteralRPNarrativeProvider{}).RenderStream(ctx, in, emit)
 	}}
 	service, err := NewRPServiceWithNarrative(s, core.DeterministicRPDecisionProvider{}, "deterministic", provider)
 	if err != nil {
@@ -60,7 +60,7 @@ func TestRPNarrativeProviderIndependentAuthorizedAndOutsideTransaction(t *testin
 	if err != nil || turn.Status != "settled" || calls != 0 {
 		t.Fatalf("presentation affected settlement: %+v %v calls=%d", turn, err, calls)
 	}
-	r := RPNarrativeReadRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, TurnRunID: turn.TurnRunID}
+	r := RPNarrativeReadRequest{PrincipalID: read.PrincipalID, SessionID: read.SessionID, TurnRunID: turn.TurnRunID, StyleOverride: &core.RPStylePatch{}}
 	var chunks []core.RPNarrativeChunk
 	view, err := service.StreamRPNarrative(ctx, r, func(c core.RPNarrativeChunk) error { chunks = append(chunks, c); return nil })
 	if err != nil || calls != 1 || len(chunks) == 0 || len(chunks) != len(view.View.Lines) {
@@ -124,6 +124,7 @@ func TestRPOfficialNarrativePersistsAcrossSelectedVariantAndRestart(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	clearRPV2CanonicalFixture(t, ctx, s, turn.TurnRunID)
 	providerCalls := 0
 	provider := narrativeProviderFixture{call: func(_ context.Context, in core.RPNarrativeInput, emit func(core.RPNarrativeChunk) error) (core.RPNarrativeView, error) {
 		providerCalls++

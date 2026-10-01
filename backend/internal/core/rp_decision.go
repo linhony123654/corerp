@@ -88,6 +88,10 @@ type RPDecisionExchange struct {
 	// RecentContext means this complete authorized exchange restores missing
 	// siblings of a still-recent utterance. Selection keeps it as one unit.
 	RecentContext bool `json:"recent_context,omitempty"`
+	// PeerContext retains a complete personally heard/self exchange with the
+	// current interlocutor even when its words do not match this turn's query.
+	// It is dated speech evidence, not proof of a continuing commitment.
+	PeerContext bool `json:"peer_context,omitempty"`
 }
 
 // RPDecisionPrivateMemory is the actor's own earlier approved decision sketch.

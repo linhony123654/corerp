@@ -72,7 +72,7 @@ func TestChatStylePlannerHTTPExecutesPreferenceWithoutWorldContext(t *testing.T)
 	provider := core.PlannedRPNarrativeProvider{Planner: planner}
 	var chunks []core.RPNarrativeChunk
 	view, err := provider.RenderStream(context.Background(), input, func(c core.RPNarrativeChunk) error { chunks = append(chunks, c); return nil })
-	if err != nil || calls.Load() != 2 || len(chunks) != 1 || !strings.Contains(view.Lines[0], "当时，我说：\n「accepted-secret-speech」") {
+	if err != nil || calls.Load() != 2 || len(chunks) != 1 || !strings.Contains(view.Lines[0], "当时") || !strings.Contains(view.Lines[0], "我说：\n「accepted-secret-speech」") {
 		t.Fatalf("real HTTP plan not executed: %+v %v calls=%d", view, err, calls.Load())
 	}
 	if view.EventIDs[0] != "event-secret" || input.Style.POV != "second_person" {

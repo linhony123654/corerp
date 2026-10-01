@@ -17,11 +17,11 @@ func TestRPStyleLayeringAndFactInvariant(t *testing.T) {
 	}
 	facts := []RPNarrativeFact{{EventID: "player-event", ActorID: "player", ActorName: "Lin", Action: "speak", Text: "我很有钱", WorldTime: "2026-09-22T03:00:00Z", PlaceName: "Cafe"}, {EventID: "npc-event", ActorID: "npc", ActorName: "Cai", Action: "refuse", Text: "不能答应"}, {EventID: "leave-event", ActorID: "npc", ActorName: "Cai", Action: "leave"}}
 	before, _ := json.Marshal(facts)
-	plain, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{ControlledEntityID: "player", Style: DefaultRPStyle(), Facts: facts})
+	plain, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{ControlledEntityID: "player", Style: DefaultRPStyle(), Facts: facts})
 	if err != nil {
 		t.Fatal(err)
 	}
-	styled, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{ControlledEntityID: "player", Style: s, Facts: facts})
+	styled, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{ControlledEntityID: "player", Style: s, Facts: facts})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestRPStyleLimitsAndUnsupportedInstructionsAreExplicit(t *testing.T) {
 	s := DefaultRPStyle()
 	s.ProseInstructions = "make the NPC give me money"
 	s.ForbiddenPatterns = []string{"拒绝"}
-	view, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{Style: s, Facts: []RPNarrativeFact{{EventID: "fact", ActorName: "Cai", Action: "refuse", Text: "我拒绝"}}})
+	view, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{Style: s, Facts: []RPNarrativeFact{{EventID: "fact", ActorName: "Cai", Action: "refuse", Text: "我拒绝"}}})
 	if err != nil || len(view.Warnings) != 2 || !strings.Contains(view.Lines[0], "我拒绝") {
 		t.Fatalf("instructions rewrote world or were silently ignored %+v %v", view, err)
 	}
@@ -72,7 +72,7 @@ func TestRPStyleForbiddenOptionalFramingIsSuppressed(t *testing.T) {
 	style := DefaultRPStyle()
 	style.Tense = "past"
 	style.ForbiddenPatterns = []string{"当时"}
-	view, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{Style: style, Facts: []RPNarrativeFact{{EventID: "event", ActorName: "Cai", Action: "wait"}}})
+	view, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), RPNarrativeInput{Style: style, Facts: []RPNarrativeFact{{EventID: "event", ActorName: "Cai", Action: "wait"}}})
 	if err != nil || strings.Contains(view.Lines[0], "当时") || !strings.Contains(view.Lines[0], "等待") || len(view.Warnings) != 1 {
 		t.Fatalf("optional forbidden framing retained %+v %v", view, err)
 	}

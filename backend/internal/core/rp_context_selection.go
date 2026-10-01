@@ -8,7 +8,7 @@ import (
 
 const DefaultRPDecisionContextBudgetBytes = 64 << 10
 
-const rpContextSelectionVersion = "corerp.context-selection.v2"
+const rpContextSelectionVersion = "corerp.context-selection.v3"
 
 // This is NPC-only selection metadata over authorized, bounded candidates.
 // It is neither a world fact nor a claim that all history is in the packet.
@@ -65,7 +65,7 @@ func SelectRPDecisionContext(input RPDecisionInput, budget int) (RPDecisionInput
 	// is explicit in RelevantExchanges, rather than an apparently complete reply.
 	restored := map[string]bool{}
 	for _, exchange := range input.RelevantDialogue {
-		if exchange.RecentContext {
+		if exchange.RecentContext || exchange.PeerContext {
 			for _, d := range exchange.Dialogue {
 				restored[d.EventID] = true
 			}
@@ -90,11 +90,17 @@ func SelectRPDecisionContext(input RPDecisionInput, budget int) (RPDecisionInput
 		priority := 3
 		if input.RelevantDialogue[i].RecentContext {
 			priority = 0
+		} else if input.RelevantDialogue[i].PeerContext {
+			priority = 1
 		}
 		candidates = append(candidates, candidate{1, i, priority, -i})
 	}
 	for i := range input.RecentPrivateDecisions {
-		candidates = append(candidates, candidate{2, i, 4, -i})
+		priority := 4
+		if input.InterlocutorEntityID != "" && input.RecentPrivateDecisions[i].InterlocutorEntityID == input.InterlocutorEntityID {
+			priority = 2
+		}
+		candidates = append(candidates, candidate{2, i, priority, -i})
 	}
 	for i := range input.HeardPlayerHistory {
 		candidates = append(candidates, candidate{3, i, 6, -i})

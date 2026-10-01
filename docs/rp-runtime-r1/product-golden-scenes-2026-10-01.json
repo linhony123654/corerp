@@ -1,0 +1,22 @@
+{
+  "version": "corerp.product-golden.v1",
+  "authority": "explicit_product_authoring_under_delegated_user_authority",
+  "spec_file": "docs/rp-runtime-r1/rongqing-product-world-spec-2026-10-01.json",
+  "spec_sha256": "31b6ce345006c380e34cf1d4e8384283e45c5aaa8f34e51b9d06dfce8dc44cf7",
+  "packages_file": "docs/rp-runtime-r1/real-rongqing-packages.json",
+  "model": "step-5-preview",
+  "model_config": {"decision_timeout": "120s", "decision_attempts": 2, "decision_max_tokens": 4096, "decision_format": "tool_call", "reasoning_effort": "low", "disable_thinking": false, "narrative_timeout": "90s", "narrative_attempts": 2},
+  "scenes": [
+    {"id": "P1", "place": "yihongyuan", "purpose": "Established recognition and two distinct speakers; no invented acquaintance between NPCs.", "inputs": ["袭人、晴雯，我来陪你们说会儿话，你们愿意么？", "先别替我安排什么，我今日只是来闲聊的。"]},
+    {"id": "P2", "place": "rongqingtang", "purpose": "Declared kinship, natural forms of address, recognizable familiar greeting.", "inputs": ["老祖宗，我来看您了。", "我是谁，您还认得么？我是逗您玩呢。"]},
+    {"id": "P3", "place": "rongqingtang", "purpose": "Player qualification changes response; no illness or backstory inferred.", "inputs": ["今天心里有点闷，却又说不清为什么。", "不急着问原因，您先陪我说一会儿话，好不好？", "也别急着劝我高兴起来，我想听您自己想说的。"]},
+    {"id": "P4", "place": "rongqingtang", "purpose": "Character motivation, bounded disagreement and revised conversational preference.", "inputs": ["您自己眼下想做什么？不必凡事顺着我。", "要是我今晚想一个人出去走走，您会怎么说？我还没决定，也没出门。", "那您能答应不追问我烦闷的缘由么？我只是不想现在解释。"]},
+    {"id": "P5", "place": "rongqingtang", "purpose": "Unknown private information, false premise and non-existent object do not become canon.", "inputs": ["您知道黛玉此刻在自己屋里想什么吗？", "昨天您答应送我的那封信，现在交给我吧。", "方才那封信是我故意乱说的，并没有这回事，您别记成真的。"]},
+    {"id": "P6", "place": "rongqingtang", "purpose": "Observable can be cited next turn; invitation does not move or consent for the player.", "inputs": ["老祖宗，若愿意我近前，您招一下手好吗？", "您方才若招了手，是让我过去么？我还在原处，没有过去。"]},
+    {"id": "P7", "place": "fengjieyuan", "purpose": "A different character has her own voice and cannot know an unheard private exchange.", "inputs": ["凤姐姐，我来听你说会儿话，今日只闲聊，不劳你张罗东西。", "老祖宗方才对我做了什么手势，您亲眼见着了么？", "不必猜那边的事。若我总说随便，你会怎么同我说？"]},
+    {"id": "P8", "place": "rongqingtang", "purpose": "Return after topic diversion/restart; paraphrased commitment recall and explicit cancellation.", "inputs": ["老祖宗，先前说好的那个分寸，还算数么？我说的是不盘问那件心事。", "现在我愿意说缘由了，是想同您多亲近些；先前那个不追问的约定就不用了。", "这会儿您还得一句缘由都不能问吗？", "今天我们先聊到这里吧，您有什么想同我说的？"]}
+  ],
+  "hard_checks": ["authored readiness", "settled turns", "real decision receipts without fallback", "unique committed source attribution", "saved original equals displayed history", "restart preserves output and does not duplicate world effects", "render cannot mutate committed world", "same fixture/model configuration across comparisons"],
+  "human_rubric": ["identity and distinct voice", "relationship and natural address", "question qualifications affect response", "dated knowledge boundaries and no assumed history", "conversation develops and can disagree", "commitment recall and revision", "optional contextual observable gestures and player agency", "natural prose without repeated audit framing", "private information remains private", "would want to continue playing"],
+  "limits": "No fixed model wording, automatic fun score or invented human approval. Semantic qualities and unsupported conversational premises require qualitative review. This is an authored product world, not a replacement for the original frozen missing-data Golden or original32 technical suite. Model stochasticity prevents attributing every wording difference to architecture."
+}

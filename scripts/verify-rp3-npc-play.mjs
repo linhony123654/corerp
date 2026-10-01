@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { openSync } from 'node:fs';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
@@ -21,6 +21,11 @@ const persist = process.argv.includes('--persist');
 const product = process.argv.includes('--product');
 const useProfile = product || process.argv.includes('--profile');
 const rongqing = process.argv.includes('--rongqing');
+// Reuse the exact verified release build without changing any regression
+// inputs or assertions. This also makes evidence identify the tested binary.
+const binaryFlag = process.argv.indexOf('--binary-dir');
+assert.ok(binaryFlag < 0 || (process.argv[binaryFlag + 1] && !process.argv[binaryFlag + 1].startsWith('--')), '--binary-dir requires a directory');
+const binaryDir = binaryFlag < 0 ? '' : resolve(process.argv[binaryFlag + 1]);
 // A turn can contain several sequential, individually bounded model calls.
 const modelResponseTimeoutMs = 600_000;
 if (densities && !prose) throw new Error('--densities requires --prose');
@@ -130,8 +135,12 @@ async function post(route, token, body, status = 200) {
   return envelope.data;
 }
 try {
-  for (const [name, program] of [['runtime', 'corerp-server'], ['m1', 'corerp-m1'], ['setup', 'corerp-m2'], ['admin', 'corerp-admin']])
-    run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, name), `./cmd/${program}`], join(root, 'backend'));
+  for (const [name, program] of [['runtime', 'corerp-server'], ['m1', 'corerp-m1'], ['setup', 'corerp-m2'], ['admin', 'corerp-admin']]) {
+    if (binaryDir) {
+      await access(join(binaryDir, name));
+      await symlink(join(binaryDir, name), join(temp, name));
+    } else run('/usr/local/go/bin/go', ['build', '-buildvcs=false', '-o', join(temp, name), `./cmd/${program}`], join(root, 'backend'));
+  }
   run(join(temp, 'm1'), ['-db', db, '-action', 'inspect']);
   const setup = JSON.parse(run(join(temp, 'setup'), ['-db', db, '-action', 'rp-travel-prepare']));
   run(join(temp, 'admin'), ['-db', db, '-operator', 'principal_operator', '-instance', 'inst_m2_t09', '-branch', branch, '-target', 'principal_creator', '-purpose', 'create_world', '-status', 'active', '-expected-head', String(setup.event_sequence), '-key', 'rp3-npc-world-grant']);

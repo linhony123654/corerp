@@ -15,7 +15,7 @@ func TestRPNarrativeLongDensityKeepsAttributedFactsAndDoesNotPadSparseScene(t *t
 		input.Facts = append(input.Facts, RPNarrativeFact{EventID: fmt.Sprintf("event-%d", i), ActorID: "lin", ActorName: "Lin", Action: "speak", Text: fmt.Sprintf("第%d段：", i) + strings.Repeat("今天我想把这件事讲清楚，", 11), WorldTime: "2026-09-25T09:00:00Z", PlaceName: "咖啡馆"})
 	}
 	chunks := []RPNarrativeChunk{}
-	view, err := (DeterministicRPNarrativeProvider{}).RenderStream(context.Background(), input, func(chunk RPNarrativeChunk) error {
+	view, err := (LiteralRPNarrativeProvider{}).RenderStream(context.Background(), input, func(chunk RPNarrativeChunk) error {
 		chunks = append(chunks, chunk)
 		return nil
 	})
@@ -29,13 +29,13 @@ func TestRPNarrativeLongDensityKeepsAttributedFactsAndDoesNotPadSparseScene(t *t
 	}
 	sparse := input
 	sparse.Facts = []RPNarrativeFact{{EventID: "event-sparse", ActorID: "lin", ActorName: "Lin", Action: "speak", Text: "你好", PlaceName: "咖啡馆"}}
-	short, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), sparse)
+	short, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), sparse)
 	if err != nil || len([]rune(strings.Join(short.Lines, ""))) >= 1000 || !strings.Contains(short.Lines[0], "「你好」") {
 		t.Fatalf("long mode invented a minimum-length scene: %+v %v", short, err)
 	}
 	legacy := sparse
 	legacy.Style = DefaultRPStyle()
-	old, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), legacy)
+	old, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), legacy)
 	if err != nil || len(old.Lines) != 1 || old.Lines[0] != "你说：「你好」" {
 		t.Fatalf("missing legacy density changed old output: %+v %v", old, err)
 	}
@@ -43,13 +43,13 @@ func TestRPNarrativeLongDensityKeepsAttributedFactsAndDoesNotPadSparseScene(t *t
 	standard.Style = DefaultRPStyle()
 	standard.Style.NarrativeDensity = "standard"
 	standard.Style.DescriptionDensity = 80
-	standardView, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), standard)
+	standardView, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), standard)
 	if err != nil || !strings.Contains(standardView.Lines[0], "在咖啡馆") {
 		t.Fatalf("standard density lost sourced place: %+v %v", standardView, err)
 	}
 	conciseScene := standard
 	conciseScene.Style.NarrativeDensity = "concise"
-	conciseView, err := (DeterministicRPNarrativeProvider{}).Render(context.Background(), conciseScene)
+	conciseView, err := (LiteralRPNarrativeProvider{}).Render(context.Background(), conciseScene)
 	if err != nil || strings.Contains(conciseView.Lines[0], "在咖啡馆") || conciseView.Lines[0] != "你说：「你好」" {
 		t.Fatalf("concise density changed accepted quote or added setting: %+v %v", conciseView, err)
 	}

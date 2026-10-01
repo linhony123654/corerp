@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { buildCreateRequest, freshStudioDraft } from '../lib/studioCreate'
+import { buildCreateRequest, buildRongqingCreateRequest, freshStudioDraft } from '../lib/studioCreate'
 import type { CreateReceipt, CreateRequest } from '../lib/studioCreate'
+import { authoredRongqingSpec, type StudioWorldPreset } from '../lib/studioWorldPresets'
 
 const draft = reactive(freshStudioDraft())
+const preset = ref<StudioWorldPreset>('custom')
+const rongqingSpec = authoredRongqingSpec()
 const token = ref(''), systemJSON = ref(''), narrativeJSON = ref('')
 const consent = ref(false), busy = ref(false), error = ref('')
 const request = ref<CreateRequest | null>(null), receipt = ref<CreateReceipt | null>(null)
@@ -11,7 +14,7 @@ const recovery = ref<{ key: string; name: string }[]>([]), recoveryChoice = ref(
 const prefix = 'corerp.studio.create.request.', currentKey = 'corerp.studio.create.current'
 let controller: AbortController | null = null, revision = 0
 const frozen = computed(() => busy.value || !!request.value)
-const shownName = computed(() => String(request.value?.spec.name || draft.name))
+const shownName = computed(() => String(request.value?.spec.name || (preset.value === 'rongqing' ? rongqingSpec.name : draft.name)))
 const rpReadiness = computed(() => {
   const value = receipt.value?.rp_readiness
   if (!value || !['READY', 'INCOMPLETE'].includes(value.status) || !Array.isArray(value.characters) || !Array.isArray(value.incomplete_relationships)) return null
@@ -69,7 +72,7 @@ function newDraft() {
   try {
     localStorage.removeItem(currentKey)
     request.value = null; receipt.value = null; recoveryChoice.value = ''; consent.value = false; error.value = ''
-    Object.assign(draft, freshStudioDraft()); systemJSON.value = ''; narrativeJSON.value = ''
+    Object.assign(draft, freshStudioDraft()); preset.value = 'custom'; systemJSON.value = ''; narrativeJSON.value = ''
   } catch { error.value = '无法保存草稿选择，原恢复记录未删除。' }
 }
 async function submit() {
@@ -79,7 +82,8 @@ async function submit() {
   let submitted = false
   try {
     if (!request.value) {
-      const prepared = await buildCreateRequest({ ...draft }, systemJSON.value, narrativeJSON.value)
+      const prepare = preset.value === 'rongqing' ? buildRongqingCreateRequest : buildCreateRequest
+      const prepared = await prepare({ ...draft }, systemJSON.value, narrativeJSON.value)
       if (version !== revision) return
       const key = prefix + prepared.idempotency_key
       // Configuration only; the credential is never part of the persisted body.
@@ -129,12 +133,20 @@ async function submit() {
           </fieldset>
           <fieldset v-if="!request" :disabled="frozen">
             <legend>02 / 世界起点</legend>
+            <label><span id="creator-preset-label">起点示例</span><select v-model="preset" aria-labelledby="creator-preset-label"><option value="custom">自定义世界</option><option value="rongqing">大观园 · 已创作的十一人世界</option></select></label>
+            <template v-if="preset === 'rongqing'">
+              <p>以贾宝玉从怡红院开始，十名 NPC 分布在九处地点。各自的人设、公开语气、与玩家的关系和称呼已明确填写。</p>
+              <p class="creator-hint">这是作者创作的示例起点。保存后，仍由实际交谈和世界规则决定发生什么。可切回自定义世界继续编辑原草稿。</p>
+              <details><summary>查看完整示例设定</summary><pre>{{ JSON.stringify(rongqingSpec, null, 2) }}</pre></details>
+            </template>
+            <template v-else>
             <label>世界名称<input v-model="draft.name" required maxlength="100"></label>
             <div class="creator-pair"><label>玩家角色名称<input v-model="draft.playerName" required maxlength="100"></label><label>NPC 名称<input v-model="draft.neighbourName" required maxlength="100"></label><label>起始居所<input v-model="draft.home" required maxlength="100"></label><label>公共地点<input v-model="draft.square" required maxlength="100"></label></div>
             <p class="creator-hint">两名人物从居所开始生活，两处地点互相可达。当前移动立即抵达，不模拟路程耗时。起始日期固定为 2026-09-22。</p>
             <details><summary>高级资源设置</summary><div class="creator-pair"><label>总人口<input v-model.number="draft.population" type="number" min="2" max="1000000" step="1" required></label><label>初始货币总量<input v-model.number="draft.money" type="number" min="0" max="9007199254740991" step="1" required></label><label>初始物资总量<input v-model.number="draft.stock" type="number" min="0" max="9007199254740991" step="1" required></label></div><p class="creator-hint">货币与物资以最小单位计。人物从守恒人口与资源池中物化，未分配部分仍留在人口群体中。</p></details>
+            </template>
           </fieldset>
-          <fieldset v-if="!request" :disabled="frozen">
+          <fieldset v-if="!request && preset === 'custom'" :disabled="frozen">
             <legend>03 / 角色设定</legend>
             <label>NPC 人设<textarea v-model="draft.neighbourPersona" rows="4" maxlength="500" required placeholder="写明性格、说话方式、眼下的愿望，以及知道或不知道什么。最多 500 字。"></textarea></label>
             <p class="creator-hint">人设用于这个角色的决策。名字或作品名称不能代替具体设定；人设里的愿望也不代表事情已经发生。</p>
@@ -165,7 +177,7 @@ async function submit() {
           <p class="creator-kicker">{{ receipt ? 'SAVED / 已确认回执' : request ? 'RECOVERY / 已保留请求' : 'DRAFT / 尚未提交' }}</p>
           <h2>{{ shownName }}</h2>
           <template v-if="request"><dl><dt>目标实例</dt><dd>{{ request.instance_id }}</dd><dt>授权范围</dt><dd>{{ request.authority_instance_id }} / {{ request.authority_branch_id }}</dd><dt>控制玩家</dt><dd>{{ request.player_principal_id }}</dd></dl><details><summary>查看冻结请求 JSON</summary><pre>{{ JSON.stringify(request, null, 2) }}</pre></details></template>
-          <p v-else>此刻只是起点的声明。保存会依次准备人口与资源、安装包、锁定规则，并绑定玩家。</p>
+          <template v-else><p>此刻只是起点的声明。保存会依次准备人口与资源、安装包、锁定规则，并绑定玩家。</p><p v-if="preset === 'rongqing'">十一名人物 · 九处地点<br>十名 NPC 的人设与称呼已填写。</p></template>
           <section v-if="receipt" class="creator-ready" role="status">
             <h3>世界已保存</h3><p>已收到准备完成事件回执。玩家进入时会重新检查当前权限。</p>
             <template v-if="rpReadiness">
@@ -192,6 +204,7 @@ async function submit() {
 .creator-layout { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 56px; align-items: start; }.creator form { min-width: 0; }.creator fieldset { min-width: 0; padding: 28px 0 32px; margin: 30px 0 0; border: 0; border-bottom: 1px solid var(--line); }.creator legend { font: 13px var(--font-mono); color: var(--amber-400); letter-spacing: 1px; }.creator label { display: grid; gap: 8px; margin: 0 0 18px; font-size: 13px; }.creator input, .creator select, .creator textarea { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--ink-500); background: var(--ink-100); color: var(--ink-900); padding: 11px 12px; font: inherit; border-radius: 0; }.creator textarea { resize: vertical; font: 12px/1.8 var(--font-mono); }.creator input::placeholder, .creator textarea::placeholder { color: var(--ink-700); }.creator-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }.creator-hint { color: var(--ink-700); font-size: 12px; line-height: 1.9; }.creator details { margin: 20px 0 0; }.creator summary { min-height: 44px; cursor: pointer; color: var(--teal-400); font-size: 13px; }.creator :is(button, input, select, textarea, summary, a):focus-visible { outline: 2px solid var(--teal-400); outline-offset: 4px; }.creator button { min-height: 44px; padding: 10px 14px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink-900); font: inherit; margin: 0 8px 12px 0; }.creator button:hover:not(:disabled) { border-color: var(--amber-400); }.creator :disabled { opacity: .55; cursor: default; }.creator-submit { padding: 28px 0; }.creator button.creator-primary { background: var(--amber-400); color: var(--ink-000); border-color: var(--amber-400); }.creator .creator-consent { grid-template-columns: 20px 1fr; align-items: start; }.creator-consent input { min-height: 20px; height: 20px; padding: 0; accent-color: var(--amber-400); }.creator-error { color: var(--rose-400); overflow-wrap: anywhere; }
 .creator-summary { margin-top: 32px; padding-left: 28px; border-left: 1px solid var(--line-amber); min-width: 0; overflow-wrap: anywhere; }.creator-summary h2 { font-size: 28px; font-weight: 400; margin: 18px 0; }.creator-summary h3 { font-size: 15px; margin: 24px 0 16px; }.creator-summary p { font-size: 13px; line-height: 1.9; }.creator-summary dt { font-size: 11px; color: var(--ink-700); margin-top: 20px; }.creator-summary dd { margin: 6px 0 0; font: 12px/1.8 var(--font-mono); }.creator-summary pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.7 var(--font-mono); max-height: 360px; overflow: auto; padding: 12px; background: var(--ink-100); }.creator-ready { border-top: 1px solid var(--line); margin: 28px 0; }.creator-ready a { display: inline-block; min-height: 44px; padding: 10px 0; color: var(--teal-400); }
 .creator-rp-status { padding-left: 18px; font-size: 12px; line-height: 1.9; }
+.creator fieldset pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.7 var(--font-mono); max-height: 360px; overflow: auto; padding: 12px; background: var(--ink-100); }
 @media (max-width: 800px) { .creator-layout { grid-template-columns: 1fr; gap: 0; }.creator-summary { margin-top: 8px; }.creator-top { flex-wrap: wrap; gap: 12px 20px; }.creator-top nav { gap: 16px; }.creator main { padding-top: 32px; } }
 @media (max-width: 480px) { .creator-pair { grid-template-columns: 1fr; }.creator-top > span { display: none; }.creator-top nav { font-size: 12px; }.creator-summary { padding-left: 18px; } }
 </style>

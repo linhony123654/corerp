@@ -570,9 +570,9 @@ function doImport() {
         <div class="form-item">
           <label class="form-label prose-toggle">
             <input v-model="form.fullProse" type="checkbox" />
-            小说式呈现（类似酒馆的段落正文）
+            模型组织叙事
           </label>
-          <small class="form-hint">开启后，模型会把已确认的事实改写成连贯的小说段落（氛围、神态、动作与对白混合）；对白原文仍逐字锁定，校验不通过会自动回退标准叙述。关闭则保持「某某说：…」的标准台词格式。</small>
+          <small class="form-hint">重新生成时，使用当前模型配置为已确认的事实选择段落节奏与可用措辞；对白逐字保留，不补写动作或心理。普通世界与大观园示例的首次叙述直接自然呈现，不额外调用模型。只有作者明确开启的世界，才在首次呈现时请求一次模型组织；已保存的正文直接读取，失败时保留自然事实叙述。</small>
         </div>
 
         <!-- Advanced Toggle -->

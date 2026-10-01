@@ -13,7 +13,7 @@ export interface ApiProfile {
   decisionMaxTokens?: number
   interactionMaxTokens?: number
   decisionFormat?: '' | 'json_schema' | 'json_object' | 'tool_call'
-  /** 小说式呈现：由模型把已结算事实写成连贯段落，而不是模板台词。 */
+  /** 模型组织叙事：选择已确认事实的节奏/措辞；保留 full_prose 请求语义。 */
   fullProse?: boolean
   temperature?: number
   maxTokens?: number

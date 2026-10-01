@@ -16,7 +16,7 @@ const PlayObservatory = defineAsyncComponent(() => import('./PlayObservatory.vue
 const PlayStyle = defineAsyncComponent(() => import('./PlayStyle.vue'))
 const PlayModelSettings = defineAsyncComponent(() => import('./PlayModelSettings.vue'))
 import type { LocalMap, MapMove } from '../lib/localMap'
-import { readNarrativeStream } from '../lib/narrativeStream'
+import { readNarrativeStream, validateNarrativeComposition, type NarrativeCompositionMetadata } from '../lib/narrativeStream'
 import { pendingStyleKey } from '../lib/narrativeStyle'
 import type { StyleScope } from '../lib/narrativeStyle'
 import type { WalletSnapshot } from '../lib/wallet'
@@ -24,7 +24,7 @@ import { providerCallSummary, type ProviderCall } from '../lib/providerReceipt'
 import { getActiveProfile, profileModelOverride, type ApiProfile } from '../lib/apiProfiles'
 
 type Person = { entity_id: string; display_name: string }
-type Turn = { turn_run_id: string; narrative_lines: string[]; can_regenerate: boolean; provider_calls?: ProviderCall[] }
+type Turn = NarrativeCompositionMetadata & { turn_run_id: string; narrative_lines: string[]; event_ids?: string[]; can_regenerate: boolean; provider_calls?: ProviderCall[] }
 type SceneObjectAction = 'open' | 'close' | 'switch_on' | 'switch_off'
 type SceneObject = { object_id: string; key: string; display_name: string; kind: 'door' | 'container' | 'light'; state: 'open' | 'closed' | 'on' | 'off'; actions: SceneObjectAction[] }
 type Observation = LocalMap & {
@@ -142,7 +142,9 @@ async function api<T>(path: string, body: Record<string, unknown>): Promise<T> {
   return envelope.data as T
 }
 async function refresh() {
-  observation.value = await api<Observation>('observe', { session_id: bookmark.value.session })
+  const next = await api<Observation>('observe', { session_id: bookmark.value.session })
+  for (const turn of next.recent_turns) validateNarrativeComposition({ ...turn, lines: turn.narrative_lines })
+  observation.value = next
   variants.value = {} // The server's selected render is the durable display truth.
 }
 async function streamNarrative(body: Record<string, unknown>, preview: (lines: string[]) => void, signal: AbortSignal) {

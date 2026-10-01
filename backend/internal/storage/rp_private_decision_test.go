@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -231,5 +232,263 @@ func TestRPOwnPrivateDecisionHistoryIsBoundedAndChronological(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestRPOwnPrivatePeerMemoryAndDialogueSurviveABAReturn(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "peer-private-memory.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	session, player, _ := newRPWaitTestSession(t, ctx, s)
+	var peerEvents []string
+	for i := 0; i < 2; i++ {
+		view, err := s.ObserveRPSession(ctx, player)
+		if err != nil {
+			t.Fatal(err)
+		}
+		turn, err := s.RunRPTurn(ctx, core.RPSpeechRequest{PrincipalID: player.PrincipalID, SessionID: session.SessionID, Text: fmt.Sprintf("借书约定%d，缺页原因不要提。", i), ExpectedCursor: view.ObservationCursor, IdempotencyKey: fmt.Sprintf("peer-a-%d", i)}, rpDecisionProviderFunc(func(_ context.Context, input core.RPDecisionInput) (core.RPDecisionProposal, error) {
+			return core.RPDecisionProposal{Action: "respond", Text: "书可以借，缺页的事不说。", Private: &core.RPDecisionPrivate{Intent: fmt.Sprintf("a-private-%d", i), RelationshipStance: "谨慎", BasisEventIDs: []string{input.SpeechEventID}}}, nil
+		}))
+		if err != nil || len(turn.NPCEventIDs) != 1 {
+			t.Fatal(turn, err)
+		}
+		peerEvents = append(peerEvents, turn.NPCEventIDs[0])
+	}
+	grantRPControlForTest(t, ctx, s, M2AgentAdaID)
+	otherSession, err := s.OpenRPSession(ctx, rpTestOpenRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := core.RPSessionReadRequest{PrincipalID: rpTestPrincipal, SessionID: otherSession.SessionID}
+	otherView, err := s.ObserveRPSession(ctx, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MoveRP(ctx, core.RPMoveRequest{PrincipalID: other.PrincipalID, SessionID: other.SessionID, FromPlaceID: otherView.PlaceID, ToPlaceID: M2AgentCafeID, ExpectedCursor: otherView.ObservationCursor, IdempotencyKey: "peer-b-arrives"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		view, err := s.ObserveRPSession(ctx, other)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.RunRPTurn(ctx, core.RPSpeechRequest{PrincipalID: other.PrincipalID, SessionID: other.SessionID, Text: "今天聊聊天气。", ExpectedCursor: view.ObservationCursor, IdempotencyKey: fmt.Sprintf("peer-b-%d", i)}, rpDecisionProviderFunc(func(context.Context, core.RPDecisionInput) (core.RPDecisionProposal, error) {
+			return core.RPDecisionProposal{Action: "respond", Text: "天气不错。", Private: &core.RPDecisionPrivate{Intent: fmt.Sprintf("b-private-%d", i), RelationshipStance: "热情"}}, nil
+		})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view, err := s.ObserveRPSession(ctx, player)
+	if err != nil {
+		t.Fatal(err)
+	}
+	speech, err := s.SpeakRP(ctx, core.RPSpeechRequest{PrincipalID: player.PrincipalID, SessionID: session.SessionID, Text: "Then let's proceed.", ExpectedCursor: view.ObservationCursor, IdempotencyKey: "peer-a-returns"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := core.RPDecisionRequest{PrincipalID: player.PrincipalID, SessionID: session.SessionID, NPCEntityID: M2RPNPCID, TurnID: speech.TurnID}
+	packet, err := s.BuildRPDecisionInput(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecall := func(input core.RPDecisionInput) {
+		t.Helper()
+		if len(input.RecentPrivateDecisions) != 4 {
+			t.Fatalf("latest peer + global three not retained: %+v", input.RecentPrivateDecisions)
+		}
+		for i, memory := range input.RecentPrivateDecisions {
+			if memory.SourceEventID == "" || memory.WorldTime == "" || (i > 0 && memory.EventSequence <= input.RecentPrivateDecisions[i-1].EventSequence) {
+				t.Fatal("private peer recall lost date/source order")
+			}
+			if i == 0 {
+				if memory.Private.Intent != "a-private-1" || memory.InterlocutorEntityID != input.InterlocutorEntityID || memory.Private.RelationshipStance != "谨慎" {
+					t.Fatal("A's historical stance was replaced by B")
+				}
+			} else if memory.Private.Intent != fmt.Sprintf("b-private-%d", i) || memory.InterlocutorEntityID == input.InterlocutorEntityID {
+				t.Fatal("global private history changed its directed peer")
+			}
+		}
+		peers := 0
+		for _, exchange := range input.RelevantDialogue {
+			if !exchange.PeerContext {
+				continue
+			}
+			if peers >= len(peerEvents) || len(exchange.Dialogue) != 2 || exchange.Dialogue[1].EventID != peerEvents[peers] {
+				t.Fatalf("return peer's latest complete exchanges lost: %+v", exchange)
+			}
+			words, ok := core.ResolveRPDecisionSpeech(input, exchange.Dialogue[1].EventID, exchange.Dialogue[1].SpeakerEntityID)
+			if !ok || words != "书可以借，缺页的事不说。" {
+				t.Fatal("peer qualification lost in provider shape")
+			}
+			peers++
+		}
+		if peers != 2 || input.ContextSelection == nil || input.ContextSelection.EncodedBytes > input.ContextSelection.BudgetBytes {
+			t.Fatalf("peer recall/budget missing: %d %+v", peers, input.ContextSelection)
+		}
+	}
+	assertRecall(packet)
+	provider, err := s.rpDecisionProviderView(ctx, packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecall(provider)
+	providerHash, err := core.HashJSON(provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitInput := packet
+	waitInput.PlayerSpeechText, waitInput.SpeechEventID, waitInput.TurnID = "", "", ""
+	waitInput.RecentDialogue = nil
+	waitInput.Trigger = &core.RPDecisionTrigger{Kind: "elapsed_time", SourceEventID: "sourced-wait"}
+	waitDialogue, err := readRPRelevantDialogue(ctx, conn, waitInput)
+	if err != nil || len(waitDialogue) != 2 || !waitDialogue[0].PeerContext || !waitDialogue[1].PeerContext {
+		t.Fatalf("wait query lost existing peer conversation: %+v %v", waitDialogue, err)
+	}
+	_ = conn.Close()
+	public, err := s.readRPNarrativeInput(ctx, session.SessionID, speech.TurnID, speech.EventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(public)
+	if err != nil || strings.Contains(string(encoded), "a-private") || strings.Contains(string(encoded), "b-private") {
+		t.Fatal("peer-private sketch leaked into narrator", err)
+	}
+	if err := s.RebuildProjections(ctx, packet.InstanceID, packet.BranchID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := s.BuildRPDecisionInput(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecall(again)
+	againProvider, err := s.rpDecisionProviderView(ctx, again)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecall(againProvider)
+	againHash, err := core.HashJSON(againProvider)
+	if err != nil || againHash != providerHash {
+		t.Fatal("peer recall changed after rebuild/restart", err)
+	}
+}
+
+func TestRPOwnPrivatePeerUnionPreservesApprovalAndCompleteHead(t *testing.T) {
+	ctx := context.Background()
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "private-peer-source.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, schema := range []string{
+		`CREATE TABLE events(event_id TEXT, instance_id TEXT, branch_id TEXT, actor_id TEXT, event_sequence INTEGER, world_time TEXT, batch_id TEXT)`,
+		`CREATE TABLE rp_npc_decisions(decision_id TEXT, event_id TEXT, session_id TEXT, npc_entity_id TEXT, parent_turn_id TEXT, proposal_json TEXT, proposal_hash TEXT)`,
+		`CREATE TABLE rp_sessions(session_id TEXT, controlled_entity_id TEXT)`,
+		`CREATE TABLE event_batches(batch_id TEXT, command_id TEXT, attempt_no INTEGER, last_sequence INTEGER)`,
+		`CREATE TABLE commands(command_id TEXT, status TEXT, command_type TEXT)`,
+		`CREATE TABLE command_attempts(command_id TEXT, attempt_no INTEGER, status TEXT, proposal_hash TEXT)`,
+	} {
+		if _, err := db.ExecContext(ctx, schema); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, peer := range []string{"a", "b", "b", "b"} {
+		key := fmt.Sprintf("record-%d", i)
+		proposal := core.RPDecisionProposal{Action: "silence", Private: &core.RPDecisionPrivate{Intent: key, RelationshipStance: "dated-subjective-stance"}}
+		raw, err := core.CanonicalJSON(proposal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash, err := core.HashJSON(proposal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, statement := range []struct {
+			query string
+			args  []any
+		}{
+			{`INSERT INTO events VALUES (?,'world','main','npc',?,'2026-10-01T00:00:00Z',?)`, []any{key, i*2 + 1, key}},
+			{`INSERT INTO rp_npc_decisions VALUES (?,?,?,'npc',?,?,?)`, []any{key, key, key, key, string(raw), hash}},
+			{`INSERT INTO rp_sessions VALUES (?,?)`, []any{key, peer}},
+			{`INSERT INTO event_batches VALUES (?,?,1,?)`, []any{key, key, i*2 + 2}},
+			{`INSERT INTO commands VALUES (?,'committed','RPNPCDecision')`, []any{key}},
+			{`INSERT INTO command_attempts VALUES (?,1,'committed',?)`, []any{key, hash}},
+		} {
+			if _, err := db.ExecContext(ctx, statement.query, statement.args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	input := core.RPDecisionInput{InstanceID: "world", BranchID: "main", NPCEntityID: "npc", InterlocutorEntityID: "a", HeadSequence: 8, TurnID: "new-turn"}
+	memory, err := readRPOwnPrivateDecisionMemory(ctx, conn, input)
+	if err != nil || len(memory) != 4 || memory[0].Private.Intent != "record-0" || memory[0].InterlocutorEntityID != "a" {
+		t.Fatalf("peer predicate did not precede global-three limit: %+v %v", memory, err)
+	}
+	for _, scope := range []string{"peer-b", "no-peer", "current-turn", "partial-batch", "actor", "branch", "instance"} {
+		bounded := input
+		want := 0
+		switch scope {
+		case "peer-b":
+			bounded.InterlocutorEntityID, want = "b", 3
+		case "no-peer":
+			bounded.InterlocutorEntityID, want = "", 3
+		case "current-turn":
+			bounded.TurnID, want = "record-0", 3
+		case "partial-batch":
+			bounded.HeadSequence = 1
+		case "actor":
+			bounded.NPCEntityID = "other"
+		case "branch":
+			bounded.BranchID = "other"
+		case "instance":
+			bounded.InstanceID = "other"
+		}
+		got, err := readRPOwnPrivateDecisionMemory(ctx, conn, bounded)
+		if err != nil || len(got) != want {
+			t.Fatalf("private union crossed %s: %+v %v", scope, got, err)
+		}
+	}
+	for _, boundary := range []struct{ update, restore string }{
+		{`UPDATE commands SET status='pending' WHERE command_id='record-0'`, `UPDATE commands SET status='committed' WHERE command_id='record-0'`},
+		{`UPDATE command_attempts SET status='ready' WHERE command_id='record-0'`, `UPDATE command_attempts SET status='committed' WHERE command_id='record-0'`},
+		{`UPDATE command_attempts SET proposal_hash='unapproved' WHERE command_id='record-0'`, `UPDATE command_attempts SET proposal_hash=(SELECT proposal_hash FROM rp_npc_decisions WHERE decision_id='record-0') WHERE command_id='record-0'`},
+	} {
+		if _, err := conn.ExecContext(ctx, boundary.update); err != nil {
+			t.Fatal(err)
+		}
+		got, err := readRPOwnPrivateDecisionMemory(ctx, conn, input)
+		if err != nil || len(got) != 3 {
+			t.Fatalf("unapproved peer row entered memory: %+v %v", got, err)
+		}
+		if _, err := conn.ExecContext(ctx, boundary.restore); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// These deliberately mutable, isolated source tables test the reader's
+	// fail-closed hash boundary; the real ledger is never modified by this case.
+	if _, err := conn.ExecContext(ctx, `UPDATE rp_npc_decisions SET proposal_json=json_set(proposal_json,'$.private.intent','changed') WHERE decision_id='record-0'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readRPOwnPrivateDecisionMemory(ctx, conn, input); !core.HasCode(err, core.CodeProjectionDiverged) {
+		t.Fatalf("peer-only historical record skipped approved hash verification: %v", err)
 	}
 }

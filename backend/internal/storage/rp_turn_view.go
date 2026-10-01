@@ -27,23 +27,38 @@ func (s *Store) renderRPTurnStyled(ctx context.Context, sessionID, playerTurnID,
 }
 
 func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnID, playerEventID string) (core.RPNarrativeInput, error) {
+	tx, err := beginImmediate(ctx, s.db)
+	if err != nil {
+		return core.RPNarrativeInput{}, err
+	}
+	defer tx.Rollback(ctx)
+	return readRPNarrativeInputOnConn(ctx, tx.conn, sessionID, playerTurnID, playerEventID)
+}
+
+// One short snapshot gathers facts, identity masking and full-batch provenance.
+// No connection survives rendering, provider calls or stream emission.
+func readRPNarrativeInputOnConn(ctx context.Context, conn *sql.Conn, sessionID, playerTurnID, playerEventID string) (core.RPNarrativeInput, error) {
+	return readRPNarrativeInputAtHead(ctx, conn, sessionID, playerTurnID, playerEventID, 0)
+}
+
+func readRPNarrativeInputAtHead(ctx context.Context, conn *sql.Conn, sessionID, playerTurnID, playerEventID string, head int64) (core.RPNarrativeInput, error) {
 	var input core.RPNarrativeInput
 	player := core.RPNarrativeFact{EventID: playerEventID, Action: "speak"}
 	var utterancePlaceID string
-	if err := s.db.QueryRowContext(ctx, `SELECT u.speech_text,u.speaker_entity_id,n.display_name,u.world_time,p.display_name,u.place_id
+	if err := conn.QueryRowContext(ctx, `SELECT u.speech_text,u.speaker_entity_id,n.display_name,u.world_time,p.display_name,u.place_id
 		FROM rp_utterances u JOIN materialized_entities n ON n.entity_id=u.speaker_entity_id JOIN agent_places p ON p.place_id=u.place_id
 		WHERE u.session_id = ? AND u.turn_id = ? AND u.event_id = ?`, sessionID, playerTurnID, playerEventID).Scan(&player.Text, &player.ActorID, &player.ActorName, &player.WorldTime, &player.PlaceName, &utterancePlaceID); err != nil {
 		return input, classifyMissing(err, "accepted player utterance for RP narrative")
 	}
 	input.ControlledEntityID = player.ActorID
 	var playerEventSeq int64
-	if err := s.db.QueryRowContext(ctx, `SELECT event_sequence FROM events WHERE event_id = ?`, playerEventID).Scan(&playerEventSeq); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT event_sequence FROM events WHERE event_id = ?`, playerEventID).Scan(&playerEventSeq); err != nil {
 		return input, classifyMissing(err, "accepted player utterance sequence")
 	}
 	seen := map[string]bool{playerEventID: true}
 	var facts []core.RPNarrativeFact
 	sequenceByEvent := map[string]int64{}
-	activityAvailable, err := rpActivityContinuityTableAvailable(ctx, s.db, "rp_activities")
+	activityAvailable, err := rpActivityContinuityTableAvailable(ctx, conn, "rp_activities")
 	if err != nil {
 		return input, err
 	}
@@ -52,7 +67,7 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 		activityCode = `COALESCE(a.activity_code, '')`
 		activityJoin = `LEFT JOIN rp_activities a ON a.start_event_id = d.event_id`
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := conn.QueryContext(ctx, `
 		SELECT d.action, e.event_type, npc.display_name, u.speech_text,e.event_id,npc.entity_id,e.world_time,`+activityCode+`,e.event_sequence
 		FROM rp_npc_decisions d JOIN events e ON e.event_id = d.event_id
 		JOIN materialized_entities npc ON npc.entity_id = d.npc_entity_id
@@ -128,7 +143,7 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 	// An expression is public only if its separate committed Event has a
 	// frozen observation for this player. Private decision metadata never enters
 	// this projection, even though it shares the decision's batch.
-	expressionRows, err := s.db.QueryContext(ctx, `
+	expressionRows, err := conn.QueryContext(ctx, `
 		SELECT e.event_id,e.event_sequence,e.world_time,e.actor_id,npc.display_name,
 			json_extract(o.claim_payload,'$.action'),COALESCE(json_extract(o.claim_payload,'$.gesture_code'),''),
 			COALESCE(json_extract(o.claim_payload,'$.target_entity_id'),'')
@@ -170,21 +185,19 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 	var instance, branch string
 	var chapterStart int64
 	chapterColumn := `0`
-	chapterAvailable, err := rpSessionChapterAvailable(ctx, s.db)
+	chapterAvailable, err := rpSessionChapterAvailable(ctx, conn)
 	if err != nil {
 		return input, err
 	}
 	if chapterAvailable {
 		chapterColumn = `chapter_start_sequence`
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT instance_id,branch_id,`+chapterColumn+` FROM rp_sessions WHERE session_id=?`, sessionID).Scan(&instance, &branch, &chapterStart); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT instance_id,branch_id,`+chapterColumn+` FROM rp_sessions WHERE session_id=?`, sessionID).Scan(&instance, &branch, &chapterStart); err != nil {
 		return input, err
 	}
-	conn, err := s.db.Conn(ctx)
-	if err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT b.head_sequence FROM rp_sessions s JOIN branches b ON b.instance_id=s.instance_id AND b.branch_id=s.branch_id WHERE s.session_id=?`, sessionID).Scan(&input.SourceHead); err != nil {
 		return input, err
 	}
-	defer conn.Close()
 	// Decision rows may be committed even when the player cannot see the NPC.
 	// Only the witnessed expression rows and heard speech bypass this visual
 	// check. Silence, activity and departure must be perceptible at commit time.
@@ -210,7 +223,19 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 	// Activity prose labels are declared by the studio narrative package;
 	// presentation metadata, never narrative facts.
 	var labels map[string]string
-	packages, err := readStudioActivePackages(ctx, conn, instance, branch)
+	if head > 0 {
+		input.SourceHead = head
+	}
+	historicalPlace, err := rpNarrativePlaceNameAtHead(ctx, conn, instance, branch, utterancePlaceID, input.SourceHead)
+	if err != nil {
+		return input, err
+	}
+	player.PlaceName = historicalPlace
+	for i := range facts {
+		facts[i].PlaceName = historicalPlace
+	}
+
+	packages, err := readRPNarrativePackagesAtHead(ctx, conn, instance, branch, input.SourceHead)
 	if err != nil {
 		return input, err
 	}
@@ -371,7 +396,7 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 			if fact.TargetActorID == player.ActorID {
 				fact.TargetActorName = player.ActorName
 			} else {
-				known, err := rpIdentityKnown(ctx, conn, instance, branch, player.ActorID, fact.TargetActorID)
+				known, err := rpNarrativeIdentityKnownAtHead(ctx, conn, instance, branch, player.ActorID, fact.TargetActorID, input.SourceHead)
 				if err != nil {
 					return input, err
 				}
@@ -391,7 +416,7 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 		if fact.ActorID == player.ActorID {
 			continue
 		}
-		known, err := rpIdentityKnown(ctx, conn, instance, branch, player.ActorID, fact.ActorID)
+		known, err := rpNarrativeIdentityKnownAtHead(ctx, conn, instance, branch, player.ActorID, fact.ActorID, input.SourceHead)
 		if err != nil {
 			return input, err
 		}
@@ -409,6 +434,9 @@ func (s *Store) readRPNarrativeInput(ctx context.Context, sessionID, playerTurnI
 			})
 			addedPresentation[fact.ActorID] = true
 		}
+	}
+	if err := annotateRPNarrativeCompanions(ctx, conn, instance, branch, player.ActorID, &input); err != nil {
+		return input, err
 	}
 	return input, nil
 }

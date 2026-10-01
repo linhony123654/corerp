@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"corerp.local/backend/internal/core"
-	"corerp.local/backend/internal/narrative"
 )
 
 type RPNarrativeSelectRequest struct {
@@ -26,7 +25,7 @@ type RPNarrativeSelectResult struct {
 	FactGroups         [][]string `json:"fact_groups,omitempty"`
 }
 
-const rpNarrativeCompositionVersion = narrative.CompositionVersion
+const rpNarrativeCompositionVersion = core.RPFactCompositionVersionV1
 
 // Validate the receipt against facts, never against the broader presentation
 // provenance list (which may also contain authored style/cue sources).
@@ -37,7 +36,7 @@ func validateRPNarrativeComposition(view core.RPNarrativeView) error {
 		}
 		return nil // Saved legacy prose does not claim closed composition.
 	}
-	if view.CompositionVersion != rpNarrativeCompositionVersion || len(view.FactGroups) == 0 || len(view.FactGroups) != len(view.Lines) {
+	if (view.CompositionVersion != rpNarrativeCompositionVersion && view.CompositionVersion != core.RPFactCompositionVersionV2) || (len(view.FactGroups) == 0 && view.CompositionVersion != core.RPFactCompositionVersionV2) || len(view.FactGroups) != len(view.Lines) {
 		return core.NewError(core.CodeProjectionDiverged, "narrative composition version or groups are invalid")
 	}
 	next := 0
@@ -105,6 +104,16 @@ func (s *Store) saveSelectedRPNarrative(ctx context.Context, request RPNarrative
 	if err != nil {
 		return core.WrapError(core.CodeStorageFailure, "encode narrative fact source sequence", err)
 	}
+	artifactJSON, err := encodeRPNarrativeArtifact(*view)
+	if err != nil {
+		return err
+	}
+	if view.CompositionVersion == core.RPFactCompositionVersionV2 {
+		hash, err := core.HashJSON(input)
+		if err != nil || hash != view.Artifact.InputSHA256 {
+			return narrativeDiverged("render artifact differs from authorized input")
+		}
+	}
 	styleJSON, err := json.Marshal(input.Style)
 	if err != nil {
 		return core.WrapError(core.CodeStorageFailure, "encode selected narrative style", err)
@@ -155,7 +164,10 @@ func (s *Store) saveSelectedRPNarrative(ctx context.Context, request RPNarrative
 	if status != "settled" {
 		return core.NewError(core.CodeBranchConflict, "narrative turn is no longer settled")
 	}
-	if err := execAgentOne(ctx, tx.conn, "save narrative render", `INSERT INTO rp_narrative_renders(render_id,turn_run_id,style_json,source_event_ids_json,lines_json,provider_kind,model_id,created_at_utc,composition_version,fact_groups_json,fact_event_ids_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, renderID, request.TurnRunID, string(styleJSON), string(sourcesJSON), string(linesJSON), metadata.Kind, metadata.Model, s.now().UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), view.CompositionVersion, string(groupsJSON), string(factIDsJSON)); err != nil {
+	if _, err := validateRPNarrativeArtifactOnConn(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, request.TurnRunID, false, artifactJSON, *view); err != nil {
+		return err
+	}
+	if err := execAgentOne(ctx, tx.conn, "save narrative render", `INSERT INTO rp_narrative_renders(render_id,turn_run_id,style_json,source_event_ids_json,lines_json,provider_kind,model_id,created_at_utc,composition_version,fact_groups_json,fact_event_ids_json,artifact_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, renderID, request.TurnRunID, string(styleJSON), string(sourcesJSON), string(linesJSON), metadata.Kind, metadata.Model, s.now().UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), view.CompositionVersion, string(groupsJSON), string(factIDsJSON), artifactJSON); err != nil {
 		return err
 	}
 	if request.StyleOverride != nil {
@@ -189,10 +201,10 @@ func (s *Store) SelectRPNarrative(ctx context.Context, request RPNarrativeSelect
 	if err := authorizeRPControl(ctx, tx.conn, request.PrincipalID, session.InstanceID, session.BranchID, session.ControlledEntityID); err != nil {
 		return result, err
 	}
-	var baseline string
+	var baseline, artifactJSON string
 	groupsJSON := "[]"
 	factIDsJSON := "[]"
-	if err := tx.conn.QueryRowContext(ctx, `SELECT narrative_json,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, request.TurnRunID, request.SessionID).Scan(&baseline, &result.CompositionVersion, &groupsJSON, &factIDsJSON); err != nil {
+	if err := tx.conn.QueryRowContext(ctx, `SELECT narrative_json,narrative_composition_version,narrative_fact_groups_json,narrative_fact_event_ids_json,narrative_artifact_json FROM rp_turn_runs WHERE turn_run_id=? AND session_id=? AND status='settled'`, request.TurnRunID, request.SessionID).Scan(&baseline, &result.CompositionVersion, &groupsJSON, &factIDsJSON, &artifactJSON); err != nil {
 		return result, classifyMissing(err, "selectable narrative turn")
 	}
 	selectedJSON := baseline
@@ -201,7 +213,7 @@ func (s *Store) SelectRPNarrative(ctx context.Context, request RPNarrativeSelect
 			return result, core.WrapError(core.CodeStorageFailure, "restore canonical narrative", err)
 		}
 	} else {
-		err := tx.conn.QueryRowContext(ctx, `SELECT lines_json,composition_version,fact_groups_json,fact_event_ids_json FROM rp_narrative_renders WHERE render_id=? AND turn_run_id=?`, request.RenderID, request.TurnRunID).Scan(&selectedJSON, &result.CompositionVersion, &groupsJSON, &factIDsJSON)
+		err := tx.conn.QueryRowContext(ctx, `SELECT lines_json,composition_version,fact_groups_json,fact_event_ids_json,artifact_json FROM rp_narrative_renders WHERE render_id=? AND turn_run_id=?`, request.RenderID, request.TurnRunID).Scan(&selectedJSON, &result.CompositionVersion, &groupsJSON, &factIDsJSON, &artifactJSON)
 		if errors.Is(err, sql.ErrNoRows) {
 			return result, core.NewError(core.CodeNotFound, "narrative render does not belong to this turn")
 		}
@@ -217,6 +229,9 @@ func (s *Store) SelectRPNarrative(ctx context.Context, request RPNarrativeSelect
 	}
 	result.FactGroups, err = decodeRPNarrativeComposition(result.CompositionVersion, groupsJSON, factIDsJSON, result.Lines)
 	if err != nil {
+		return result, err
+	}
+	if _, err := validateRPNarrativeArtifactOnConn(ctx, tx.conn, session.InstanceID, session.BranchID, session.ControlledEntityID, request.TurnRunID, request.RenderID == "", artifactJSON, core.RPNarrativeView{Lines: result.Lines, EventIDs: mustRPNarrativeIDs(factIDsJSON), FactGroups: result.FactGroups, CompositionVersion: result.CompositionVersion}); err != nil {
 		return result, err
 	}
 	if err := tx.Commit(ctx); err != nil {

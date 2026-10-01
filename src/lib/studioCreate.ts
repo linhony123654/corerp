@@ -1,3 +1,5 @@
+import { authoredRongqingSpec } from './studioWorldPresets.ts'
+
 export type StudioDraft = {
   name: string; population: number; money: number; stock: number
   home: string; square: string; playerName: string; neighbourName: string
@@ -80,13 +82,25 @@ export async function buildCreateRequest(draft: StudioDraft, systemJSON: string,
       relationships.push({ from: direction.from, to: direction.to, role, address_to: [address], ...(self ? { self_reference: self } : {}) })
     }
   }
+  return assembleCreateRequest(draft, systemJSON, narrativeJSON,
+    { version: 'corerp.studio-world.v1', name: draft.name, start_world_time: '2026-09-22T00:00:00Z', population: draft.population, opening_money_minor: draft.money, opening_stock_minor: draft.stock,
+      places: [{ key: 'home', name: draft.home, kind: 'home' }, { key: 'square', name: draft.square, kind: 'public' }], links: [{ from: 'home', to: 'square', minutes: 1 }],
+      people: [{ key: 'player', name: draft.playerName, place: 'home', player: true, ...(playerPersona ? { persona: playerPersona } : {}) }, { key: 'neighbour', name: draft.neighbourName, place: 'home', player: false, persona, ...(presentation ? { public_presentation: presentation } : {}) }],
+      ...(relationships.length ? { acquaintances: [['player', 'neighbour']], relationships } : {}) })
+}
+
+export async function buildRongqingCreateRequest(draft: StudioDraft, systemJSON: string, narrativeJSON: string): Promise<CreateRequest> {
+  return assembleCreateRequest(draft, systemJSON, narrativeJSON, authoredRongqingSpec())
+}
+
+async function assembleCreateRequest(draft: StudioDraft, systemJSON: string, narrativeJSON: string, spec: Record<string, unknown>): Promise<CreateRequest> {
+  if (![draft.authorityInstance, draft.authorityBranch, draft.playerPrincipal].every(value => value.trim())) throw new Error('请填写管理员提供的创建授权范围和玩家身份。')
+  if (!Number.isSafeInteger(draft.budget) || draft.budget < 1 || draft.budget > 64) throw new Error('人物行动预算须为 1–64 的整数。')
+  if (!['plain', 'dialogue', 'detailed'].includes(draft.narration)) throw new Error('请选择有效的叙事包风格。')
   return {
     authority_instance_id: draft.authorityInstance.trim(), authority_branch_id: draft.authorityBranch.trim(), instance_id: `world_${crypto.randomUUID()}`, idempotency_key: crypto.randomUUID(), player_principal_id: draft.playerPrincipal.trim(),
     system_package: systemJSON.trim() ? importedBundle(systemJSON) : await packageBundle('system', draft),
     narrative_package: narrativeJSON.trim() ? importedBundle(narrativeJSON) : await packageBundle('narrative', draft),
-    spec: { version: 'corerp.studio-world.v1', name: draft.name, start_world_time: '2026-09-22T00:00:00Z', population: draft.population, opening_money_minor: draft.money, opening_stock_minor: draft.stock,
-      places: [{ key: 'home', name: draft.home, kind: 'home' }, { key: 'square', name: draft.square, kind: 'public' }], links: [{ from: 'home', to: 'square', minutes: 1 }],
-      people: [{ key: 'player', name: draft.playerName, place: 'home', player: true, ...(playerPersona ? { persona: playerPersona } : {}) }, { key: 'neighbour', name: draft.neighbourName, place: 'home', player: false, persona, ...(presentation ? { public_presentation: presentation } : {}) }],
-      ...(relationships.length ? { acquaintances: [['player', 'neighbour']], relationships } : {}) }
+    spec
   }
 }

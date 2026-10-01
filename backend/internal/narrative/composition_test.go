@@ -112,16 +112,16 @@ func TestCompositionProviderRepairsLegacyAndStreamsBoundGroups(t *testing.T) {
 				Templates []string `json:"allowed_templates"`
 			}
 		}
-		if len(request.Messages) < 2 || json.Unmarshal([]byte(request.Messages[1].Content), &payload) != nil || payload.Version != compositionVersion || len(payload.Facts) != 2 || payload.Facts[0].Ref != "f0" || len(payload.Facts[0].Templates) != 4 {
+		if len(request.Messages) < 2 || json.Unmarshal([]byte(request.Messages[1].Content), &payload) != nil || payload.Version != core.RPFactCompositionVersionV2 || len(payload.Facts) != 2 || payload.Facts[0].Ref != "f0" || len(payload.Facts[0].Templates) != 2 {
 			t.Error("actual provider view lacks closed fact references")
 			return
 		}
 		draft := "Cai说：「今晚\n  有空吗？」你说：「有啊，坐这儿吧。」"
 		if calls.Add(1) == 2 {
-			if len(request.Messages) != 4 || !strings.Contains(request.Messages[3].Content, compositionVersion) {
+			if len(request.Messages) != 4 || !strings.Contains(request.Messages[3].Content, core.RPFactCompositionVersionV2) {
 				t.Error("repair not versioned")
 			}
-			draft = `{"version":"corerp.fact-composition.v1","groups":[{"layout":"inline","atoms":[{"fact_ref":"f0","template":"dialogue"}]},{"layout":"inline","atoms":[{"fact_ref":"f1","template":"plain"}]}]}`
+			draft = factCompositionFixture("f0", "f1")
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"content": draft}}}})
 	}))
@@ -132,7 +132,7 @@ func TestCompositionProviderRepairsLegacyAndStreamsBoundGroups(t *testing.T) {
 	}
 	var chunks []core.RPNarrativeChunk
 	view, err := p.RenderStream(context.Background(), in, func(c core.RPNarrativeChunk) error { chunks = append(chunks, c); return nil })
-	if err != nil || view.FallbackReason != "" || calls.Load() != 2 || view.CompositionVersion != CompositionVersion || len(view.FactGroups) != 2 || len(view.Lines) != 2 || len(chunks) != 2 || !strings.Contains(view.Lines[0], in.Facts[0].Text) {
+	if err != nil || view.FallbackReason != "" || calls.Load() != 2 || view.CompositionVersion != core.RPFactCompositionVersionV2 || len(view.FactGroups) != 2 || len(view.Lines) != 2 || len(chunks) != 2 || !strings.Contains(view.Lines[0], in.Facts[0].Text) {
 		t.Fatalf("composition integration failed: %+v %v calls=%d", view, err, calls.Load())
 	}
 	for i, c := range chunks {
@@ -158,7 +158,7 @@ func TestCompositionProviderRejectsFreshLegacyWithoutEmission(t *testing.T) {
 			in := proseFixture()
 			var lines []string
 			view, err := p.RenderStream(context.Background(), in, func(c core.RPNarrativeChunk) error { lines = append(lines, c.Line); return nil })
-			if err != nil || view.FallbackReason != "prose_invalid composition plan" || len(lines) != 2 || calls.Load() != 1 || len(view.EventIDs) != 2 || view.CompositionVersion != "" || len(view.FactGroups) != 0 {
+			if err != nil || view.FallbackReason != "prose_invalid composition plan" || len(lines) != 2 || calls.Load() != 1 || len(view.EventIDs) != 2 || view.CompositionVersion != core.RPFactCompositionVersionV2 || len(view.FactGroups) != 2 || view.Artifact == nil {
 				t.Fatalf("fresh legacy did not recover without claiming composition: %+v %v", view, err)
 			}
 			expected, err := (core.DeterministicRPNarrativeProvider{}).Render(context.Background(), in)
@@ -219,7 +219,7 @@ func TestCompositionSupportedFactVocabularyAndTargets(t *testing.T) {
 			in.Facts = []core.RPNarrativeFact{fact}
 			draft := `{"version":"corerp.fact-composition.v1","groups":[{"layout":"inline","atoms":[{"fact_ref":"f0","template":"plain"}]}]}`
 			result, err := renderComposition(context.Background(), draft, in)
-			expected, expectedErr := (core.DeterministicRPNarrativeProvider{}).Render(context.Background(), core.RPNarrativeInput{ControlledEntityID: in.ControlledEntityID, Style: in.Style, Facts: in.Facts})
+			expected, expectedErr := (core.LiteralRPNarrativeProvider{}).Render(context.Background(), core.RPNarrativeInput{ControlledEntityID: in.ControlledEntityID, Style: in.Style, Facts: in.Facts})
 			if err != nil || expectedErr != nil || len(result.Lines) != 1 || !strings.Contains(result.Lines[0], "陌生人") || result.Sources[0][0] != "observable" {
 				t.Fatalf("public atom failed: %+v %v / %+v %v", result, err, expected, expectedErr)
 			}
@@ -277,7 +277,7 @@ func TestCompositionPlainRetainsRequestedRichSourceFraming(t *testing.T) {
 	for _, density := range []string{"concise", "standard", "long"} {
 		in.Style.NarrativeDensity = density
 		result, err := renderComposition(context.Background(), draft, in)
-		expected, expectedErr := (core.DeterministicRPNarrativeProvider{}).Render(context.Background(), in)
+		expected, expectedErr := (core.LiteralRPNarrativeProvider{}).Render(context.Background(), in)
 		if err != nil || expectedErr != nil || result.Lines[0] != strings.Join(expected.Lines, "") {
 			t.Fatalf("plain overwrote requested %s framing: %+v %v / %+v %v", density, result, err, expected, expectedErr)
 		}
@@ -313,7 +313,7 @@ func TestCompositionReportsLexicalAndPublicStyleCapability(t *testing.T) {
 	in.Style.FullProse = true
 	in.Style.ProseInstructions = "用华丽词汇改写对白，呈现角色私有心理。"
 	in.PublicPresentations = []core.RPPublicPresentation{{ActorID: "entity_cai", ActorName: "Cai", SourceEventID: "style", Text: "说话温柔，使用独特比喻。"}}
-	result, err := renderComposition(context.Background(), factCompositionFixture("f0", "f1"), in)
+	result, err := renderComposition(context.Background(), legacyFactCompositionFixture("f0", "f1"), in)
 	if err != nil || len(result.Warnings) == 0 || result.Warnings[0] != compositionCapabilityWarning {
 		t.Fatalf("unsupported lexical request silently accepted: %+v %v", result, err)
 	}
