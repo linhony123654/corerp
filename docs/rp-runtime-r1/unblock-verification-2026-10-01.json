@@ -1,0 +1,196 @@
+{
+  "kind": "corerp.r1-unblock-verification.v1",
+  "recorded_at_utc": "2026-10-01T06:34:55.416688+00:00",
+  "base_commit": "b6e37a7c8cee5bc2299e6531d98c4fc9254a4860",
+  "branch": "rp-preview-integration-20260929",
+  "new_runtime_sha256": "8366b5a80678aac03c28bbb3a13d0edee20c49f7967b189f36f4d77e43a2e2db",
+  "all_current_jobs": "TERMINAL",
+  "r1_status": "NOT_DONE",
+  "evidence_basis": "Native tool outputs and retained local diagnostic artifacts; durations are observed values, not benchmarks.",
+  "checks": [
+    {
+      "check": "preflight CLI and Studio readiness focused tests",
+      "result": "PASS",
+      "limits": "No provider or world writes"
+    },
+    {
+      "check": "narrative explicit HTTP override tests before fix",
+      "result": "RED",
+      "native_session": 28047,
+      "evidence": "/dev/shm/corerp-r1-narrative-controls-red-20261001.log",
+      "limits": "Two explicit options subcases failed; shell wrapper exit0 is not a passing go test"
+    },
+    {
+      "check": "outer speech-token punctuation before fix",
+      "result": "RED",
+      "failed_subcases": 7
+    },
+    {
+      "check": "new narrative and HTTP options tests after fix",
+      "result": "PASS",
+      "native_session": 7576,
+      "seconds_by_package": {
+        "narrative": 0.009,
+        "httpapi": 0.011
+      }
+    },
+    {
+      "check": "full package go tests for narrative, decision, core, and new CLI",
+      "result": "PASS",
+      "native_session": 14913,
+      "seconds_by_package": {
+        "narrative": 1.486,
+        "decision": 0.616,
+        "core": 0.134,
+        "preflight": 0.057
+      }
+    },
+    {
+      "check": "HTTP model override related tests",
+      "result": "PASS",
+      "native_session": 86410,
+      "seconds": 2.004
+    },
+    {
+      "check": "related go vet",
+      "result": "PASS",
+      "native_session": 35958
+    },
+    {
+      "check": "npm run build (Vue TypeScript and Vite)",
+      "result": "PASS",
+      "native_session": 56878,
+      "limits": "Local build, not deployment or visual acceptance"
+    },
+    {
+      "check": "storage authorized narration, restart, visibility, authored public presentation and prose fallback",
+      "result": "PASS",
+      "native_session": 31084,
+      "seconds": 3.755,
+      "tests": [
+        "TestRPNarrativeProviderIndependentAuthorizedAndOutsideTransaction",
+        "TestRPOfficialNarrativePersistsAcrossSelectedVariantAndRestart",
+        "TestRPNarrativeRenderSelectionPersistsAndDoesNotChangeWorld",
+        "TestRPNarrativeExcludesUnheardNPCSpeech",
+        "TestRPNarrativeUsesOnlyAuthoredPublicPresentationAfterRecognition",
+        "TestRPNarrativeFullProseFallbackIsQueryable"
+      ]
+    },
+    {
+      "check": "readiness receipt script, short helper node syntax and narrative helper Python AST syntax",
+      "result": "PASS"
+    },
+    {
+      "check": "full current-source backend suite",
+      "result": "NOT_RUN"
+    },
+    {
+      "check": "full current-source original32 and frozen real Golden",
+      "result": "NOT_RUN"
+    },
+    {
+      "check": "human RP experience acceptance",
+      "result": "PENDING"
+    }
+  ],
+  "preflight": {
+    "exit_code": 2,
+    "named_characters": 11,
+    "players": 1,
+    "npcs": 10,
+    "missing_persona": 10,
+    "unknown_relationship": 10,
+    "public_artifact": "rongqing-preflight-2026-10-01.json"
+  },
+  "original_short": {
+    "native_session": 64712,
+    "exit_code": 1,
+    "status": "FAIL",
+    "npc_success": 4,
+    "npc_attempts": 4,
+    "model": "step-5-preview",
+    "original_end_prose": "FAIL/prose_unavailable",
+    "fixture_authority": "test_author_only",
+    "real_world_canon": "NOT_APPROVED",
+    "public_artifact": "rongqing-minimal-short-samples-2026-10-01.json",
+    "local_artifact": "/dev/shm/corerp-r1-short-XtMw2w/short-samples.json"
+  },
+  "same_facts_prose": {
+    "native_session": 43394,
+    "exit_code": 0,
+    "before": "PASS",
+    "after": "PASS",
+    "actual_http": 2,
+    "npc_reruns": 0,
+    "world_unchanged": {
+      "head": 21,
+      "events": 21,
+      "utterances": 8,
+      "decisions": 4,
+      "turn_runs": 4
+    },
+    "same_source_event_count": 3,
+    "explicit_reasoning_effort": {
+      "before": null,
+      "after": "low"
+    },
+    "public_artifact": "narrative-controls-same-facts-2026-10-01.json",
+    "local_artifact": "/dev/shm/corerp-r1-narrative-controls-t6o9y4fx/result.json",
+    "initial_probe": {
+      "status": "FAIL",
+      "actual_http": 0,
+      "cause": "diagnostic helper read wrong event_ids field and cached original without explicit style override",
+      "preserved_artifact": "/dev/shm/corerp-r1-narrative-controls-s2rytftq/result.json"
+    }
+  },
+  "actual_provider_http_total": 7,
+  "actual_provider_http_breakdown": {
+    "npc": 4,
+    "original_failed_prose": 1,
+    "same_facts_prose": 2
+  },
+  "preview": {
+    "deployed_this_turn": false,
+    "observed_backend_pid": 722907,
+    "observed_backend_sha256": "fea2067aa393dd6608b5502f13a7ee3884d5ba5336203d167de315a99a4cbc23",
+    "frontend_serving_version": "UNVERIFIED"
+  },
+  "prior_checkpoint_retained": {
+    "runtime_sha256": "f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21",
+    "backend_12_package_coverage": "PASS with initial 10m storage failure retained; same-source explicit30m storage retry passed",
+    "original32": "FAIL at round29 Step deadline; 28 main pass, remaining/postchecks NOT_REACHED",
+    "frozen_golden": "17 NOT_READY, zero NPC model HTTP; no human RP pass",
+    "limits": "Historical evidence for old source, not a complete regression for current changes."
+  },
+  "original_frozen_sha256": {
+    "real-rongqing-world-spec.json": "e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+    "real-rongqing-packages.json": "a486adeae8e1a21c9256048a9d8d258a90c28b71141b88324404b953b6986a6d",
+    "before-samples.json": "9e4ddf8a948be6d80f7fa46365fe4320c3d7577437e6dd4f839eee06d1c52c2a",
+    "after-samples.json": "924f55ba7b77ed2358d514b6c5161a3232b280174e9d8f926685af80fd3a9709"
+  },
+  "changed_source_sha256": {
+    "backend/cmd/corerp-rp-preflight/main.go": "0eec06f8c835dca0fd0be6c0fc73e0a5e7d17752ae1248005a6b510fb4609f2d",
+    "backend/cmd/corerp-rp-preflight/main_test.go": "83ba8f53ba03bae47029d70e0b25ae4c329ab55c0b720231c9d7e4b49ca2a40b",
+    "backend/internal/narrative/chat.go": "fcff84ff22e56f83ba66e9f12904246e83cfa9c70f7caf117e9ebb36e7c4510a",
+    "backend/internal/narrative/config.go": "66b1fc7e7274f30e3c7f6c25807011c11320f655343d2888d8d4264e19d69a3b",
+    "backend/internal/narrative/prose.go": "44f3ec93b20df9443225cc4b79d5996fcd4cbabccab0219e09712a7cc6de493b",
+    "backend/internal/narrative/prose_test.go": "1c4dfd508aaf7d7dd9f247cf63e21e8ebb263451002225b4fb3ee3ef1cbef778",
+    "backend/internal/narrative/reasoning_test.go": "017824744e4b8e3c9a640ffd0202add55176b4eaa14e6e3493de2a698443c924",
+    "backend/internal/transport/httpapi/rp_model.go": "e8bbc00f3f3e68359baaaefba7923872b1ba768591444b34e7d912200691ce4e",
+    "backend/internal/transport/httpapi/rp_narrative_reasoning_test.go": "e47fd18ecebf1bfa3d07a8a0c755e967c61b8eaa697e9e399a01d330a76b39b7",
+    "src/components/PlayModelSettings.vue": "c70d191ca8cfcaea775ab11c71bb94ee5eaa1600796c1cccd8bfb571c4dfb274",
+    "scripts/verify-rp-runtime-r1-short.mjs": "21670b08a6f95fb39ed94d5c57b49e6a7e8850ed45cf9152c0060c92de8dcb34",
+    "scripts/diagnose-rp-runtime-r1-narrative.py": "1f214a2fde5fcc5a07b16b8863e38cd3065e77c2b62677a26d2536e153be2354",
+    "docs/rp-runtime-r1/rongqing-minimal-test-fixture-2026-10-01.json": "62614cd2b10f3bf62099a3a5852982b72d95a1c530b4b4aaea0ecacc9adaa79d"
+  },
+  "limits": [
+    "Independent test-author world reduces actor count and changes player start; not approved canon or same-input architecture Golden.",
+    "Four turns prove bounded address/recall behavior only; no long-conversation claim.",
+    "First speech implies unauthored illness; repetition and prose taste remain unresolved.",
+    "Own latest3 private decisions are not a persistent intent lifecycle or long-term semantic memory.",
+    "Two stochastic prose samples cannot establish stable speedup or clear literary improvement.",
+    "Provider-specific support for explicit reasoning controls is not guaranteed.",
+    "No secret, raw reasoning, production DB or new actor prior is a public artifact."
+  ],
+  "next": "Review/amend candidate data and same-data short experience; align preview after validation; retain original32, comparable real Golden and human review as final exits."
+}

@@ -639,7 +639,7 @@ function doImport() {
                 <input v-model="form.disableThinking" type="checkbox" />
                 请求关闭思考
               </label>
-              <small class="form-hint">以上推理选项用于角色决策和输入解析，需服务商支持；关闭思考不保证生效。输出预算可能包含思考用量，不代表对白长度。</small>
+              <small class="form-hint">以上推理选项用于角色决策、输入解析和叙事呈现，需服务商支持；关闭思考不保证生效。角色决策与输入解析的输出预算可能包含思考用量，不代表对白长度。</small>
             </div>
           </div>
         </div>

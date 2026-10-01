@@ -52,11 +52,13 @@ func resolveRPNarrativeOverride(override *core.RPModelOverride, policy endpointp
 	}
 	if override.FullProse {
 		prose, err := narrative.NewChatProseProvider(narrative.Config{
-			Endpoint:       override.Endpoint,
-			Model:          override.Model,
-			APIKey:         override.APIKey,
-			Timeout:        rpOverrideTimeout(override.TimeoutSeconds, 90*time.Second),
-			EndpointPolicy: policy,
+			Endpoint:        override.Endpoint,
+			Model:           override.Model,
+			APIKey:          override.APIKey,
+			Timeout:         rpOverrideTimeout(override.TimeoutSeconds, 90*time.Second),
+			ReasoningEffort: override.ReasoningEffort,
+			DisableThinking: override.DisableThinking,
+			EndpointPolicy:  policy,
 		})
 		if err != nil {
 			return nil, core.WrapError(core.CodeInvalidArgument, "模型配置无效，请在模型与 API 设置中修正或改用系统默认", err)
@@ -64,11 +66,13 @@ func resolveRPNarrativeOverride(override *core.RPModelOverride, policy endpointp
 		return prose, nil
 	}
 	planner, err := narrative.NewChatStylePlanner(narrative.Config{
-		Endpoint:       override.Endpoint,
-		Model:          override.Model,
-		APIKey:         override.APIKey,
-		Timeout:        rpOverrideTimeout(override.TimeoutSeconds, 30*time.Second),
-		EndpointPolicy: policy,
+		Endpoint:        override.Endpoint,
+		Model:           override.Model,
+		APIKey:          override.APIKey,
+		Timeout:         rpOverrideTimeout(override.TimeoutSeconds, 30*time.Second),
+		ReasoningEffort: override.ReasoningEffort,
+		DisableThinking: override.DisableThinking,
+		EndpointPolicy:  policy,
 	})
 	if err != nil {
 		return nil, core.WrapError(core.CodeInvalidArgument, "模型配置无效，请在模型与 API 设置中修正或改用系统默认", err)

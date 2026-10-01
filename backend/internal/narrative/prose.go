@@ -33,6 +33,9 @@ const maxProseResponseBytes = 64 << 10
 const maxProseRunes = 6000
 
 func NewChatProseProvider(c Config) (*ChatProseProvider, error) {
+	if err := c.validateReasoningOptions(); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(c.Model) == "" || len(c.Model) > 200 || strings.ContainsAny(c.APIKey, "\r\n") {
 		return nil, failure("invalid model configuration")
 	}
@@ -287,10 +290,12 @@ func (p *ChatProseProvider) write(ctx context.Context, in core.RPNarrativeInput)
 		if previousDraft != "" {
 			messages = append(messages, map[string]string{"role": "assistant", "content": previousDraft}, map[string]string{"role": "user", "content": revisionInstruction})
 		}
-		body, err := json.Marshal(map[string]any{
+		request := map[string]any{
 			"model": p.config.Model, "stream": false, "store": false, "max_completion_tokens": 4096,
 			"messages": messages,
-		})
+		}
+		p.config.applyReasoningOptions(request)
+		body, err := json.Marshal(request)
 		if err != nil {
 			return "", failure("request encoding failed")
 		}
@@ -412,9 +417,13 @@ func expandProseSpeechTokens(draft string, in core.RPNarrativeInput) (string, er
 		return draft, nil
 	}
 	quotes := map[string]string{}
+	terminalSpeech := map[string]bool{}
 	for index, fact := range in.Facts {
 		if fact.Text != "" {
-			quotes[proseSpeechToken(index)] = "「" + fact.Text + "」"
+			token := proseSpeechToken(index)
+			quotes[token] = "「" + fact.Text + "」"
+			last, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(fact.Text))
+			terminalSpeech[token] = strings.ContainsRune("。！？.!?…", last)
 		}
 	}
 	matches := proseSpeechTokens.FindAllStringIndex(draft, -1)
@@ -437,6 +446,12 @@ func expandProseSpeechTokens(draft string, in core.RPNarrativeInput) (string, er
 		out.WriteString(draft[offset:match[0]])
 		out.WriteString(quote)
 		offset = match[1]
+		// The model owns punctuation outside this inserted quotation only.
+		// Avoid 「already-ended。」。 without cleaning any accepted speech,
+		// including literal nested quotes, tokens, or punctuation in that speech.
+		if terminalSpeech[token] && strings.HasPrefix(draft[offset:], "。") {
+			offset += len("。")
+		}
 	}
 	if len(used) != len(quotes) {
 		return "", failure("missing or repeated prose speech token")

@@ -15,7 +15,7 @@ func FromEnvironment(get func(string) string) (core.RPStreamingNarrativeProvider
 		mode = "deterministic"
 	}
 	if mode == "deterministic" {
-		for _, suffix := range []string{"ENDPOINT", "MODEL", "API_KEY", "TIMEOUT", "ATTEMPTS"} {
+		for _, suffix := range []string{"ENDPOINT", "MODEL", "API_KEY", "TIMEOUT", "ATTEMPTS", "REASONING_EFFORT", "DISABLE_THINKING"} {
 			if get("CORERP_NARRATIVE_"+suffix) != "" {
 				return nil, "", failure("narrative settings require explicit style_planner or full_prose mode")
 			}
@@ -26,6 +26,14 @@ func FromEnvironment(get func(string) string) (core.RPStreamingNarrativeProvider
 		return nil, "", failure("unknown provider mode")
 	}
 	c := Config{Endpoint: get("CORERP_NARRATIVE_ENDPOINT"), Model: get("CORERP_NARRATIVE_MODEL"), APIKey: get("CORERP_NARRATIVE_API_KEY")}
+	c.ReasoningEffort = strings.TrimSpace(get("CORERP_NARRATIVE_REASONING_EFFORT"))
+	if value := get("CORERP_NARRATIVE_DISABLE_THINKING"); value != "" {
+		disabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil, "", failure("invalid thinking configuration")
+		}
+		c.DisableThinking = disabled
+	}
 	policy, err := endpointpolicy.FromEnvironment(get("CORERP_PROVIDER_ALLOWLIST"), get("CORERP_PROVIDER_LOCAL_ALLOWLIST"))
 	if err != nil {
 		return nil, "", failure("invalid endpoint allowlist")

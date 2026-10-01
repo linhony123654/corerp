@@ -1,5 +1,15 @@
 # CoreRP M1 strict-world kernel
 
+Before running an RP replay, check its creator declaration without a model or database:
+
+```sh
+go run ./cmd/corerp-rp-preflight -spec ../docs/rp-runtime-r1/real-rongqing-world-spec.json
+```
+
+This uses Studio's existing validation/readiness contract and reports completeness metadata and the input hash, never persona text. The executable exits `0` for READY, `2` for INCOMPLETE, and `1` for invalid input; `go run` wraps a nonzero executable status. An unknown relationship is valid, while an explicitly declared relationship missing an address is incomplete. READY does not establish author approval or RP experience acceptance.
+
+The narrator has its own optional `CORERP_NARRATIVE_REASONING_EFFORT` (`low`, `medium`, `high`) and `CORERP_NARRATIVE_DISABLE_THINKING` (boolean). It does not inherit `CORERP_LLM_*` settings or credentials. An explicit Play model override now applies its reasoning controls to both narrative providers as well as NPC decisions and input interpretation. Defaults omit both controls; service support is required. The timeout/token budgets and fact/privacy gates remain in force. See [the R1 diagnosis](../docs/rp-runtime-r1/unblock-diagnosis-2026-10-01.md).
+
 This module is the executable M1 vertical slice of the M0 contract: one demo instance, one branch, one open Rule Epoch, one enterprise, three employees, one landlord, and one store backed by a real SQLite file.
 
 The kernel provides authoritative genesis, deterministic world time and stable scheduler order, a strict 90-day wage/rent/household-purchase/restock run, atomic purchase and controlled-issuance commands, balanced obligation accounting, durable Outbox dispatch, replay/snapshots/projection repair, and scoped private-economic reads. Scheduler work is budgeted and restartable; each item commits independently, and a final clock checkpoint advances the requested day only after earlier due phases. A separate HTTP process now exposes authenticated commands/queries plus scope-filtered finite events and resumable SSE without giving transport handlers direct database authority.

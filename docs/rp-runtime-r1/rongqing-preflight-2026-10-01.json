@@ -1,0 +1,122 @@
+{
+  "kind": "corerp.r1-readiness-diagnosis.v1",
+  "summary": {
+    "exit_code": 2,
+    "status": "INCOMPLETE",
+    "npc_count": 10,
+    "missing_persona_count": 10,
+    "unknown_relationship_count": 10,
+    "spec_unchanged": true,
+    "spec_sha256": "e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47"
+  },
+  "report": {
+    "kind": "corerp.rp-preflight.v1",
+    "spec_sha256": "sha256:e9d4ac788451be22dd610403d3278e3c6fb20516a1854595dd25b557bc806e47",
+    "rp_readiness": {
+      "status": "INCOMPLETE",
+      "characters": [
+        {
+          "key": "lin_daiyu",
+          "name": "林黛玉",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "xue_baochai",
+          "name": "薛宝钗",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "jia_mu",
+          "name": "贾母",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "wang_xifeng",
+          "name": "王熙凤",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "li_wan",
+          "name": "李纨",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "miao_yu",
+          "name": "妙玉",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "jia_tanchun",
+          "name": "贾探春",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "xi_ren",
+          "name": "袭人",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "qing_wen",
+          "name": "晴雯",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        },
+        {
+          "key": "zi_juan",
+          "name": "紫鹃",
+          "readiness": {
+            "persona": "MISSING",
+            "relationship_to_interlocutor": "UNKNOWN",
+            "address_to_interlocutor": "UNKNOWN"
+          },
+          "public_presentation": "MISSING"
+        }
+      ],
+      "incomplete_relationships": []
+    }
+  }
+}

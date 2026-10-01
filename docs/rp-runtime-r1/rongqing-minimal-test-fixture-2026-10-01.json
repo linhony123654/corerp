@@ -1,0 +1,163 @@
+{
+  "kind": "corerp.r1-experience-fixture.v1",
+  "authority": "test_author_only",
+  "real_world_canon": "NOT_APPROVED",
+  "origin": "本次R1设计讨论中的祖孙、宝玉、老祖宗候选；其余文字为显式测试作者声明，不由模型补全。",
+  "limitations": "独立的两人测试世界，改变了角色数量和玩家初始位置；不等于冻结荣庆堂Golden，不是同输入架构前后对照，也不修改真实预览世界。",
+  "spec": {
+    "links": [
+      {
+        "from": "yihongyuan",
+        "minutes": 3,
+        "to": "qinfangting"
+      },
+      {
+        "from": "xiaoxiangguan",
+        "minutes": 3,
+        "to": "qinfangting"
+      },
+      {
+        "from": "hengwuyuan",
+        "minutes": 4,
+        "to": "qinfangting"
+      },
+      {
+        "from": "qiushuangzhai",
+        "minutes": 3,
+        "to": "qinfangting"
+      },
+      {
+        "from": "daoxiangcun",
+        "minutes": 5,
+        "to": "qinfangting"
+      },
+      {
+        "from": "longcuian",
+        "minutes": 4,
+        "to": "daoxiangcun"
+      },
+      {
+        "from": "rongqingtang",
+        "minutes": 2,
+        "to": "fengjieyuan"
+      },
+      {
+        "from": "rongqingtang",
+        "minutes": 6,
+        "to": "qinfangting"
+      },
+      {
+        "from": "yihongyuan",
+        "minutes": 8,
+        "to": "rongqingtang"
+      },
+      {
+        "from": "xiaoxiangguan",
+        "minutes": 4,
+        "to": "yihongyuan"
+      }
+    ],
+    "name": "荣庆堂最小体验测试·作者候选",
+    "opening_money_minor": 100000,
+    "opening_stock_minor": 500,
+    "people": [
+      {
+        "key": "player",
+        "name": "贾宝玉",
+        "place": "rongqingtang",
+        "player": true,
+        "persona": "宝玉是贾母的孙儿，二人彼此熟悉，称贾母为老祖宗。"
+      },
+      {
+        "key": "jia_mu",
+        "name": "贾母",
+        "place": "rongqingtang",
+        "player": false,
+        "persona": "贾母与宝玉是亲近的祖孙。她对熟识晚辈关照而有长辈的威严，言谈从容，关心宝玉的来意和心情。眼下的私人意愿是听他把话说完、照应他，不急于结束交谈。只按当前世界设定以及自己实际听见、看见的内容回应。",
+        "public_presentation": "言辞亲切、从容，带长辈的亲昵。"
+      }
+    ],
+    "places": [
+      {
+        "key": "yihongyuan",
+        "kind": "home",
+        "name": "怡红院"
+      },
+      {
+        "key": "xiaoxiangguan",
+        "kind": "home",
+        "name": "潇湘馆"
+      },
+      {
+        "key": "hengwuyuan",
+        "kind": "home",
+        "name": "蘅芜苑"
+      },
+      {
+        "key": "daoxiangcun",
+        "kind": "home",
+        "name": "稻香村"
+      },
+      {
+        "key": "qiushuangzhai",
+        "kind": "home",
+        "name": "秋爽斋"
+      },
+      {
+        "key": "fengjieyuan",
+        "kind": "home",
+        "name": "凤姐院"
+      },
+      {
+        "key": "longcuian",
+        "kind": "public",
+        "name": "栊翠庵"
+      },
+      {
+        "key": "rongqingtang",
+        "kind": "public",
+        "name": "荣庆堂"
+      },
+      {
+        "key": "qinfangting",
+        "kind": "public",
+        "name": "沁芳亭"
+      }
+    ],
+    "population": 300,
+    "start_world_time": "2026-09-22T00:00:00Z",
+    "version": "corerp.studio-world.v1",
+    "acquaintances": [
+      [
+        "player",
+        "jia_mu"
+      ]
+    ],
+    "relationships": [
+      {
+        "from": "jia_mu",
+        "to": "player",
+        "role": "祖母",
+        "address_to": [
+          "宝玉"
+        ],
+        "self_reference": "老祖宗"
+      },
+      {
+        "from": "player",
+        "to": "jia_mu",
+        "role": "孙儿",
+        "address_to": [
+          "老祖宗"
+        ],
+        "self_reference": "我"
+      }
+    ]
+  },
+  "inputs": [
+    "老祖宗，我来看您了。",
+    "今天心里有点闷，却又说不清为什么。",
+    "不急着问原因，您先陪我说一会儿话，好不好？",
+    "您刚才答应我的是什么？"
+  ]
+}

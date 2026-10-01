@@ -1,0 +1,219 @@
+{
+  "kind": "corerp.r1-short-diagnostic.v1",
+  "model": "step-5-preview",
+  "tuning": {
+    "decision_timeout": "120s",
+    "decision_max_tokens": 4096,
+    "reasoning_effort": "low",
+    "decision_format": "tool_call",
+    "narrative_timeout": "90s"
+  },
+  "fixture_sha256": "sha256:62614cd2b10f3bf62099a3a5852982b72d95a1c530b4b4aaea0ecacc9adaa79d",
+  "runtime_sha256": "sha256:f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21",
+  "fixture_authority": "test_author_only",
+  "real_world_canon": "NOT_APPROVED",
+  "world": "r1-short-test-world",
+  "artifact_dir": "/dev/shm/corerp-r1-short-XtMw2w",
+  "configuration_readiness": {
+    "status": "READY",
+    "characters": [
+      {
+        "key": "jia_mu",
+        "name": "贾母",
+        "readiness": {
+          "persona": "READY",
+          "relationship_to_interlocutor": "READY",
+          "address_to_interlocutor": "READY"
+        },
+        "public_presentation": "READY"
+      }
+    ],
+    "incomplete_relationships": []
+  },
+  "samples": [
+    {
+      "index": 1,
+      "text": "老祖宗，我来看您了。",
+      "duration_seconds": 6.864,
+      "turn_run_id": "rpturn_fcddceb1ad4a69bad99890a6ac9fbfcf985c53cdb9928f8e4f66e836ffd76fab",
+      "world_head": 12,
+      "decisions": [
+        {
+          "event_sequence": 11,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "宝玉来了，快过来让老祖宗瞧瞧。身子可好些了？今日倒得空来看我。",
+          "event_id": "event_rp_npc_c45c0a796926636d8fb470f5ba1356aff46728d2f16f8085eabc483f1dfbeccf"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "public_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「老祖宗，我来看您了。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「宝玉来了，快过来让老祖宗瞧瞧。身子可好些了？今日倒得空来看我。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ]
+    },
+    {
+      "index": 2,
+      "text": "今天心里有点闷，却又说不清为什么。",
+      "duration_seconds": 27.202,
+      "turn_run_id": "rpturn_3e31a104e2ee304393477deda2015374e8b8e33812ce1c0f7f2278715bc82e1a",
+      "world_head": 15,
+      "decisions": [
+        {
+          "event_sequence": 14,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "宝玉，到自己祖母面前还有什么说不清的。心里闷，就坐下来慢慢说，老祖宗听着呢。",
+          "event_id": "event_rp_npc_e1c6f9869b7180cdbb9c25188c17d2b5b1a9b37085e17e5a45c01325c98a5e76"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "public_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「今天心里有点闷，却又说不清为什么。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「宝玉，到自己祖母面前还有什么说不清的。心里闷，就坐下来慢慢说，老祖宗听着呢。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 向你招了招手。"
+      ]
+    },
+    {
+      "index": 3,
+      "text": "不急着问原因，您先陪我说一会儿话，好不好？",
+      "duration_seconds": 7.891,
+      "turn_run_id": "rpturn_c64ce7d9b5741144d8d9b782dea02254294dfaa83a4c7da5696fad21062efea7",
+      "world_head": 18,
+      "decisions": [
+        {
+          "event_sequence": 17,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "好，宝玉，老祖宗不急着问你为什么。你就安安心心在我这儿坐一会儿，咱们娘儿俩说说话，你想说什么就说什么。",
+          "event_id": "event_rp_npc_072dd2876fb8aeac2b9e61e565e563e4a6a32f1029c79ac77be0a59c446c8b90"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "public_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「不急着问原因，您先陪我说一会儿话，好不好？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「好，宝玉，老祖宗不急着问你为什么。你就安安心心在我这儿坐一会儿，咱们娘儿俩说说话，你想说什么就说什么。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 点了点头。"
+      ]
+    },
+    {
+      "index": 4,
+      "text": "您刚才答应我的是什么？",
+      "duration_seconds": 6.245,
+      "turn_run_id": "rpturn_1d37e757c7f61f0f6c48bacfbacacc3823a79d6e115ae5716ed4a2d159d84bdd",
+      "world_head": 21,
+      "decisions": [
+        {
+          "event_sequence": 20,
+          "speaker": "贾母",
+          "action": "respond",
+          "text": "老祖宗答应你，不急着问你为什么，只陪你安安心心坐一会儿，娘儿俩说说话，你想说什么就说什么。宝玉，这话祖母记着呢，什么时候都算数。",
+          "event_id": "event_rp_npc_050cd253ee066cdcf50ff5fc82d9cdfbdb1953142fac7529ad9689d0df480287"
+        }
+      ],
+      "receipts": [
+        {
+          "phase": "decision",
+          "provider_kind": "chat_completions",
+          "model_id": "step-5-preview",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        }
+      ],
+      "public_narrative": [
+        "（2026-09-22T00:00:00Z）在荣庆堂，你说：「您刚才答应我的是什么？」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 回应：「老祖宗答应你，不急着问你为什么，只陪你安安心心坐一会儿，娘儿俩说说话，你想说什么就说什么。宝玉，这话祖母记着呢，什么时候都算数。」",
+        "（2026-09-22T00:00:00Z）在荣庆堂，贾母 笑了笑。"
+      ],
+      "full_prose": [
+        "在荣庆堂，你说：「您刚才答应我的是什么？」",
+        "在荣庆堂，贾母 回应：「老祖宗答应你，不急着问你为什么，只陪你安安心心坐一会儿，娘儿俩说说话，你想说什么就说什么。宝玉，这话祖母记着呢，什么时候都算数。」",
+        "在荣庆堂，贾母 笑了笑。"
+      ],
+      "prose_fallback": "prose_unavailable",
+      "prose_receipts": [
+        {
+          "phase": "narrative",
+          "provider_kind": "deterministic",
+          "model_id": "",
+          "result": "success",
+          "attempt_count": 0,
+          "fallback_kind": ""
+        },
+        {
+          "phase": "narrative",
+          "provider_kind": "full_prose",
+          "model_id": "step-5-preview",
+          "result": "failed",
+          "attempt_count": 1,
+          "fallback_kind": "prose_unavailable"
+        }
+      ]
+    }
+  ],
+  "status": "FAIL",
+  "human_experience": "PENDING",
+  "limits": "独立的两人测试世界，改变了角色数量和玩家初始位置；不等于冻结荣庆堂Golden，不是同输入架构前后对照，也不修改真实预览世界。 The four NPC decisions succeeded, but the original whole diagnostic exited 1 on a failed full-prose receipt. No human pass or runtime improvement from this data change is claimed.",
+  "failure": "AssertionError"
+}

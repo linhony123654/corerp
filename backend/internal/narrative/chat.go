@@ -21,8 +21,29 @@ type Config struct {
 	Endpoint, Model, APIKey string
 	Timeout                 time.Duration
 	Attempts                int
+	ReasoningEffort         string
+	DisableThinking         bool
 	EndpointPolicy          endpointpolicy.Policy
 }
+
+func (c Config) validateReasoningOptions() error {
+	if c.ReasoningEffort != "" && c.ReasoningEffort != "low" && c.ReasoningEffort != "medium" && c.ReasoningEffort != "high" {
+		return failure("invalid reasoning effort")
+	}
+	return nil
+}
+
+// These are explicit narrator controls. Defaults omit both options, and
+// environment configuration never borrows the decision provider's settings.
+func (c Config) applyReasoningOptions(request map[string]any) {
+	if c.ReasoningEffort != "" {
+		request["reasoning_effort"] = c.ReasoningEffort
+	}
+	if c.DisableThinking {
+		request["enable_thinking"] = false
+	}
+}
+
 type Error struct{ Kind string }
 
 func (e *Error) Error() string  { return "narrative style planner: " + e.Kind }
@@ -34,6 +55,9 @@ type ChatStylePlanner struct {
 }
 
 func NewChatStylePlanner(c Config) (*ChatStylePlanner, error) {
+	if err := c.validateReasoningOptions(); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(c.Model) == "" || len(c.Model) > 200 || strings.ContainsAny(c.APIKey, "\r\n") {
 		return nil, failure("invalid model configuration")
 	}
@@ -92,6 +116,7 @@ func (p *ChatStylePlanner) PlanStyle(ctx context.Context, style core.RPStyleProf
 	request := map[string]any{"model": p.config.Model, "stream": false, "store": false, "max_completion_tokens": 512,
 		"messages":        []map[string]string{{"role": "system", "content": instruction}, {"role": "user", "content": string(encoded)}},
 		"response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "corerp_narrative_style_plan", "strict": true, "schema": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"pov", "tense", "verbosity", "dialogue_ratio", "description_density", "narrative_pack_ref", "unsupported_instructions"}, "properties": properties}}}}
+	p.config.applyReasoningOptions(request)
 	body, err := json.Marshal(request)
 	if err != nil {
 		return empty, failure("request encoding failed")

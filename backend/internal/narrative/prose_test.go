@@ -417,6 +417,35 @@ func TestProseSpeechReferencesNeverExpandQuotedLiteralRecursively(t *testing.T) 
 	}
 }
 
+func TestProseSpeechReferencesOwnOnlyTheOuterSentencePunctuation(t *testing.T) {
+	for _, text := range []string{"好。", "好？", "好！", "All right.", "再想想…", "话还没说完", "原文是「好。」。 [[corerp-speech:0]]"} {
+		t.Run(text, func(t *testing.T) {
+			input := proseFixture()
+			input.Facts[1].Text = text
+			draft := "你说：[[corerp-speech:0]]。Cai 回应：[[corerp-speech:1]]。"
+			got, err := expandProseSpeechTokens(draft, input)
+			ending := ""
+			if text == "话还没说完" || strings.HasSuffix(text, "]]") {
+				ending = "。"
+			}
+			want := "你说：「" + input.Facts[0].Text + "」Cai 回应：「" + text + "」" + ending
+			if err != nil || got != want || validateProse(got, input) != nil {
+				t.Fatalf("speech/punctuation boundary: got %q want %q err %v", got, want, err)
+			}
+			if !strings.Contains(got, text) {
+				t.Fatal("formatting modified accepted speech")
+			}
+		})
+	}
+	input := proseFixture()
+	draft := "你说：[[corerp-speech:0]]，Cai 回应：[[corerp-speech:1]]！"
+	got, err := expandProseSpeechTokens(draft, input)
+	want := "你说：「" + input.Facts[0].Text + "」，Cai 回应：「" + input.Facts[1].Text + "」！"
+	if err != nil || got != want {
+		t.Fatal("formatting removed independent connecting punctuation", got, err)
+	}
+}
+
 func TestValidateProseRequiresCommittedExpression(t *testing.T) {
 	input := proseFixture()
 	draft := "你问：「今晚有空吗？」Cai 招了招手，回答：「有啊，坐这儿吧。」"

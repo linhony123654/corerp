@@ -1,0 +1,133 @@
+{
+  "kind": "corerp.r1-same-facts-narrative-controls.v1",
+  "world": "r1-short-test-world",
+  "turn_run_id": "rpturn_1d37e757c7f61f0f6c48bacfbacacc3823a79d6e115ae5716ed4a2d159d84bdd",
+  "source_database": "/dev/shm/corerp-r1-short-XtMw2w/world.db",
+  "artifact_directory": "/dev/shm/corerp-r1-narrative-controls-t6o9y4fx",
+  "model": "step-5-preview",
+  "human_experience": "PENDING",
+  "runs": [
+    {
+      "label": "before",
+      "runtime_sha256": "f4b6353465fab223d3f0df19e48819805a781d3124a873d3d197ac8318006e21",
+      "status": "PASS",
+      "public_lines": [
+        "你开口向贾母确认，「您刚才答应我的是什么？」",
+        "贾母微笑起来，以亲切从容的长辈口吻将先前答应的话说与你听，「老祖宗答应你，不急着问你为什么，只陪你安安心心坐一会儿，娘儿俩说说话，你想说什么就说什么。宝玉，这话祖母记着呢，什么时候都算数。」"
+      ],
+      "source_event_ids": [
+        "event_rp_speech_2548540ba8279ce451a54d5590b55d3edb103117d6290dc077fbae6170ce61e5",
+        "event_rp_npc_050cd253ee066cdcf50ff5fc82d9cdfbdb1953142fac7529ad9689d0df480287",
+        "event_rp_npc_expression_050cd253ee066cdcf50ff5fc82d9cdfbdb1953142fac7529ad9689d0df480287"
+      ],
+      "prose_fallback": "",
+      "seconds": 60.967,
+      "world_before": {
+        "head": 21,
+        "events": 21,
+        "utterances": 8,
+        "decisions": 4,
+        "turn_runs": 4
+      },
+      "world_after": {
+        "head": 21,
+        "events": 21,
+        "utterances": 8,
+        "decisions": 4,
+        "turn_runs": 4
+      },
+      "provider_receipts": [
+        {
+          "phase": "narrative",
+          "provider_kind": "full_prose",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": "",
+          "render_source": "live_prose"
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "runtime_sha256": "8366b5a80678aac03c28bbb3a13d0edee20c49f7967b189f36f4d77e43a2e2db",
+      "status": "PASS",
+      "public_lines": [
+        "你向贾母开口，问：「您刚才答应我的是什么？」 贾母微微一笑，从容应道：「老祖宗答应你，不急着问你为什么，只陪你安安心心坐一会儿，娘儿俩说说话，你想说什么就说什么。宝玉，这话祖母记着呢，什么时候都算数。」 她言辞亲昵，满是长辈的从容与疼宠，那承诺落在话里，是什么时候都算数的话。"
+      ],
+      "source_event_ids": [
+        "event_rp_speech_2548540ba8279ce451a54d5590b55d3edb103117d6290dc077fbae6170ce61e5",
+        "event_rp_npc_050cd253ee066cdcf50ff5fc82d9cdfbdb1953142fac7529ad9689d0df480287",
+        "event_rp_npc_expression_050cd253ee066cdcf50ff5fc82d9cdfbdb1953142fac7529ad9689d0df480287"
+      ],
+      "prose_fallback": "",
+      "seconds": 38.113,
+      "world_before": {
+        "head": 21,
+        "events": 21,
+        "utterances": 8,
+        "decisions": 4,
+        "turn_runs": 4
+      },
+      "world_after": {
+        "head": 21,
+        "events": 21,
+        "utterances": 8,
+        "decisions": 4,
+        "turn_runs": 4
+      },
+      "provider_receipts": [
+        {
+          "phase": "narrative",
+          "provider_kind": "full_prose",
+          "result": "success",
+          "attempt_count": 1,
+          "fallback_kind": "",
+          "render_source": "live_prose"
+        }
+      ]
+    }
+  ],
+  "limits": "Same committed public turn and identical explicit model override; different runtime binaries. Two stochastic runs are not a latency or long-RP benchmark. Independent test-author world, not approved real Rongqing canon or frozen Golden.",
+  "wire": [
+    {
+      "label": "before",
+      "reasoning_effort": null,
+      "enable_thinking_present": false,
+      "max_completion_tokens": 4096,
+      "request_bytes": 3764,
+      "http_status": 200,
+      "seconds": 60.959,
+      "finish_reason": "stop",
+      "content_bytes": 154,
+      "reasoning_bytes": {
+        "reasoning": 15762,
+        "reasoning_content": 15762
+      },
+      "usage": {
+        "prompt_tokens": 842,
+        "completion_tokens": 3831,
+        "total_tokens": 4673
+      }
+    },
+    {
+      "label": "after",
+      "reasoning_effort": "low",
+      "enable_thinking_present": false,
+      "max_completion_tokens": 4096,
+      "request_bytes": 3789,
+      "http_status": 200,
+      "seconds": 38.105,
+      "finish_reason": "stop",
+      "content_bytes": 211,
+      "reasoning_bytes": {
+        "reasoning": 8910,
+        "reasoning_content": 8910
+      },
+      "usage": {
+        "prompt_tokens": 847,
+        "completion_tokens": 2275,
+        "total_tokens": 3122
+      }
+    }
+  ]
+}

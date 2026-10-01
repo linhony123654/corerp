@@ -1,5 +1,7 @@
 # CoreRP R1 接续提示词
 
+最新本地增量先看[卡点复查](unblock-diagnosis-2026-10-01.md)、[四轮公开样本](rongqing-minimal-short-samples-2026-10-01.json)和[同事实叙事复验](narrative-controls-same-facts-2026-10-01.json)。新runtime`8366b5a8`；全部本轮任务TERMINAL。四轮NPC均首试成功但原末轮Prose失败；后续同事实旧/新真实Prose均成功并验证`low`选项出站、账本/台词/决策/来源不变。只是测试作者候选世界，不是已批准真实canon或完整Golden；首轮病史暗示、重复话和语气仍待人工。新增独立Narrator环境/显式override推理控制、quote_token外重复句号处理和无模型预检；缺省参数、所有事实/隐私/预算门禁保留。新source未跑完整32/真实Golden，不要照下方历史提示盲跑或假定live已升级。
+
 独立审计使用 [dot-audit-prompt](dot-audit-prompt.md)。继续开发复制以下内容。
 
 ```text
